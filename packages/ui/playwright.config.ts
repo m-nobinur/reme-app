@@ -11,6 +11,19 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: "http://localhost:4321" },
+  // The default is threshold 0.2, a per-pixel colour tolerance wide enough that
+  // a muted surface changing shape is invisible to it: rounded-2xl to
+  // rounded-none on the skeleton passed with the same bytes. In a design system
+  // where most surfaces are muted, that is most of the gate. So: exact
+  // comparison. It is affordable because rendering here is deterministic —
+  // five consecutive runs on macOS and two fresh containers on Linux all
+  // reproduced the baselines to the pixel. If antialiasing ever does start to
+  // drift, raise maxDiffPixels rather than threshold; the shape changes this
+  // exists to catch are worth tens of pixels each, and a wide colour tolerance
+  // hides them all.
+  expect: {
+    toHaveScreenshot: { threshold: 0, maxDiffPixels: 0 },
+  },
   projects: [
     {
       name: "chromium",

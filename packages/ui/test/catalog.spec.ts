@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
@@ -8,14 +9,24 @@ const COMPONENTS_DIR = fileURLToPath(
 )
 
 /**
+ * Every way a component can leave a file: a declaration exported where it
+ * stands, with or without `default`, and an export block at the foot. Only the
+ * block was matched at first, which meant `export function Thing() {}` added a
+ * primitive with no catalog entry, no a11y scan and no snapshot, and this suite
+ * stayed green. `export type { … }` matches neither branch, because `type` is
+ * not one of the declaration keywords and it does not sit directly before `{`.
+ */
+const EXPORTED =
+  /export\s+(?:default\s+)?(?:(?:async\s+)?function\s*\*?|const|let|var|class)\s+([A-Za-z0-9_$]+)|export\s+\{([^}]*)\}/g
+
+/**
  * The exported component names of one file. A component export is PascalCase,
  * which is what separates it from the variant helpers, class strings and
- * constants the same files export. `export type { … }` is skipped: a type has
- * nothing to render.
+ * constants the same files export.
  */
 function exportedComponents(source: string): string[] {
-  return [...source.matchAll(/(?<!type\s)export\s\{([^}]*)\}/g)]
-    .flatMap((match) => match[1].split(","))
+  return [...source.matchAll(EXPORTED)]
+    .flatMap((match) => match[1] ?? (match[2] ?? "").split(","))
     .map((name) => name.trim())
     .filter((name) => /^[A-Z][A-Za-z0-9]*$/.test(name))
 }
@@ -33,15 +44,15 @@ test("every primitive in the package has a catalog entry", async ({ page }) => {
   await page.goto("/")
   const listed = new Set(await entryNames(page))
 
-  const missing = readdirSync(COMPONENTS_DIR)
+  // Recursive: a component in src/components/<anything>/ is still a component,
+  // and a flat read let one hide in a subdirectory.
+  const missing = readdirSync(COMPONENTS_DIR, { recursive: true })
+    .map(String)
     .filter((file) => file.endsWith(".tsx"))
     .flatMap((file) =>
-      exportedComponents(
-        readFileSync(
-          new URL(`../src/components/${file}`, import.meta.url),
-          "utf8"
-        )
-      ).map((name) => ({ file, name }))
+      exportedComponents(readFileSync(join(COMPONENTS_DIR, file), "utf8")).map(
+        (name) => ({ file, name })
+      )
     )
     .filter((component) => !listed.has(component.name))
 
@@ -49,6 +60,43 @@ test("every primitive in the package has a catalog entry", async ({ page }) => {
     missing,
     "a primitive without a catalog entry has no a11y test and no visual snapshot"
   ).toEqual([])
+
+  // An entry that renders nothing satisfies all three gates and asserts none of
+  // them: axe finds no violations in an empty box and the snapshot of one is a
+  // blank PNG that matches itself forever. Each section holds its heading plus
+  // whatever the entry rendered, so one child means the entry rendered nothing.
+  const blank = await page
+    .locator("[data-entry]")
+    .evaluateAll((nodes) =>
+      nodes
+        .filter((node) => node.childElementCount < 2)
+        .map((node) => (node as HTMLElement).dataset.entry ?? "")
+    )
+
+  expect(blank, "a catalog entry that renders nothing tests nothing").toEqual(
+    []
+  )
+})
+
+test("the theme toggle flips the document and remembers it", async ({
+  page,
+}) => {
+  // The catalog reads ?theme=dark so a test can have a theme on first paint,
+  // which means the mechanism apps/web actually ships — the class on <html> and
+  // the localStorage key behind it — is never exercised by the theme runs
+  // below. This is the one place that drives it.
+  await page.goto("/")
+  const toggle = page.locator('[data-entry="ThemeToggle"] button')
+  const stored = () =>
+    page.evaluate(() => window.localStorage.getItem("reme-theme"))
+
+  await toggle.click()
+  await expect(page.locator("html")).toHaveClass(/dark/)
+  expect(await stored()).toBe("dark")
+
+  await toggle.click()
+  await expect(page.locator("html")).not.toHaveClass(/dark/)
+  expect(await stored()).toBe("light")
 })
 
 for (const theme of ["light", "dark"] as const) {
