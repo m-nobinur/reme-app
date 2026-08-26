@@ -1,2 +1,5 @@
+# The dashboard is behind authentication and has nothing to index. The public
+# marketing page at / does.
 User-agent: *
-Disallow: /
+Disallow: /app/
+Disallow: /api/
