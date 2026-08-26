@@ -42,7 +42,7 @@ if (process.env.NEON_OFFLINE === "1") {
 
 console.log("")
 note(
-  "Next: fill DATABASE_URL in .env.local, then `pnpm run doctor` and `pnpm dev`."
+  "Next: fill DATABASE_URL in .env.local, then `pnpm preflight` and `pnpm dev`."
 )
 note(
   "No Neon branch? Set NEON_OFFLINE=1, take the offline DATABASE_URL from the"

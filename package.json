@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "bootstrap": "node scripts/bootstrap.mjs",
-    "doctor": "node scripts/doctor.mjs",
+    "preflight": "node scripts/preflight.mjs",
     "seed": "node scripts/seed.mjs",
     "build": "turbo build",
     "dev": "turbo dev",

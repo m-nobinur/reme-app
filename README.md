@@ -40,12 +40,12 @@ Node 24 or newer (see `.nvmrc`) and pnpm.
 git clone <repo> && cd reme
 pnpm bootstrap    # git hooks, .env.local, dependencies
 # put a DATABASE_URL in .env.local
-pnpm run doctor   # names what is still missing and the command that fixes it
+pnpm preflight    # names what is still missing and the command that fixes it
 pnpm dev
 ```
 
-`pnpm run doctor` needs the `run`: pnpm has a built-in `doctor` command of its own,
-and `pnpm doctor` reaches that one instead.
+It is `preflight` rather than `doctor` because pnpm has a built-in `doctor` command that
+would shadow the script and report `All checks passed` without running any of ours.
 
 `pnpm bootstrap` is safe to run again: every step is a no-op once it has been done. It is
 also the only thing that sets `core.hooksPath`, so a clone that skips it runs no hooks at
