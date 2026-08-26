@@ -43,16 +43,11 @@ const ulid = (org: "a" | "b", n: number) =>
 const PLATFORM_ROLE = uuid(9)
 
 export async function seedTwoOrgs() {
+  // Clearing first rather than repeating the delete list: two copies of a
+  // dependency-ordered list drift, and the copy that drifts is the one nobody
+  // reads.
+  await clearTwoOrgs()
   const { sql, db } = connect()
-  // Order matters twice over: down by dependency to clear, up to insert.
-  await sql`delete from events where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from staff_events where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from facts where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from staff where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from departments where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from users where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from roles where org_id in (${ORG_A}, ${ORG_B}) or id = ${PLATFORM_ROLE}`
-  await sql`delete from orgs where id in (${ORG_A}, ${ORG_B})`
 
   await db.insert(orgs).values([
     { id: ORG_A, slug: "tenancy-probe-a", name: "Tenancy Probe A" },
@@ -125,15 +120,38 @@ export async function seedTwoOrgs() {
   await sql.end()
 }
 
+/**
+ * Removes both probe orgs. Safe to run on a database that never had them, and
+ * safe to run twice, which is what makes `seedTwoOrgs` able to open with it.
+ *
+ * One transaction, and that is the fix for a real flake rather than tidiness.
+ * The deletes take about four seconds against Neon warm and longer against a
+ * suspended compute, while vitest's default hook timeout is ten. As eight
+ * separate statements, an `afterAll` that ran over left some tables cleared and
+ * some not, and the next run's `beforeAll` walked into a foreign key it could
+ * not satisfy. As one transaction it either all lands or none of it does, and
+ * the caller sees the error either way. `rls.test.ts` also gives the hook the
+ * same 60 s the seed has.
+ *
+ * The order is by dependency, deepest first, and it is maintained by hand. A
+ * tenant table added to the seed and forgotten here surfaces as a foreign key
+ * violation on `delete from orgs` that names the constraint, and the
+ * constraint names the table.
+ */
 export async function clearTwoOrgs() {
   const { sql } = connect()
-  await sql`delete from events where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from staff_events where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from facts where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from staff where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from departments where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from users where org_id in (${ORG_A}, ${ORG_B})`
-  await sql`delete from roles where org_id in (${ORG_A}, ${ORG_B}) or id = ${PLATFORM_ROLE}`
-  await sql`delete from orgs where id in (${ORG_A}, ${ORG_B})`
-  await sql.end()
+  try {
+    await sql.begin(async (tx) => {
+      await tx`delete from events where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from staff_events where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from facts where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from staff where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from departments where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from users where org_id in (${ORG_A}, ${ORG_B})`
+      await tx`delete from roles where org_id in (${ORG_A}, ${ORG_B}) or id = ${PLATFORM_ROLE}`
+      await tx`delete from orgs where id in (${ORG_A}, ${ORG_B})`
+    })
+  } finally {
+    await sql.end()
+  }
 }
