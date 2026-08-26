@@ -34,20 +34,18 @@ if [ -n "$gen" ] && [ -z "${ALLOW_GENERATED:-}" ]; then
   die "Regenerate instead. If this IS the regeneration commit: ALLOW_GENERATED=1 git commit ..."
 fi
 
+# Check only, never write. A --write pass here would have to be re-staged, and
+# re-staging sweeps working-tree content past the secret scan above and into the
+# commit. useSortedClasses is at error in biome.jsonc, so the check alone enforces
+# class order; the author runs the fixer and re-stages.
 if { [ -f biome.json ] || [ -f biome.jsonc ]; } && [ -x node_modules/.bin/biome ]; then
-  if node_modules/.bin/biome check --staged --write --unsafe \
-       --only=nursery/useSortedClasses --files-ignore-unknown=true \
-       --no-errors-on-unmatched >/dev/null 2>&1; then
-    git diff --cached --name-only --diff-filter=ACM | while IFS= read -r f; do
-      [ -n "$f" ] && git add -- "$f"
-    done
-  else
-    warn "  ↷ class sort skipped (staged files have unstaged changes) — run: pnpm lint:classes"
-  fi
   printf '  → biome check --staged\n' >&2
   node_modules/.bin/biome check --staged --files-ignore-unknown=true --no-errors-on-unmatched \
-    || die "biome failed. Run 'pnpm lint:fix', or --no-verify and own the consequences."
+    || die "biome failed. Run 'pnpm lint:fix' (class order: 'pnpm lint:classes'), stage the
+   result, and commit again. Or --no-verify and own the consequences."
 else
+  warn "  ↷ biome not run: no config, or dependencies not installed in this worktree.
+   Lint and Tailwind class order are NOT checked for this commit. Run: pnpm install"
   run_script lint
 fi
 ok "✓ pre-commit"
