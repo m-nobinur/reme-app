@@ -5,6 +5,7 @@ import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
+import { ErrorEnvelope } from "../src/error.ts"
 import { contracts } from "../src/registry.ts"
 import { samples } from "./samples.ts"
 
@@ -73,7 +74,16 @@ function mutate(root: unknown, path: Path, value: unknown): unknown {
       delete parent[last]
     }
   } else {
-    parent[last] = value
+    // `parent[last] = value` would set the prototype when the fuzzer picks
+    // `__proto__` as a key, producing an object that no JSON document can
+    // contain. defineProperty adds the ordinary own key we meant, so
+    // `__proto__` gets tested as the adversarial field name it is.
+    Object.defineProperty(parent, last, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    })
   }
   return clone
 }
@@ -114,11 +124,13 @@ describe.each(Object.keys(contracts))("%s", (name) => {
               fc.option(fc.jsonValue(), { nil: undefined })
             )
             .map(([path, value]) => mutate(sample, path, value)),
-          // Add a field the contract never declared.
+          // Add a field the contract never declared. `__proto__` is excluded
+          // because Zod 4.4.3 genuinely disagrees with the JSON Schema there;
+          // the test below pins that divergence so it stays visible.
           fc
             .tuple(
               fc.constantFrom(...objectPaths),
-              fc.string({ minLength: 1 }),
+              fc.string({ minLength: 1 }).filter((key) => key !== "__proto__"),
               fc.jsonValue()
             )
             .map(([path, key, value]) => mutate(sample, [...path, key], value))
@@ -126,7 +138,66 @@ describe.each(Object.keys(contracts))("%s", (name) => {
         (candidate) =>
           schema.safeParse(candidate).success === validate(candidate)
       ),
-      { numRuns: 300 }
+      // Pinned so a cache hit means something and a red gate is never noise.
+      // The cost is a fixed 300 cases: new ground gets covered when the schemas
+      // change, not when the clock moves. A random-seed sweep belongs in the
+      // nightly job alongside the other non-blocking suites.
+      { numRuns: 300, seed: 20260826 }
     )
+  })
+})
+
+/**
+ * A known, narrow divergence between Zod 4.4.3 and the JSON Schema we publish.
+ * `{"__proto__": ...}` is valid JSON, and `JSON.parse` turns it into an
+ * ordinary own key rather than touching the prototype. Ajv rejects it under
+ * `additionalProperties: false`, which is correct. Zod accepts it and strips
+ * it, so nothing pollutes anything, but a consumer validating against our
+ * OpenAPI document would reject a payload our own API waves through.
+ *
+ * Every other inherited key name (`constructor`, `toString`, ...) is rejected
+ * by both, so the gap is exactly one key wide. This test fails when Zod fixes
+ * it, which is the signal to drop the `__proto__` filter from the fuzz
+ * generator above.
+ */
+describe("__proto__ as a wire key", () => {
+  const wire =
+    '{"class":"permission","code":"capability.denied","message":"x","occurred_at":"2026-08-26T09:30:00Z","detail":{},"__proto__":{"polluted":true}}'
+
+  it("arrives as an own key, not a prototype change", () => {
+    const data = JSON.parse(wire) as object
+    expect(Object.keys(data)).toContain("__proto__")
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype)
+  })
+
+  it("is rejected by the published JSON Schema", () => {
+    const validate = ajv.compile(
+      generated.components.schemas.ErrorEnvelope as object
+    )
+    expect(validate(JSON.parse(wire))).toBe(false)
+  })
+
+  it("is still accepted and stripped by Zod, which is the open gap", () => {
+    const result = ErrorEnvelope.safeParse(JSON.parse(wire))
+    expect(result.success).toBe(true)
+    expect(Object.keys(result.data ?? {})).not.toContain("__proto__")
+  })
+
+  it("agrees with the JSON Schema on every other inherited key name", () => {
+    const validate = ajv.compile(
+      generated.components.schemas.ErrorEnvelope as object
+    )
+    for (const key of Object.getOwnPropertyNames(Object.prototype)) {
+      if (key === "__proto__") {
+        continue
+      }
+      const candidate: unknown = JSON.parse(
+        wire.replace('"__proto__"', JSON.stringify(key))
+      )
+      expect(
+        ErrorEnvelope.safeParse(candidate).success,
+        `zod disagreed with the JSON Schema on "${key}"`
+      ).toBe(validate(candidate))
+    }
   })
 })
