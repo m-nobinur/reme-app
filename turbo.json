@@ -13,8 +13,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["coverage/**"]
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
     "size": {
       "dependsOn": ["build"],
