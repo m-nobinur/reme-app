@@ -45,6 +45,32 @@
   // first group of every block.
   "overrides": [
     {
+      // apps/* -> packages/* is permissive, so nothing is banned by name here.
+      // The relative reach still is: it skips the package's exports the same way
+      // it does between packages. An app needs a different pattern from the one
+      // the packages blocks use, because an app nests deeply enough that
+      // "../../..." is an ordinary in-app import; every reach out of an app,
+      // at any depth, goes through a literal "packages/" segment instead.
+      "includes": ["apps/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/packages/*/**"],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/**"],
       "linter": {
         "rules": {
