@@ -2,9 +2,6 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "globalEnv": ["NEON_OFFLINE"],
-  // Read by scripts/workos.mjs, which turbo never runs, so it must not reach any
-  // task hash. globalPassThroughEnv declares it without hashing it.
-  "globalPassThroughEnv": ["WORKOS_API_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

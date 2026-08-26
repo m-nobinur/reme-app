@@ -69,7 +69,12 @@ workos env switch staging
 pnpm workos:config staging
 ```
 
-Every call it makes is idempotent, so a second run prints `unchanged` on every line. Two
+A second run changes nothing remotely and exits 0. The redirect URI and CORS lines say so and read
+`unchanged`, which is the API's own answer rather than a local guess. The homepage line always reads
+`set`: that call is an unconditional PUT of one field, with no prior value in its response to compare
+against, and it is last-write-wins per environment. Redirect URIs and CORS origins are add-only, so
+this script is a floor and not a source of truth: a value deleted in the dashboard returns as `added`
+on the next run, and a value removed from the file stays in WorkOS. Two
 things it cannot do, because the WorkOS API cannot. The sign-in endpoint has no CLI
 command and no API endpoint, so the script prints the URL to paste into the Redirects tab
 once per environment. Redirect URIs and CORS origins are add-only, so deleting a line from
