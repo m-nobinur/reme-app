@@ -1,6 +1,11 @@
 # ADR-024: Session sealing
 
-Status: accepted, 2026-08-27. Settles the question DR-4a left open.
+Status: accepted, 2026-08-27. Settles the question DR-4a left open. **Amended by ADR-026**, which
+installs `@workos/authkit-tanstack-react-start` in `apps/web` and moves the owner session there. The
+clause below reading "neither `@workos/authkit-tanstack-react-start` nor `@workos/authkit-session` is
+installed" no longer holds, and the credential boundary that produced it has moved. Everything here
+about how a session is sealed, what the envelope contains and how a tampered cookie behaves is
+unchanged, and ADR-026 depends on it.
 
 Applies to `apps/api`, `apps/web`, and anything that reads the owner session cookie.
 
