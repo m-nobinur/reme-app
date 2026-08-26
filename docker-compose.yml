@@ -1,0 +1,24 @@
+# Offline Postgres for NEON_OFFLINE=1. Neon is the default path, so nothing
+# here is required to run the stack. `pnpm bootstrap` starts it when
+# NEON_OFFLINE=1 is set; `docker compose down -v` throws the data away.
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: reme
+      POSTGRES_PASSWORD: reme
+      POSTGRES_DB: reme
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18 images keep the cluster in a version subdirectory, so the
+      # mount goes one level up. Mounting .../data makes the container exit 1.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reme -d reme"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  pgdata:
