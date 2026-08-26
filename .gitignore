@@ -1,0 +1,26 @@
+# dependencies, caches, build output
+node_modules/
+.turbo/
+dist/
+build/
+.next/
+.open-next/
+out/
+coverage/
+*.tsbuildinfo
+
+# secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# local dev
+.wrangler/
+.vercel/
+.DS_Store
+.claude/
+CLAUDE.md
+.local/
+*.log

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/_lib.sh"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ -z "${remote_ref:-}" ] && continue
+  target=${remote_ref#refs/heads/}
+  [[ "$target" =~ $PROTECTED_BRANCHES ]] && \
+    die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
+done
+
+run_script typecheck
+run_script test
+ok "✓ pre-push"

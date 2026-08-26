@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/_lib.sh"
+
+# The repository's first commit has no parent and necessarily lands on main.
+root=$(git rev-parse --verify -q HEAD^ >/dev/null 2>&1 && echo '' || echo 1)
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo '')
+if [ -z "$root" ] && [[ "$branch" =~ $PROTECTED_BRANCHES ]]; then
+  die "direct commit to '$branch'. Branch first:  git switch -c <role>/<short-task-name>"
+fi
+
+if [ -z "$root" ] && ! [[ "$branch" =~ ^($COMMIT_TYPES)/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  die "branch '$branch' is not <type>/<short-kebab-summary>
+   types: feat fix docs refactor test chore perf build ci revert
+   e.g.:  feat/staff-directory-endpoint"
+fi
+if [[ "$(upper "$branch")" =~ $LOCAL_NOISE ]] || [[ "$(upper "$branch")" =~ $STORY_ID ]]; then
+  die "branch '$branch' carries a story ID, phase or role. Published history says what
+   changed, not how the work was organised. Rename it:  git branch -m <new-name>"
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+scan=$(printf '%s\n' "$staged" | grep -vE '(^|/)\.env\.example$|^\.githooks/secret-scan$' | tr '\n' ' ' || true)
+if [ -n "$scan" ]; then
+  git diff --cached -U0 -- $scan | "$(dirname "$0")/secret-scan"
+fi
+
+# Generated output is regenerated, never hand-edited.
+gen=$(printf '%s\n' "$staged" | grep -E '(^|/)(generated|__generated__)/|\.gen\.(ts|js|json)$|openapi\.(json|yaml)$' || true)
+if [ -n "$gen" ] && [ -z "${ALLOW_GENERATED:-}" ]; then
+  red "✖ hand-edited generated files:"; printf '%s\n' "$gen" >&2
+  die "Regenerate instead. If this IS the regeneration commit: ALLOW_GENERATED=1 git commit ..."
+fi
+
+if { [ -f biome.json ] || [ -f biome.jsonc ]; } && [ -x node_modules/.bin/biome ]; then
+  if node_modules/.bin/biome check --staged --write --unsafe \
+       --only=nursery/useSortedClasses --files-ignore-unknown=true \
+       --no-errors-on-unmatched >/dev/null 2>&1; then
+    git diff --cached --name-only --diff-filter=ACM | while IFS= read -r f; do
+      [ -n "$f" ] && git add -- "$f"
+    done
+  else
+    warn "  ↷ class sort skipped (staged files have unstaged changes) — run: pnpm lint:classes"
+  fi
+  printf '  → biome check --staged\n' >&2
+  node_modules/.bin/biome check --staged --files-ignore-unknown=true --no-errors-on-unmatched \
+    || die "biome failed. Run 'pnpm lint:fix', or --no-verify and own the consequences."
+else
+  run_script lint
+fi
+ok "✓ pre-commit"

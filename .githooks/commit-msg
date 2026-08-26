@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/_lib.sh"
+
+subject=$(head -1 "$1")
+[[ "$subject" =~ ^(fixup|squash)! ]] && exit 0
+[[ "$subject" =~ ^Merge\  ]] && exit 0
+
+[[ "$subject" =~ ^(feat|fix|docs|refactor|test|chore|perf|build|ci|revert)(\([a-z0-9/-]+\))?!?:\ .+ ]] \
+  || die "commit subject must be conventional:  type(scope): summary
+   types: feat fix docs refactor test chore perf build ci revert
+   got:   $subject"
+
+[ ${#subject} -le 72 ] || die "subject is ${#subject} chars, keep it ≤ 72"
+
+if [[ "$subject" == *. ]]; then
+  die "subject ends with a period. Drop it:
+   $subject"
+fi
+
+body=$(sed -e '/^#/d' -e '/^diff --git/,$d' "$1" | tail -n +2 | grep -c '[^[:space:]]' || true)
+[ "$body" -eq 0 ] || die "commit body has $body lines. Subject only — if the change needs
+   paragraphs it is too large. Split it, or write an ADR."
+
+grep -qiE '^(co-authored-by|signed-off-by|generated with|\U0001F916)' "$1" \
+  && die "Should not contain trailers" || true
+
+if [[ "$(upper "$subject")" =~ $LOCAL_NOISE ]] || [[ "$subject" =~ $STORY_ID ]]; then
+  die "subject carries a story ID, phase or role — those live in the plan, not in git log:
+   $subject"
+fi
+ok "✓ commit-msg"
