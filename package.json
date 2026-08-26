@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "seed": "node scripts/seed.mjs",
     "build": "turbo build",
     "dev": "turbo dev",
     "typecheck": "turbo typecheck",
@@ -14,6 +17,7 @@
     "format": "biome format --write"
   },
   "devDependencies": {
+    "@workspace/config": "workspace:*",
     "@biomejs/biome": "2.5.10",
     "turbo": "^2.9.18",
     "typescript": "^6"

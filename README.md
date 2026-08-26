@@ -32,10 +32,38 @@ Behaviour is the product, with an engineering budget behind it:
 - **Knows routine from consequential.** Money, availability exceptions and public commitments become a one-tap owner approval, never a vague alert.
 - **Honest, and unbudgeable.** Discloses that it is the business's AI, admits uncertainty, and cannot be talked out of its instructions, prices or permissions by anything it reads.
 
+## Getting started
+
+Node 24 or newer (see `.nvmrc`) and pnpm.
+
+```sh
+git clone <repo> && cd reme
+pnpm bootstrap    # git hooks, .env.local, dependencies
+# put a DATABASE_URL in .env.local
+pnpm preflight    # names what is still missing and the command that fixes it
+pnpm dev
+```
+
+It is `preflight` rather than `doctor` because pnpm has a built-in `doctor` command that
+would shadow the script and report `All checks passed` without running any of ours.
+
+`pnpm bootstrap` is safe to run again: every step is a no-op once it has been done. It is
+also the only thing that sets `core.hooksPath`, so a clone that skips it runs no hooks at
+all, meaning no commit-subject check and no secret scan.
+
+Postgres is a Neon branch by default. Without one, set `NEON_OFFLINE=1` in `.env.local`
+and take the offline `DATABASE_URL` from the comment in `.env.example`, then run
+`pnpm bootstrap` again to start the pgvector container in `docker-compose.yml`.
+
+Secrets never enter a committed file. `.env.example` carries names and shapes,
+`.env.local` carries values and is gitignored, and `packages/config` validates both so a
+missing one fails at boot naming the variable.
+
 ## Conventions
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.
-- Branches are `<type>/<short-kebab-summary>`; commits are conventional, imperative, subject line only. `.githooks/` enforces both locally after `git config core.hooksPath .githooks` — a fresh clone does not run them until you do. They are advisory; review still happens on the PR.
+- Branches are `<type>/<short-kebab-summary>`; commits are conventional, imperative, subject line only. `.githooks/` enforces both locally once `pnpm bootstrap` has pointed `core.hooksPath` at it. They are advisory; review still happens on the PR.
+- Decisions that are expensive to reverse are recorded in `docs/adr/`, one file each.
 - Requires Node ≥ 24 (see `.nvmrc`).
 
 All rights reserved.
