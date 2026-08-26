@@ -105,8 +105,16 @@ run rather than silently green. Baselines sit under `test/__screenshots__/<platf
 because the same Chromium rasterises text differently on macOS and on Linux.
 
 Colour comes from the tokens in `packages/ui/src/styles/globals.css` and from nowhere
-else. A hard-coded colour anywhere in the tree fails `pnpm lint`, through the GritQL
-plugin in `scripts/lint/`.
+else. A hard-coded colour in a string or template literal in any `.ts` or `.tsx` file
+fails `pnpm lint`, through the GritQL plugin in `scripts/lint/`: a Tailwind palette
+class, a hex literal, a CSS colour function, or a named CSS colour. It does not read
+`.css`, where the only stylesheet today is the token file itself, and it cannot see a
+class assembled from pieces at runtime.
+
+The plugin can fail open — a regex Biome cannot parse is reported at info level, which
+does not fail a build — so `pnpm lint` runs `scripts/lint/colour-rule.mjs` first. That
+lints a fixture with known answers and exits non-zero if the rule stops matching what it
+is supposed to match, or starts matching what it is not.
 
 ## Conventions
 
