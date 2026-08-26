@@ -20,6 +20,12 @@ coverage/
 .dev.vars
 .dev.vars.*
 
+# test output. The screenshot baselines under test/__screenshots__ are committed;
+# these three are what a run writes on the way to comparing against them.
+test-results/
+playwright-report/
+blob-report/
+
 # local dev
 .wrangler/
 .vercel/

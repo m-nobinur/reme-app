@@ -47,7 +47,11 @@ jobs:
 
       - run: pnpm lint:ci --reporter=github
 
-      # No test runner in the tree yet; turbo exits 0 when no package defines the task.
+      # The a11y and visual gates in packages/ui run in a real browser, so the
+      # `test` task needs one. Only Chromium: the design system is compared
+      # against committed screenshots, and a second engine means a second set.
+      - run: pnpm --filter @workspace/ui exec playwright install --with-deps chromium
+
       - run: pnpm test
 
       # Bundles the worker and gzips it. Needs no Cloudflare credentials: the

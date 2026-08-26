@@ -10,6 +10,9 @@
     "cssVariables": true
   },
   "iconLibrary": "phosphor",
+  "registries": {
+    "@assistant-ui": "https://r.assistant-ui.com/styles/{style}/{name}.json"
+  },
   "aliases": {
     "components": "@workspace/ui/components",
     "utils": "@workspace/ui/lib/utils",

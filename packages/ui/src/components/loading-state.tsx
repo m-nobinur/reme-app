@@ -1,3 +1,4 @@
+import { Skeleton } from "@workspace/ui/components/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 import type { ComponentProps } from "react"
 
@@ -16,8 +17,8 @@ function LoadingState({
       {...props}
     >
       <span className="sr-only">{label}</span>
-      <div className="h-8 w-48 animate-pulse rounded-2xl bg-muted" />
-      <div className="h-32 animate-pulse rounded-3xl bg-muted" />
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-32 rounded-3xl" />
     </div>
   )
 }

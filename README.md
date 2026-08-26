@@ -86,6 +86,28 @@ Prod needs its API key from the dashboard before the CLI can reach it:
 the change that gives it a hostname. In CI, `WORKOS_API_KEY` comes from a repository
 secret and overrides the stored environment.
 
+## Design system
+
+`packages/ui` is the app design system, and every primitive it exports carries a catalog
+entry and an axe scan. A primitive missing from the catalog fails the suite that reads it.
+
+```sh
+pnpm --filter @workspace/ui catalog       # the catalog page; add ?theme=dark for the other one
+pnpm --filter @workspace/ui test          # catalog drift, accessibility, and screenshots if you have baselines
+pnpm --filter @workspace/ui test:update   # write the screenshot baselines for this machine
+```
+
+Screenshot baselines are gitignored. They are PNGs that every visual change rewrites, and
+git keeps every version of each forever, so the visual comparison is a local gate: run
+`test:update` once, then `test` before a UI change and after it. CI runs the catalog and
+accessibility checks and reports the two snapshot tests as skipped, which is visible in the
+run rather than silently green. Baselines sit under `test/__screenshots__/<platform>/`,
+because the same Chromium rasterises text differently on macOS and on Linux.
+
+Colour comes from the tokens in `packages/ui/src/styles/globals.css` and from nowhere
+else. A hard-coded colour anywhere in the tree fails `pnpm lint`, through the GritQL
+plugin in `scripts/lint/`.
+
 ## Conventions
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.

@@ -15,6 +15,7 @@
     "test": "turbo test",
     "test:tenancy": "pnpm --filter @workspace/db test:tenancy",
     "size": "turbo size",
+    "snapshots:linux": "bash scripts/ui-linux-snapshots.sh",
     "lint": "biome check --error-on-warnings",
     "lint:ci": "biome ci --error-on-warnings",
     "lint:fix": "biome check --write --unsafe",
