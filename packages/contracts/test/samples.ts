@@ -1,0 +1,173 @@
+import type { ContractName } from "../src/registry.ts"
+
+const ORG = "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e"
+const STAFF = "1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d"
+const SESSION = "2b3c4d5e-6f70-4b8c-8d0e-2f3a4b5c6d7e"
+const ASSIGNMENT = "3c4d5e6f-7081-4c8d-9e0f-3a4b5c6d7e8f"
+const NOW = "2026-08-26T09:30:00Z"
+const LATER = "2026-08-27T09:30:00+01:00"
+const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
+
+/**
+ * One valid instance per contract. The round-trip suite mutates these, so they
+ * double as the worked example of each shape. All content is fictional (R8).
+ */
+export const samples: Record<ContractName, unknown> = {
+  ApprovalRequest: {
+    approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    requested_by_staff_id: STAFF,
+    approver_staff_id: "5e6f7081-92a3-4e8f-b021-5c6d7e8f9001",
+    action_kind: "publish_site_revision",
+    target: {
+      kind: "revision",
+      revision_id: "6f708192-a3b4-4f80-8132-6d7e8f900112",
+    },
+    rationale: "First public revision of the site built from canonical facts.",
+    requested_at: NOW,
+    expires_at: LATER,
+  },
+  Assignment: {
+    assignment_id: ASSIGNMENT,
+    org_id: ORG,
+    staff_id: STAFF,
+    created_by_staff_id: "5e6f7081-92a3-4e8f-b021-5c6d7e8f9001",
+    parent_assignment_id: null,
+    revision_of_assignment_id: null,
+    kind: "website_build",
+    state: "implementing",
+    expected_version: 3,
+    goal: "Build the first site revision from the canonical fact snapshot.",
+    acceptance_criteria: [
+      "Every price and opening hour on the page matches a canonical fact",
+      "Lighthouse performance at or above 90 on the preview build",
+    ],
+    fact_snapshot_id: "708192a3-b4c5-4081-9243-7e8f90011223",
+    pack_refs: [{ key: "cleaning", version: "0.1.0" }],
+    budget_usd: 12.5,
+    deadline: LATER,
+    priority: "normal",
+    created_at: NOW,
+    updated_at: NOW,
+  },
+  CapabilityCall: {
+    call_id: "8192a3b4-c5d6-4192-a354-8f9001122334",
+    org_id: ORG,
+    staff_id: STAFF,
+    session_id: SESSION,
+    assignment_id: ASSIGNMENT,
+    capability_key: "calendar.create_event",
+    args: { starts_at: NOW, duration_minutes: 90 },
+    idempotency_key: ULID,
+    audit_id: "92a3b4c5-d6e7-42a3-8465-900112233445",
+    requested_at: NOW,
+  },
+  ErrorEnvelope: {
+    class: "permission",
+    code: "capability.denied",
+    message: "The staff member is not granted calendar.create_event.",
+    occurred_at: NOW,
+    detail: { capability_key: "calendar.create_event" },
+  },
+  EventEnvelope: {
+    event_id: ULID,
+    org_id: ORG,
+    staff_id: STAFF,
+    assignment_id: ASSIGNMENT,
+    session_id: SESSION,
+    seq: 41,
+    type: "assignment.state_changed",
+    occurred_at: NOW,
+    idempotency_key: ULID,
+    taint: [],
+    payload: { from: "planning", to: "implementing" },
+  },
+  FactRecord: {
+    fact_id: "a3b4c5d6-e7f8-43b4-9576-011223344556",
+    org_id: ORG,
+    key: "hours.tuesday_close",
+    fact_type: "opening_hours",
+    value: "18:00",
+    version: 2,
+    provenance: {
+      source: "owner_stated",
+      confidence: 1,
+      verified_by_staff_id: STAFF,
+      verified_at: NOW,
+    },
+    valid_from: NOW,
+    valid_to: null,
+    superseded_by_fact_id: null,
+  },
+  FailureReport: {
+    failure_id: ULID,
+    org_id: ORG,
+    staff_id: STAFF,
+    assignment_id: ASSIGNMENT,
+    error: {
+      class: "transient",
+      code: "sandbox.heartbeat_missed",
+      message: "The builder sandbox missed three consecutive heartbeats.",
+      occurred_at: NOW,
+      detail: { missed: 3 },
+    },
+    diagnosis: "Sandbox died mid-build; resume from the last checkpoint.",
+    last_checkpoint_ref: "checkpoint:01JZ8QK5M7N9P0R2T4V6W8X0Y2",
+    attempt: 2,
+    reported_at: NOW,
+  },
+  InformationRequest: {
+    request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    requested_by_staff_id: STAFF,
+    field: "service_area.postcodes",
+    why: "The service-area section cannot render without a postcode list.",
+    answer_schema: {
+      type: "array",
+      items: { type: "string", minLength: 2 },
+      minItems: 1,
+    },
+    options: null,
+    blocking: true,
+    requested_at: NOW,
+    expires_at: LATER,
+  },
+  RuntimeSpec: {
+    spec_id: "c5d6e7f8-091a-45d6-9798-223344556677",
+    org_id: ORG,
+    staff_id: STAFF,
+    session_id: SESSION,
+    profile: "builder",
+    model_routing: {
+      triage: { model: "small", max_output_tokens: 1024 },
+      implement: { model: "frontier", max_output_tokens: 8192 },
+    },
+    tool_manifest: ["memory.search", "site.write_file", "site.run_build"],
+    skill_refs: [{ key: "astro-starter", version: "0.3.1" }],
+    hook_set: ["session_start", "pre_model_call", "checkpoint", "session_end"],
+    memory_namespaces: {
+      read: ["mem:project:site-1", "mem:curated:engineering"],
+      write: ["mem:project:site-1"],
+    },
+    context_policy: {
+      max_input_tokens: 180000,
+      compaction_threshold_tokens: 140000,
+      include_fact_snapshot: true,
+    },
+    budget_snapshot: {
+      model_usd_cap: 20,
+      model_usd_spent: 4.25,
+      tool_usd_cap: 5,
+      tool_usd_spent: 0,
+      period_ends_at: LATER,
+    },
+    sandbox_class: "standard-2",
+    egress_allowlist: ["registry.npmjs.org", "gateway.internal"],
+    supervisor_ref: "5e6f7081-92a3-4e8f-b021-5c6d7e8f9001",
+    issued_at: NOW,
+    expires_at: LATER,
+    signature: "ed25519:AbC123",
+  },
+}
