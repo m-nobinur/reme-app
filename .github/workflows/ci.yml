@@ -110,10 +110,17 @@ jobs:
           pnpm --filter @workspace/db seed:probe
           pnpm db:migrate
 
-      # Blocking, and not removable. It reads the catalog rather than a list, so
-      # a tenant table that arrives without a policy fails here rather than in
-      # production. The pooler measurement inside it skips: there is no
-      # DATABASE_URL_POOLED and this service container has no pooler in front of
-      # it. Everything else runs.
+      # Blocking: a red run blocks the merge button. Not unremovable, though,
+      # and the README says so plainly rather than leaving it implied. This is
+      # one `run:` line any PR can delete, and branch protection, which is what
+      # would make it binding, needs a paid plan on a private repo.
+      #
+      # It reads the catalog rather than a list, so a relation that arrives
+      # without a policy fails here rather than in production. Two things it
+      # does not prove. The service container's `reme` user is a superuser, so
+      # the Neon-specific fact the design rests on, that `neondb_owner` holds
+      # `rolbypassrls`, is never exercised here. And the pooler measurement
+      # inside the suite skips: there is no DATABASE_URL_POOLED and this
+      # container has no pooler in front of it. Everything else runs.
       - name: Tenancy gate
         run: pnpm test:tenancy
