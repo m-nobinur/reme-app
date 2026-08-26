@@ -4,8 +4,15 @@
   "files": {
     "ignoreUnknown": false,
     // Generated: the TanStack router plugin rewrites the route tree on every
-    // dev run, and `wrangler types` rewrites the Worker binding types.
-    "includes": ["**", "!**/*.gen.ts", "!**/worker-configuration.d.ts"]
+    // dev run, `wrangler types` rewrites the Worker binding types, and
+    // drizzle-kit rewrites the migration snapshots. Formatting the last of
+    // those would put the repo permanently at odds with the next `db:generate`.
+    "includes": [
+      "**",
+      "!**/*.gen.ts",
+      "!**/worker-configuration.d.ts",
+      "!packages/db/drizzle"
+    ]
   },
   "formatter": {
     "enabled": true,

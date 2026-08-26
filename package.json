@@ -6,6 +6,8 @@
     "bootstrap": "node scripts/bootstrap.mjs",
     "preflight": "node scripts/preflight.mjs",
     "seed": "node scripts/seed.mjs",
+    "db:generate": "pnpm --filter @workspace/db db:generate",
+    "db:migrate": "pnpm --filter @workspace/db db:migrate",
     "build": "turbo build",
     "dev": "turbo dev",
     "typecheck": "turbo typecheck",
