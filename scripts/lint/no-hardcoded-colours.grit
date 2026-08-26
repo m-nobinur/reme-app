@@ -1,0 +1,17 @@
+language js
+
+// Colour comes from the semantic tokens in packages/ui/src/styles/globals.css and
+// from nowhere else, which is what lets one token edit move both themes at once.
+// Biome has no rule for this, so it is a GritQL plugin, loaded from biome.jsonc so
+// that `pnpm lint`, `biome ci` and the pre-commit hook all apply it.
+//
+// The regex has to match a node in full, so it is anchored on the quote or backtick
+// that opens and closes a string or template literal, and only those nodes match.
+// Three shapes are caught: a Tailwind palette class (`bg-red-500`, `text-white`), a
+// hex literal, and a CSS colour function. `color-mix(in oklch, var(--secondary), …)`
+// is not one of them: it names no colour, it combines tokens, and the button
+// primitive already uses it.
+$value where {
+  $value <: r"(?s)[\"'`].*(?:[^A-Za-z0-9-](?:bg|text|border|ring|outline|decoration|divide|from|via|to|fill|stroke|shadow|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b|#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\().*[\"'`]",
+  register_diagnostic(span=$value, message="Hard-coded colour. Both themes flip through the tokens in packages/ui/src/styles/globals.css, so use a token class (bg-background, text-muted-foreground, border-border) or add a token there.")
+}
