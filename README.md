@@ -63,6 +63,7 @@ missing one fails at boot naming the variable.
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.
 - Branches are `<type>/<short-kebab-summary>`; commits are conventional, imperative, subject line only. `.githooks/` enforces both locally once `pnpm bootstrap` has pointed `core.hooksPath` at it. They are advisory; review still happens on the PR.
+- `pnpm size` bundles the worker with `wrangler deploy --dry-run` and gzips it. It fails over the 1 MiB budget in `apps/web/size-budget.json`, and over a 2% drift from the baseline recorded there. A change that legitimately grows the bundle raises that baseline in the same PR, so the growth is visible in review.
 - Decisions that are expensive to reverse are recorded in `docs/adr/`, one file each.
 - Requires Node ≥ 24 (see `.nvmrc`).
 

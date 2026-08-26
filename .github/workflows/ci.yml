@@ -50,6 +50,10 @@ jobs:
       # No test runner in the tree yet; turbo exits 0 when no package defines the task.
       - run: pnpm test
 
+      # Bundles the worker and gzips it. Needs no Cloudflare credentials: the
+      # dry run never talks to the API.
+      - run: pnpm size
+
   # Migrations and the tenancy gate get their own job with a real Postgres,
   # because the thing worth knowing about either is what the database does, not
   # what the code intends. A service container needs no secret, so this is green
