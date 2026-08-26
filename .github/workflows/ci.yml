@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Turbo remote cache. Both are unset until the owner adds them, and turbo falls
+  # back to the filesystem cache below when they are empty. They are repo secrets
+  # rather than environment secrets because environments need a paid plan on a
+  # private repo, so `staging` and `prod` are deferred.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  TURBO_CACHE_DIR: .turbo/cache
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint:ci --reporter=github
+
+      # No test runner in the tree yet; turbo exits 0 when no package defines the task.
+      - run: pnpm test
