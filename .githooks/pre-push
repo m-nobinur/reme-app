@@ -8,6 +8,12 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
     die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
 done
 
+# The last gate before a push runs the suites for real. Plain `pnpm typecheck`
+# reads a turbo cache shared by every worktree on this machine, so it can print
+# FULL TURBO for a result produced somewhere else, against a tree that no longer
+# exists. Seen on main: 5 cached in 26ms while packages/db/node_modules was gone.
+export TURBO_FORCE=true
+
 run_script typecheck
 run_script test
 ok "✓ pre-push"
