@@ -30,4 +30,5 @@ todos.json
 .claude/
 CLAUDE.md
 .local/
+.vscode/
 *.log

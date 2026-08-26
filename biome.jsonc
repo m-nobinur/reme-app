@@ -1,9 +1,5 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
-  // The only linter and formatter in the tree. There is exactly one of these files
-  // and it lives at the root: a nested biome.jsonc re-roots path matching and drops
-  // these overrides. It is .jsonc and not .json because a // comment in a .json makes
-  // Biome discard the whole config and pass with defaults, silently.
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": false,
@@ -65,11 +61,6 @@
       },
       "nursery": {
         "useImportsFirst": "error",
-        // Tailwind class order. Nursery, defaults to info, and its fix is classified
-        // unsafe, so it needs "error" here and `biome check --write --unsafe` to apply.
-        // Known gaps against prettier-plugin-tailwindcss: it does not sort screen
-        // variants (md:, max-lg:) and it only knows the default Tailwind config, so
-        // plugin utilities sort by the built-in order.
         "useSortedClasses": {
           "level": "error",
           "options": { "functions": ["clsx", "cva", "cn"] }
@@ -79,7 +70,6 @@
         "noCommonJs": "error",
         "noInferrableTypes": "error",
         "noNamespace": "error",
-        // Off in the scaffold's ESLint config, kept off here.
         "useConsistentArrayType": "off",
         "useAsConstAssertion": "error",
         "useConsistentMethodSignatures": "error",
@@ -101,7 +91,6 @@
         "noExtraNonNullAssertion": "error",
         "noFallthroughSwitchClause": "error",
         "noGlobalAssign": "error",
-        // Off in the scaffold's ESLint config, kept off here.
         "noImportCycles": "off",
         "noIrregularWhitespace": "error",
         "noMisleadingCharacterClass": "error",
@@ -113,7 +102,6 @@
         "noUselessRegexBackrefs": "error",
         "noVar": "error",
         "noWith": "error",
-        // Off in the scaffold's ESLint config, kept off here.
         "useAwait": "off"
       }
     },
