@@ -42,8 +42,25 @@ are RFC 3339 strings with an offset; ids are UUIDs or ULIDs.
 **snake_case field names**, matching the Postgres columns and the architecture
 document.
 
+## Known gap: `__proto__`
+
+`{"__proto__": ...}` is valid JSON, and `JSON.parse` turns it into an ordinary
+own key without touching the prototype. The published JSON Schema rejects it,
+correctly. Zod 4.4.3 accepts it and strips it, so nothing is polluted, but a
+consumer validating against our OpenAPI document would reject a payload our own
+runtime waves through. The gap is exactly one key wide: every other inherited
+name is rejected by both, and the suite asserts that.
+
+Whatever terminates TLS is the right place to drop the key outright. Until
+then the divergence is pinned by a test that fails when Zod fixes it.
+
 ## Versions
 
 `zod` and `openapi-typescript` are pinned exactly. Both decide the bytes in
 `generated/`, so a floating minor would turn the drift check red on a PR that
 changed nothing.
+
+The fuzz seed is pinned too, so the suite is a pure function of its inputs and
+a cached pass means what it says. The cost is a fixed set of cases: new ground
+gets covered when the schemas change, not when the clock moves. A random-seed
+sweep belongs in the nightly job.
