@@ -29,7 +29,8 @@ which the TanStack SDK depends on, seals through `AuthKitCore.encryptSession`, w
 `sealData(session, { password, ttl: 0 })` over iron-webcrypto: AES-256-CBC, SHA-256
 integrity, 256-bit salts, one PBKDF2 iteration, then a literal `~2` appended. `@workos-inc/node`
 vendors iron-webcrypto and does the same thing with the same parameters. Measured under
-workerd, a value sealed by one unseals in the other and back. The difference is the payload,
+workerd in both directions: a value sealed by the framework SDK unseals in the backend SDK, and
+the backend SDK's own seal (`Fe26.2*1*...~2`, 657 bytes) unseals in the framework SDK. The difference is the payload,
 not the envelope: the framework SDK stores `{accessToken, refreshToken, user, impersonator}`,
 the backend SDK stores that plus `organizationId` and `authenticationMethod`. Everything else
 that reaches a request handler, including `org_id`, `role`, `roles`, `permissions`,
@@ -37,8 +38,13 @@ that reaches a request handler, including `org_id`, `role`, `roles`, `permission
 is not in the cookie.
 
 *The framework SDK cannot run where we would need it.* `ConfigurationProvider` lists `apiKey`
-among its required keys, and the default client factory calls `getConfig('apiKey')` eagerly.
-Any worker that constructs the AuthKit service needs `WORKOS_API_KEY` in its own environment.
+among its required keys. Constructing the service is not what fails: `getWorkOS` is
+`once(createWorkOSInstance)` and stays lazy, and importing the package and building the
+`AuthService` both succeed without the key. What fails is `validateConfig()` in the
+`authkitMiddleware` body, on the first request through it, whether or not that request needs
+the key. Measured: a cookieless `GET` throws `WORKOS_API_KEY is required`. So the failure is
+unconditional at request time, and any worker serving traffic through the middleware needs
+`WORKOS_API_KEY` in its own environment.
 `apps/web` is the browser-facing worker and holds no credentials (§9.2), and the phase exit
 gate asserts in CI that `WORKOS_API_KEY` reaches no client bundle. So the framework SDK is
 ruled out by the credential boundary before the cookie format is even a question.
@@ -83,8 +89,11 @@ so the verifier is a short-lived row keyed by `state`, not a crypto problem.
 
 The session cookie has less headroom than it looks. Measured under workerd with a 983-byte
 access token and a full user object, the backend SDK's payload is 1463 bytes of JSON and 2172
-bytes sealed, an overhead of about 1.49x. Against the roughly 4096-byte per-cookie browser
-limit that leaves about 1.3 KB of plaintext, and a real access token carrying `roles`,
+bytes sealed. **The overhead is additive, not a ratio**: about 220 fixed bytes for two 64-hex
+salts, the iv, the mac and the delimiters, plus base64 expansion on the rest. Measured across
+four payload sizes the ratio falls from 3.23x at 111 bytes to 1.41x at 2911, so quoting a
+single multiplier misleads anyone re-deriving this at another size. Against the roughly
+4096-byte per-cookie browser limit that leaves about 1.3 KB of plaintext, and a real access token carrying `roles`,
 `permissions`, `entitlements` and `feature_flags` arrays eats into it. Nothing of ours goes in
 this cookie.
 
@@ -99,6 +108,11 @@ treats the result as a session. `loadSealedSession(...).authenticate()` checks f
 token and then verifies the JWT, so a bad cookie comes back as `authenticated: false` with a
 reason. A test that a tampered cookie is rejected, and a test that a forged `org_id` in a
 request body is ignored, both belong to the auth story.
+
+**`authenticate()` fails closed on a bad cookie and not on an unreachable JWKS.** Only
+`ERR_JWT_*` and `ERR_JWS_*` are turned into `authenticated: false`; a non-200 from the JWKS
+endpoint raises `JOSEError` out of the guard, so a WorkOS JWKS outage surfaces as a 500 rather
+than a redirect to sign in. The auth story owns deciding which that should be.
 
 `WORKOS_COOKIE_PASSWORD` is a second secret alongside `WORKOS_API_KEY`, and key derivation runs
 a single PBKDF2 iteration, so the password carries the entropy on its own. Generate it with
