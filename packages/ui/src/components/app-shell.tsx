@@ -1,5 +1,5 @@
 import { cn } from "@workspace/ui/lib/utils"
-import type { ComponentProps, ReactNode } from "react"
+import { type ComponentProps, type ReactNode, useEffect, useRef } from "react"
 
 /**
  * The frame every authenticated screen renders into: a sidebar that becomes a
@@ -48,6 +48,49 @@ const navLinkClass = cn(
   "flex items-center gap-2 rounded-2xl px-3 py-2 text-sidebar-foreground/70 text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/30 aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0"
 )
 
+/**
+ * The sidebar navigation list. Below `md` it is a horizontally scrolling row,
+ * where the active item can start off-screen, so it is scrolled into view when
+ * the route changes. Children are `<li>` elements; the active one is found by
+ * `aria-current="page"`, which is what a router link sets, so this package
+ * still imports no router.
+ */
+function AppNav({
+  activeKey,
+  children,
+  className,
+  ...props
+}: ComponentProps<"nav"> & { activeKey: string }) {
+  const listRef = useRef<HTMLUListElement | null>(null)
+
+  // An effect, not a layout effect: it must not run during SSR, where there is
+  // no DOM. The overflow check makes it a no-op on desktop, where the list is a
+  // column and the only scrollable ancestor is the page itself. Instant rather
+  // than smooth, so there is no motion to have to opt out of.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeKey is the trigger, not an input. Without it this would re-run on every render and yank the nav back after the reader had scrolled it themselves.
+  useEffect(() => {
+    const list = listRef.current
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Biome reads RefObject.current as non-nullable here; tsc does not, and tsc is right.
+    if (!list || list.scrollWidth <= list.clientWidth) {
+      return
+    }
+    list
+      .querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [activeKey])
+
+  return (
+    <nav className={cn("min-w-0", className)} {...props}>
+      <ul
+        className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible"
+        ref={listRef}
+      >
+        {children}
+      </ul>
+    </nav>
+  )
+}
+
 /** The heading block at the top of every screen. */
 function PageHeader({
   title,
@@ -78,4 +121,4 @@ function PageHeader({
   )
 }
 
-export { AppShell, navLinkClass, PageHeader }
+export { AppNav, AppShell, navLinkClass, PageHeader }

@@ -4,8 +4,17 @@ import {
   HouseIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
-import { createFileRoute, Link, Outlet } from "@tanstack/react-router"
-import { AppShell, navLinkClass } from "@workspace/ui/components/app-shell"
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useLocation,
+} from "@tanstack/react-router"
+import {
+  AppNav,
+  AppShell,
+  navLinkClass,
+} from "@workspace/ui/components/app-shell"
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import { listOwnerOrgs } from "@/lib/org"
@@ -34,6 +43,7 @@ const NAV = [
 
 function AppLayout() {
   const { orgs } = Route.useLoaderData()
+  const pathname = useLocation({ select: (location) => location.pathname })
 
   return (
     <AppShell
@@ -43,22 +53,20 @@ function AppLayout() {
             <OrgSwitcher className="min-w-0 flex-1" orgs={orgs} />
             <ThemeToggle className="shrink-0" />
           </div>
-          <nav aria-label="Main" className="min-w-0">
-            <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-              {NAV.map((item) => (
-                <li key={item.to}>
-                  <Link
-                    activeOptions={{ exact: item.exact }}
-                    className={navLinkClass}
-                    to={item.to}
-                  >
-                    <item.icon aria-hidden />
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <AppNav activeKey={pathname} aria-label="Main">
+            {NAV.map((item) => (
+              <li key={item.to}>
+                <Link
+                  activeOptions={{ exact: item.exact }}
+                  className={navLinkClass}
+                  to={item.to}
+                >
+                  <item.icon aria-hidden />
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </AppNav>
         </>
       }
     >
