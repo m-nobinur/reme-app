@@ -34,6 +34,7 @@
   },
   "linter": {
     "enabled": true,
+    "domains": { "types": "all" },
     "rules": {
       "preset": "recommended",
       "complexity": {
@@ -60,6 +61,7 @@
         "useYield": "error"
       },
       "nursery": {
+        "noFloatingPromises": "error",
         "useImportsFirst": "error",
         "useSortedClasses": {
           "level": "error",
@@ -92,6 +94,7 @@
         "noFallthroughSwitchClause": "error",
         "noGlobalAssign": "error",
         "noImportCycles": "off",
+        "noUnnecessaryConditions": "error",
         "noIrregularWhitespace": "error",
         "noMisleadingCharacterClass": "error",
         "noMisleadingInstantiator": "error",

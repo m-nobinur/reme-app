@@ -8,7 +8,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "size": "turbo size",
-    "lint": "biome check",
+    "lint": "biome check --error-on-warnings",
     "lint:fix": "biome check --write --unsafe",
     "lint:classes": "biome check --write --unsafe --only=nursery/useSortedClasses",
     "format": "biome format --write"
