@@ -35,7 +35,7 @@ Behaviour is the product, with an engineering budget behind it:
 ## Conventions
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.
-- Branches are `<type>/<short-kebab-summary>`; commits are conventional, imperative, subject line only. `.githooks/` enforces both locally — they are advisory, review still happens on the PR.
+- Branches are `<type>/<short-kebab-summary>`; commits are conventional, imperative, subject line only. `.githooks/` enforces both locally after `git config core.hooksPath .githooks` — a fresh clone does not run them until you do. They are advisory; review still happens on the PR.
 - Requires Node ≥ 24 (see `.nvmrc`).
 
 All rights reserved.
