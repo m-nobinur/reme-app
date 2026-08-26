@@ -33,6 +33,161 @@
       "!**/.pnpm-store/"
     ]
   },
+  // Dependency direction, from 3-engineering.md: apps/* -> packages/*;
+  // packages/* -> contracts | config | observability only; contracts imports
+  // nothing. Biome matches the import string and not the resolved package, so
+  // each block names the bare specifier and the relative path that means the
+  // same thing. A narrower block replaces a wider one rather than merging with
+  // it, so each repeats the whole pattern set.
+  //
+  // Adding a package needs no change here unless it joins the allowed set, in
+  // which case add "!@workspace/<name>" and "!@workspace/<name>/**" to the
+  // first group of every block.
+  "overrides": [
+    {
+      // apps/* -> packages/* is permissive, so nothing is banned by name here.
+      // The relative reach still is: it skips the package's exports the same way
+      // it does between packages. An app needs a different pattern from the one
+      // the packages blocks use, because an app nests deeply enough that
+      // "../../..." is an ordinary in-app import; every reach out of an app,
+      // at any depth, goes through a literal "packages/" segment instead.
+      "includes": ["apps/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/packages/*/**"],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@workspace/*",
+                      "@workspace/*/**",
+                      "!@workspace/contracts",
+                      "!@workspace/contracts/**",
+                      "!@workspace/config",
+                      "!@workspace/config/**",
+                      "!@workspace/observability",
+                      "!@workspace/observability/**"
+                    ],
+                    "message": "A package may import only @workspace/contracts, @workspace/config and @workspace/observability."
+                  },
+                  {
+                    // Escapes are named, not counted. A relative reach out of a
+                    // package always passes through a sibling's directory name,
+                    // so the names are listed. Counting "../" instead does not
+                    // work: depth is not fixed, and "../../lib/utils" from
+                    // src/components/ never leaves its own package. Add a line
+                    // here when a package is added, same as the negations above.
+                    "group": [
+                      "**/contracts/src/**",
+                      "**/config/src/**",
+                      "**/ui/src/**",
+                      "**/db/src/**"
+                    ],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // shadcn writes self-imports as "@workspace/ui/lib/utils" and rewrites them
+      // on every `shadcn add`, so ui is allowed to name itself. A package that
+      // does the same needs its own block here.
+      "includes": ["packages/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@workspace/*",
+                      "@workspace/*/**",
+                      "!@workspace/contracts",
+                      "!@workspace/contracts/**",
+                      "!@workspace/config",
+                      "!@workspace/config/**",
+                      "!@workspace/observability",
+                      "!@workspace/observability/**",
+                      "!@workspace/ui",
+                      "!@workspace/ui/**"
+                    ],
+                    "message": "A package may import only @workspace/contracts, @workspace/config, @workspace/observability and itself."
+                  },
+                  {
+                    "group": [
+                      "**/contracts/src/**",
+                      "**/config/src/**",
+                      "**/ui/src/**",
+                      "**/db/src/**"
+                    ],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // contracts is the base of the graph and imports no workspace package.
+      "includes": ["packages/contracts/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@workspace/*", "@workspace/*/**"],
+                    "message": "contracts imports nothing from the workspace."
+                  },
+                  {
+                    "group": [
+                      "**/contracts/src/**",
+                      "**/config/src/**",
+                      "**/ui/src/**",
+                      "**/db/src/**"
+                    ],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "linter": {
     "enabled": true,
     "domains": { "types": "all" },
