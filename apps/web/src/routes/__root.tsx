@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router"
+import { themeInitScript } from "@workspace/ui/components/theme-toggle"
 
 import appCss from "@workspace/ui/globals.css?url"
 
@@ -13,7 +14,11 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        name: "color-scheme",
+        content: "light dark",
+      },
+      {
+        title: "Reme",
       },
     ],
     links: [
@@ -23,20 +28,21 @@ export const Route = createRootRoute({
       },
     ],
   }),
-  notFoundComponent: () => (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>404</h1>
-      <p>The requested page could not be found.</p>
-    </main>
-  ),
   shellComponent: RootDocument,
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // The theme script adds a class to this element before React hydrates.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Inline and blocking on purpose: it has to set the theme class
+            before first paint, or a dark-mode reader gets a white flash. */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed literal from this repo, with nothing interpolated into it
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
       </head>
       <body>
         {children}

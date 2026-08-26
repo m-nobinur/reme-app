@@ -9,13 +9,43 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppStaffRouteImport } from './routes/app/staff'
+import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
+import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as ApiRuntimeRouteImport } from './routes/api.runtime'
 
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStaffRoute = AppStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPipelineRoute = AppPipelineRouteImport.update({
+  id: '/pipeline',
+  path: '/pipeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApprovalsRoute = AppApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiRuntimeRoute = ApiRuntimeRouteImport.update({
   id: '/api/runtime',
@@ -25,38 +55,109 @@ const ApiRuntimeRoute = ApiRuntimeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/app/staff': typeof AppStaffRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/app/staff': typeof AppStaffRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/app/staff': typeof AppStaffRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/runtime'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/api/runtime'
+    | '/app/approvals'
+    | '/app/pipeline'
+    | '/app/staff'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/runtime'
-  id: '__root__' | '/' | '/api/runtime'
+  to:
+    | '/'
+    | '/api/runtime'
+    | '/app/approvals'
+    | '/app/pipeline'
+    | '/app/staff'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/api/runtime'
+    | '/app/approvals'
+    | '/app/pipeline'
+    | '/app/staff'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   ApiRuntimeRoute: typeof ApiRuntimeRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/staff': {
+      id: '/app/staff'
+      path: '/staff'
+      fullPath: '/app/staff'
+      preLoaderRoute: typeof AppStaffRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/pipeline': {
+      id: '/app/pipeline'
+      path: '/pipeline'
+      fullPath: '/app/pipeline'
+      preLoaderRoute: typeof AppPipelineRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/approvals': {
+      id: '/app/approvals'
+      path: '/approvals'
+      fullPath: '/app/approvals'
+      preLoaderRoute: typeof AppApprovalsRouteImport
+      parentRoute: typeof AppRoute
     }
     '/api/runtime': {
       id: '/api/runtime'
@@ -68,8 +169,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppRouteChildren {
+  AppApprovalsRoute: typeof AppApprovalsRoute
+  AppPipelineRoute: typeof AppPipelineRoute
+  AppStaffRoute: typeof AppStaffRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppApprovalsRoute: AppApprovalsRoute,
+  AppPipelineRoute: AppPipelineRoute,
+  AppStaffRoute: AppStaffRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   ApiRuntimeRoute: ApiRuntimeRoute,
 }
 export const routeTree = rootRouteImport
