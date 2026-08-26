@@ -294,6 +294,16 @@ export const staff = pgTable(
   ]
 )
 
+/** Deliberately missing its RLS policy, to prove the gate refuses it. */
+export const widgets = pgTable("widgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => orgs.id),
+  name: text("name").notNull(),
+  createdAt,
+})
+
 /**
  * Store 1 (§10.1). Versioned and never overwritten: superseding a fact closes
  * the losing version with `valid_to` and writes a new row. Provenance is
