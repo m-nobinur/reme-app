@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reme-web",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "observability": { "enabled": true },
+  // No id: wrangler provisions this locally for dev and preview. The deployed
+  // namespace is created from code when the infrastructure story lands.
+  "kv_namespaces": [{ "binding": "CACHE" }]
+}
