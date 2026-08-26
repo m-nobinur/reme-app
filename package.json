@@ -1,0 +1,25 @@
+{
+  "name": "reme",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "size": "turbo size",
+    "lint": "biome check",
+    "lint:fix": "biome check --write --unsafe",
+    "lint:classes": "biome check --write --unsafe --only=nursery/useSortedClasses",
+    "format": "biome format --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "turbo": "^2.9.18",
+    "typescript": "^6"
+  },
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=24"
+  }
+}

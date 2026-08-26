@@ -1,0 +1,34 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/vite": "^4",
+    "@tanstack/react-devtools": "0.10.5",
+    "@tanstack/react-router": "1.170.16",
+    "@tanstack/react-router-devtools": "1.167.0",
+    "@tanstack/react-start": "1.168.26",
+    "@tanstack/router-plugin": "1.168.18",
+    "@workspace/ui": "workspace:*",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwindcss": "^4"
+  },
+  "devDependencies": {
+    "@tanstack/devtools-vite": "0.7.0",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "typescript": "^6",
+    "vite": "^8"
+  }
+}

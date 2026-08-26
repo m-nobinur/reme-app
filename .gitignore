@@ -2,10 +2,14 @@
 node_modules/
 .turbo/
 dist/
+dist-ssr/
 build/
 .next/
 .open-next/
 out/
+.output/
+.tanstack/
+.vinxi/
 coverage/
 *.tsbuildinfo
 
@@ -20,6 +24,9 @@ coverage/
 .wrangler/
 .vercel/
 .DS_Store
+*.local
+__unconfig*
+todos.json
 .claude/
 CLAUDE.md
 .local/
