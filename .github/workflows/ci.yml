@@ -49,3 +49,63 @@ jobs:
 
       # No test runner in the tree yet; turbo exits 0 when no package defines the task.
       - run: pnpm test
+
+  # Migrations get their own job with a real Postgres because the thing worth
+  # knowing about a migration is whether it applies, and to a database that
+  # already holds rows. A service container needs no secret, so this is green on
+  # a fork PR exactly as it is on ours.
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        # Postgres 17 to match the Neon compute (17.11), not the pg18 in
+        # docker-compose.yml. This job earns its place by failing on what Neon
+        # would reject.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: reme
+          POSTGRES_DB: reme
+          # No password at all, rather than a fake one written into the repo:
+          # the database lives inside this job and is reachable from nowhere else.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reme -d reme"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://reme@localhost:5432/reme
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Schema and migrations agree
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain packages/db/drizzle)" ]; then
+            echo "::error::schema.ts was edited without generating a migration."
+            echo "Run: pnpm db:generate --name <what_it_does>"
+            git status --porcelain packages/db/drizzle
+            exit 1
+          fi
+
+      - run: pnpm --filter @workspace/db db:check
+
+      # A fresh database.
+      - run: pnpm db:migrate
+
+      - name: Apply again, over rows
+        run: |
+          pnpm --filter @workspace/db seed:probe
+          pnpm db:migrate
