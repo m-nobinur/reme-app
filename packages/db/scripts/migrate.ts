@@ -17,6 +17,13 @@ import { connect } from "../src/client.ts"
  * that statement and the next transaction may land on a different one. It does
  * not error. It silently stops locking, so the failure only shows up as two
  * concurrent deploys corrupting a schema. Migrations use the direct endpoint.
+ *
+ * The check below is a hostname heuristic, not a guarantee: it knows Neon's
+ * `-pooler` naming and nothing else, so a non-Neon PgBouncer or a Hyperdrive
+ * binding passes straight through. There is no runtime probe that would do
+ * better. A lone client through PgBouncer in transaction mode is handed the
+ * same backend every time, so taking a session lock and reading it back
+ * reports success on exactly the setup this is meant to catch.
  */
 const LOCK_ID = 4027431100
 

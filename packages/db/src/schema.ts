@@ -387,9 +387,12 @@ export const events = pgTable(
       "events_idempotency_key_is_ulid",
       sql`idempotency_key ~ '^[0-7][0-9A-HJKMNP-TV-Z]{25}$'`
     ),
-    // `[.]` rather than `\.`: drizzle-kit drops the backslash on its way into
-    // the migration file, and `.` in a POSIX regex matches anything, so the
-    // escaped form silently accepts `staff-hired` as a dotted event type.
+    // `[.]` rather than `\.`, because a lone backslash never survives to SQL:
+    // the JavaScript template literal consumes it, before drizzle-kit sees the
+    // string at all. `\.` in a `sql` tag reaches Postgres as `.`, which matches
+    // any character, so the escaped-looking form silently accepts `staff-hired`
+    // as a dotted event type. Write `\\.` or, as here, a character class that
+    // needs no escape.
     check(
       "events_type_is_dotted",
       sql`type ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$'`
