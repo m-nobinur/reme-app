@@ -8,6 +8,7 @@ import {
   integer,
   jsonb,
   pgEnum,
+  pgPolicy,
   pgTable,
   text,
   timestamp,
@@ -75,6 +76,32 @@ export const taintLabel = pgEnum("taint_label", [
   "quarantined",
 ])
 
+/**
+ * The tenant boundary (§9.2, layer 2). Every policy below reads the org id out
+ * of `app.org_id`, which `withOrg` sets transaction-locally and nothing else
+ * sets at all.
+ *
+ * `current_setting(..., true)` returns NULL when the GUC was never set, and
+ * `nullif` turns an empty string into NULL too, so a query with no org context
+ * compares against NULL, matches nothing, and is denied. Fail-closed is the
+ * resting state rather than a case someone has to remember.
+ *
+ * Policies apply `to public`, which is every role except one holding BYPASSRLS.
+ * The migrator holds it; `reme_app`, which `withOrg` switches to for the length
+ * of the transaction, does not. That is the whole enforcement.
+ */
+const currentOrg = () =>
+  sql`nullif(current_setting('app.org_id', true), '')::uuid`
+
+/** The standard policy: rows belong to the current org, reads and writes both. */
+const orgIsolation = (table: string) =>
+  pgPolicy(`${table}_org_isolation`, {
+    for: "all",
+    to: "public",
+    using: sql`org_id = ${currentOrg()}`,
+    withCheck: sql`org_id = ${currentOrg()}`,
+  })
+
 const createdAt = timestamp("created_at", { withTimezone: true })
   .notNull()
   .defaultNow()
@@ -85,14 +112,26 @@ const updatedAt = timestamp("updated_at", { withTimezone: true })
   .$onUpdate(() => new Date())
 
 /** The tenant root. Everything else is scoped to one of these. */
-export const orgs = pgTable("orgs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /** Stable handle used by fixtures, seeds and dev URLs. */
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  createdAt,
-  updatedAt,
-})
+export const orgs = pgTable(
+  "orgs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Stable handle used by fixtures, seeds and dev URLs. */
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  () => [
+    // The tenant root carries no org_id: it scopes on its own key.
+    pgPolicy("orgs_org_isolation", {
+      for: "all",
+      to: "public",
+      using: sql`id = ${currentOrg()}`,
+      withCheck: sql`id = ${currentOrg()}`,
+    }),
+  ]
+)
 
 /**
  * Owners and operators, mirrored from WorkOS (DR-4). Tenant end-customers are
@@ -118,6 +157,7 @@ export const users = pgTable(
     unique("users_org_email_key").on(t.orgId, t.email),
     // Sign-in resolves the org from the WorkOS user, so this is the hot path.
     index("users_workos_user_idx").on(t.workosUserId),
+    orgIsolation("users"),
   ]
 )
 
@@ -152,6 +192,24 @@ export const roles = pgTable(
       .on(t.orgId, t.key, t.version)
       .nullsNotDistinct(),
     check("roles_version_positive", sql`version > 0`),
+    // The one table whose `org_id` is nullable, so the one policy that is not
+    // the standard equality. A NULL means a platform-defined template and every
+    // org reads it; nothing else here is lenient.
+    pgPolicy("roles_org_read", {
+      for: "select",
+      to: "public",
+      using: sql`org_id is null or org_id = ${currentOrg()}`,
+    }),
+    // Split from the read on purpose. A single `for all` policy would let a
+    // tenant DELETE a platform template, because DELETE is checked against
+    // USING and has no WITH CHECK to stop it, and would let one INSERT a
+    // template too. Writes see equality only.
+    pgPolicy("roles_org_write", {
+      for: "all",
+      to: "public",
+      using: sql`org_id = ${currentOrg()}`,
+      withCheck: sql`org_id = ${currentOrg()}`,
+    }),
   ]
 )
 
@@ -176,6 +234,7 @@ export const departments = pgTable(
       columns: [t.parentId, t.orgId],
       foreignColumns: [t.id, t.orgId],
     }),
+    orgIsolation("departments"),
   ]
 )
 
@@ -231,6 +290,7 @@ export const staff = pgTable(
       .on(t.orgId)
       .where(sql`manager_id is null`),
     index("staff_org_manager_idx").on(t.orgId, t.managerId),
+    orgIsolation("staff"),
   ]
 )
 
@@ -289,6 +349,7 @@ export const facts = pgTable(
       "facts_confidence_range",
       sql`provenance_confidence >= 0 and provenance_confidence <= 1`
     ),
+    orgIsolation("facts"),
   ]
 )
 
@@ -328,6 +389,7 @@ export const staffEvents = pgTable(
       foreignColumns: [staff.id, staff.orgId],
     }),
     index("staff_events_staff_idx").on(t.orgId, t.staffId, t.occurredAt),
+    orgIsolation("staff_events"),
   ]
 )
 
@@ -397,5 +459,6 @@ export const events = pgTable(
       "events_type_is_dotted",
       sql`type ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$'`
     ),
+    orgIsolation("events"),
   ]
 )

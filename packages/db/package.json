@@ -9,7 +9,8 @@
     "db:migrate": "node scripts/migrate.ts",
     "seed:probe": "node scripts/probe-seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --dir test",
+    "test:tenancy": "vitest run --dir tenancy"
   },
   "dependencies": {
     "@workspace/config": "workspace:*",
