@@ -22,7 +22,7 @@ function AppShell({
     >
       <a
         href="#main"
-        className="sr-only z-10 rounded-2xl bg-card px-3 py-2 font-medium text-sm shadow-sm ring-3 ring-ring/30 focus:not-sr-only focus:absolute focus:m-2"
+        className="sr-only z-10 rounded-2xl bg-card px-3 py-2 font-medium text-sm shadow-sm ring-3 ring-ring focus:not-sr-only focus:absolute focus:m-2"
       >
         Skip to content
       </a>
@@ -45,7 +45,7 @@ function AppShell({
  * the visual state and the accessible state cannot drift apart.
  */
 const navLinkClass = cn(
-  "flex items-center gap-2 rounded-2xl px-3 py-2 text-sidebar-foreground/70 text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/30 aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0"
+  "flex items-center gap-2 rounded-2xl px-3 py-2 text-sidebar-foreground/70 text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0"
 )
 
 /**
