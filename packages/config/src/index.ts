@@ -9,6 +9,15 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .regex(/^postgres(ql)?:\/\//, "must be a postgres connection string"),
+  /**
+   * The pooled endpoint, when there is one. Optional: only the tenancy suite
+   * reads it, to measure what a transaction pooler does to a session-scoped
+   * setting. Never used by migrations, which refuse a `-pooler` host.
+   */
+  DATABASE_URL_POOLED: z
+    .string()
+    .regex(/^postgres(ql)?:\/\//, "must be a postgres connection string")
+    .optional(),
   /** Use the docker-compose Postgres instead of a Neon branch. */
   NEON_OFFLINE: z
     .enum(["0", "1"])

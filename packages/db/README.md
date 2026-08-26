@@ -4,8 +4,10 @@ The Drizzle schema, the migrations, and the scripts that apply them. Postgres is
 system of record in the product, so this package is where a mistake is most expensive and
 hardest to take back.
 
-- `src/schema.ts` is the schema. One file, because reading the whole tenant boundary in one
-  pass is worth more than short files.
+- `src/schema.ts` is the schema and the policies. One file, because reading the whole tenant
+  boundary in one pass is worth more than short files.
+- `src/tenancy.ts` is `withOrg`, the only way to a database handle.
+- `tenancy/` is the blocking suite, run by `pnpm test:tenancy`.
 - `src/map.ts` maps rows onto the `packages/contracts` shapes that describe the same thing.
 - `drizzle/` is generated SQL. Committed, reviewed, never hand-edited after it has been applied.
 - `scripts/migrate.ts` applies pending migrations under a lock.
@@ -17,6 +19,7 @@ pnpm db:generate --name what_it_does   # schema edit -> SQL, always with a name
 pnpm db:migrate                        # apply what is pending
 pnpm db:check                          # collisions between migration files
 pnpm --filter @workspace/db seed:probe # one row per table
+pnpm test:tenancy                      # the blocking tenancy gate
 ```
 
 ## Writing a migration
@@ -71,17 +74,74 @@ transaction that reads.
 
 ## Tenancy
 
-There are no RLS policies here yet, and that is the next story rather than an oversight. The
-columns are already shaped for them:
+Reads and writes go through `withOrg(ctx, fn)`. It opens one transaction, switches to the
+`reme_app` role, sets `app.org_id`, and hands the callback a handle. Nothing else on the
+package surface returns a handle, so a raw query outside `withOrg` has nothing to run on and
+does not typecheck; `test/surface.types.ts` fails `pnpm typecheck` if `connect` is ever
+re-exported.
 
-- Every tenant-scoped table has `org_id`. `orgs` is the tenant root and scopes on `id`.
-  `roles` allows a NULL `org_id`, which means a platform-defined template, so its policy is
-  the one that needs `org_id IS NULL OR org_id = ...`.
-- `org_id` travels inside every foreign key that stays inside the tenant boundary, so a staff
-  member cannot report to a manager in another org and a fact cannot supersede one belonging
-  to someone else. RLS does not catch that class of bug; the foreign key does.
+```ts
+import { withOrg } from "@workspace/db"
 
-Two constraints in §5.2 are only half built. `staff_one_root_per_org` gives exactly one root
-per org, and the column being scalar gives single-parent, but nothing yet rejects a cycle in
-the reporting line. That needs a constraint trigger with a recursive CTE, and it lands with
-the first endpoint that can write a reporting line rather than sitting here untested.
+const rows = await withOrg({ orgId }, (db) => db.select().from(staff))
+```
+
+`org_id` is resolved server-side from identity and never read from a request body. `withOrg`
+rejects anything that is not a uuid before it reaches a statement.
+
+### Three things that are easy to get wrong here
+
+**The role.** Neon's `neondb_owner` has `rolbypassrls = true`, measured 2026-08-27. A policy
+is not a boundary for a role that bypasses it, and `FORCE ROW LEVEL SECURITY` does not rescue
+it: FORCE closes the table-owner hole, not the BYPASSRLS one. So migration `0001_app_role`
+creates `reme_app`, which is `NOLOGIN NOBYPASSRLS`, and `withOrg` reaches it with
+`SET LOCAL ROLE` inside the reading transaction. Migrations keep running as the owner, which
+is what lets them write the platform-level rows the policies deny to tenants. When a
+per-environment credential arrives with Hyperdrive, point it at `reme_app` and the
+`SET LOCAL ROLE` becomes belt over braces rather than the only strap.
+
+**The scope.** `set_config('app.org_id', ..., true)`. The third argument is `is_local` and it
+is not a detail. Measured 2026-08-27 through the Neon pooler with twelve concurrent clients:
+transaction-local returned the caller's own row on 240 of 240 reads and left nothing behind,
+while the session-scoped form returned **another tenant's row on 220 to 228 of those 240** and
+left a live org context on every backend it touched, where the next client to be handed that
+backend reads it. PgBouncer in transaction mode does not reset a server between clients, so
+that context sits there for the life of the backend. A lone client reads its own value back
+either way, which is exactly why the wrong version passes every quiet test.
+
+**The nullable column.** `roles.org_id` is nullable by design: NULL means a platform-defined
+template (§5.3). Its read policy is therefore `org_id IS NULL OR org_id = ...`, which is
+lenient, so it is split in two. `roles_org_read` is `FOR SELECT` and lenient; `roles_org_write`
+is `FOR ALL` with plain equality in both `USING` and `WITH CHECK`. A single lenient `FOR ALL`
+policy would let a tenant delete a platform template, because DELETE is checked against
+`USING` and has no `WITH CHECK` to stop it. `roles` is the only nullable `org_id` in the
+schema today; the suite discovers that from the catalog rather than trusting this sentence.
+
+### The suite
+
+`pnpm test:tenancy` reads `pg_class`, `pg_attribute` and `pg_policies` instead of a list of
+table names, so it covers tables that do not exist yet. Per discovered tenant table it asserts
+RLS is enabled, that every policy reads `app.org_id`, that every policy which can write has a
+`WITH CHECK`, that org A sees none of org B's rows, that a write aimed at org B touches
+nothing, that moving one of A's own rows to B is refused, and that a nullable `org_id` cannot
+be nulled by a tenant. With no org context set, every tenant table reads zero rows.
+
+Adding a table means adding its rows to `tenancy/fixtures.ts`. Denial proven against an empty
+table proves nothing, so the suite fails a tenant table with no fixture row and says so.
+
+A public table with no `org_id` fails too, unless it is named in `PLATFORM_TABLES` in
+`tenancy/rls.test.ts`. That list is empty. Adding a name to it is the decision to put data
+outside the tenant boundary, and it needs a reviewer who agrees rather than a passing build.
+
+`tenancy/pooler.test.ts` is the measurement behind the second point above. It needs
+`DATABASE_URL_POOLED` and skips without one, which is what it does in CI: the service
+container there has no pooler in front of it. The assertion that runs everywhere is in
+`tenancy/rls.test.ts`, and it checks the statements `withOrg` issues are the `LOCAL` forms. On
+a direct connection there is no behaviour to observe, because a session setting and a
+transaction setting read back identically when nothing is reassigning backends underneath.
+
+### Not done yet
+
+Cross-org denial **through the authenticated API** is the other half of this gate and cannot
+be built until there are authenticated endpoints (B5, D3). The hook is `withOrg`: the same
+suite gains an API arm once `apps/api` resolves a tenant context, and D4 is where it lands.

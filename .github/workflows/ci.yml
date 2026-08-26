@@ -50,11 +50,11 @@ jobs:
       # No test runner in the tree yet; turbo exits 0 when no package defines the task.
       - run: pnpm test
 
-  # Migrations get their own job with a real Postgres because the thing worth
-  # knowing about a migration is whether it applies, and to a database that
-  # already holds rows. A service container needs no secret, so this is green on
-  # a fork PR exactly as it is on ours.
-  migrations:
+  # Migrations and the tenancy gate get their own job with a real Postgres,
+  # because the thing worth knowing about either is what the database does, not
+  # what the code intends. A service container needs no secret, so this is green
+  # on a fork PR exactly as it is on ours.
+  database:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -109,3 +109,11 @@ jobs:
         run: |
           pnpm --filter @workspace/db seed:probe
           pnpm db:migrate
+
+      # Blocking, and not removable. It reads the catalog rather than a list, so
+      # a tenant table that arrives without a policy fails here rather than in
+      # production. The pooler measurement inside it skips: there is no
+      # DATABASE_URL_POOLED and this service container has no pooler in front of
+      # it. Everything else runs.
+      - name: Tenancy gate
+        run: pnpm test:tenancy
