@@ -15,6 +15,15 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
+    // Not cached, unlike every other test task. This one compares screenshots
+    // against per-platform baselines, so its result depends on the machine it
+    // ran on, and nothing in the hash says which machine that was: a macOS run
+    // and a Linux run of the same commit hash identically and would hand each
+    // other a result the other could not have produced.
+    "@workspace/ui#test": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "size": {
       "dependsOn": ["build"],
       "cache": false
