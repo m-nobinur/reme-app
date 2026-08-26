@@ -7,11 +7,29 @@ language js
 //
 // The regex has to match a node in full, so it is anchored on the quote or backtick
 // that opens and closes a string or template literal, and only those nodes match.
-// Three shapes are caught: a Tailwind palette class (`bg-red-500`, `text-white`), a
-// hex literal, and a CSS colour function. `color-mix(in oklch, var(--secondary), …)`
-// is not one of them: it names no colour, it combines tokens, and the button
-// primitive already uses it.
+// The body is then one of three shapes, and the three are separate branches because
+// a palette class needs a character before it to prove it is a whole class and not
+// the tail of a longer word, and at the start of a string there is no such character
+// to spend. Matching the boundary in the same branch as the rest is what let
+// `className="bg-red-500"` through for the whole of its first life.
+//
+// Caught: a Tailwind palette class (`bg-red-500`, `text-white`), a hex literal, a
+// CSS colour function, a named CSS colour as a whole string value (`fill="red"`,
+// `style={{ color: "red" }}`) and a named colour inside an arbitrary value
+// (`text-[color:red]`).
+//
+// Not caught, on purpose: `currentColor`, which follows whatever token set the text
+// colour and is the correct fill for an icon; `color-mix(in oklch, var(--secondary),
+// …)`, which names no colour and combines tokens, as the button primitive does; and
+// a colour assembled from pieces (`"bg-" + "red-500"`), which no regex over one
+// string node can see. scripts/lint/colour-rule.mjs asserts all of this and runs as
+// part of `pnpm lint`.
+//
+// `language js` also leaves .css out. Biome 2.5.10 does load a `language css`
+// plugin — checked, it fires on a `color:` declaration — but the only stylesheet
+// in the repo is the token file, where a colour literal is the point. Worth adding
+// the day a second stylesheet lands, not before.
 $value where {
-  $value <: r"(?s)[\"'`].*(?:[^A-Za-z0-9-](?:bg|text|border|ring|outline|decoration|divide|from|via|to|fill|stroke|shadow|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b|#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\().*[\"'`]",
+  $value <: r"(?s)[\"'`](?:(?:bg|text|border|ring|outline|decoration|divide|from|via|to|fill|stroke|shadow|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b.*|(?:aqua|aquamarine|beige|bisque|black|blue|brown|chartreuse|chocolate|coral|crimson|cyan|fuchsia|gold|goldenrod|gray|grey|green|indigo|ivory|khaki|lavender|lime|magenta|maroon|navy|olive|orange|orchid|pink|plum|purple|red|salmon|sienna|silver|tan|teal|thistle|tomato|turquoise|violet|wheat|white|yellow)|.*(?:[^A-Za-z0-9-](?:bg|text|border|ring|outline|decoration|divide|from|via|to|fill|stroke|shadow|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b|#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|\[(?:[a-z-]+:)?(?:aqua|beige|black|blue|brown|coral|crimson|cyan|fuchsia|gold|gray|grey|green|indigo|ivory|khaki|lavender|lime|magenta|maroon|navy|olive|orange|orchid|pink|plum|purple|red|salmon|silver|tan|teal|tomato|turquoise|violet|wheat|white|yellow)\]).*)[\"'`]",
   register_diagnostic(span=$value, message="Hard-coded colour. Both themes flip through the tokens in packages/ui/src/styles/globals.css, so use a token class (bg-background, text-muted-foreground, border-border) or add a token there.")
 }
