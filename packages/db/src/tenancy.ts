@@ -4,8 +4,14 @@ import { connect } from "./client.ts"
 /**
  * The tenancy kit (§9.2, layer 2). One entry point, `withOrg`, and no other way
  * to reach a database handle: `src/index.ts` exports this and the schema, and
- * `connect` is not on the package surface, so a raw query outside `withOrg` has
- * nothing to run on and does not typecheck.
+ * `connect` is not on the package surface, so there is no exported value to
+ * call `.select()` on outside `withOrg`.
+ *
+ * That covers reaching a handle. It does not cover keeping one, which is the
+ * other half: `withOrg` returns whatever the callback returns, so
+ * `withOrg(ctx, async (db) => db)` hands the caller a live handle with no cast
+ * and no type error. See `revocable` below for why that used to be worse than
+ * useless and what closes it.
  *
  * Two things happen inside the transaction and both have to be transaction-local.
  */
@@ -65,6 +71,56 @@ export const setOrgContext = (orgId: string) =>
 let handle: Handle | undefined
 
 /**
+ * Wraps the transaction handle so it stops working the moment `withOrg`
+ * returns.
+ *
+ * Without this, a handle that escapes the callback keeps working and comes back
+ * **promoted rather than degraded**. The transaction is over, so the pooled
+ * connection carries no `SET LOCAL ROLE` and no `app.org_id`: the next
+ * statement runs as the connecting role, which on Neon is `neondb_owner` and
+ * holds `rolbypassrls`. Measured 2026-08-27 against the `tenancy-rls` branch,
+ * an escaped handle reported `current_user = neondb_owner` with an empty org
+ * context and read every row of both probe orgs. No error, nothing in the log.
+ *
+ * The shapes that produce it are ordinary rather than perverse:
+ * `async (db) => ({ db, rows })` to reuse a handle, a helper that returns the
+ * transaction for its caller to finish with, a handler that memoises. All of
+ * them typecheck and lint clean, because the brand on `OrgScopedDb` constrains
+ * the type and not the connection.
+ *
+ * Revocation is in the callback's `finally`, so it holds whether the callback
+ * returned, threw, or returned the handle inside something else.
+ *
+ * What it does not cover: a savepoint handle taken with `db.transaction(...)`
+ * inside the callback is a different object and is not wrapped, and a method
+ * read off the handle while it was still live keeps its own reference. Both are
+ * closed for good by connecting as a login role that lacks BYPASSRLS, at which
+ * point an escaped handle reads nothing rather than everything. That role does
+ * not exist yet: `reme_app` is NOLOGIN with no password and no migration grants
+ * one. See `README.md`, "Known gaps".
+ */
+function revocable(tx: Transaction) {
+  let live = true
+  const db = new Proxy(tx, {
+    get(target, prop, receiver) {
+      if (!live) {
+        throw new Error(
+          "this handle belongs to a withOrg transaction that has already " +
+            "ended. Do the work inside the callback, or call withOrg again."
+        )
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+  }) as OrgScopedDb
+  return {
+    db,
+    revoke: () => {
+      live = false
+    },
+  }
+}
+
+/**
  * Runs `fn` in one transaction, as `reme_app`, with `app.org_id` set for the
  * length of that transaction and no longer.
  *
@@ -92,6 +148,13 @@ export async function withOrg<T>(
   return handle.transaction(async (tx) => {
     await tx.execute(ENTER_APP_ROLE)
     await tx.execute(setOrgContext(ctx.orgId))
-    return fn(tx as OrgScopedDb)
+    const { db, revoke } = revocable(tx)
+    try {
+      // Awaited rather than returned, so `finally` runs after the callback
+      // settles rather than before it.
+      return await fn(db)
+    } finally {
+      revoke()
+    }
   })
 }
