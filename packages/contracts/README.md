@@ -14,8 +14,12 @@ dependency direction, not a coincidence.
 3. `pnpm test`. Every contract in the registry needs a sample in
    `test/samples.ts`; the suite fails without one.
 
-`pnpm check:drift` regenerates and fails if the committed output moved. It runs
-on every PR, so step 2 is not optional. Never hand-edit anything in
+Step 2 is not optional, and the suite is what holds you to it.
+`test/drift.test.ts` rebuilds the document in memory and fails if it does not
+match the committed `generated/openapi.json`. It runs wherever `pnpm test`
+runs, so a stale file fails on your machine before it reaches a PR.
+`pnpm check:drift` is the same check in writing form, for when you would
+rather have the file fixed than be told about it. Never hand-edit anything in
 `generated/`; the pre-commit hook rejects it.
 
 ## Rules the shapes follow
@@ -23,9 +27,10 @@ on every PR, so step 2 is not optional. Never hand-edit anything in
 **Strict objects everywhere.** An unknown key is a validation error, not
 silently dropped data. This is what makes the Zod schema and the emitted JSON
 Schema mean exactly the same thing, and the fuzz suite asserts that agreement
-on every field of every contract. The cost is lockstep: a producer sending a
-field its consumer has not deployed yet gets rejected. That is the intended
-trade while contracts change by PR with every consumer reviewing.
+structurally, on every field of every contract. The cost is lockstep: a
+producer sending a field its consumer has not deployed yet gets rejected. That
+is the intended trade while contracts change by PR with every consumer
+reviewing.
 
 **No `.default()`.** A default makes the input and output schemas differ, which
 means one contract would emit two JSON Schemas. Defaults are the producer's
@@ -42,7 +47,9 @@ are RFC 3339 strings with an offset; ids are UUIDs or ULIDs.
 **snake_case field names**, matching the Postgres columns and the architecture
 document.
 
-## Known gap: `__proto__`
+## Known gaps
+
+### `__proto__` is accepted by Zod and rejected by the JSON Schema
 
 `{"__proto__": ...}` is valid JSON, and `JSON.parse` turns it into an ordinary
 own key without touching the prototype. The published JSON Schema rejects it,
@@ -53,6 +60,31 @@ name is rejected by both, and the suite asserts that.
 
 Whatever terminates TLS is the right place to drop the key outright. Until
 then the divergence is pinned by a test that fails when Zod fixes it.
+
+### The fuzz suite catches structural divergence, not value constraints
+
+Mutations come from `fc.jsonValue()`, which lands on the narrow band between
+two value constraints roughly never. A tightened `minLength`, an enum member
+present in one schema and not the other, or a dropped `minimum` are not
+reliably caught; a field that appears, disappears, or changes type is. The
+drift test covers the case that matters in practice, which is a schema edit
+that never got regenerated. Closing the gap properly means deriving candidate
+values from each leaf's own constraints, and that is its own change.
+
+### `openapi-typescript` wants a TypeScript it does not get
+
+`openapi-typescript@7.13.0` declares `peerDependencies: {"typescript": "^5.x"}`
+and the repo runs 6.0.3, so an install prints an unmet peer warning. It works,
+and the output is byte-stable, but this package decides the bytes in
+`generated/` and the mismatch is worth knowing about before a version bump.
+
+## There is no generated client yet
+
+`paths` in the OpenAPI document is empty, so `generated/openapi.d.ts` gives you
+`components["schemas"][...]` and an empty `paths`. That is deliberate: no
+service exists to describe. A client becomes worth generating the moment
+`apps/api` declares its first route; until then a typed wrapper would have
+nothing to call, and the mock server FE builds against has nothing to mock.
 
 ## Versions
 
