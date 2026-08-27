@@ -32,8 +32,20 @@ import { useState } from "react"
 /** A thread over fixed messages. Nothing sends; the composer is disabled. */
 // Tall enough that nothing scrolls: the viewport pins to the bottom of the
 // conversation, so a box shorter than its content hides the states above.
+//
+// "Tall enough" needs slack, not a snug fit. Each height here used to be tuned
+// to the pixel, and at a snug fit the viewport overflows for one layout pass
+// while text and icons settle. That is enough for it to latch "not at the
+// bottom", which shows the scroll-to-bottom button, and the state never
+// re-evaluates: these threads are mounted off screen on a long page, where the
+// viewport's observers do not run. So the button's visibility came out
+// path-dependent, stable within a run and different between runs, and the
+// snapshots recorded whichever state that run happened to reach. It failed
+// under load because a slow paint changes which entries are painted while off
+// screen. `catalog.spec.ts` now asserts no scroll-to-bottom button is visible,
+// so a height that is too tight fails with that message rather than flaking.
 function FixtureThread({
-  height = "h-[40rem]",
+  height = "h-[48rem]",
   messages,
 }: {
   height?: string
@@ -315,7 +327,7 @@ const assistantCatalog = [
     name: "ToolFallback",
     render: () => (
       <FixtureThread
-        height="h-[81rem]"
+        height="h-[88rem]"
         messages={[
           ask("Run the weekly read."),
           toolCall("running"),
@@ -330,7 +342,7 @@ const assistantCatalog = [
     name: "Approval",
     render: () => (
       <FixtureThread
-        height="h-[68rem]"
+        height="h-[76rem]"
         messages={[
           ask("Publish the revision."),
           approvalCall(undefined),

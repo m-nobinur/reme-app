@@ -7,9 +7,10 @@ type OrgOption = { id: string; name: string }
  * Picks the organisation the dashboard is scoped to. A native select because
  * it is keyboard- and screen-reader-correct for free at this size.
  *
- * There is no organisation data source yet, so the list arrives empty and the
- * control is inert. Selecting an organisation changes nothing until the org
- * read lands; the handler goes on this element when it does.
+ * Presentational: the caller owns the value and the change handler, and the
+ * option ids are whatever the caller's server accepts. An owner with one
+ * organisation gets a disabled control showing its name, and an owner with
+ * none gets "No organisation" rather than an invented one.
  */
 function OrgSwitcher({
   orgs,

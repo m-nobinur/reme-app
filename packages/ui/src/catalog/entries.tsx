@@ -23,6 +23,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import type { ReactNode } from "react"
 import { assistantCatalog } from "./assistant-entries"
+import { productCatalog } from "./product-entries"
 
 type CatalogEntry = {
   /** The exported component's own name. The drift test matches on it. */
@@ -293,6 +294,7 @@ const catalog: CatalogEntry[] = [
       </AppShell>
     ),
   },
+  ...productCatalog,
   ...assistantCatalog,
 ]
 

@@ -147,6 +147,18 @@ for (const theme of ["light", "dark"] as const) {
     // first snapshot of a run is taken mid-swap and every later one is not.
     await page.evaluate(() => document.fonts.ready)
 
+    // A fixture thread is meant to be taller than its conversation, so the
+    // viewport sits at the bottom and this button stays hidden. A thread that
+    // overflows its box even for one layout pass latches the opposite, and off
+    // screen on this page nothing re-evaluates it, so the button's visibility
+    // becomes a property of how the run walked the page rather than of the
+    // component. That is what made these entries fail only under load. Assert
+    // the invariant here, where a too-tight height says so.
+    await expect(
+      page.locator(".aui-thread-scroll-to-bottom:visible"),
+      "a fixture thread is overflowing its box: give it more height"
+    ).toHaveCount(0)
+
     for (const name of await entryNames(page)) {
       await expect
         .soft(page.locator(`[data-entry="${name}"]`))
