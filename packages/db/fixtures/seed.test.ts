@@ -20,8 +20,9 @@ import { seedGolden } from "./seed.ts"
  * and vitest's ten-second default tears the seed down halfway through.
  */
 
-/** Postgres `check_violation`. */
+/** Postgres `check_violation` and `foreign_key_violation`. */
 const CHECK_VIOLATION = "23514"
+const FOREIGN_KEY_VIOLATION = "23503"
 
 beforeAll(async () => {
   // Reset rather than plain seed, so this starts from the fixture file
@@ -82,6 +83,51 @@ it("shows the smaller org only its own two", async () => {
   )
   expect(rows).toHaveLength(mopandbucket.staff.length)
 })
+
+it("refuses a human staff row naming somebody from another org", async () => {
+  // The property §5.2 rests on, and the one line of ADR-028 doing the most
+  // work: `staff_user_fk` points at `memberships(org_id, user_id)`, so a human
+  // staff row can only name a person who holds a membership in the same org.
+  // Written as the migrator, so what refuses it is the foreign key rather than
+  // a policy, which is the point: application code cannot forget it.
+  const { sql: client, db } = connect()
+  try {
+    let refusal: { code?: string; constraint_name?: string } = {}
+    try {
+      await db.insert(staff).values({
+        id: "10000001-0000-4000-8000-000000009002",
+        orgId: brightclean.org.id as string,
+        staffCode: "PROBE-001",
+        displayName: "Someone Else's Owner",
+        kind: "human",
+        // A real person, with a real membership, in the neighbouring org.
+        userId: mopandbucket.users[0]?.id as string,
+        // Reporting to the org root, because a second row with no manager is
+        // refused by `staff_one_root_per_org` first and this would then be
+        // proving that constraint instead of the foreign key.
+        managerId: brightclean.staff.find((row) => !row.managerId)
+          ?.id as string,
+        status: "draft",
+      })
+    } catch (error) {
+      const seen = error as {
+        code?: string
+        constraint_name?: string
+        cause?: { code?: string; constraint_name?: string }
+      }
+      refusal = seen.code ? seen : (seen.cause ?? {})
+    }
+    // The constraint by name, not only the class of error: `staff` carries five
+    // foreign keys and a unique index that would each refuse some version of
+    // this row, and only one of them is the property under test.
+    expect(
+      { code: refusal.code, constraint: refusal.constraint_name },
+      "a cross-org human staff row was accepted"
+    ).toEqual({ code: FOREIGN_KEY_VIOLATION, constraint: "staff_user_fk" })
+  } finally {
+    await client.end()
+  }
+}, 60_000)
 
 it("refuses an event that numbers a stream it is not in", async () => {
   // The pairing `EventEnvelope` carries, in the database, proven rather than
