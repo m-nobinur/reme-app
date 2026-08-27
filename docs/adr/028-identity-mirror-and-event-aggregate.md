@@ -36,10 +36,13 @@ organization. `OrganizationMembership` (line 2064) is the join: `id`, `organizat
 `listOrganizationMemberships` accepts `{ userId }` with no `organizationId`, so "which orgs does
 this person belong to" is a question WorkOS answers and our database does not have to.
 
-*What was not checked.* Whether WorkOS guarantees one user per email address per environment. The
-`workos` MCP server failed to connect this session and I did not run the CLI or open the live docs
-for it. The consequence is below: `users.email` carries no unique constraint, because a constraint
-we cannot cite is a constraint that fails an upsert at 3am.
+*One user per email, checked against staging.* Creating a user, then creating a second with the
+same address, is refused: `email_not_available`, `user_creation_error`, HTTP 400. WorkOS also
+lowercases on store, so `Probe.Case@reme.invalid` comes back `probe.case@reme.invalid` and the
+lowercase form is then refused as a duplicate too. Our mirror therefore only ever receives folded
+addresses, and `users.email` carries a plain `UNIQUE` rather than a unique index on `lower(email)`.
+Both probe users were deleted and staging is back to zero. This closes what an earlier draft of
+this ADR left open, and the constraint is B5's to write.
 
 *The tenancy suite's discovery rule*, `packages/db/tenancy/rls.test.ts`. It reads `pg_class` for
 relkinds `r p v m f` in `public`. A stored table with no `org_id` column fails "has no table outside
@@ -66,7 +69,7 @@ The mirror takes the grain of the system it mirrors.
 users (                                    -- platform table, no org_id
   id uuid PK default gen_random_uuid(),
   workos_user_id text NOT NULL UNIQUE,     -- their primary key, ours to join on
-  email text NOT NULL,                     -- no UNIQUE, see "what was not checked"
+  email text NOT NULL UNIQUE,              -- WorkOS folds case and refuses duplicates
   name text,
   created_at, updated_at
 )
@@ -170,8 +173,8 @@ The contract moves first, in its own PR, per R1.
    generated output.
 2. `packages/db/src/schema.ts`, one migration:
    - `users` loses `org_id`, `users_id_org_key`, `users_org_workos_user_key`, `users_org_email_key`,
-     `users_workos_user_idx` and `users_org_isolation`. It gains `UNIQUE (workos_user_id)` and the
-     three policies above.
+     `users_workos_user_idx` and `users_org_isolation`. It gains `UNIQUE (workos_user_id)`,
+     `UNIQUE (email)` and the three policies above.
    - `memberships` is new, with the columns, constraints and standard isolation policy above.
    - `staff_user_fk` retargets from `users(id, org_id)` to `memberships(org_id, user_id)`.
    - `events.seq` becomes nullable, gains `events_seq_pairs_with_session`, and
