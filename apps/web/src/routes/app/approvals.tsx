@@ -57,7 +57,14 @@ function Approvals() {
           title="Nothing waiting on you"
         />
       ) : (
-        <>
+        <section aria-labelledby="approvals-waiting">
+          {/* The cards are h3, matching the dashboard where they sit under a
+              section heading. This page has no visible h2 of its own, so name
+              the region for a screen reader rather than let the outline skip a
+              level between the page title and the first card. */}
+          <h2 className="sr-only" id="approvals-waiting">
+            Approvals waiting on you
+          </h2>
           <ListFilter
             label="Filter approvals"
             onValueChange={(value) => {
@@ -118,7 +125,7 @@ function Approvals() {
               ))}
             </ul>
           )}
-        </>
+        </section>
       )}
     </>
   )
