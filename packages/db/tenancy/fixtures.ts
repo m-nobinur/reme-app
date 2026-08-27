@@ -53,6 +53,29 @@ const PLATFORM_ROLE = uuid(9)
  */
 export const USER_OF = { a: per("a", 1), b: per("b", 1) } as const
 
+/**
+ * The vendor ids the org resolver joins on. Exported for the same reason as
+ * `USER_OF`: the refusal the suite drives is one org's person against the other
+ * org's WorkOS id, and both halves have to be nameable from the test.
+ */
+export const WORKOS_USER_OF = {
+  a: "user_tenancy_a",
+  b: "user_tenancy_b",
+} as const
+
+export const WORKOS_ORG_OF = {
+  a: "org_tenancy_a",
+  b: "org_tenancy_b",
+} as const
+
+/**
+ * A person who holds a membership in org A that is not active. ADR-029 makes
+ * the resolver refuse one, and a refusal with nobody in that state to refuse is
+ * an assertion about nothing.
+ */
+export const USER_PENDING = per("a", 8)
+export const WORKOS_USER_PENDING = "user_tenancy_pending"
+
 export async function seedTwoOrgs() {
   // Clearing first rather than repeating the delete list: two copies of a
   // dependency-ordered list drift, and the copy that drifts is the one nobody
@@ -61,8 +84,18 @@ export async function seedTwoOrgs() {
   const { sql, db } = connect()
 
   await db.insert(orgs).values([
-    { id: ORG_A, slug: "tenancy-probe-a", name: "Tenancy Probe A" },
-    { id: ORG_B, slug: "tenancy-probe-b", name: "Tenancy Probe B" },
+    {
+      id: ORG_A,
+      slug: "tenancy-probe-a",
+      name: "Tenancy Probe A",
+      workosOrganizationId: WORKOS_ORG_OF.a,
+    },
+    {
+      id: ORG_B,
+      slug: "tenancy-probe-b",
+      name: "Tenancy Probe B",
+      workosOrganizationId: WORKOS_ORG_OF.b,
+    },
   ])
 
   // org_id NULL: the platform template every org may read and none may write.
@@ -70,6 +103,22 @@ export async function seedTwoOrgs() {
     id: PLATFORM_ROLE,
     key: "chief_of_staff",
     title: "Chief of Staff",
+  })
+
+  // Somebody in org A whose membership never went active.
+  await db.insert(users).values({
+    id: USER_PENDING,
+    workosUserId: WORKOS_USER_PENDING,
+    email: "pending@tenancy-probe-a.invalid",
+    name: "Tenancy Probe Invitee",
+  })
+  await db.insert(memberships).values({
+    id: per("a", 9),
+    orgId: ORG_A,
+    userId: USER_PENDING,
+    workosMembershipId: "om_tenancy_pending",
+    role: "member",
+    status: "pending",
   })
 
   for (const [tag, org] of [
@@ -81,7 +130,7 @@ export async function seedTwoOrgs() {
     // org (ADR-028).
     await db.insert(users).values({
       id: USER_OF[tag],
-      workosUserId: `user_tenancy_${tag}`,
+      workosUserId: WORKOS_USER_OF[tag],
       email: `owner@tenancy-probe-${tag}.invalid`,
       name: "Tenancy Probe Owner",
     })
@@ -167,7 +216,7 @@ export async function clearTwoOrgs() {
   const { sql, db } = connect()
   try {
     await db.transaction(async (tx) => {
-      await clearOrgs(tx, [ORG_A, ORG_B], [USER_OF.a, USER_OF.b])
+      await clearOrgs(tx, [ORG_A, ORG_B], [USER_OF.a, USER_OF.b, USER_PENDING])
       await tx.delete(roles).where(eq(roles.id, PLATFORM_ROLE))
     })
   } finally {

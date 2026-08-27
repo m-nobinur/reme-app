@@ -11,6 +11,7 @@
     "size": "node scripts/size.mjs"
   },
   "dependencies": {
+    "@workos-inc/node": "10.11.0",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*"
   },

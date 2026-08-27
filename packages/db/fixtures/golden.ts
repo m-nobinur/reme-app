@@ -117,6 +117,7 @@ export const brightclean: GoldenOrg = {
     id: bc(0),
     slug: "brightclean",
     name: "Brightclean Cleaning Co. (fixture)",
+    workosOrganizationId: "org_fixture_brightclean",
   },
   users: [
     {
@@ -393,6 +394,7 @@ export const mopandbucket: GoldenOrg = {
     id: mb(0),
     slug: "mopandbucket",
     name: "Mop and Bucket Ltd. (fixture)",
+    workosOrganizationId: "org_fixture_mopandbucket",
   },
   users: [
     {
@@ -511,7 +513,12 @@ const ec = (n: number) => id(3, n)
  */
 export const emptyco: GoldenOrg = {
   slug: "emptyco",
-  org: { id: ec(0), slug: "emptyco", name: "Emptyco Services (fixture)" },
+  org: {
+    id: ec(0),
+    slug: "emptyco",
+    name: "Emptyco Services (fixture)",
+    workosOrganizationId: "org_fixture_emptyco",
+  },
   users: [
     {
       id: ec(1),

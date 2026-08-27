@@ -128,10 +128,26 @@ export const orgs = pgTable(
     /** Stable handle used by fixtures, seeds and dev URLs. */
     slug: text("slug").notNull().unique(),
     name: text("name").notNull(),
+    /**
+     * The WorkOS organization this org mirrors (ADR-029). Nullable, because an
+     * org can exist before one does: the fixtures, the seeds and the evals all
+     * make orgs that no identity provider has ever heard of, and a column they
+     * cannot fill would be a column they had to invent a value for.
+     *
+     * Unique, because it is the join key `resolve_org` reads. Two rows claiming
+     * the same WorkOS organization would make "which org is this person in"
+     * ambiguous, and the resolver would answer either one.
+     *
+     * Our `id` stays ours. It is not derived from this value and does not
+     * change when this value does, so the vendor id is a lookup key rather than
+     * a primary key wearing a disguise.
+     */
+    workosOrganizationId: text("workos_organization_id"),
     createdAt,
     updatedAt,
   },
-  () => [
+  (t) => [
+    unique("orgs_workos_organization_key").on(t.workosOrganizationId),
     // The tenant root carries no org_id: it scopes on its own key.
     pgPolicy("orgs_org_isolation", {
       for: "all",
@@ -190,6 +206,18 @@ export const users = pgTable(
         select 1 from memberships m
         where m.user_id = users.id and m.org_id = ${currentOrg()}
       )`,
+    }),
+    // A person may read their own row, membership or not. Without it the org
+    // writer cannot work: `insert ... on conflict ... returning id` applies the
+    // SELECT policies to the row it returns, and at that moment the membership
+    // that `users_member_read` looks for does not exist yet, because the
+    // membership is the next statement and references the id this one returns.
+    // It widens nothing across a tenant boundary: the id it keys on comes from
+    // the sealed session and names one person.
+    pgPolicy("users_self_read", {
+      for: "select",
+      to: "public",
+      using: sql`workos_user_id = ${currentWorkosUser()}`,
     }),
     // Sign-in mirrors the person signing in and nobody else. A
     // membership-derived write policy cannot work here: the membership

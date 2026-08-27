@@ -26,6 +26,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@workos-inc/node':
+        specifier: 10.11.0
+        version: 10.11.0
       '@workspace/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
