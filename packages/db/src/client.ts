@@ -1,10 +1,7 @@
-import { existsSync } from "node:fs"
 import { parseEnv } from "@workspace/config"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import * as schema from "./schema.ts"
-
-const localEnv = new URL("../../../.env.local", import.meta.url)
 
 /**
  * The Node-side connection, used by migrations, seeds and tests. Workers get
@@ -20,11 +17,30 @@ const localEnv = new URL("../../../.env.local", import.meta.url)
  * a one-off run against a scratch database is not silently overwritten by
  * whatever is in the file. Idempotent, and safe to call before reading any
  * variable the file carries.
+ *
+ * Nothing here runs at module load and nothing here imports `node:fs`, because
+ * `packages/db` is imported by a Worker now. Both were true before and both
+ * broke workerd: the `node:fs` import fails the build, and resolving the path
+ * against `import.meta.url` threw `Invalid URL string` at startup, measured
+ * against `wrangler dev` 2026-08-28. The missing file is caught rather than
+ * tested for, and the guard below is what says the whole function is Node's.
  */
 export function loadLocalEnv() {
-  if (!process.env.DATABASE_URL && existsSync(localEnv)) {
-    process.loadEnvFile(localEnv)
+  if (process.env.DATABASE_URL || typeof process.loadEnvFile !== "function") {
+    return
   }
+  try {
+    process.loadEnvFile(new URL("../../../.env.local", import.meta.url))
+  } catch {
+    // No .env.local. Every caller either has DATABASE_URL in the environment
+    // already or is about to fail in `parseEnv` naming the variable.
+  }
+}
+
+/** `DATABASE_URL`, after `.env.local`. The Node side of the tenancy kit. */
+export function connectionString(): string {
+  loadLocalEnv()
+  return parseEnv().DATABASE_URL
 }
 
 export function connect(options: { max?: number } = {}) {

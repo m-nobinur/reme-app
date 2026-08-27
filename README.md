@@ -55,6 +55,13 @@ Postgres is a Neon branch by default. Without one, set `NEON_OFFLINE=1` in `.env
 and take the offline `DATABASE_URL` from the comment in `.env.example`, then run
 `pnpm bootstrap` again to start the pgvector container in `docker-compose.yml`.
 
+`apps/api` reaches Postgres through a Hyperdrive binding rather than through
+`DATABASE_URL`. Locally there is no Hyperdrive: `wrangler dev` connects to whatever
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` holds, and `pnpm dev` fills that
+from the `DATABASE_URL` in `.env.local` so both reach the same database. Set the variable
+yourself and it wins. That is also the answer when something else already owns port 5432:
+publish the container somewhere else and move `DATABASE_URL` with it.
+
 Secrets never enter a committed file. `.env.example` carries names and shapes,
 `.env.local` carries values and is gitignored, and `packages/config` validates both so a
 missing one fails at boot naming the variable.

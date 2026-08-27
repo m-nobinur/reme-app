@@ -24,6 +24,28 @@ importers:
         specifier: ^6
         version: 6.0.3
 
+  apps/api:
+    dependencies:
+      '@workspace/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.19
+      typescript:
+        specifier: ^6
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.19)(vite@8.2.2(@types/node@22.19.19)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0))
+      wrangler:
+        specifier: ^4.126.0
+        version: 4.126.0
+
   apps/web:
     dependencies:
       '@assistant-ui/react':
@@ -160,7 +182,7 @@ importers:
         version: link:../contracts
       drizzle-orm:
         specifier: 0.45.2
-        version: 0.45.2(postgres@3.4.9)
+        version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9)
       postgres:
         specifier: 3.4.9
         version: 3.4.9
@@ -644,6 +666,9 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
+
+  '@cloudflare/workers-types@4.20260702.1':
+    resolution: {integrity: sha512-mOhf5TUEB1m2vPrxtqoIGfz0fUC9xyxRDx5gWHy5s+OCo6dcV+g7wI1R7gYCMFohhqF/2y2xeKVwMwCJjfn/WA==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -5883,6 +5908,9 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260825.1':
     optional: true
 
+  '@cloudflare/workers-types@4.20260702.1':
+    optional: true
+
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
@@ -8274,8 +8302,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.21.0
 
-  drizzle-orm@0.45.2(postgres@3.4.9):
+  drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9):
     optionalDependencies:
+      '@cloudflare/workers-types': 4.20260702.1
       postgres: 3.4.9
 
   dunder-proto@1.0.1:

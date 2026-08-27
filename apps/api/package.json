@@ -1,0 +1,23 @@
+{
+  "name": "api",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "size": "node scripts/size.mjs"
+  },
+  "dependencies": {
+    "@workspace/contracts": "workspace:*",
+    "@workspace/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^6",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.126.0"
+  }
+}

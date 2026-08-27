@@ -1,11 +1,21 @@
 import { sql } from "drizzle-orm"
-import { connect } from "./client.ts"
+import { drizzle } from "drizzle-orm/postgres-js"
+import postgres from "postgres"
+import { type connect, connectionString } from "./client.ts"
+import * as schema from "./schema.ts"
 
 /**
  * The tenancy kit (§9.2, layer 2). One entry point, `withOrg`, and no other way
  * to reach a database handle: `src/index.ts` exports this and the schema, and
  * `connect` is not on the package surface, so there is no exported value to
  * call `.select()` on outside `withOrg`.
+ *
+ * It comes two ways round, and both lead to the same transaction. `tenancy(url)`
+ * is the kit over a pool the caller owns and closes, which is what a Worker
+ * needs: Hyperdrive hands its connection string to the request rather than to
+ * the environment. `withOrg` is the same thing over `DATABASE_URL`, shared and
+ * opened on first use, for migrations, seeds and the suites; `closeTenancy`
+ * shuts it, and a Node process that does not call it will not exit.
  *
  * That covers reaching a handle. It does not cover keeping one, which is the
  * other half: `withOrg` returns whatever the callback returns, so
@@ -94,8 +104,6 @@ export const setContext = (ctx: TenantContext) =>
   sql`select set_config(${ORG_SETTING}, ${ctx.orgId}, true),
              set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true)`
 
-let handle: Handle | undefined
-
 /**
  * Wraps the transaction handle so it stops working the moment `withOrg`
  * returns.
@@ -160,7 +168,8 @@ function revocable(tx: Transaction) {
  * makes the session-scoped version pass every quiet test and leak under load.
  * `tenancy/pooler.test.ts` re-measures both.
  */
-export async function withOrg<T>(
+async function run<T>(
+  on: Handle,
   ctx: TenantContext,
   fn: (db: OrgScopedDb) => Promise<T>
 ): Promise<T> {
@@ -170,8 +179,7 @@ export async function withOrg<T>(
   if (!UUID.test(ctx.orgId)) {
     throw new Error(`withOrg needs a uuid org_id, got: ${ctx.orgId}`)
   }
-  handle ??= connect({ max: 10 }).db
-  return handle.transaction(async (tx) => {
+  return on.transaction(async (tx) => {
     await tx.execute(ENTER_APP_ROLE)
     await tx.execute(setContext(ctx))
     const { db, revoke } = revocable(tx)
@@ -183,4 +191,62 @@ export async function withOrg<T>(
       revoke()
     }
   })
+}
+
+/** The kit, bound to one pool. `close` is the caller's to call. */
+export type Tenancy = {
+  withOrg: <T>(
+    ctx: TenantContext,
+    fn: (db: OrgScopedDb) => Promise<T>
+  ) => Promise<T>
+  close: () => Promise<void>
+}
+
+/**
+ * A tenancy kit over a connection string the caller supplies, and the only
+ * shape that works in a Worker: Hyperdrive hands its connection string to the
+ * request through a binding, so there is no environment variable for the lazy
+ * one below to read, and each isolate wants its own pool.
+ *
+ * The caller owns it and closes it. That is the other half of the same
+ * problem: the shared kit opens a pool nothing can shut, so a Node process that
+ * reads through it never exits (measured 2026-08-28, a script whose only
+ * statement was `select 1` returned in 34 ms and was killed at 25 s). Both are answered here rather
+ * than only one, because a Worker cannot use an exported teardown and a script
+ * cannot use a per-isolate handle.
+ */
+export function tenancy(
+  url: string,
+  { max = 5 }: { max?: number } = {}
+): Tenancy {
+  const client = postgres(url, { max })
+  const db = drizzle(client, { schema })
+  return {
+    withOrg: (ctx, fn) => run(db, ctx, fn),
+    close: () => client.end(),
+  }
+}
+
+let shared: Tenancy | undefined
+
+/**
+ * The same thing over `DATABASE_URL`, for migrations, seeds and the suites.
+ * Opened on first use and shared, because those callers all want one pool.
+ *
+ * A Node entry point that uses this has to call `closeTenancy` before it can
+ * exit. Vitest does not, because it tears its workers down.
+ */
+export async function withOrg<T>(
+  ctx: TenantContext,
+  fn: (db: OrgScopedDb) => Promise<T>
+): Promise<T> {
+  shared ??= tenancy(connectionString(), { max: 10 })
+  return shared.withOrg(ctx, fn)
+}
+
+/** Closes the shared pool. Safe to call twice, and safe never to have opened. */
+export async function closeTenancy(): Promise<void> {
+  const open = shared
+  shared = undefined
+  await open?.close()
 }
