@@ -4,6 +4,38 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Reme component catalog</title>
+    <style>
+      /*
+        The catalog renders every entry on one very long page, so nearly all of
+        it is off screen. `content-visibility: auto` on the thread's messages
+        skips rendering exactly that content and stands in a placeholder from
+        `contain-intrinsic-size`, which means a thread viewport's scroll height
+        is a guess until the entry has been painted once. The viewport reads
+        that guess to decide whether it is scrolled to the bottom, latches the
+        answer, and never revisits it while off screen.
+
+        The result was a scroll-to-bottom button whose visibility depended on
+        which entries a run happened to paint, stable within a run and
+        different between runs. It failed only under load, because a slow paint
+        changes the order things settle in. Measured at a 20x CPU throttle:
+        with the skipping on, one thread reported 1214px of box against 3034px
+        of content; with it off, every viewport reports its true height before
+        and after a full walk of the page.
+
+        So the harness renders eagerly. Nothing visual is lost, because
+        `content-visibility: auto` only ever changes off-screen content, and
+        the gate only ever photographs on-screen content.
+      */
+      /*
+        The leading `html` is doing work: the value being overridden comes from
+        a Tailwind arbitrary-property class on the element itself, which has the
+        same specificity as `[data-entry] *` and is written later in the sheet.
+        The type selector adds enough to win without reaching for !important.
+      */
+      html [data-entry] * {
+        content-visibility: visible;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
