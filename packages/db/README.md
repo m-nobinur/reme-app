@@ -11,16 +11,51 @@ hardest to take back.
 - `src/map.ts` maps rows onto the `packages/contracts` shapes that describe the same thing.
 - `drizzle/` is generated SQL. Committed, reviewed, never hand-edited after it has been applied.
 - `scripts/migrate.ts` applies pending migrations under a lock.
-- `scripts/probe-seed.ts` writes one row per table so a migration can be tried against a
-  database that is not empty. It is a probe, not the fixture set: the golden orgs come later.
+- `fixtures/` is the golden orgs, described below.
 
 ```sh
 pnpm db:generate --name what_it_does   # schema edit -> SQL, always with a name
 pnpm db:migrate                        # apply what is pending
 pnpm db:check                          # collisions between migration files
-pnpm --filter @workspace/db seed:probe # one row per table
+pnpm seed                              # the golden orgs, --reset to start clean
+pnpm test:seed                         # the seed round trip, needs a database
 pnpm test:tenancy                      # the blocking tenancy gate
 ```
+
+## The golden orgs
+
+`fixtures/golden.ts` is `brightclean`, `mopandbucket` and `emptyco`: one set of rows shared by
+the seed, the suites, the mock UI and the evals, so nobody writes a second copy of the same
+business. `brightclean` is fully configured and carries the §5.2 staff tree, `mopandbucket` is
+a smaller second tenant to be denied against, and `emptyco` is an owner who has configured
+nothing, which is the state every empty screen has to handle.
+
+The module is data only. Every import in it is `import type`, so it has no runtime dependency
+on drizzle or on a connection and `@workspace/db/fixtures` can be imported from a Worker
+bundle. `@workspace/db/fixtures/seed` is the writer and is Node-only.
+
+R8 says a fixture business must be unmistakably fictional, and `test/golden-fixtures.test.ts`
+enforces it rather than trusting a comment: every address is under `.invalid`, which RFC 2606
+reserves so it can never resolve; every phone number is in the North American `555-01xx` range;
+and every org name carries `(fixture)`. That test ships with a negative fixture, because a
+check nobody has watched fail is not a check.
+
+`pnpm seed` inserts what is missing and leaves everything else alone, so it is safe on a
+database holding other data. `pnpm seed --reset` clears the three orgs first, which is how a
+database is brought back in line with the file. Both are one transaction under an advisory
+lock: two concurrent runs queue rather than interleave, and without the lock one of the two
+fails on a foreign key every time.
+
+The seed writes as the migrator rather than through `withOrg`, and `fixtures/seed.ts` says why
+at length. The short version: `--reset` deletes append-only rows the app role is deliberately
+not granted, and the clear has to span three orgs in one transaction while `withOrg` scopes to
+one. `fixtures/seed.test.ts` is what proves the seeded rows are readable through the policies
+and not only through the role that wrote them.
+
+Two things it does not handle. A fixture whose content changed is not updated by a plain
+`pnpm seed`; that is what `--reset` is for. And two suite runs sharing one database, where one
+resets while the other asserts, will collide: fixed ids are the point of a golden fixture, so
+no id scheme avoids it, and the model is one database per runner.
 
 ## Writing a migration
 
@@ -201,6 +236,15 @@ the callback can switch back: `reset role` inside the callback restores `neondb_
 holds BYPASSRLS. Closing it needs a login role that lacks BYPASSRLS, and `reme_app` is
 `NOLOGIN` with no password. Provisioning that credential belongs with the per-environment
 Hyperdrive configuration.
+
+**`withOrg` cannot be used from a script.** It opens its pool lazily on first call, holds it in
+a module-level variable, and exports nothing that closes it, so a Node process that calls
+`withOrg` never exits. Measured 2026-08-27: a script whose only statement was a `select 1`
+inside `withOrg` returned from the callback in 2.5 s and was still running when a 30 s timeout
+killed it. Vitest does not care, which is why the tenancy suite has never hit it, and it is
+why the seed reads back through vitest rather than from the script. Closing it means either an
+exported teardown or a handle passed in by the caller, and both are decisions about the shape
+of the tenancy kit rather than about seeding.
 
 **CI proves this against a lookalike.** The `database` job runs against a
 `pgvector/pgvector:pg17` service container whose `reme` user is a superuser. The whole design

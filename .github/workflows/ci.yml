@@ -115,10 +115,19 @@ jobs:
       # A fresh database.
       - run: pnpm db:migrate
 
+      # The golden orgs are the rows. They cover every table, so a migration is
+      # proven against a database holding the fixture set the rest of the repo
+      # uses rather than against a probe row written only for this step.
       - name: Apply again, over rows
         run: |
-          pnpm --filter @workspace/db seed:probe
+          pnpm seed
           pnpm db:migrate
+
+      # The seed writes as the migrator, which holds BYPASSRLS, so a row it
+      # wrote is not yet proof of anything. This reads the seeded rows back
+      # through `withOrg` and asserts a second run writes nothing.
+      - name: Seed round trip
+        run: pnpm test:seed
 
       # Blocking: a red run blocks the merge button. Not unremovable, though,
       # and the README says so plainly rather than leaving it implied. This is

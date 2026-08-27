@@ -7,10 +7,10 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "node scripts/migrate.ts",
-    "seed:probe": "node scripts/probe-seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir test",
-    "test:tenancy": "vitest run --dir tenancy"
+    "test:tenancy": "vitest run --dir tenancy",
+    "test:seed": "vitest run --dir fixtures"
   },
   "dependencies": {
     "@workspace/config": "workspace:*",
@@ -26,6 +26,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./fixtures": "./fixtures/golden.ts",
+    "./fixtures/seed": "./fixtures/seed.ts"
   }
 }

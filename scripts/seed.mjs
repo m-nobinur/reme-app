@@ -1,4 +1,9 @@
 // Loads the golden fixture orgs into the database named by DATABASE_URL.
+//
+// `--reset` clears the three orgs first, so the database ends up matching
+// packages/db/fixtures/golden.ts exactly. Without it the inserts skip rows that
+// are already there and leave everything else in the database alone. Both forms
+// are safe to run twice.
 import { bad, loadLocalEnv, note, ok, repoRoot } from "./lib.mjs"
 
 process.chdir(repoRoot)
@@ -15,6 +20,20 @@ try {
   process.exit(1)
 }
 
-ok(`DATABASE_URL points at ${new URL(env.DATABASE_URL).host}`)
-note("Nothing to seed yet: there is no schema and there are no fixtures.")
-note("This script fills in when the Drizzle schema and the golden orgs land.")
+const reset = process.argv.includes("--reset")
+const { seedGolden } = await import("@workspace/db/fixtures/seed")
+const counts = await seedGolden({ reset })
+
+const host = new URL(env.DATABASE_URL).host
+ok(reset ? `re-seeded ${host} from scratch` : `seeded ${host}`)
+note(
+  Object.entries(counts)
+    .map(([table, n]) => `${table}: ${n}`)
+    .join("\n")
+)
+if (!reset) {
+  note(
+    "Rows that were already there were left alone. Use --reset to bring the\n" +
+      "database back in line with the fixture file."
+  )
+}

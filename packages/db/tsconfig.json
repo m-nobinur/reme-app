@@ -16,6 +16,13 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "scripts", "test", "tenancy", "drizzle.config.ts"],
+  "include": [
+    "src",
+    "scripts",
+    "test",
+    "tenancy",
+    "fixtures",
+    "drizzle.config.ts"
+  ],
   "exclude": ["node_modules"]
 }

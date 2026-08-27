@@ -1,0 +1,175 @@
+import { inArray, sql } from "drizzle-orm"
+import { connect } from "../src/client.ts"
+import {
+  departments,
+  events,
+  facts,
+  orgs,
+  roles,
+  staff,
+  staffEvents,
+  users,
+} from "../src/schema.ts"
+import { GOLDEN_ORGS } from "./golden.ts"
+
+/**
+ * Writes the golden orgs from `golden.ts`. Run it with `pnpm seed`, or
+ * `pnpm seed --reset` to clear the three orgs first so the database matches the
+ * file exactly.
+ *
+ * ## Which connection this uses, and why it is not `withOrg`
+ *
+ * The migrator connection, the same one `scripts/migrate.ts` and
+ * `tenancy/fixtures.ts` use. Not a bypass added for convenience, and `withOrg`
+ * is untouched: seeding is a platform operation and `withOrg` is the
+ * per-request tenant path, which by construction cannot do it.
+ *
+ * Three reasons, and the first two are structural rather than awkward:
+ *
+ * 1. `--reset` deletes rows from `events` and `staff_events`, which are
+ *    append-only. Migration 0003 revoked DELETE on both from `reme_app`
+ *    deliberately, so a tenant can never erase its own audit trail. A seed that
+ *    could clear them through the tenant path would mean that revoke was
+ *    missing.
+ * 2. The clear has to span all three orgs in one transaction. `withOrg` sets one
+ *    `app.org_id` per transaction, so three orgs is three transactions and a
+ *    reader can observe the gap between them.
+ * 3. `withOrg` opens a lazy module-level pool and exports no way to close it, so
+ *    a Node script that used it would never exit. That one is a gap in the
+ *    tenancy kit rather than a reason, and the seed does not paper over it: the
+ *    tenant-path read is asserted from vitest in `seed.test.ts` instead, which
+ *    is where the seeded rows are proven visible through the policies rather
+ *    than only through the role that wrote them.
+ *
+ * ## Concurrency
+ *
+ * One transaction, under a transaction-scoped advisory lock. Two `pnpm seed`
+ * runs against one database therefore queue instead of interleaving, and a
+ * reader never sees a half-cleared org.
+ *
+ * The lock is load-bearing rather than defensive. Measured 2026-08-27 against a
+ * Neon branch, two concurrent `pnpm seed --reset` runs: with the lock, both
+ * succeeded on 3 of 3 attempts; with the lock removed, one of the two failed on
+ * every attempt with `update or delete on table ... violates foreign key
+ * constraint`, because the second run's cascade of deletes ran against rows the
+ * first was re-inserting. Transaction-scoped rather than session-scoped, so it
+ * is released by the commit or the rollback and needs no `finally`.
+ *
+ * What that does not cover: two suite runs sharing one database, where one
+ * calls `--reset` while the other is asserting. Fixed ids are the point of a
+ * golden fixture, so no id scheme avoids it. The model is one database per
+ * runner, which is what the repo already does: CI's `database` job gets its own
+ * service container and a developer gets their own Neon branch.
+ */
+
+/** Distinct from the migration lock in `scripts/migrate.ts`. */
+const LOCK_ID = 4027431101
+
+type Handle = ReturnType<typeof connect>["db"]
+/** The handle `db.transaction` hands its callback. */
+export type Tx = Parameters<Parameters<Handle["transaction"]>[0]>[0]
+
+/**
+ * Deletes every row belonging to `orgIds`, deepest dependency first.
+ *
+ * Exported because `tenancy/fixtures.ts` clears its own probe orgs the same
+ * way, and two hand-maintained copies of a dependency-ordered delete list drift
+ * apart. `facts` references `staff`, and `staff` references `departments`,
+ * `users` and itself, so a partial clear leaves a foreign key violation for the
+ * next run rather than an empty database.
+ *
+ * The order is still maintained by hand. A tenant table added to the schema and
+ * forgotten here surfaces as a foreign key violation on `delete from orgs` that
+ * names the constraint, and the constraint names the table.
+ */
+export async function clearOrgs(tx: Tx, orgIds: readonly string[]) {
+  const ids = [...orgIds]
+  await tx.delete(events).where(inArray(events.orgId, ids))
+  await tx.delete(staffEvents).where(inArray(staffEvents.orgId, ids))
+  await tx.delete(facts).where(inArray(facts.orgId, ids))
+  await tx.delete(staff).where(inArray(staff.orgId, ids))
+  await tx.delete(departments).where(inArray(departments.orgId, ids))
+  await tx.delete(users).where(inArray(users.orgId, ids))
+  await tx.delete(roles).where(inArray(roles.orgId, ids))
+  await tx.delete(orgs).where(inArray(orgs.id, ids))
+}
+
+/** Rows written per table. Printed by the script, asserted by the suite. */
+export type SeedCounts = Record<string, number>
+
+/**
+ * Seeds the golden orgs and returns what it wrote.
+ *
+ * Without `reset`, every insert is `on conflict do nothing`, so a second run
+ * changes nothing and the script is safe on a database that already holds other
+ * data. That also means it will not update a row whose fixture changed:
+ * `--reset` is how a database is brought back in line with the file.
+ */
+export async function seedGolden({ reset = false } = {}): Promise<SeedCounts> {
+  const { sql: client, db } = connect()
+  try {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_ID})`)
+      const ids = GOLDEN_ORGS.map((o) => o.org.id as string)
+      if (reset) await clearOrgs(tx, ids)
+
+      const counts: SeedCounts = {}
+      // Counts what the database actually took, not what was offered: every
+      // insert is `on conflict do nothing`, so a second run reports zeros. That
+      // is the idempotency evidence rather than a claim about it.
+      const write = async (
+        table: string,
+        rows: unknown[],
+        run: () => Promise<{ length: number }>
+      ) => {
+        // drizzle rejects an empty `values([])`, and `emptyco` is empty rows on
+        // purpose.
+        if (rows.length === 0) return
+        const written = await run()
+        counts[table] = (counts[table] ?? 0) + written.length
+      }
+
+      for (const org of GOLDEN_ORGS) {
+        // Table order is dependency order, and inside `staff` the array order is
+        // too: a manager has to exist before the row reporting to it. Each is
+        // one multi-row insert, which the self-reference survives because a
+        // foreign key is an after-row trigger and those fire at statement end.
+        await write("orgs", [org.org], () =>
+          tx.insert(orgs).values(org.org).onConflictDoNothing().returning()
+        )
+        await write("users", org.users, () =>
+          tx.insert(users).values(org.users).onConflictDoNothing().returning()
+        )
+        await write("roles", org.roles, () =>
+          tx.insert(roles).values(org.roles).onConflictDoNothing().returning()
+        )
+        await write("departments", org.departments, () =>
+          tx
+            .insert(departments)
+            .values(org.departments)
+            .onConflictDoNothing()
+            .returning()
+        )
+        await write("staff", org.staff, () =>
+          tx.insert(staff).values(org.staff).onConflictDoNothing().returning()
+        )
+        await write("facts", org.facts, () =>
+          tx.insert(facts).values(org.facts).onConflictDoNothing().returning()
+        )
+        await write("staff_events", org.staffEvents, () =>
+          tx
+            .insert(staffEvents)
+            .values(org.staffEvents)
+            .onConflictDoNothing()
+            .returning()
+        )
+        await write("events", org.events, () =>
+          tx.insert(events).values(org.events).onConflictDoNothing().returning()
+        )
+      }
+      return counts
+    })
+  } finally {
+    await client.end()
+  }
+}

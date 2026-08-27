@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm"
+import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
 import {
   departments,
@@ -133,23 +135,18 @@ export async function seedTwoOrgs() {
  * the caller sees the error either way. `rls.test.ts` also gives the hook the
  * same 60 s the seed has.
  *
- * The order is by dependency, deepest first, and it is maintained by hand. A
- * tenant table added to the seed and forgotten here surfaces as a foreign key
- * violation on `delete from orgs` that names the constraint, and the
- * constraint names the table.
+ * The dependency-ordered deletes are `clearOrgs`, shared with the golden seed
+ * rather than written out a second time here: two hand-maintained copies of
+ * that order drift, and the copy that drifts is the one nobody reads. The
+ * platform role template belongs to no org, so it is the one delete this file
+ * still owns.
  */
 export async function clearTwoOrgs() {
-  const { sql } = connect()
+  const { sql, db } = connect()
   try {
-    await sql.begin(async (tx) => {
-      await tx`delete from events where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from staff_events where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from facts where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from staff where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from departments where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from users where org_id in (${ORG_A}, ${ORG_B})`
-      await tx`delete from roles where org_id in (${ORG_A}, ${ORG_B}) or id = ${PLATFORM_ROLE}`
-      await tx`delete from orgs where id in (${ORG_A}, ${ORG_B})`
+    await db.transaction(async (tx) => {
+      await clearOrgs(tx, [ORG_A, ORG_B])
+      await tx.delete(roles).where(eq(roles.id, PLATFORM_ROLE))
     })
   } finally {
     await sql.end()
