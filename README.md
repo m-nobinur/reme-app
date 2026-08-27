@@ -86,10 +86,39 @@ the application in the dashboard. There is no matching read on either surface, s
 prints the value it expects rather than checking it, and the dashboard is the only place the
 current one is visible.
 
+Two more fields are MCP-only and are **not set on staging yet**, so two flows behave differently
+from how they read. `mfaEnabled` is `Off`, which means WorkOS never asks for a second factor at
+sign-in: the enrolment page works and returns a real QR code, but the challenge page is
+unreachable until it moves to `Optional`. `passwordResetUrl` is unset, so the reset email links
+to the WorkOS-hosted page rather than to `/reset-password` here; our page works with any token,
+it is the link in the email that points elsewhere. Both are one `updateAuthkitSettings` call
+through the MCP server. `isMagicAuthEnabled` is `false` and no page here uses magic auth.
+
 Prod needs its API key from the dashboard before the CLI can reach it:
 `workos env add prod <api-key> --client-id=<client-id>`. It gets an entry in the script in
 the change that gives it a hostname. In CI, `WORKOS_API_KEY` comes from a repository
 secret and overrides the stored environment.
+
+## Owner sign-in
+
+Our own pages, not the WorkOS-hosted ones (DR-4a): `/sign-in`, `/sign-up`, `/verify-email`,
+`/forgot-password`, `/reset-password`, `/mfa`, `/mfa-setup`, `/choose-organisation`,
+`/sign-out`, plus `/api/auth/social` and `/api/auth/callback`.
+
+`apps/web` owns the session (ADR-026). `authkitMiddleware` runs on every request from
+`src/start.ts`; the pages post to `createServerFn` handlers in `src/lib/auth/`, which call
+`@workos-inc/node` and seal the session there (ADR-024). There is no `apps/api` in this repo
+yet and nothing here needs one: no flow in the list touches the database.
+
+The Worker reads `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI` and
+`WORKOS_COOKIE_PASSWORD` from its own bindings. Locally that is `apps/web/.dev.vars`, which
+`pnpm bootstrap` writes and `.gitignore` covers; deployed it is `wrangler secret put`.
+`pnpm check:secrets` scans the built `dist/client` and fails if any of them, or
+`@workos-inc/node`, reaches a file a browser downloads.
+
+Social sign-in is ours too, because the kit hard-codes `provider: "authkit"` and so can only
+send someone to the hosted page. `/api/auth/social` builds the provider URL with the backend
+SDK and writes a `state` cookie; `/api/auth/callback` matches it before exchanging the code.
 
 ## Design system
 

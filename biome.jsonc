@@ -82,6 +82,44 @@
       }
     },
     {
+      // Narrower than the apps block above and so replacing it, which is why the
+      // relative-reach pattern is repeated here rather than inherited.
+      //
+      // apps/web must not reach the database. ADR-026 moved the owner session
+      // into this Worker, which makes it the one app where somebody would
+      // reasonably try: the session is here, so the tenant row feels like it
+      // should be too. It is not. §9.2 layer 1 puts the server-created tenant
+      // context on the only path to a database handle, and that path is
+      // apps/api. This Worker holds no binding, and this rule is what says so
+      // before a review has to.
+      "includes": ["apps/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/packages/*/**"],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  },
+                  {
+                    "group": [
+                      "@workspace/db",
+                      "@workspace/db/**",
+                      "**/db/src/**"
+                    ],
+                    "message": "apps/web has no database binding and must not import @workspace/db. Reads and writes go through apps/api, which is the only holder of a tenant context (architecture §9.2 layer 1)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/**"],
       "linter": {
         "rules": {
