@@ -1,6 +1,7 @@
 # ADR-028: The identity mirror, the event aggregate and the staff lifecycle log
 
-Status: accepted, 2026-08-28. Applies to `packages/db`, `packages/contracts`, the tenancy suite, and
+Status: accepted, 2026-08-28. Amended 2026-08-28, see "Amendment: the self read" at the end.
+Applies to `packages/db`, `packages/contracts`, the tenancy suite, and
 every endpoint that reads a person, a session event or a staff lifecycle event.
 
 Changes no DR. DR-4 is the reason the first ruling goes the way it does and is unchanged. §5.2 left
@@ -109,11 +110,16 @@ Row-level security:
   person who is signing in and nobody else. A membership-derived write policy cannot work here:
   the membership references the user, so at sign-up the user row has to exist first and no
   membership can vouch for it yet.
+- `users_self_read` (`FOR SELECT`), keyed on the same predicate. Added by the amendment at the end
+  of this ADR, for the same bootstrap reason as the two write policies above and left out of the
+  original list by oversight.
 - No delete policy. Removing a person is the deletion workflow in §10.5 and runs as the migrator.
 
 `withOrg` gains a second transaction-local setting, `app.workos_user_id`, set with
 `set_config(..., true)` exactly as `app.org_id` is, from the sealed session and never from client
-input. Unset it reads as NULL and matches nothing, so fail-closed stays the resting state. It opens,
+input. Unset it reads as NULL and matches nothing, so fail-closed stays the resting state. When no
+person is named, `withOrg` writes the empty string rather than leaving it unset; the `nullif` on
+every policy that reads it is why the two behave the same, measured in the amendment below. It opens,
 holds and closes nothing, so it does not touch the connection-lifetime problem already open against
 `withOrg`.
 
@@ -239,3 +245,114 @@ measurement.
 
 Or something in the product needs a total order across a whole org's event stream. That would be the
 first real evidence for an aggregate wider than the session, and the question reopens with it.
+
+## Amendment: the self read
+
+2026-08-28. Adds a fourth policy to `users`. Changes no DR. Raised from the branch behind PR #37,
+which needs it and flagged it rather than letting a green build stand for agreement.
+
+```sql
+create policy users_self_read on users as permissive for select
+  using (workos_user_id = nullif(current_setting('app.workos_user_id', true), ''));
+```
+
+### Why the original list was short by one
+
+The decision above gives a person `users_self_insert` and `users_self_update` and no way to read
+the row back. The reason it gives for the write policies is the reason the read policy is missing:
+"the membership references the user, so at sign-up the user row has to exist first and no
+membership can vouch for it yet." That sentence is equally true of the read. `users_member_read`
+needs a membership in the current org, and during the write that creates the first one there is
+none. So the original list saw the bootstrap for writes and stopped one policy short of it. This is
+a gap in ADR-028, not a deviation from it.
+
+Generating the uuid in the worker, which ADR-029 asks for, answers a different problem. It removes
+the `INSERT ... RETURNING` that the SELECT policy would refuse. It does not help when the person
+already has a row and the generated uuid was never used. Two paths reach that state and both are
+live, not hypothetical: an owner creating a second business, and a retry of a signup that wrote
+`users` and then failed. `createOrg` inserts `users` with `on conflict do nothing`, so on both
+paths the insert is a no-op and the worker has to find an id it did not write.
+
+### What it does and does not widen
+
+No tenant boundary is crossed. `users` has no `org_id` and is the one entry in `PLATFORM_TABLES`;
+this policy selects one row, the row for the WorkOS user named by the sealed session. It is
+permissive alongside `users_member_read`, so the effective read becomes "the people this org has
+memberships for, or me". In every settled state the second clause adds nothing, because a person
+reading inside an org is a member of it. The only row it adds is the reader's own, in the window
+before their membership exists.
+
+It gives a compromised session nothing it did not hold. The row carries `workos_user_id`, `email`
+and `name`, all of which are in the sealed session already, plus our `id`, which is a surrogate for
+the same person. `users_self_update` already qualifies rows on this exact predicate, and an UPDATE
+policy's `USING` clause is a read qualification, so a session that can reach SQL can already locate
+and probe that row a row count at a time. The read policy states plainly what the write policy
+already implied.
+
+### Why not the alternative
+
+The named fallback is a second `SECURITY DEFINER` function resolving a `users.id` from a WorkOS
+user id, which ADR-029 correctly says is an ADR rather than a migration. Refused, because it costs
+more privilege for less enforcement. That object would run as an owner with `rolbypassrls`,
+evaluate no policy at all, and its hand-written body would be the entire boundary, to return a uuid
+for the one person the session already names. It would also double what the tenancy gate has to
+police: a second `search_path` to keep pinned, a second `proacl` to keep revoked from `PUBLIC`, and
+a second body whose join is the only thing standing between a caller and every row. Trading a read
+that RLS enforces for a whole-table read that nothing enforces, guarded by a comment, is the wrong
+direction. ADR-029's "a second one is an ADR" is a cost signal, and the cost is not worth paying to
+solve a problem a policy solves.
+
+A narrower form was considered and rejected: column-level `GRANT SELECT (id)` on `users`, so the
+self read reaches the surrogate key and nothing else. It answers an RLS question with a second
+mechanism, it drifts against migration `0001`'s blanket grant and matching default privileges, and
+the columns it would hide are ones the session is already holding. The concrete policy, and one
+mechanism.
+
+### The empty string is the resting state, so say what the guard does
+
+Measured against the local Postgres 17.11 container on 2026-08-28, in a transaction that was rolled
+back, as a `nologin nobypassrls` role holding only `SELECT`:
+
+- `app.workos_user_id` never set: 0 rows.
+- set to the empty string: 0 rows.
+- set to the reader's own id: exactly 1 row, theirs.
+- set to an id that exists but is not theirs: 0 rows.
+
+Fail-closed in both unset spellings, which is the property `withOrg` needs, because `withOrg` sets
+this GUC to `ctx.workosUserId ?? ""`. The empty string is therefore not an edge case. It is what
+every read that names no person writes, which is most of them.
+
+`nullif` is the right guard and stays, but be precise about what it is buying here. With it, the
+comparison is `text = NULL`, which is NULL, and RLS denies anything that is not true. Without it,
+the comparison is `workos_user_id = ''`, which is false, so this policy would fail closed either
+way, on the strength of `workos_user_id` being `NOT NULL` and no real WorkOS id being empty. The
+guard makes the behaviour a property of the expression rather than of the data.
+
+The reason to keep the idiom identical across every policy is the other GUC. On `app.org_id` the
+guarded expression yields NULL for the empty string and the unguarded one raises `invalid input
+syntax for type uuid: ""`, both measured in the same session. There the guard is the difference
+between a denial and a 500. Writing the two policies the same way means nobody has to work out, per
+policy, which kind it is.
+
+### What the tenancy suite must prove
+
+A policy no case exercises is a policy nobody is checking, and this one is easy to leave unproven
+because in the settled state it is invisible. The suite must isolate its contribution rather than
+count a total that `users_member_read` also feeds. Read the visible `users` ids twice in the same
+org, once with `workosUserId` omitted and once naming a person who holds no membership in that org,
+and assert the difference is exactly that person's row: added, and nothing else added, and nothing
+removed. That single case carries all three properties, needs no new fixture, and fails if the
+policy is dropped, if it is widened past one row, or if the guard is removed so that the
+person-less context starts matching.
+
+One standing trap, noted rather than gated. The `PLATFORM_TABLES` cross-org denial probe for
+`users` calls `withOrg` with no `workosUserId` today, so it still proves what it claims. Anyone who
+later gives that probe a person must not give it the person whose row the denial is asserting, or
+the case passes for the wrong reason.
+
+### Change if
+
+The identity mirror stops being written by the request that signs a person in. If a webhook or a
+provisioning job mirrors people ahead of their first request, the row exists before the signup
+transaction needs it, this policy stops being load-bearing, and it should be dropped rather than
+kept for the case it no longer serves.
