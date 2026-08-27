@@ -5,13 +5,20 @@ import { defineConfig, devices } from "@playwright/test"
 // before a change and after it. They stay keyed by platform because the same
 // Chromium rasterises text differently on macOS and on Linux, so a set carried
 // between machines would fail on every glyph.
+// The catalog server's port, overridable because 4321 is not always ours.
+// `reuseExistingServer` is on locally, so a second worktree on the same machine
+// silently runs this suite against the *other* worktree's catalog and reports a
+// pass for components it has never seen. Measured: a run here read the entries
+// from a sibling checkout and failed on primitives it did not have.
+const PORT = Number(process.env.CATALOG_PORT ?? 4321)
+
 export default defineConfig({
   testDir: "./test",
   snapshotPathTemplate: "{testDir}/__screenshots__/{platform}/{arg}{ext}",
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: "http://localhost:4321" },
+  use: { baseURL: `http://localhost:${PORT}` },
   // The default is threshold 0.2, a per-pixel colour tolerance wide enough that
   // a muted surface changing shape is invisible to it: rounded-2xl to
   // rounded-none on the skeleton passed with the same bytes. In a design system
@@ -43,8 +50,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm catalog",
-    url: "http://localhost:4321",
+    command: `pnpm catalog --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     stdout: "ignore",
   },

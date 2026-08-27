@@ -9,6 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
+import { Route as MfaRouteImport } from './routes/mfa'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
@@ -18,7 +27,54 @@ import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as ApiRuntimeRouteImport } from './routes/api.runtime'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
+import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignOutRoute = SignOutRouteImport.update({
+  id: '/sign-out',
+  path: '/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MfaSetupRoute = MfaSetupRouteImport.update({
+  id: '/mfa-setup',
+  path: '/mfa-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MfaRoute = MfaRouteImport.update({
+  id: '/mfa',
+  path: '/mfa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChooseOrganisationRoute = ChooseOrganisationRouteImport.update({
+  id: '/choose-organisation',
+  path: '/choose-organisation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
@@ -64,10 +120,29 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
+  id: '/api/auth/social',
+  path: '/api/auth/social',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
+  id: '/api/auth/callback',
+  path: '/api/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/choose-organisation': typeof ChooseOrganisationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/mfa': typeof MfaRoute
+  '/mfa-setup': typeof MfaSetupRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -75,9 +150,20 @@ export interface FileRoutesByFullPath {
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/social': typeof ApiAuthSocialRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/choose-organisation': typeof ChooseOrganisationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/mfa': typeof MfaRoute
+  '/mfa-setup': typeof MfaSetupRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -85,11 +171,22 @@ export interface FileRoutesByTo {
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app': typeof AppIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/social': typeof ApiAuthSocialRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/choose-organisation': typeof ChooseOrganisationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/mfa': typeof MfaRoute
+  '/mfa-setup': typeof MfaSetupRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -97,12 +194,23 @@ export interface FileRoutesById {
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/social': typeof ApiAuthSocialRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/app'
+    | '/choose-organisation'
+    | '/forgot-password'
+    | '/mfa'
+    | '/mfa-setup'
+    | '/reset-password'
+    | '/sign-in'
+    | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
@@ -110,9 +218,20 @@ export interface FileRouteTypes {
     | '/app/pipeline'
     | '/app/staff'
     | '/app/'
+    | '/api/auth/callback'
+    | '/api/auth/social'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/choose-organisation'
+    | '/forgot-password'
+    | '/mfa'
+    | '/mfa-setup'
+    | '/reset-password'
+    | '/sign-in'
+    | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
@@ -120,10 +239,21 @@ export interface FileRouteTypes {
     | '/app/pipeline'
     | '/app/staff'
     | '/app'
+    | '/api/auth/callback'
+    | '/api/auth/social'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/choose-organisation'
+    | '/forgot-password'
+    | '/mfa'
+    | '/mfa-setup'
+    | '/reset-password'
+    | '/sign-in'
+    | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
@@ -131,17 +261,93 @@ export interface FileRouteTypes {
     | '/app/pipeline'
     | '/app/staff'
     | '/app/'
+    | '/api/auth/callback'
+    | '/api/auth/social'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  ChooseOrganisationRoute: typeof ChooseOrganisationRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  MfaRoute: typeof MfaRoute
+  MfaSetupRoute: typeof MfaSetupRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SignInRoute: typeof SignInRoute
+  SignOutRoute: typeof SignOutRoute
+  SignUpRoute: typeof SignUpRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiRuntimeRoute: typeof ApiRuntimeRoute
+  ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
+  ApiAuthSocialRoute: typeof ApiAuthSocialRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-out': {
+      id: '/sign-out'
+      path: '/sign-out'
+      fullPath: '/sign-out'
+      preLoaderRoute: typeof SignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mfa-setup': {
+      id: '/mfa-setup'
+      path: '/mfa-setup'
+      fullPath: '/mfa-setup'
+      preLoaderRoute: typeof MfaSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mfa': {
+      id: '/mfa'
+      path: '/mfa'
+      fullPath: '/mfa'
+      preLoaderRoute: typeof MfaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/choose-organisation': {
+      id: '/choose-organisation'
+      path: '/choose-organisation'
+      fullPath: '/choose-organisation'
+      preLoaderRoute: typeof ChooseOrganisationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -205,6 +411,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/social': {
+      id: '/api/auth/social'
+      path: '/api/auth/social'
+      fullPath: '/api/auth/social'
+      preLoaderRoute: typeof ApiAuthSocialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/callback': {
+      id: '/api/auth/callback'
+      path: '/api/auth/callback'
+      fullPath: '/api/auth/callback'
+      preLoaderRoute: typeof ApiAuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -229,18 +449,30 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  ChooseOrganisationRoute: ChooseOrganisationRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  MfaRoute: MfaRoute,
+  MfaSetupRoute: MfaSetupRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SignInRoute: SignInRoute,
+  SignOutRoute: SignOutRoute,
+  SignUpRoute: SignUpRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ApiChatRoute: ApiChatRoute,
   ApiRuntimeRoute: ApiRuntimeRoute,
+  ApiAuthCallbackRoute: ApiAuthCallbackRoute,
+  ApiAuthSocialRoute: ApiAuthSocialRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

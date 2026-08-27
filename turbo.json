@@ -28,6 +28,13 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    // Reads the built client assets, so it needs the build. Not cached: the
+    // answer depends on what is in dist/client on this machine, and a cached
+    // pass would report clean against a bundle nobody scanned.
+    "check:secrets": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true

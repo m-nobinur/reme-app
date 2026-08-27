@@ -60,6 +60,12 @@ jobs:
       # dry run never talks to the API.
       - run: pnpm size
 
+      # The whole of the credential boundary since ADR-026 put WORKOS_API_KEY in
+      # both Workers: the key is a server-side secret and reaches no client
+      # bundle. Scans the built dist/client rather than the source, because what
+      # a browser downloads is the only thing the property is about.
+      - run: pnpm check:secrets
+
   # Migrations and the tenancy gate get their own job with a real Postgres,
   # because the thing worth knowing about either is what the database does, not
   # what the code intends. A service container needs no secret, so this is green

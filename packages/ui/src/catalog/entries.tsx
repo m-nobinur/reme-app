@@ -3,14 +3,18 @@ import {
   HouseIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
+import { Alert } from "@workspace/ui/components/alert"
 import {
   AppNav,
   AppShell,
   navLinkClass,
   PageHeader,
 } from "@workspace/ui/components/app-shell"
+import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
 import { Button } from "@workspace/ui/components/button"
+import { CodeInput } from "@workspace/ui/components/code-input"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { ListFilter } from "@workspace/ui/components/list-filter"
 import { LoadingState } from "@workspace/ui/components/loading-state"
@@ -90,6 +94,94 @@ const catalog: CatalogEntry[] = [
           id="catalog-input-disabled"
         />
       </div>
+    ),
+  },
+  {
+    name: "Field",
+    render: () => (
+      <div className="flex max-w-sm flex-col gap-4">
+        <Field
+          autoComplete="email"
+          id="catalog-field-email"
+          label="Work email"
+          type="email"
+        />
+        <Field
+          hint="At least 10 characters."
+          id="catalog-field-password"
+          label="Password"
+          type="password"
+        />
+        <Field
+          error="The provided password does not meet the minimum length requirements."
+          id="catalog-field-invalid"
+          label="New password"
+          type="password"
+        />
+      </div>
+    ),
+  },
+  {
+    name: "CodeInput",
+    render: () => (
+      <div className="flex max-w-sm flex-col gap-3">
+        <Field id="catalog-code" label="Six-digit code">
+          <CodeInput
+            aria-describedby="catalog-code-hint"
+            defaultValue="481502"
+            id="catalog-code"
+          />
+        </Field>
+      </div>
+    ),
+  },
+  {
+    name: "Alert",
+    render: () => (
+      <div className="flex max-w-md flex-col gap-3">
+        <Alert variant="error">That email or password is not right.</Alert>
+        <Alert variant="info">
+          We sent a six-digit code to the address you gave us.
+        </Alert>
+        <Alert variant="success">Your password has been changed.</Alert>
+      </div>
+    ),
+  },
+  {
+    name: "AuthCard",
+    render: () => (
+      <AuthCard
+        brand="Reme"
+        className="min-h-0 rounded-3xl border border-border"
+        description="Use the email address your account was set up with."
+        footer="New here? Create an account"
+        title="Sign in"
+      >
+        <AuthForm>
+          <Field
+            autoComplete="email"
+            id="catalog-auth-email"
+            label="Email"
+            type="email"
+          />
+          <Field
+            autoComplete="current-password"
+            id="catalog-auth-password"
+            label="Password"
+            type="password"
+          />
+          <Button type="button">Sign in</Button>
+        </AuthForm>
+      </AuthCard>
+    ),
+  },
+  {
+    name: "AuthForm",
+    render: () => (
+      <AuthForm className="max-w-sm">
+        <Field id="catalog-authform-email" label="Email" type="email" />
+        <Button type="button">Send the link</Button>
+      </AuthForm>
     ),
   },
   {

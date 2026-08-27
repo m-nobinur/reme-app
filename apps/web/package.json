@@ -10,7 +10,8 @@
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "size": "node scripts/size.mjs"
+    "size": "node scripts/size.mjs",
+    "check:secrets": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.16",
@@ -22,6 +23,8 @@
     "@tanstack/react-router-devtools": "1.167.0",
     "@tanstack/react-start": "1.168.26",
     "@tanstack/router-plugin": "1.168.18",
+    "@workos-inc/node": "10.11.0",
+    "@workos/authkit-tanstack-react-start": "0.11.0",
     "@workspace/ui": "workspace:*",
     "ai": "7.0.83",
     "react": "^19.2.6",
