@@ -35,8 +35,21 @@ export default defineConfig({
   // suite reads, so state it: a plain run never writes, and only the CLI flag
   // that `test:update` passes overrides this back.
   updateSnapshots: "none",
+  // `threshold: 0` meant byte-identical, and rendering here is not quite that.
+  // Measured on the `ToolGroup` entry, which failed roughly one run in three in
+  // either theme: five to forty-nine pixels differed, and the largest
+  // difference on any channel was **1 of 255**, 0.0039 in the normalised space
+  // this option uses. That is rasteriser rounding, invisible, and it was
+  // failing a gate meant to catch shape changes.
+  //
+  // So 0.01, which is above that noise floor and twenty times tighter than
+  // Playwright's 0.2 default. `maxDiffPixels: 0` is untouched and is what
+  // still does the work: a rounded-2xl to rounded-none change moves pixels by
+  // most of the colour space, so every one of them is still counted, and one
+  // is enough to fail. Widening `threshold` further is what hides those, which
+  // is why the number is a measurement rather than a round figure.
   expect: {
-    toHaveScreenshot: { threshold: 0, maxDiffPixels: 0 },
+    toHaveScreenshot: { threshold: 0.01, maxDiffPixels: 0 },
   },
   projects: [
     {
