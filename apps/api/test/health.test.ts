@@ -1,32 +1,16 @@
-import { ErrorEnvelope } from "@workspace/contracts"
 import { sql, tenancy } from "@workspace/db"
 import { brightclean } from "@workspace/db/fixtures"
 import { afterAll, describe, expect, it } from "vitest"
 import { checkTenantPath, PROBE_ORG } from "../src/health.ts"
-import worker from "../src/index.ts"
 
 /**
- * Two halves. The routing half needs no database and runs in the ordinary unit
- * job; the tenant-path half needs one and runs in the `database` job beside the
- * tenancy gate, which is the only place a claim about RLS means anything.
+ * The tenant-path half of `/health`. It needs a database and runs in the
+ * `database` job beside the tenancy gate, which is the only place a claim
+ * about RLS means anything. The routing half lives in `org.test.ts` with the
+ * rest of the router.
  */
 
 const url = process.env.DATABASE_URL
-
-describe("routes", () => {
-  it("answers an unknown path with the typed error envelope", async () => {
-    const response = await worker.fetch(
-      new Request("http://api.invalid/nope"),
-      {} as Env,
-      {} as ExecutionContext
-    )
-    expect(response.status).toBe(404)
-    // R4: parsed rather than eyeballed, so a shape that drifts from §28.1
-    // fails here rather than in whatever reads it.
-    const body = ErrorEnvelope.parse(await response.json())
-    expect(body.code).toBe("route.not_found")
-  })
-})
 
 describe.skipIf(!url)("the tenant path, on a live connection", () => {
   const kit = tenancy(url as string, { max: 2 })

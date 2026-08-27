@@ -2,12 +2,24 @@ import {
   EventEnvelope,
   FactProvenance,
   FactRecord,
+  Org,
+  StaffMember,
   TaintLabel,
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { toEventEnvelope, toFactRecord } from "../src/map.ts"
-import type { events, facts } from "../src/schema.ts"
-import { factSource, taintLabel } from "../src/schema.ts"
+import {
+  toEventEnvelope,
+  toFactRecord,
+  toOrg,
+  toStaffMember,
+} from "../src/map.ts"
+import type { events, facts, orgs, staff } from "../src/schema.ts"
+import {
+  factSource,
+  staffKind,
+  staffStatus,
+  taintLabel,
+} from "../src/schema.ts"
 
 /**
  * The schema and the contracts describe the same two things. Nothing stops
@@ -24,6 +36,14 @@ describe("enums match the contract", () => {
 
   it("taint labels", () => {
     expect(taintLabel.enumValues).toEqual(TaintLabel.options)
+  })
+
+  it("staff kinds", () => {
+    expect(staffKind.enumValues).toEqual(StaffMember.shape.kind.options)
+  })
+
+  it("staff lifecycle states", () => {
+    expect(staffStatus.enumValues).toEqual(StaffMember.shape.status.options)
   })
 })
 
@@ -62,6 +82,52 @@ describe("rows map onto contracts", () => {
     taint: [],
     payload: {},
   }
+
+  const orgRow: typeof orgs.$inferSelect = {
+    id: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e71",
+    slug: "brightclean",
+    name: "Brightclean Cleaning Co. (fixture)",
+    workosOrganizationId: "org_fixture_brightclean",
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const staffRow: typeof staff.$inferSelect = {
+    id: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e72",
+    orgId: orgRow.id,
+    staffCode: "COS-001",
+    displayName: "Remy",
+    kind: "agent",
+    userId: null,
+    roleId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e74",
+    departmentId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e75",
+    managerId: null,
+    positionTitle: "Chief of Staff",
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  it("an orgs row is an Org", () => {
+    expect(() => Org.parse(toOrg(orgRow))).not.toThrow()
+  })
+
+  it("the WorkOS organization id does not leave with it", () => {
+    // `Org` is a strict object, so a mapper that passed the column through
+    // would fail to parse rather than leak quietly. This says the same thing
+    // where someone reading the mapper will look.
+    expect(Object.keys(toOrg(orgRow))).not.toContain("workos_organization_id")
+  })
+
+  it("a staff row is a StaffMember", () => {
+    expect(() => StaffMember.parse(toStaffMember(staffRow))).not.toThrow()
+  })
+
+  it("the org root reports to nobody", () => {
+    expect(
+      StaffMember.parse(toStaffMember(staffRow)).manager_staff_id
+    ).toBeNull()
+  })
 
   it("a facts row is a FactRecord", () => {
     expect(() => FactRecord.parse(toFactRecord(factRow))).not.toThrow()

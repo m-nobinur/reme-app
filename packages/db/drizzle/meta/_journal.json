@@ -36,6 +36,13 @@
       "when": 1787858432941,
       "tag": "0004_identity_mirror_and_event_aggregate",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787864247924,
+      "tag": "0005_org_workos_link_and_self_read",
+      "breakpoints": true
     }
   ]
 }

@@ -193,6 +193,24 @@ async function run<T>(
   })
 }
 
+/**
+ * Who a request is, before it is anything else. Both halves come from the
+ * sealed session and neither is ever read off a request body: `org_id` never
+ * comes from client input, and neither does the vendor id it is looked up by.
+ */
+export type Identity = {
+  readonly workosUserId: string
+  readonly workosOrganizationId: string
+}
+
+/**
+ * Where the kit keeps its handle. An unexported symbol, the same trick the
+ * `orgScoped` brand above uses: `resolveOrg` needs the pool and nothing outside
+ * this file can name the key, so the rule that no handle leaves `withOrg`
+ * survives having a second entry point.
+ */
+const pool = Symbol("pool")
+
 /** The kit, bound to one pool. `close` is the caller's to call. */
 export type Tenancy = {
   withOrg: <T>(
@@ -200,6 +218,36 @@ export type Tenancy = {
     fn: (db: OrgScopedDb) => Promise<T>
   ) => Promise<T>
   close: () => Promise<void>
+  readonly [pool]: Handle
+}
+
+/**
+ * The one read that happens outside an org context, because it is the read that
+ * produces one (ADR-029).
+ *
+ * `resolve_org` is SECURITY DEFINER, so it runs as its owner and no policy is
+ * evaluated inside it; migration 0005 carries the reasoning and the body that
+ * is therefore the whole boundary. What this adds is the role: the call runs as
+ * `reme_app` in a transaction of its own, so the connecting role, which on Neon
+ * holds BYPASSRLS, executes nothing on this path either, and `reme_app` is the
+ * only role granted EXECUTE. No org context is set and no handle is handed out.
+ *
+ * Returns the org id, or null when the person holds no active membership in
+ * that organization. Null is the ordinary answer for a signed-in person whose
+ * org we do not mirror yet, not an error.
+ */
+export async function resolveOrg(
+  kit: Tenancy,
+  identity: Identity
+): Promise<string | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{ org_id: string | null }>(
+      sql`select public.resolve_org(${identity.workosUserId},
+                                    ${identity.workosOrganizationId}) as org_id`
+    )
+    return rows[0]?.org_id ?? null
+  })
 }
 
 /**
@@ -224,6 +272,7 @@ export function tenancy(
   return {
     withOrg: (ctx, fn) => run(db, ctx, fn),
     close: () => client.end(),
+    [pool]: db,
   }
 }
 

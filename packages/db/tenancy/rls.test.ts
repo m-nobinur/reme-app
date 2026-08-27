@@ -18,6 +18,9 @@ import {
   ORG_B,
   seedTwoOrgs,
   USER_OF,
+  WORKOS_ORG_OF,
+  WORKOS_USER_OF,
+  WORKOS_USER_PENDING,
 } from "./fixtures.ts"
 
 /**
@@ -51,6 +54,8 @@ const APPEND_ONLY = new Set(["events", "staff_events"])
 const PROBE_LEAKY = "tenancy_probe_leaky_view"
 const PROBE_SCOPED = "tenancy_probe_scoped_view"
 const PROBE_SEQ = "tenancy_probe_seq"
+const PROBE_LOOSE_FN = "tenancy_probe_loose_definer"
+const PROBE_TIGHT_FN = "tenancy_probe_tight_definer"
 
 /**
  * Tables that are deliberately not tenant-scoped, each with the read that
@@ -73,6 +78,59 @@ const PLATFORM_TABLES: Record<string, { rowOf: (org: "a" | "b") => SQL }> = {
   users: {
     rowOf: (org) =>
       sql`select count(*)::int as n from users where id = ${USER_OF[org]}`,
+  },
+}
+
+/**
+ * Functions that run as their owner rather than their caller, each with the
+ * refusal that proves the body is doing the work the policies are not.
+ *
+ * A SECURITY DEFINER function in this database runs as `neondb_owner`, which
+ * holds BYPASSRLS, so no policy is evaluated inside one and its body is the
+ * entire security boundary. That makes it exactly as capable of leaking a
+ * tenant as an owner-rights view, and the catalog cannot tell a safe body from
+ * an unsafe one. So the rule is the same one `PLATFORM_TABLES` uses: the name
+ * cannot be added on its own, because the entry is the probe, and the probe is
+ * driven rather than asserted.
+ *
+ * `resolve_org` is the only entry (ADR-029). It answers which `org_id` a
+ * request runs under, which is the one read that has to happen before an org
+ * context exists and therefore the one read RLS cannot scope.
+ */
+type DefinerProbe = {
+  /** What the caller is entitled to, so a refusal below is not a broken call. */
+  granted: (string | null)[]
+  /** Every way in, that must not be one. */
+  refused: (string | null)[]
+}
+
+const SECURITY_DEFINER_FUNCTIONS: Record<
+  string,
+  { probe: (raw: Raw) => Promise<DefinerProbe> }
+> = {
+  resolve_org: {
+    probe: async (raw) => {
+      const call = async (user: string, org: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select public.resolve_org(${user}, ${org}) as org_id`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [
+          await call(WORKOS_USER_OF.a, WORKOS_ORG_OF.a),
+          await call(WORKOS_USER_OF.b, WORKOS_ORG_OF.b),
+        ],
+        refused: [
+          // Each org's person against the other org's organization.
+          await call(WORKOS_USER_OF.a, WORKOS_ORG_OF.b),
+          await call(WORKOS_USER_OF.b, WORKOS_ORG_OF.a),
+          // A membership that exists and is not active.
+          await call(WORKOS_USER_PENDING, WORKOS_ORG_OF.a),
+          // An organization nothing mirrors.
+          await call(WORKOS_USER_OF.a, "org_never_mirrored"),
+        ],
+      }
+    },
   },
 }
 
@@ -125,6 +183,58 @@ async function dropProbes(raw: Raw) {
   await raw.unsafe(`drop view if exists public.${PROBE_LEAKY}`)
   await raw.unsafe(`drop view if exists public.${PROBE_SCOPED}`)
   await raw.unsafe(`drop table if exists public.${PROBE_SEQ}`)
+  await raw.unsafe(`drop function if exists public.${PROBE_LOOSE_FN}()`)
+  await raw.unsafe(`drop function if exists public.${PROBE_TIGHT_FN}()`)
+}
+
+/**
+ * The pinning ADR-029 requires, exactly. A `search_path` set to anything but
+ * the empty string still leaves a schema for a caller to put a table in.
+ */
+const PINNED_SEARCH_PATH = 'search_path=""'
+
+type DiscoveredFunction = {
+  name: string
+  args: string
+  securityDefiner: boolean
+  /** `proconfig`, joined. `search_path=""` is the one that matters. */
+  config: string
+  /** Null means the default, and the default for a function is world-executable. */
+  acl: string | null
+  /** Whether PUBLIC holds EXECUTE, however the ACL happens to spell it. */
+  publicCanExecute: boolean
+}
+
+async function readFunctions(raw: Raw): Promise<DiscoveredFunction[]> {
+  const rows = await raw<
+    {
+      name: string
+      args: string
+      security_definer: boolean
+      config: string
+      acl: string | null
+      public_can_execute: boolean
+    }[]
+  >`
+    select p.proname as name,
+           pg_get_function_identity_arguments(p.oid) as args,
+           p.prosecdef as security_definer,
+           coalesce(array_to_string(p.proconfig, ','), '') as config,
+           array_to_string(p.proacl, ',') as acl,
+           has_function_privilege('public', p.oid, 'execute')
+             as public_can_execute
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+    order by p.proname`
+  return rows.map((row) => ({
+    name: row.name,
+    args: row.args,
+    securityDefiner: row.security_definer,
+    config: row.config,
+    acl: row.acl,
+    publicCanExecute: row.public_can_execute,
+  }))
 }
 
 async function readRelations(raw: Raw): Promise<Discovered[]> {
@@ -185,6 +295,7 @@ async function discover() {
   const { sql: raw } = connect()
   await dropProbes(raw)
   const relations = await readRelations(raw)
+  const functions = await readFunctions(raw)
   const policies = await raw<Policy[]>`
     select tablename, policyname, cmd, qual, with_check
     from pg_policies where schemaname = 'public'`
@@ -196,11 +307,12 @@ async function discover() {
     // Views, materialised views and foreign tables hold no rows of their own,
     // so RLS is not the question for them. What they are granted is.
     derived: relations.filter((r) => !STORED_KINDS.has(r.kind)),
+    definers: functions.filter((f) => f.securityDefiner),
     policies,
   }
 }
 
-const { tables, tenantTables, derived, policies } = await discover()
+const { tables, tenantTables, derived, definers, policies } = await discover()
 
 /** One case per discovered tenant table. */
 const cases = tenantTables.map((t) => [t.name, t] as const)
@@ -384,6 +496,91 @@ describe("a platform table is outside the tenant boundary, not outside RLS", () 
           theirs,
           `${name} showed org ${org.toUpperCase()} a row belonging to the other`
         ).toBe(0)
+      }
+    },
+    60_000
+  )
+})
+
+describe("a function that runs as its owner cannot hide either", () => {
+  /**
+   * The catalog half. A SECURITY DEFINER function bypasses RLS by construction,
+   * so the three things asked of one here are: that somebody declared it, that
+   * its search path is pinned, and that it is not executable by everyone.
+   */
+  const declared = Object.keys(SECURITY_DEFINER_FUNCTIONS)
+
+  it("has no undeclared function running as its owner", () => {
+    const stray = definers
+      .filter((f) => !(f.name in SECURITY_DEFINER_FUNCTIONS))
+      .map((f) => `${f.name}(${f.args})`)
+    expect(
+      stray,
+      "a SECURITY DEFINER function runs as a role that holds BYPASSRLS, so its " +
+        "body is the only thing standing between a caller and every tenant. " +
+        "SECURITY_DEFINER_FUNCTIONS in this file is where one is declared, and " +
+        "the entry has to carry the probe that drives its refusal"
+    ).toEqual([])
+  })
+
+  it("names only functions the database has", () => {
+    const present = new Set(definers.map((f) => f.name))
+    const absent = declared.filter((name) => !present.has(name))
+    expect(
+      absent,
+      "SECURITY_DEFINER_FUNCTIONS names a function the database does not " +
+        "have, so its probe proves nothing. Drop the entry with the function"
+    ).toEqual([])
+  })
+
+  it.each(definers.map((f) => [f.name, f] as const))(
+    "%s pins its search path to nothing",
+    (name, fn) => {
+      expect(
+        fn.config.split(",").includes(PINNED_SEARCH_PATH),
+        `${name} runs as its owner without SET search_path = '', which is the ` +
+          "classic privilege escalation: anything the body names can be " +
+          "shadowed by an object the caller creates in a schema on the path. " +
+          `Its proconfig reads ${fn.config || "(nothing)"}`
+      ).toBe(true)
+    }
+  )
+
+  it.each(definers.map((f) => [f.name, f] as const))(
+    "%s is not executable by everyone",
+    (name, fn) => {
+      expect(
+        fn.acl,
+        `${name} has a null proacl, which means the default rather than no ` +
+          "privileges, and the default for a function is EXECUTE to PUBLIC. " +
+          "REVOKE ALL ON FUNCTION ... FROM PUBLIC, then grant it to the one " +
+          "role that needs it"
+      ).not.toBeNull()
+      expect(
+        fn.publicCanExecute,
+        `${name} is executable by PUBLIC, so a function that bypasses RLS by ` +
+          "construction is callable by anything holding a connection"
+      ).toBe(false)
+    }
+  )
+
+  it.each(Object.entries(SECURITY_DEFINER_FUNCTIONS))(
+    "%s answers for a membership and refuses every other way in",
+    async (name, entry) => {
+      const { sql: raw } = connect()
+      try {
+        const { granted, refused } = await entry.probe(raw)
+        expect(
+          granted.filter((answer) => answer === null),
+          `${name} answered nothing where it should have, so the refusals ` +
+            "below prove nothing. Check the fixtures this probe reads"
+        ).toEqual([])
+        expect(
+          refused.filter((answer) => answer !== null),
+          `${name} answered for a caller that is not entitled to it`
+        ).toEqual([])
+      } finally {
+        await raw.end()
       }
     },
     60_000
@@ -579,6 +776,77 @@ describe("the gate fails when it should", () => {
         narrow?.length,
         "an invoker-rights view read past the policies"
       ).toBe(1)
+    } finally {
+      await dropProbes(raw)
+      await raw.end()
+    }
+  }, 60_000)
+
+  it("catches a definer function that hides and passes one that does not", async () => {
+    const { sql: raw } = connect()
+    try {
+      // The shape the assertions above exist for: runs as its owner, resolves
+      // its names against the caller's search path, and inherits the EXECUTE
+      // grant to PUBLIC that every function is born with. No REVOKE and no SET
+      // written here, deliberately.
+      await raw.unsafe(
+        `create function public.${PROBE_LOOSE_FN}() returns bigint ` +
+          "language sql security definer as $$ select count(*) from orgs $$"
+      )
+      await raw.unsafe(
+        `create function public.${PROBE_TIGHT_FN}() returns bigint ` +
+          "language sql security definer set search_path = '' " +
+          "as $$ select count(*) from public.orgs $$"
+      )
+      await raw.unsafe(
+        `revoke all on function public.${PROBE_TIGHT_FN}() from public`
+      )
+
+      const found = await readFunctions(raw)
+      const loose = found.find(
+        (f) => f.name === PROBE_LOOSE_FN
+      ) as DiscoveredFunction
+      const tight = found.find(
+        (f) => f.name === PROBE_TIGHT_FN
+      ) as DiscoveredFunction
+
+      expect(loose.securityDefiner, "discovery missed a definer").toBe(true)
+      expect(
+        loose.config.split(",").includes(PINNED_SEARCH_PATH),
+        "the negative fixture was not caught"
+      ).toBe(false)
+      expect(
+        loose.acl,
+        "a new function no longer arrives with a null proacl, so the " +
+          "assertion this fixture guards is untested"
+      ).toBeNull()
+      expect(
+        loose.publicCanExecute,
+        "a new function is no longer executable by PUBLIC, so the assertion " +
+          "this fixture guards is untested"
+      ).toBe(true)
+      expect(
+        tight.config.split(",").includes(PINNED_SEARCH_PATH),
+        "the positive fixture was caught"
+      ).toBe(true)
+      expect(tight.publicCanExecute, "the positive fixture was caught").toBe(
+        false
+      )
+
+      // And the catalog shape is not a proxy for the bypass. The loose one is
+      // called through `withOrg`, so the caller is `reme_app` with an org
+      // context set, and it still counts both orgs: the function does not
+      // evaluate the policies its caller is subject to.
+      const seen = await withOrg({ orgId: ORG_A }, async (db) =>
+        db.execute<{ n: number }>(
+          sql`select ${sql.identifier(PROBE_LOOSE_FN)}()::int as n`
+        )
+      )
+      expect(
+        seen[0]?.n,
+        "a SECURITY DEFINER function no longer reads past the policies, which " +
+          "is the premise every assertion in this block rests on"
+      ).toBeGreaterThan(1)
     } finally {
       await dropProbes(raw)
       await raw.end()
