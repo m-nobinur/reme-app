@@ -47,9 +47,11 @@ jobs:
 
       - run: pnpm lint:ci --reporter=github
 
-      # The a11y and visual gates in packages/ui run in a real browser, so the
-      # `test` task needs one. Only Chromium: the design system is compared
-      # against committed screenshots, and a second engine means a second set.
+      # The catalog and a11y gates in packages/ui run in a real browser, so the
+      # `test` task needs one. Chromium alone: nothing here is engine-specific,
+      # and each extra engine is another browser download on every run. The two
+      # snapshot tests skip, because baselines are gitignored and the visual
+      # comparison is a local gate; the run prints them as skipped.
       - run: pnpm --filter @workspace/ui exec playwright install --with-deps chromium
 
       - run: pnpm test

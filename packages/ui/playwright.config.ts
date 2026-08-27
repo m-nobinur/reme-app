@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test"
 
-// Screenshots are platform-specific: the same Chromium rasterises text
-// differently on macOS and on Linux, so the baselines are kept per platform and
-// CI compares against the Linux set. Regenerate the Linux set with
-// `pnpm --filter @workspace/ui snapshots:linux`.
+// Baselines are gitignored, so the visual comparison is a local gate: write
+// them once with `pnpm --filter @workspace/ui test:update`, then run the suite
+// before a change and after it. They stay keyed by platform because the same
+// Chromium rasterises text differently on macOS and on Linux, so a set carried
+// between machines would fail on every glyph.
 export default defineConfig({
   testDir: "./test",
   snapshotPathTemplate: "{testDir}/__screenshots__/{platform}/{arg}{ext}",

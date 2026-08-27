@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import AxeBuilder from "@axe-core/playwright"
@@ -6,6 +6,17 @@ import { expect, type Page, test } from "@playwright/test"
 
 const COMPONENTS_DIR = fileURLToPath(
   new URL("../src/components", import.meta.url)
+)
+
+/**
+ * Where `snapshotPathTemplate` puts this platform's baselines. They are
+ * gitignored, so a fresh clone and CI have none, and Playwright's answer to a
+ * missing baseline is to write it and fail — which would make the first run
+ * anywhere red for a reason that is not a regression. The snapshot tests skip
+ * instead, and report as skipped rather than passing.
+ */
+const BASELINES = fileURLToPath(
+  new URL(`./__screenshots__/${process.platform}`, import.meta.url)
 )
 
 /**
@@ -124,6 +135,10 @@ for (const theme of ["light", "dark"] as const) {
   })
 
   test(`catalog matches its snapshots in ${theme}`, async ({ page }) => {
+    test.skip(
+      !existsSync(BASELINES),
+      "no baselines on this machine: pnpm --filter @workspace/ui test:update"
+    )
     await page.goto(`/?theme=${theme}`)
     // The variable font loads from node_modules through Vite; without this the
     // first snapshot of a run is taken mid-swap and every later one is not.

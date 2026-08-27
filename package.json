@@ -15,7 +15,6 @@
     "test": "turbo test",
     "test:tenancy": "pnpm --filter @workspace/db test:tenancy",
     "size": "turbo size",
-    "snapshots:linux": "bash scripts/ui-linux-snapshots.sh",
     "lint": "node scripts/lint/colour-rule.mjs && biome check --error-on-warnings",
     "lint:ci": "node scripts/lint/colour-rule.mjs && biome ci --error-on-warnings",
     "lint:fix": "biome check --write --unsafe",
