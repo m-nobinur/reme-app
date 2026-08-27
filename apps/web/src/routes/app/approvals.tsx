@@ -1,18 +1,47 @@
 import { CheckCircleIcon } from "@phosphor-icons/react"
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
+import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
+import { AttentionCard } from "@workspace/ui/components/attention-card"
+import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
+import { decideApproval, getApprovals } from "@/lib/api/server"
 import { validateListSearch } from "@/lib/search"
 
 export const Route = createFileRoute("/app/approvals")({
   validateSearch: validateListSearch,
+  loader: async () => await getApprovals(),
   component: Approvals,
 })
 
 function Approvals() {
   const { q } = Route.useSearch()
   const navigate = Route.useNavigate()
+  const router = useRouter()
+  const { approvals } = Route.useLoaderData()
+
+  /**
+   * Nothing changes on screen until the server has answered. An approval is
+   * the one place an optimistic update is wrong: showing it as approved before
+   * the decision is recorded tells the owner something happened that may not
+   * have.
+   */
+  const decide = (approvalId: string, decision: "approved" | "declined") => {
+    void (async () => {
+      await decideApproval({ data: { approvalId, decision } })
+      await router.invalidate()
+    })()
+  }
+
+  const needle = (q ?? "").toLowerCase()
+  const matches = needle
+    ? approvals.filter((item) =>
+        [item.title, item.requestedBy, item.request.action_kind].some((field) =>
+          field.toLowerCase().includes(needle)
+        )
+      )
+    : approvals
 
   return (
     <>
@@ -20,23 +49,77 @@ function Approvals() {
         description="Decisions Reme cannot take on its own. Each one shows what it changes and when it expires."
         title="Approvals"
       />
-      <ListFilter
-        label="Filter approvals"
-        onValueChange={(value) => {
-          // The filter lives in the URL, so a filtered view is shareable and
-          // survives a reload. Changing it resets to the first page.
-          navigate({
-            replace: true,
-            search: { page: 1, q: value || undefined },
-          })
-        }}
-        value={q ?? ""}
-      />
-      <EmptyState
-        description="Approval requests appear here as Reme raises them."
-        icon={<CheckCircleIcon />}
-        title="Nothing waiting on you"
-      />
+
+      {approvals.length === 0 ? (
+        <EmptyState
+          description="Approval requests appear here as Reme raises them."
+          icon={<CheckCircleIcon />}
+          title="Nothing waiting on you"
+        />
+      ) : (
+        <>
+          <ListFilter
+            label="Filter approvals"
+            onValueChange={(value) => {
+              // The filter lives in the URL, so a filtered view is shareable and
+              // survives a reload. Changing it resets to the first page.
+              navigate({
+                replace: true,
+                search: { page: 1, q: value || undefined },
+              })
+            }}
+            value={q ?? ""}
+          />
+          {matches.length === 0 ? (
+            <EmptyState
+              description="No approval matches that filter."
+              icon={<CheckCircleIcon />}
+              title="No matches"
+            />
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {matches.map((item) => (
+                <li key={item.request.approval_id}>
+                  <AttentionCard
+                    // One tap each, both in reach, neither behind a menu or a
+                    // disclosure, and the target they act on is on the card
+                    // above them rather than a screen away.
+                    actions={
+                      <>
+                        <Button
+                          onClick={() =>
+                            decide(item.request.approval_id, "approved")
+                          }
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            decide(item.request.approval_id, "declined")
+                          }
+                          variant="outline"
+                        >
+                          Decline
+                        </Button>
+                      </>
+                    }
+                    detail={item.request.rationale}
+                    expiresAt={item.request.expires_at}
+                    kind="approval"
+                    onExpiry={item.onExpiry}
+                    raisedAt={item.request.requested_at}
+                    raisedBy={item.requestedBy}
+                    target={
+                      <ApprovalTargetSummary target={item.request.target} />
+                    }
+                    title={item.title}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </>
   )
 }

@@ -1,4 +1,5 @@
 import {
+  BuildingsIcon,
   ChatCircleIcon,
   CheckCircleIcon,
   FlowArrowIcon,
@@ -11,6 +12,7 @@ import {
   Link,
   Outlet,
   useLocation,
+  useRouter,
 } from "@tanstack/react-router"
 import {
   AppNav,
@@ -19,7 +21,7 @@ import {
 } from "@workspace/ui/components/app-shell"
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
-import { listOwnerOrgs } from "@/lib/org"
+import { getOrgContext, selectOrg } from "@/lib/api/server"
 import { requireOwner } from "@/lib/tenant"
 
 export const Route = createFileRoute("/app")({
@@ -29,7 +31,9 @@ export const Route = createFileRoute("/app")({
   // route is protected by where it lives rather than by remembering.
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
-    return { owner, orgs: await listOwnerOrgs() }
+    // The organisation list and the current selection, both resolved on the
+    // server. This is what replaced the `listOwnerOrgs` placeholder.
+    return { owner, ...(await getOrgContext()) }
   },
   component: AppLayout,
 })
@@ -45,19 +49,37 @@ const NAV = [
   },
   { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon, exact: false },
   { to: "/app/staff", label: "Staff", icon: UsersThreeIcon, exact: false },
+  { to: "/app/profile", label: "Business", icon: BuildingsIcon, exact: false },
   { to: "/app/account", label: "Account", icon: UserCircleIcon, exact: false },
 ] as const
 
 function AppLayout() {
-  const { orgs } = Route.useLoaderData()
+  const { orgs, active } = Route.useLoaderData()
   const pathname = useLocation({ select: (location) => location.pathname })
+  const router = useRouter()
 
   return (
     <AppShell
       sidebar={
         <>
           <div className="flex items-end gap-2">
-            <OrgSwitcher className="min-w-0 flex-1" orgs={orgs} />
+            <OrgSwitcher
+              className="min-w-0 flex-1"
+              onChange={async (event) => {
+                // The server decides. This posts the slug the owner picked and
+                // then reloads every loader, so the screens read whatever
+                // organisation the server resolved rather than what the select
+                // now shows.
+                await selectOrg({
+                  data: { organisation: event.target.value },
+                })
+                await router.invalidate()
+              }}
+              // The option value is the slug, because that is what the server
+              // accepts: an organisation id never travels through the client.
+              orgs={orgs.map((org) => ({ id: org.slug, name: org.name }))}
+              value={active?.slug ?? ""}
+            />
             <ThemeToggle className="shrink-0" />
           </div>
           <AppNav activeKey={pathname} aria-label="Main">

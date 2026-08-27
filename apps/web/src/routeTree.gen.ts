@@ -22,6 +22,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppStaffRouteImport } from './routes/app/staff'
+import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
@@ -96,6 +97,11 @@ const AppStaffRoute = AppStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPipelineRoute = AppPipelineRouteImport.update({
   id: '/pipeline',
   path: '/pipeline',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByTo {
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
   '/app': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
+    | '/app/profile'
     | '/app/staff'
     | '/app/'
     | '/api/auth/callback'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
+    | '/app/profile'
     | '/app/staff'
     | '/app'
     | '/api/auth/callback'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
+    | '/app/profile'
     | '/app/staff'
     | '/app/'
     | '/api/auth/callback'
@@ -388,6 +400,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStaffRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/pipeline': {
       id: '/app/pipeline'
       path: '/pipeline'
@@ -452,6 +471,7 @@ interface AppRouteChildren {
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppChatRoute: typeof AppChatRoute
   AppPipelineRoute: typeof AppPipelineRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppStaffRoute: typeof AppStaffRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -461,6 +481,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppApprovalsRoute: AppApprovalsRoute,
   AppChatRoute: AppChatRoute,
   AppPipelineRoute: AppPipelineRoute,
+  AppProfileRoute: AppProfileRoute,
   AppStaffRoute: AppStaffRoute,
   AppIndexRoute: AppIndexRoute,
 }
