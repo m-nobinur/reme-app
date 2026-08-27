@@ -63,6 +63,9 @@ export const samples: Record<ContractName, unknown> = {
     audit_id: "92a3b4c5-d6e7-42a3-8465-900112233445",
     requested_at: NOW,
   },
+  CreateOrgRequest: {
+    name: "Brightclean Cleaning Co. (fixture)",
+  },
   ErrorEnvelope: {
     class: "permission",
     code: "capability.denied",
