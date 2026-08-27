@@ -76,9 +76,12 @@ response to compare against, and it is last-write-wins per environment.
 
 The script is a floor, not a source of truth. Its CLI commands only add, so removing a line
 here removes nothing in WorkOS, and a value deleted elsewhere comes back as `added` on the
-next run. Removing one for real means `updateCorsConfig` or `setRedirectUris` through the
-WorkOS MCP server, which take the whole list and so can shorten it. The default redirect URI
-cannot be deleted at all.
+next run. Removing one takes a different surface per resource. A redirect URI has a public
+REST delete, reachable without leaving the CLI:
+`workos api /user_management/redirect_uris/<id> -X DELETE`. A CORS origin has none, because
+`/user_management/cors_origins` is GET and POST only, so that one needs `updateCorsConfig`
+through the MCP server, which takes the whole list and can therefore shorten it. The default
+redirect URI cannot be deleted at all.
 
 One field is not in the CLI: the sign-in endpoint, which WorkOS calls the initiate login URI.
 Set it with `updateAuthkitExternalLoginUri` through the MCP server, or in the Redirects tab of
