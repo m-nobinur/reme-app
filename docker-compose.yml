@@ -3,7 +3,9 @@
 # NEON_OFFLINE=1 is set; `docker compose down -v` throws the data away.
 services:
   postgres:
-    image: pgvector/pgvector:pg18
+    # Pinned to 17 to match Neon, which serves 17.11. Local, CI and production
+    # ran three configurations before this, two of them agreeing.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: reme
       POSTGRES_PASSWORD: reme
@@ -11,9 +13,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      # Postgres 18 images keep the cluster in a version subdirectory, so the
-      # mount goes one level up. Mounting .../data makes the container exit 1.
-      - pgdata:/var/lib/postgresql
+      # 17 keeps the cluster in .../data, unlike 18, which puts it in a version
+      # subdirectory and needs the mount one level up. Moving the pin moves this.
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U reme -d reme"]
       interval: 5s
