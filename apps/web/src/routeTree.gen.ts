@@ -14,8 +14,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
+import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as ApiRuntimeRouteImport } from './routes/api.runtime'
+import { Route as ApiChatRouteImport } from './routes/api.chat'
 
 const AppRoute = AppRouteImport.update({
   id: '/app',
@@ -42,6 +44,11 @@ const AppPipelineRoute = AppPipelineRouteImport.update({
   path: '/pipeline',
   getParentRoute: () => AppRoute,
 } as any)
+const AppChatRoute = AppChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppApprovalsRoute = AppApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
@@ -52,20 +59,29 @@ const ApiRuntimeRoute = ApiRuntimeRouteImport.update({
   path: '/api/runtime',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app': typeof AppIndexRoute
@@ -74,8 +90,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
@@ -85,16 +103,20 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
+    | '/app/chat'
     | '/app/pipeline'
     | '/app/staff'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
+    | '/app/chat'
     | '/app/pipeline'
     | '/app/staff'
     | '/app'
@@ -102,8 +124,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/api/chat'
     | '/api/runtime'
     | '/app/approvals'
+    | '/app/chat'
     | '/app/pipeline'
     | '/app/staff'
     | '/app/'
@@ -112,6 +136,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  ApiChatRoute: typeof ApiChatRoute
   ApiRuntimeRoute: typeof ApiRuntimeRoute
 }
 
@@ -152,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPipelineRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/chat': {
+      id: '/app/chat'
+      path: '/chat'
+      fullPath: '/app/chat'
+      preLoaderRoute: typeof AppChatRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/approvals': {
       id: '/app/approvals'
       path: '/approvals'
@@ -166,11 +198,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRuntimeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface AppRouteChildren {
   AppApprovalsRoute: typeof AppApprovalsRoute
+  AppChatRoute: typeof AppChatRoute
   AppPipelineRoute: typeof AppPipelineRoute
   AppStaffRoute: typeof AppStaffRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -178,6 +218,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppApprovalsRoute: AppApprovalsRoute,
+  AppChatRoute: AppChatRoute,
   AppPipelineRoute: AppPipelineRoute,
   AppStaffRoute: AppStaffRoute,
   AppIndexRoute: AppIndexRoute,
@@ -188,6 +229,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  ApiChatRoute: ApiChatRoute,
   ApiRuntimeRoute: ApiRuntimeRoute,
 }
 export const routeTree = rootRouteImport

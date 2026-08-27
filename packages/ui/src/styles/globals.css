@@ -1,9 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* CSS only, no runtime: the sweep on a tool call or a reasoning block while it
+   is still running. */
+@import "tw-shimmer";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/dm-sans";
 
 @custom-variant dark (&:is(.dark *));
+/* Base UI marks an open panel with `data-open`; these are what the collapsible
+   in the chat surface animates on. */
+@custom-variant data-open (
+  &:where([data-state="open"], [data-open]:not([data-open="false"]))
+);
+@custom-variant data-closed (
+  &:where([data-state="closed"], [data-closed]:not([data-closed="false"]))
+);
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
@@ -48,6 +59,24 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: "DM Sans Variable", sans-serif;
+  /* Base UI measures the panel and publishes the height; the Radix variable the
+     registry ships alongside it is dropped, because Radix is not in this tree. */
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--collapsible-panel-height, auto);
+    }
+  }
+  @keyframes collapsible-up {
+    from {
+      height: var(--collapsible-panel-height, auto);
+    }
+    to {
+      height: 0;
+    }
+  }
 }
 
 :root {
