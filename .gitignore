@@ -20,6 +20,14 @@ coverage/
 .dev.vars
 .dev.vars.*
 
+# test output. Screenshot baselines are here too: they are PNGs that every
+# visual change rewrites and that git then keeps forever, so the visual
+# comparison is a local gate and CI skips it.
+test-results/
+playwright-report/
+blob-report/
+__screenshots__/
+
 # local dev
 .wrangler/
 .vercel/

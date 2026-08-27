@@ -25,7 +25,7 @@ function OrgSwitcher({
         Organisation
       </label>
       <select
-        className="h-9 w-full rounded-2xl border border-sidebar-border bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-60"
+        className="h-9 w-full rounded-2xl border border-sidebar-border bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-60"
         disabled={orgs.length < 2}
         id="org-switcher"
         name="org"

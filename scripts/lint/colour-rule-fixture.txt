@@ -1,0 +1,19 @@
+MUST const a = <div className="bg-red-500" />
+MUST const b = <div className="text-white" />
+MUST const c = <div className="border-blue-600" />
+MUST const d = cn("bg-red-500", "p-2")
+MUST const e = cva("x", { variants: { tone: { bad: "bg-red-500" } } })
+MUST const f = `bg-red-500 ${a}`
+MUST const g = <div className="flex bg-red-500" />
+MUST const h = <div className="hover:bg-red-500" />
+MUST const i = "#ff0000"
+MUST const j = "rgb(255 0 0)"
+MUST const k = <div style={{ color: "red" }} />
+MUST const l = <path fill="red" />
+MUST const m = <div className="text-[color:red]" />
+OK   const n = <div className="flex items-center gap-2" />
+OK   const o = <div className="bg-background text-muted-foreground" />
+OK   const p = "color-mix(in oklch, var(--secondary), var(--foreground) 5%)"
+OK   const q = <path fill="currentColor" />
+OK   const r = "The van is red"
+OK   const s = <div className="rounded-3xl border border-border" />

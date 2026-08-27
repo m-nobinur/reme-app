@@ -1,6 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  // Colour tokens, not colour values. Biome has no rule for it, so the check is a
+  // GritQL plugin; loading it here is what puts it in `pnpm lint`, `biome ci` and
+  // the pre-commit hook at once.
+  "plugins": ["./scripts/lint/no-hardcoded-colours.grit"],
   "files": {
     "ignoreUnknown": false,
     // Generated: the TanStack router plugin rewrites the route tree on every
