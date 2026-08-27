@@ -25,6 +25,7 @@ import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
+import { Route as AppAccountRouteImport } from './routes/app/account'
 import { Route as ApiRuntimeRouteImport } from './routes/api.runtime'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
@@ -110,6 +111,11 @@ const AppApprovalsRoute = AppApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAccountRoute = AppAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiRuntimeRoute = ApiRuntimeRouteImport.update({
   id: '/api/runtime',
   path: '/api/runtime',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/api/runtime': typeof ApiRuntimeRoute
+  '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
+    | '/app/account'
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
+    | '/app/account'
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/chat'
     | '/api/runtime'
+    | '/app/account'
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
@@ -397,6 +409,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppApprovalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/account': {
+      id: '/app/account'
+      path: '/account'
+      fullPath: '/app/account'
+      preLoaderRoute: typeof AppAccountRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/runtime': {
       id: '/api/runtime'
       path: '/api/runtime'
@@ -429,6 +448,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAccountRoute: typeof AppAccountRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppChatRoute: typeof AppChatRoute
   AppPipelineRoute: typeof AppPipelineRoute
@@ -437,6 +457,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAccountRoute: AppAccountRoute,
   AppApprovalsRoute: AppApprovalsRoute,
   AppChatRoute: AppChatRoute,
   AppPipelineRoute: AppPipelineRoute,

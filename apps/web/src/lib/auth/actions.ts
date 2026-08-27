@@ -275,7 +275,10 @@ export const confirmMfa = createServerFn({ method: "POST" })
 
 export const chooseOrganization = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({
-    organizationId: text(record(input).organizationId, 64),
+    // The one payload allowed to name an organisation, and only because there
+    // is no session to resolve one from yet. The handler below checks it
+    // against the list WorkOS offered, which is sealed in the flow cookie.
+    organizationId: text(record(input, ["organizationId"]).organizationId, 64),
   }))
   .handler(async ({ data }): Promise<AuthOutcome> => {
     const pending = await readPending()
