@@ -7,6 +7,7 @@ export const repoRoot = fileURLToPath(new URL("..", import.meta.url))
 
 export const ok = (message) => console.log(`\x1b[32m✓\x1b[0m ${message}`)
 export const bad = (message) => console.log(`\x1b[31m✖\x1b[0m ${message}`)
+export const warn = (message) => console.log(`\x1b[33m⚠\x1b[0m ${message}`)
 /** Indents every line, so a multi-line message stays under its heading. */
 export const note = (message) =>
   console.log(

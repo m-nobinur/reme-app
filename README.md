@@ -59,6 +59,33 @@ Secrets never enter a committed file. `.env.example` carries names and shapes,
 `.env.local` carries values and is gitignored, and `packages/config` validates both so a
 missing one fails at boot naming the variable.
 
+## WorkOS environments
+
+Redirect URIs, CORS origins and the homepage URL come from `scripts/workos.mjs`, applied
+with the WorkOS CLI. Nothing is set in the dashboard by hand except the one field below.
+
+```sh
+workos env switch staging
+pnpm workos:config staging
+```
+
+A second run changes nothing remotely and exits 0. The redirect URI and CORS lines say so and read
+`unchanged`, which is the API's own answer rather than a local guess. The homepage line always reads
+`set`: that call is an unconditional PUT of one field, with no prior value in its response to compare
+against, and it is last-write-wins per environment. Redirect URIs and CORS origins are add-only, so
+this script is a floor and not a source of truth: a value deleted in the dashboard returns as `added`
+on the next run, and a value removed from the file stays in WorkOS. Two
+things it cannot do, because the WorkOS API cannot. The sign-in endpoint has no CLI
+command and no API endpoint, so the script prints the URL to paste into the Redirects tab
+once per environment. Redirect URIs and CORS origins are add-only, so deleting a line from
+the script does not delete it in WorkOS, and the default redirect URI cannot be deleted at
+all.
+
+Prod needs its API key from the dashboard before the CLI can reach it:
+`workos env add prod <api-key> --client-id=<client-id>`. It gets an entry in the script in
+the change that gives it a hostname. In CI, `WORKOS_API_KEY` comes from a repository
+secret and overrides the stored environment.
+
 ## Conventions
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.
