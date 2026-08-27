@@ -52,9 +52,7 @@ describe("rows map onto contracts", () => {
     staffId: null,
     assignmentId: null,
     // A session, because `seq` is the position in one and the contract pairs
-    // the two (ADR-028). The column is still `not null` here, so the other
-    // half of the pair, an event with neither, lands with the migration that
-    // makes it nullable.
+    // the two (ADR-028). The other half of the pair is the case below.
     sessionId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e73",
     seq: 0,
     type: "staff.hired",
@@ -78,5 +76,21 @@ describe("rows map onto contracts", () => {
 
   it("an events row is an EventEnvelope", () => {
     expect(() => EventEnvelope.parse(toEventEnvelope(eventRow))).not.toThrow()
+  })
+
+  it("an event outside a session carries no seq", () => {
+    const parsed = EventEnvelope.parse(
+      toEventEnvelope({ ...eventRow, sessionId: null, seq: null })
+    )
+    expect(parsed.seq).toBeNull()
+  })
+
+  it("refuses a row that numbers a stream it is not in", () => {
+    // The column is nullable and the check constraint pairs it in the
+    // database. This is the same rule on the way out, so a row written before
+    // the constraint existed cannot leave as a contract-shaped event.
+    expect(() =>
+      EventEnvelope.parse(toEventEnvelope({ ...eventRow, sessionId: null }))
+    ).toThrow()
   })
 })

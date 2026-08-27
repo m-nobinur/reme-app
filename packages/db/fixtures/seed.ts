@@ -4,6 +4,7 @@ import {
   departments,
   events,
   facts,
+  memberships,
   orgs,
   roles,
   staff,
@@ -70,26 +71,39 @@ type Handle = ReturnType<typeof connect>["db"]
 export type Tx = Parameters<Parameters<Handle["transaction"]>[0]>[0]
 
 /**
- * Deletes every row belonging to `orgIds`, deepest dependency first.
+ * Deletes every row belonging to `orgIds`, deepest dependency first, and the
+ * people named in `userIds`.
  *
  * Exported because `tenancy/fixtures.ts` clears its own probe orgs the same
  * way, and two hand-maintained copies of a dependency-ordered delete list drift
  * apart. `facts` references `staff`, and `staff` references `departments`,
- * `users` and itself, so a partial clear leaves a foreign key violation for the
- * next run rather than an empty database.
+ * `memberships` and itself, so a partial clear leaves a foreign key violation
+ * for the next run rather than an empty database.
+ *
+ * `users` is a platform table (ADR-028), so its rows belong to no org and no
+ * org id can find them. The caller passes the ids it created rather than this
+ * deleting whoever is left without a membership, which would reach rows it
+ * never wrote.
  *
  * The order is still maintained by hand. A tenant table added to the schema and
  * forgotten here surfaces as a foreign key violation on `delete from orgs` that
  * names the constraint, and the constraint names the table.
  */
-export async function clearOrgs(tx: Tx, orgIds: readonly string[]) {
+export async function clearOrgs(
+  tx: Tx,
+  orgIds: readonly string[],
+  userIds: readonly string[]
+) {
   const ids = [...orgIds]
   await tx.delete(events).where(inArray(events.orgId, ids))
   await tx.delete(staffEvents).where(inArray(staffEvents.orgId, ids))
   await tx.delete(facts).where(inArray(facts.orgId, ids))
   await tx.delete(staff).where(inArray(staff.orgId, ids))
   await tx.delete(departments).where(inArray(departments.orgId, ids))
-  await tx.delete(users).where(inArray(users.orgId, ids))
+  await tx.delete(memberships).where(inArray(memberships.orgId, ids))
+  if (userIds.length > 0) {
+    await tx.delete(users).where(inArray(users.id, [...userIds]))
+  }
   await tx.delete(roles).where(inArray(roles.orgId, ids))
   await tx.delete(orgs).where(inArray(orgs.id, ids))
 }
@@ -111,7 +125,13 @@ export async function seedGolden({ reset = false } = {}): Promise<SeedCounts> {
     return await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_ID})`)
       const ids = GOLDEN_ORGS.map((o) => o.org.id as string)
-      if (reset) await clearOrgs(tx, ids)
+      if (reset) {
+        await clearOrgs(
+          tx,
+          ids,
+          GOLDEN_ORGS.flatMap((o) => o.users.map((u) => u.id as string))
+        )
+      }
 
       const counts: SeedCounts = {}
       // Counts what the database actually took, not what was offered: every
@@ -139,6 +159,13 @@ export async function seedGolden({ reset = false } = {}): Promise<SeedCounts> {
         )
         await write("users", org.users, () =>
           tx.insert(users).values(org.users).onConflictDoNothing().returning()
+        )
+        await write("memberships", org.memberships, () =>
+          tx
+            .insert(memberships)
+            .values(org.memberships)
+            .onConflictDoNothing()
+            .returning()
         )
         await write("roles", org.roles, () =>
           tx.insert(roles).values(org.roles).onConflictDoNothing().returning()

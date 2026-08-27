@@ -2,7 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core"
 import postgres from "postgres"
 import { afterAll, describe, expect, it } from "vitest"
 import { connect, loadLocalEnv } from "../src/client.ts"
-import { ENTER_APP_ROLE, ORG_SETTING, setOrgContext } from "../src/tenancy.ts"
+import { ENTER_APP_ROLE, ORG_SETTING, setContext } from "../src/tenancy.ts"
 
 /**
  * Why `withOrg` sets the org context with `set_config(..., true)` and not
@@ -84,7 +84,7 @@ async function measure(mode: "session" | "transaction"): Promise<Tally> {
     await Promise.all(
       clients.map(async (client, i) => {
         const mine = orgs[i] as string
-        const local = dialect.sqlToQuery(setOrgContext(mine))
+        const local = dialect.sqlToQuery(setContext({ orgId: mine }))
         for (let round = 0; round < ROUNDS; round++) {
           let rows: { id: string }[]
           if (mode === "session") {
