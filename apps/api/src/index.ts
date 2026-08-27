@@ -103,7 +103,11 @@ async function signup(
       detail: {},
     })
   }
-  const parsed = CreateOrgRequest.safeParse(await request.json())
+  // Caught rather than left to the handler, which would answer a body that is
+  // not JSON with a 503 and tell the caller to retry something that will never
+  // work.
+  const body = await request.json().catch(() => null)
+  const parsed = CreateOrgRequest.safeParse(body)
   if (!parsed.success) {
     return failure(400, {
       class: "validation",
