@@ -474,6 +474,11 @@ describe("a platform table is outside the tenant boundary, not outside RLS", () 
   it.each(platformCases)(
     "%s shows an org its own and not a neighbour's",
     async (name, probe) => {
+      // No `workosUserId` here, and it has to stay that way: `users_self_read`
+      // shows a person their own row whatever org the context names, so a probe
+      // given the person whose row the denial asserts would find it and the
+      // case would fail for the right reason at the wrong assertion. If this
+      // ever needs a person, it must not be that one.
       const seen = async (org: "a" | "b") =>
         withOrg({ orgId: org === "a" ? ORG_A : ORG_B }, async (db) => ({
           mine: (await db.execute<{ n: number }>(probe.rowOf(org)))[0]?.n ?? 0,
@@ -500,6 +505,43 @@ describe("a platform table is outside the tenant boundary, not outside RLS", () 
     },
     60_000
   )
+
+  it("users adds the reader's own row and nothing else", async () => {
+    /**
+     * `users_self_read` (ADR-028, amended). A person may read their own row
+     * membership or not, which is what lets the org writer find the id of
+     * someone who already signed up before writing their membership.
+     *
+     * Read twice in org B, once with nobody named and once naming org A's
+     * owner, who holds no membership in B. Unfiltered both times, on purpose:
+     * `select ... where workos_user_id = $1` reads the same one row whether the
+     * policy shows that row or the whole table, so it would prove nothing. The
+     * difference between the two reads is this policy's own contribution,
+     * separated from what `users_member_read` already shows.
+     */
+    const visible = (ctx: { orgId: string; workosUserId?: string }) =>
+      withOrg(ctx, async (db) => {
+        const rows = await db.execute<{ id: string }>(sql`select id from users`)
+        return rows.map((row) => row.id)
+      })
+
+    const anonymous = await visible({ orgId: ORG_B })
+    expect(
+      anonymous,
+      "org B saw org A's owner with no person named, so the difference below " +
+        "measures nothing. Either app.workos_user_id is leaking across " +
+        "transactions or users_member_read is wider than it reads"
+    ).not.toContain(USER_OF.a)
+
+    const asSelf = await visible({
+      orgId: ORG_B,
+      workosUserId: WORKOS_USER_OF.a,
+    })
+    expect(
+      asSelf.filter((id) => !anonymous.includes(id)),
+      "naming a person should add exactly their own row to what org B can see"
+    ).toEqual([USER_OF.a])
+  }, 60_000)
 })
 
 describe("a function that runs as its owner cannot hide either", () => {
