@@ -118,6 +118,9 @@ export interface components {
       /** Format: date-time */
       requested_at: string
     }
+    CreateOrgRequest: {
+      name: string
+    }
     ErrorEnvelope: {
       /** @enum {string} */
       class:

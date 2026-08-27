@@ -11,6 +11,24 @@ import { Timestamp, Uuid } from "./common.ts"
  * first endpoints that produce them.
  */
 
+/**
+ * What signup posts to the Core API to bring an org into existence (ADR-029).
+ *
+ * The name and nothing else. There is no organisation id in it, in any spelling:
+ * the WorkOS organization is created by the API, from this name, so the id that
+ * the tenant is later resolved by never travels over this boundary and cannot
+ * be chosen by a caller. The slug is derived from the name for the same reason,
+ * rather than accepted, since a caller that picks slugs can probe which ones
+ * are taken.
+ *
+ * `120` is a bound rather than a rule about names: `orgs.name` is `text` and
+ * the value ends up on a WorkOS organization, so this refuses a megabyte of
+ * form field before it reaches either.
+ */
+export const CreateOrgRequest = z.strictObject({
+  name: z.string().min(1).max(120),
+})
+
 /** §5.2. The tenant root, as a screen shows it. */
 export const Org = z.strictObject({
   org_id: Uuid,
@@ -57,6 +75,7 @@ export const StaffDirectory = z.strictObject({
   staff: z.array(StaffMember),
 })
 
+export type CreateOrgRequest = z.infer<typeof CreateOrgRequest>
 export type Org = z.infer<typeof Org>
 export type StaffMember = z.infer<typeof StaffMember>
 export type StaffDirectory = z.infer<typeof StaffDirectory>
