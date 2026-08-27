@@ -22,6 +22,12 @@ export default defineConfig({
   // drift, raise maxDiffPixels rather than threshold; the shape changes this
   // exists to catch are worth tens of pixels each, and a wide colour tolerance
   // hides them all.
+  // Playwright's default is `missing`, which writes a baseline it cannot find
+  // and fails the test for having written it. That is indistinguishable from
+  // `--update-snapshots` at the config level, which is what the guard in the
+  // suite reads, so state it: a plain run never writes, and only the CLI flag
+  // that `test:update` passes overrides this back.
+  updateSnapshots: "none",
   expect: {
     toHaveScreenshot: { threshold: 0, maxDiffPixels: 0 },
   },
