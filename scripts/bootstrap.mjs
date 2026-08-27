@@ -34,6 +34,20 @@ if (existsSync(".env.local")) {
 run("pnpm", ["install"])
 ok("dependencies installed")
 
+// The design system suite drives a real browser, and it is the only place that
+// gate runs now that CI skips it. Without this the trap is a fresh clone
+// failing at pre-push, which is the worst moment to learn a browser is missing.
+// Playwright's own installer is the no-op when the binary is already there.
+run("pnpm", [
+  "--filter",
+  "@workspace/ui",
+  "exec",
+  "playwright",
+  "install",
+  "chromium",
+])
+ok("chromium installed for the design system suite")
+
 loadLocalEnv()
 if (process.env.NEON_OFFLINE === "1") {
   run("docker", ["compose", "up", "-d", "--wait"])

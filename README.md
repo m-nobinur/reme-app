@@ -97,12 +97,17 @@ pnpm --filter @workspace/ui test          # catalog drift, accessibility, and sc
 pnpm --filter @workspace/ui test:update   # write the screenshot baselines for this machine
 ```
 
-Screenshot baselines are gitignored. They are PNGs that every visual change rewrites, and
-git keeps every version of each forever, so the visual comparison is a local gate: run
-`test:update` once, then `test` before a UI change and after it. CI runs the catalog and
-accessibility checks and reports the two snapshot tests as skipped, which is visible in the
-run rather than silently green. Baselines sit under `test/__screenshots__/<platform>/`,
-because the same Chromium rasterises text differently on macOS and on Linux.
+This suite runs locally, not in CI. It drives a real browser, and a runner that downloads
+Chromium and its system dependencies on every run and then throws them away spent about a
+minute doing it. `pnpm bootstrap` installs the browser, `pre-push` runs the suite, and CI
+runs `pnpm test:ci`, which is every package except this one.
+
+Screenshot baselines are gitignored on top of that: they are PNGs that every visual change
+rewrites, and git keeps every version of each forever. Run `test:update` once per machine,
+then `test` before a UI change and after it. Without baselines the two snapshot tests skip
+rather than failing or silently writing new ones. They sit under
+`test/__screenshots__/<platform>/`, because the same Chromium rasterises text differently
+on macOS and on Linux.
 
 Colour comes from the tokens in `packages/ui/src/styles/globals.css` and from nowhere
 else. A hard-coded colour in a string or template literal in any `.ts` or `.tsx` file
