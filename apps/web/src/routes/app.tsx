@@ -3,6 +3,7 @@ import {
   CheckCircleIcon,
   FlowArrowIcon,
   HouseIcon,
+  UserCircleIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import {
@@ -19,14 +20,17 @@ import {
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import { listOwnerOrgs } from "@/lib/org"
+import { requireOwner } from "@/lib/tenant"
 
 export const Route = createFileRoute("/app")({
-  // The authentication guard belongs in this loader, and specifically not in
+  // The authentication guard, in this loader and specifically not in
   // `beforeLoad`: that runs on the client during hydration, where the server
-  // session is not readable. When sign-in exists, the check and its
-  // `throw redirect(...)` go at the top of this function and nothing else in
-  // the layout moves.
-  loader: async () => ({ orgs: await listOwnerOrgs() }),
+  // session is not readable. Every page under /app is behind it, so a new
+  // route is protected by where it lives rather than by remembering.
+  loader: async ({ location }) => {
+    const owner = await requireOwner(location.href)
+    return { owner, orgs: await listOwnerOrgs() }
+  },
   component: AppLayout,
 })
 
@@ -41,6 +45,7 @@ const NAV = [
   },
   { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon, exact: false },
   { to: "/app/staff", label: "Staff", icon: UsersThreeIcon, exact: false },
+  { to: "/app/account", label: "Account", icon: UserCircleIcon, exact: false },
 ] as const
 
 function AppLayout() {

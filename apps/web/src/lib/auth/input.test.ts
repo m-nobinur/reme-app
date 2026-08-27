@@ -37,3 +37,54 @@ describe("reading a server function payload", () => {
     expect(record({ a: 1 })).toEqual({ a: 1 })
   })
 })
+
+describe("an organisation named by a request body", () => {
+  it("is refused in every spelling", () => {
+    for (const key of [
+      "org_id",
+      "orgId",
+      "ORG_ID",
+      "org-id",
+      "organization_id",
+      "organizationId",
+      "organisation_id",
+      "tenant_id",
+      "tenantId",
+      "org",
+      "tenant",
+    ]) {
+      expect(
+        () => record({ [key]: "org_evil", email: "owner@example.com" }),
+        key
+      ).toThrow(/may not name an organisation/)
+    }
+  })
+
+  it("is refused when it hides one level down", () => {
+    // The version of this check that reads only the top of the payload passes
+    // its own test and stops nothing.
+    expect(() => record({ filters: { org_id: "org_evil" } })).toThrow(
+      /may not name an organisation/
+    )
+    expect(() => record({ rows: [{ ok: 1 }, { orgId: "org_evil" }] })).toThrow(
+      /may not name an organisation/
+    )
+  })
+
+  it("names the offending key, so the answer is a fix and not a shrug", () => {
+    expect(() => record({ org_id: "org_evil" })).toThrow('"org_id"')
+  })
+
+  it("is allowed only where the sign-in flow offers the choice", () => {
+    expect(record({ organizationId: "org_a" }, ["organizationId"])).toEqual({
+      organizationId: "org_a",
+    })
+    // The exception is that one key and nothing else it could be spelled as.
+    expect(() => record({ org_id: "org_a" }, ["organizationId"])).toThrow()
+  })
+
+  it("leaves an ordinary payload alone", () => {
+    const body = { email: "owner@example.com", page: 2, filters: { q: "ada" } }
+    expect(record(body)).toEqual(body)
+  })
+})
