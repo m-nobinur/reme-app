@@ -51,7 +51,11 @@ describe("rows map onto contracts", () => {
     orgId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e71",
     staffId: null,
     assignmentId: null,
-    sessionId: null,
+    // A session, because `seq` is the position in one and the contract pairs
+    // the two (ADR-028). The column is still `not null` here, so the other
+    // half of the pair, an event with neither, lands with the migration that
+    // makes it nullable.
+    sessionId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e73",
     seq: 0,
     type: "staff.hired",
     occurredAt: now,
