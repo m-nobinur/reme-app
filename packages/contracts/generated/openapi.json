@@ -484,9 +484,16 @@
             ]
           },
           "seq": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "type": {
             "type": "string",
@@ -534,7 +541,33 @@
           "taint",
           "payload"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "session_id": {
+                    "type": "null"
+                  },
+                  "seq": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "session_id": {
+                    "type": "string"
+                  },
+                  "seq": {
+                    "type": "integer"
+                  }
+                }
+              }
+            ]
+          }
+        ]
       },
       "FactRecord": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

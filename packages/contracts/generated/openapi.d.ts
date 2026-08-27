@@ -144,7 +144,7 @@ export interface components {
       staff_id: string | null
       assignment_id: string | null
       session_id: string | null
-      seq: number
+      seq: number | null
       type: string
       /** Format: date-time */
       occurred_at: string
@@ -158,7 +158,16 @@ export interface components {
       payload: {
         [key: string]: unknown
       }
-    }
+    } & (
+      | {
+          session_id?: null
+          seq?: null
+        }
+      | {
+          session_id?: string
+          seq?: number
+        }
+    )
     FactRecord: {
       /** Format: uuid */
       fact_id: string

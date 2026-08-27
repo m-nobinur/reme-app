@@ -6,6 +6,7 @@ import addFormats from "ajv-formats"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { ErrorEnvelope } from "../src/error.ts"
+import { EventEnvelope } from "../src/event.ts"
 import { contracts } from "../src/registry.ts"
 import { samples } from "./samples.ts"
 
@@ -144,6 +145,35 @@ describe.each(Object.keys(contracts))("%s", (name) => {
       // nightly job alongside the other non-blocking suites.
       { numRuns: 300, seed: 20260826 }
     )
+  })
+})
+
+/**
+ * `seq` is the position in a session's stream, so it exists exactly when a
+ * session does (ADR-028). Zod says that in a `.check()`, which no JSON Schema
+ * generator can see, and the published schema says it in an `anyOf` carried as
+ * metadata. Two statements of one rule is how they drift, so both are driven
+ * from the same cases here.
+ */
+describe("seq pairs with session_id", () => {
+  const event = samples.EventEnvelope as Record<string, unknown>
+  const validate = ajv.compile(
+    generated.components.schemas.EventEnvelope as object
+  )
+  const cases: [string, Record<string, unknown>, boolean][] = [
+    ["a session event numbers its place", { ...event }, true],
+    [
+      "an event with no session has no seq",
+      { ...event, session_id: null, seq: null },
+      true,
+    ],
+    ["a session with no seq", { ...event, seq: null }, false],
+    ["a seq with no session", { ...event, session_id: null }, false],
+  ]
+
+  it.each(cases)("%s", (_name, candidate, accepted) => {
+    expect(EventEnvelope.safeParse(candidate).success).toBe(accepted)
+    expect(validate(candidate)).toBe(accepted)
   })
 })
 
