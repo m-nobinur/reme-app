@@ -93,6 +93,15 @@ export const taintLabel = pgEnum("taint_label", [
 const currentOrg = () =>
   sql`nullif(current_setting('app.org_id', true), '')::uuid`
 
+/**
+ * The signed-in person, for the two policies that cannot be answered by an org
+ * (ADR-028). `withOrg` sets it transaction-locally beside `app.org_id`, from
+ * the sealed session and never from client input, and an unset one reads as
+ * NULL and matches nothing.
+ */
+const currentWorkosUser = () =>
+  sql`nullif(current_setting('app.workos_user_id', true), '')`
+
 /** The standard policy: rows belong to the current org, reads and writes both. */
 const orgIsolation = (table: string) =>
   pgPolicy(`${table}_org_isolation`, {
@@ -135,16 +144,30 @@ export const orgs = pgTable(
 
 /**
  * Owners and operators, mirrored from WorkOS (DR-4). Tenant end-customers are
- * a different population in Better Auth tables and do not belong here. One row
- * per (org, WorkOS user): the same person in two orgs is two memberships.
+ * a different population in Better Auth tables and do not belong here.
+ *
+ * The one table in the schema with no `org_id`, and the only entry in the
+ * tenancy suite's `PLATFORM_TABLES` (ADR-028). The mirror takes the grain of
+ * the system it mirrors: a WorkOS `User` holds no organization reference and
+ * `OrganizationMembership` is the join, so a person is one row here however
+ * many orgs they work in, and `memberships` below carries the org. A
+ * `user.updated` webhook arrives with a user id and no organization, which the
+ * per-org shape could answer only by bypassing RLS or by writing one
+ * transaction per org and leaving two orgs disagreeing when one half failed.
+ *
+ * `email` carries a plain unique rather than one on `lower(email)`: WorkOS
+ * folds case on store and refuses a second user at an address that already
+ * exists, checked against staging 2026-08-28, so the mirror only ever receives
+ * folded addresses.
+ *
+ * Being outside the tenant boundary is not being outside RLS. An org sees
+ * exactly the people it holds a membership for, and the only writes are a
+ * person mirroring themselves at sign-in.
  */
 export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    orgId: uuid("org_id")
-      .notNull()
-      .references(() => orgs.id),
     workosUserId: text("workos_user_id").notNull(),
     email: text("email").notNull(),
     name: text("name"),
@@ -152,12 +175,75 @@ export const users = pgTable(
     updatedAt,
   },
   (t) => [
-    unique("users_id_org_key").on(t.id, t.orgId),
-    unique("users_org_workos_user_key").on(t.orgId, t.workosUserId),
-    unique("users_org_email_key").on(t.orgId, t.email),
-    // Sign-in resolves the org from the WorkOS user, so this is the hot path.
-    index("users_workos_user_idx").on(t.workosUserId),
-    orgIsolation("users"),
+    // Their primary key, and what a webhook arrives holding, so this is both
+    // the join key and the sign-in lookup: the unique index serves both and the
+    // separate hot-path index the per-org shape needed is gone with it.
+    unique("users_workos_user_key").on(t.workosUserId),
+    unique("users_email_key").on(t.email),
+    // The org test is written out rather than left to compose through the
+    // memberships policy, so this USING names `app.org_id` itself and the
+    // guarantee does not depend on a second table's policy staying as it is.
+    pgPolicy("users_member_read", {
+      for: "select",
+      to: "public",
+      using: sql`exists (
+        select 1 from memberships m
+        where m.user_id = users.id and m.org_id = ${currentOrg()}
+      )`,
+    }),
+    // Sign-in mirrors the person signing in and nobody else. A
+    // membership-derived write policy cannot work here: the membership
+    // references the user, so at sign-up the user row has to exist before any
+    // membership can vouch for it.
+    pgPolicy("users_self_insert", {
+      for: "insert",
+      to: "public",
+      withCheck: sql`workos_user_id = ${currentWorkosUser()}`,
+    }),
+    pgPolicy("users_self_update", {
+      for: "update",
+      to: "public",
+      using: sql`workos_user_id = ${currentWorkosUser()}`,
+      withCheck: sql`workos_user_id = ${currentWorkosUser()}`,
+    }),
+    // No delete policy. Removing a person is the deletion workflow in §10.5 and
+    // runs as the migrator.
+  ]
+)
+
+/**
+ * The join, and the tenant table (ADR-028). A person leaving an org sets
+ * `status = 'inactive'` and is never hard-deleted, because §5.4 keeps the staff
+ * row for the life of the org and `staff_user_fk` is `no action`.
+ *
+ * `role` and `status` mirror WorkOS: `RoleResponse.slug`, and one of `active`,
+ * `inactive` or `pending`. Neither is an enum here, because the set is theirs
+ * to extend and a mirror that refuses a value the source already holds drops
+ * the row instead of the value.
+ */
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    workosMembershipId: text("workos_membership_id").notNull(),
+    role: text("role").notNull(),
+    status: text("status").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("memberships_workos_membership_key").on(t.workosMembershipId),
+    // What `staff_user_fk` points at, so a human staff row can only name a
+    // person who holds a membership in the same org.
+    unique("memberships_org_user_key").on(t.orgId, t.userId),
+    unique("memberships_org_membership_key").on(t.orgId, t.id),
+    orgIsolation("memberships"),
   ]
 )
 
@@ -254,7 +340,7 @@ export const staff = pgTable(
     staffCode: text("staff_code").notNull(),
     displayName: text("display_name").notNull(),
     kind: staffKind("kind").notNull(),
-    /** Set only for `kind = 'human'`; the link to the WorkOS identity. */
+    /** Set only for `kind = 'human'`; the person's membership in this org. */
     userId: uuid("user_id"),
     roleId: uuid("role_id").references(() => roles.id),
     departmentId: uuid("department_id"),
@@ -278,10 +364,15 @@ export const staff = pgTable(
       columns: [t.departmentId, t.orgId],
       foreignColumns: [departments.id, departments.orgId],
     }),
+    // Into `memberships`, not `users`: a person is global and a membership is
+    // what makes them part of this org, so this is the constraint that keeps a
+    // human staff row from naming somebody who does not work here. MATCH
+    // SIMPLE, so a null `user_id` skips the check, which is what an agent staff
+    // row wants.
     foreignKey({
       name: "staff_user_fk",
-      columns: [t.userId, t.orgId],
-      foreignColumns: [users.id, users.orgId],
+      columns: [t.orgId, t.userId],
+      foreignColumns: [memberships.orgId, memberships.userId],
     }),
     // Exactly one root per org (§5.2). Single-parent comes from the column
     // being scalar; the no-cycles check needs a constraint trigger and lands
@@ -413,8 +504,15 @@ export const events = pgTable(
     staffId: uuid("staff_id"),
     assignmentId: uuid("assignment_id"),
     sessionId: uuid("session_id"),
-    /** Monotonic per aggregate; out-of-order appends are rejected (§13). */
-    seq: integer("seq").notNull(),
+    /**
+     * The position in the session's stream, and NULL for an event that belongs
+     * to no session (ADR-028). The aggregate is the session because §10.6
+     * replays a session. It is allocated by the single writer of that stream
+     * rather than by the database, so there is no counter row to serialise on;
+     * the unique index below refuses a duplicate, and refusing the out-of-order
+     * append §13 asks for is one probe on that same index.
+     */
+    seq: integer("seq"),
     /** Dotted event key, e.g. `assignment.state_changed`. */
     type: text("type").notNull(),
     /** When it happened, from the producer. */
@@ -439,11 +537,17 @@ export const events = pgTable(
     // R5: a consumer that runs twice upserts onto the same row.
     unique("events_org_idempotency_key").on(t.orgId, t.idempotencyKey),
     // The aggregate replay reads: one seq per session, no gaps to argue about.
-    uniqueIndex("events_session_seq_key")
-      .on(t.sessionId, t.seq)
-      .where(sql`session_id is not null`),
+    // No WHERE any more, because a row with no session now has no seq either
+    // and two of those do not collide: NULLs are distinct in a unique index.
+    uniqueIndex("events_session_seq_key").on(t.sessionId, t.seq),
     index("events_org_occurred_idx").on(t.orgId, t.occurredAt),
     check("events_seq_nonnegative", sql`seq >= 0`),
+    // The same pairing `EventEnvelope` carries, in the place a producer that
+    // skips the contract still meets it.
+    check(
+      "events_seq_pairs_with_session",
+      sql`(session_id is null) = (seq is null)`
+    ),
     check("events_id_is_ulid", sql`event_id ~ '^[0-7][0-9A-HJKMNP-TV-Z]{25}$'`),
     check(
       "events_idempotency_key_is_ulid",

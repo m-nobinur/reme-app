@@ -110,8 +110,14 @@ transaction that reads.
 ## Tenancy
 
 Reads and writes go through `withOrg(ctx, fn)`. It opens one transaction, switches to the
-`reme_app` role, sets `app.org_id`, hands the callback a handle, and takes the handle back
-when the callback settles.
+`reme_app` role, sets `app.org_id` and `app.workos_user_id`, hands the callback a handle, and
+takes the handle back when the callback settles.
+
+Both settings go out in one statement, and both are transaction-local. The second one is what
+the two `users` write policies key on: `users` is a platform table, so a person signing up has
+to write their own row before any membership can vouch for it, and the policy asks who is
+signing in rather than where they work. `ctx.workosUserId` is optional; leaving it out sets
+the empty string, which reads as NULL and matches no row, so those two policies deny.
 
 Two separate guarantees, and it is worth being exact about which is which.
 
@@ -216,8 +222,15 @@ Adding a table means adding its rows to `tenancy/fixtures.ts`. Denial proven aga
 table proves nothing, so the suite fails a tenant table with no fixture row and says so.
 
 A public table with no `org_id` fails too, unless it is named in `PLATFORM_TABLES` in
-`tenancy/rls.test.ts`. That list is empty. Adding a name to it is the decision to put data
-outside the tenant boundary, and it needs a reviewer who agrees rather than a passing build.
+`tenancy/rls.test.ts`. Adding a name to it is the decision to put data outside the tenant
+boundary, and it needs a reviewer who agrees rather than a passing build.
+
+The name is not an exemption. An entry there is a name plus the read that proves the table is
+still confined, so it cannot be added on its own, and a platform table still has to have RLS
+enabled, still has to carry at least one policy whose `USING` names `app.org_id`, and still
+has to show org A its own row and org B none of it through `withOrg`. `users` is the only
+entry (ADR-028): a person is one row however many orgs they work in, because that is the grain
+WorkOS keeps them at, and `memberships` carries the org.
 
 `tenancy/pooler.test.ts` is the measurement behind the second point above. It needs
 `DATABASE_URL_POOLED` and skips without one, which is what it does in CI: the service

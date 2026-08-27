@@ -5,6 +5,7 @@ import {
   departments,
   events,
   facts,
+  memberships,
   orgs,
   roles,
   staff,
@@ -44,6 +45,14 @@ const ulid = (org: "a" | "b", n: number) =>
 
 const PLATFORM_ROLE = uuid(9)
 
+/**
+ * One person per org, in the platform `users` table. Exported because the
+ * suite's platform-table probe names the row it expects each org to see and
+ * the row it must not: a global table has no `org_id` to filter on, so the
+ * denial has to be written as an id.
+ */
+export const USER_OF = { a: per("a", 1), b: per("b", 1) } as const
+
 export async function seedTwoOrgs() {
   // Clearing first rather than repeating the delete list: two copies of a
   // dependency-ordered list drift, and the copy that drifts is the one nobody
@@ -67,12 +76,22 @@ export async function seedTwoOrgs() {
     ["a", ORG_A],
     ["b", ORG_B],
   ] as const) {
+    // A person, then their membership. `users` is a platform table now, so the
+    // row itself belongs to nobody and the membership is what puts them in an
+    // org (ADR-028).
     await db.insert(users).values({
-      id: per(tag, 1),
-      orgId: org,
+      id: USER_OF[tag],
       workosUserId: `user_tenancy_${tag}`,
       email: `owner@tenancy-probe-${tag}.invalid`,
       name: "Tenancy Probe Owner",
+    })
+    await db.insert(memberships).values({
+      id: per(tag, 7),
+      orgId: org,
+      userId: USER_OF[tag],
+      workosMembershipId: `om_tenancy_${tag}`,
+      role: "owner",
+      status: "active",
     })
     await db.insert(roles).values({
       id: per(tag, 2),
@@ -91,7 +110,7 @@ export async function seedTwoOrgs() {
       staffCode: "OWN-001",
       displayName: "Tenancy Probe Owner",
       kind: "human",
-      userId: per(tag, 1),
+      userId: USER_OF[tag],
       status: "active",
     })
     await db.insert(facts).values({
@@ -113,7 +132,10 @@ export async function seedTwoOrgs() {
       eventId: ulid(tag, 1),
       orgId: org,
       staffId: per(tag, 4),
-      seq: 0,
+      // A lifecycle event belongs to no session, so it carries no seq
+      // (ADR-028). The check constraint refuses the other three combinations.
+      sessionId: null,
+      seq: null,
       type: "staff.hired",
       occurredAt: new Date(),
       idempotencyKey: ulid(tag, 2),
@@ -145,7 +167,7 @@ export async function clearTwoOrgs() {
   const { sql, db } = connect()
   try {
     await db.transaction(async (tx) => {
-      await clearOrgs(tx, [ORG_A, ORG_B])
+      await clearOrgs(tx, [ORG_A, ORG_B], [USER_OF.a, USER_OF.b])
       await tx.delete(roles).where(eq(roles.id, PLATFORM_ROLE))
     })
   } finally {

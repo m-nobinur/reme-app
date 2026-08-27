@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm"
+import { type SQL, sql } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connect } from "../src/client.ts"
@@ -7,7 +7,8 @@ import {
   ENTER_APP_ROLE,
   ORG_SETTING,
   type OrgScopedDb,
-  setOrgContext,
+  setContext,
+  USER_SETTING,
   withOrg,
 } from "../src/tenancy.ts"
 import {
@@ -16,6 +17,7 @@ import {
   ORG_ABSENT,
   ORG_B,
   seedTwoOrgs,
+  USER_OF,
 } from "./fixtures.ts"
 
 /**
@@ -51,11 +53,28 @@ const PROBE_SCOPED = "tenancy_probe_scoped_view"
 const PROBE_SEQ = "tenancy_probe_seq"
 
 /**
- * Tables that are deliberately not tenant-scoped. Empty, and adding a name
- * here is the decision to put data outside the tenant boundary: it needs a
- * reviewer who agrees, not a passing build.
+ * Tables that are deliberately not tenant-scoped, each with the read that
+ * proves it is still confined. Adding a name here is the decision to put data
+ * outside the tenant boundary and needs a reviewer who agrees, not a passing
+ * build, so the name cannot be added on its own: the entry is the probe, and
+ * the cases below drive it from org A and from org B.
+ *
+ * Being outside the boundary is not being outside RLS. A platform table still
+ * has to have row-level security enabled, still has to carry at least one
+ * policy whose USING names `app.org_id`, and still has to deny a neighbour
+ * (ADR-028).
+ *
+ * `users` is the only entry. A person is one row here however many orgs they
+ * work in, because that is the grain WorkOS keeps them at, and `memberships`
+ * carries the org. What an org may read is the people it holds a membership
+ * for.
  */
-const PLATFORM_TABLES = new Set<string>()
+const PLATFORM_TABLES: Record<string, { rowOf: (org: "a" | "b") => SQL }> = {
+  users: {
+    rowOf: (org) =>
+      sql`select count(*)::int as n from users where id = ${USER_OF[org]}`,
+  },
+}
 
 /**
  * Postgres `insufficient_privilege`. Both refusals asserted below raise it: a
@@ -219,7 +238,7 @@ describe("the catalog", () => {
 
   it("has no table outside the tenant boundary", () => {
     const stray = tables
-      .filter((t) => t.orgColumn === null && !PLATFORM_TABLES.has(t.name))
+      .filter((t) => t.orgColumn === null && !(t.name in PLATFORM_TABLES))
       .map((t) => t.name)
     expect(
       stray,
@@ -287,6 +306,90 @@ describe("every tenant table carries a policy", () => {
   })
 })
 
+describe("a platform table is outside the tenant boundary, not outside RLS", () => {
+  /**
+   * The other half of `PLATFORM_TABLES`. Naming a table there takes it out of
+   * every case above, so these are what it is taken into: the same three
+   * properties, proven per name, and a denial driven through `withOrg` rather
+   * than inferred from the catalog.
+   */
+  const platformCases = Object.entries(PLATFORM_TABLES)
+
+  it("names only tables that exist", () => {
+    const known = new Set(tables.map((t) => t.name))
+    const absent = Object.keys(PLATFORM_TABLES).filter((n) => !known.has(n))
+    expect(
+      absent,
+      "PLATFORM_TABLES names a table the database does not have, so its " +
+        "cases prove nothing. Drop the entry with the table"
+    ).toEqual([])
+  })
+
+  it.each(platformCases)(
+    "%s carries RLS and a policy that reads the org",
+    (name) => {
+      const table = tables.find((t) => t.name === name) as Discovered
+      expect(table.rlsEnabled, `${name} has no ENABLE ROW LEVEL SECURITY`).toBe(
+        true
+      )
+      const own = policies.filter((p) => p.tablename === name)
+      expect(
+        own.length,
+        `${name} has RLS on and no policy, so it denies all`
+      ).toBeGreaterThan(0)
+      expect(
+        own
+          .filter((p) => p.qual?.includes(ORG_SETTING))
+          .map((p) => p.policyname),
+        `no policy on ${name} reads ${ORG_SETTING}, so nothing about it is ` +
+          "scoped to an org at all"
+      ).not.toEqual([])
+      for (const policy of own) {
+        // A write policy with no WITH CHECK writes anything. The tenant tables
+        // above want that check to name the org; here it may key on the person
+        // instead, which is why this asserts the clause exists rather than what
+        // is in it.
+        if (["ALL", "INSERT", "UPDATE"].includes(policy.cmd)) {
+          expect(
+            policy.with_check,
+            `${policy.policyname} writes with no WITH CHECK`
+          ).not.toBeNull()
+        }
+      }
+    }
+  )
+
+  it.each(platformCases)(
+    "%s shows an org its own and not a neighbour's",
+    async (name, probe) => {
+      const seen = async (org: "a" | "b") =>
+        withOrg({ orgId: org === "a" ? ORG_A : ORG_B }, async (db) => ({
+          mine: (await db.execute<{ n: number }>(probe.rowOf(org)))[0]?.n ?? 0,
+          theirs:
+            (
+              await db.execute<{ n: number }>(
+                probe.rowOf(org === "a" ? "b" : "a")
+              )
+            )[0]?.n ?? 0,
+        }))
+
+      for (const org of ["a", "b"] as const) {
+        const { mine, theirs } = await seen(org)
+        expect(
+          mine,
+          `${name} has no fixture row for org ${org.toUpperCase()}, so denying ` +
+            "the other proves nothing"
+        ).toBe(1)
+        expect(
+          theirs,
+          `${name} showed org ${org.toUpperCase()} a row belonging to the other`
+        ).toBe(0)
+      }
+    },
+    60_000
+  )
+})
+
 describe("the reading transaction runs as a role that cannot bypass", () => {
   it("switches to reme_app and back", async () => {
     const inside = await withOrg({ orgId: ORG_A }, async (db) => {
@@ -311,11 +414,22 @@ describe("the reading transaction runs as a role that cannot bypass", () => {
     expect(dialect.sqlToQuery(ENTER_APP_ROLE).sql).toBe(
       `set local role ${APP_ROLE}`
     )
-    const context = dialect.sqlToQuery(setOrgContext(ORG_A))
-    expect(context.sql.replace(/\s+/g, " ")).toBe(
-      "select set_config($1, $2, true)"
+    // Both GUCs in one statement, both with the third argument true. The
+    // second one is what the `users` write policies key on (ADR-028), and a
+    // session-scoped version of it would leak the signed-in person onto a
+    // pooled backend exactly as the org context would.
+    const context = dialect.sqlToQuery(
+      setContext({ orgId: ORG_A, workosUserId: "user_probe" })
     )
-    expect(context.params).toEqual([ORG_SETTING, ORG_A])
+    expect(context.sql.replace(/\s+/g, " ")).toBe(
+      "select set_config($1, $2, true), set_config($3, $4, true)"
+    )
+    expect(context.params).toEqual([
+      ORG_SETTING,
+      ORG_A,
+      USER_SETTING,
+      "user_probe",
+    ])
   })
 })
 

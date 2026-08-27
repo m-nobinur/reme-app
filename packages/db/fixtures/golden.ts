@@ -2,6 +2,7 @@ import type {
   departments,
   events,
   facts,
+  memberships,
   orgs,
   roles,
   staff,
@@ -39,6 +40,7 @@ import type {
 
 type OrgRow = typeof orgs.$inferInsert
 type UserRow = typeof users.$inferInsert
+type MembershipRow = typeof memberships.$inferInsert
 type RoleRow = typeof roles.$inferInsert
 type DepartmentRow = typeof departments.$inferInsert
 type StaffRow = typeof staff.$inferInsert
@@ -49,7 +51,10 @@ type EventRow = typeof events.$inferInsert
 export type GoldenOrg = {
   readonly slug: string
   readonly org: OrgRow
+  /** People. Global rows: `users` is a platform table (ADR-028). */
   readonly users: UserRow[]
+  /** What puts each of them in this org, and what `staff.user_id` points at. */
+  readonly memberships: MembershipRow[]
   readonly roles: RoleRow[]
   readonly departments: DepartmentRow[]
   readonly staff: StaffRow[]
@@ -116,10 +121,19 @@ export const brightclean: GoldenOrg = {
   users: [
     {
       id: BC_OWNER_USER,
-      orgId: bc(0),
       workosUserId: "user_fixture_brightclean_owner",
       email: "dana@brightclean.invalid",
       name: "Dana Reyes",
+    },
+  ],
+  memberships: [
+    {
+      id: bc(2),
+      orgId: bc(0),
+      userId: BC_OWNER_USER,
+      workosMembershipId: "om_fixture_brightclean_owner",
+      role: "owner",
+      status: "active",
     },
   ],
   roles: [
@@ -348,11 +362,15 @@ export const brightclean: GoldenOrg = {
     actorStaffId: BC_ROOT,
     occurredAt: AT,
   })),
+  // A hire belongs to no session, so it carries no `seq`: the aggregate is the
+  // session and a number outside one orders nothing (ADR-028). Ordering across
+  // these comes from `event_id`, which is a ULID.
   events: brightcleanHires.map((staffId, n) => ({
     eventId: ulid("B", n * 2),
     orgId: bc(0),
     staffId,
-    seq: n,
+    sessionId: null,
+    seq: null,
     type: "staff.hired",
     occurredAt: AT,
     idempotencyKey: ulid("B", n * 2 + 1),
@@ -379,10 +397,19 @@ export const mopandbucket: GoldenOrg = {
   users: [
     {
       id: MB_OWNER_USER,
-      orgId: mb(0),
       workosUserId: "user_fixture_mopandbucket_owner",
       email: "kit@mopandbucket.invalid",
       name: "Kit Mbeki",
+    },
+  ],
+  memberships: [
+    {
+      id: mb(2),
+      orgId: mb(0),
+      userId: MB_OWNER_USER,
+      workosMembershipId: "om_fixture_mopandbucket_owner",
+      role: "owner",
+      status: "active",
     },
   ],
   roles: [
@@ -462,7 +489,8 @@ export const mopandbucket: GoldenOrg = {
       eventId: ulid("M", 0),
       orgId: mb(0),
       staffId: MB_COS,
-      seq: 0,
+      sessionId: null,
+      seq: null,
       type: "staff.hired",
       occurredAt: AT,
       idempotencyKey: ulid("M", 1),
@@ -487,10 +515,19 @@ export const emptyco: GoldenOrg = {
   users: [
     {
       id: ec(1),
-      orgId: ec(0),
       workosUserId: "user_fixture_emptyco_owner",
       email: "robin@emptyco.invalid",
       name: "Robin Alder",
+    },
+  ],
+  memberships: [
+    {
+      id: ec(2),
+      orgId: ec(0),
+      userId: ec(1),
+      workosMembershipId: "om_fixture_emptyco_owner",
+      role: "owner",
+      status: "active",
     },
   ],
   roles: [],

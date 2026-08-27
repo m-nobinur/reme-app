@@ -36,6 +36,17 @@ export const APP_ROLE = "reme_app"
 /** The GUC the policies read. Set with the third argument true, always. */
 export const ORG_SETTING = "app.org_id"
 
+/**
+ * The second GUC, for the two policies an org cannot answer (ADR-028). `users`
+ * is a platform table: a person is one row however many orgs they work in, and
+ * at sign-up their row has to exist before any membership can vouch for it, so
+ * the write policies key on who is signing in rather than on where they work.
+ *
+ * Same rules as the org context. Transaction-local, from the sealed session,
+ * never from client input, and unset it reads as NULL and matches nothing.
+ */
+export const USER_SETTING = "app.workos_user_id"
+
 declare const orgScoped: unique symbol
 
 type Handle = ReturnType<typeof connect>["db"]
@@ -47,8 +58,19 @@ type Transaction = Parameters<Parameters<Handle["transaction"]>[0]>[0]
  */
 export type OrgScopedDb = Transaction & { readonly [orgScoped]: true }
 
-/** Resolved server-side from identity (§9.2, layer 1). Never client input. */
-export type TenantContext = { readonly orgId: string }
+/**
+ * Resolved server-side from identity (§9.2, layer 1). Never client input.
+ *
+ * `workosUserId` is optional because most work is org-scoped and needs nobody
+ * in particular. Leave it out and `app.workos_user_id` is set to the empty
+ * string, which reads as NULL and matches no row, so the two `users` write
+ * policies deny. Sign-in is the caller that has it and the caller that needs
+ * it.
+ */
+export type TenantContext = {
+  readonly orgId: string
+  readonly workosUserId?: string
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -64,9 +86,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  */
 export const ENTER_APP_ROLE = sql.raw(`set local role ${APP_ROLE}`)
 
-/** `is_local = true` is the third argument, and it is the whole story. */
-export const setOrgContext = (orgId: string) =>
-  sql`select set_config(${ORG_SETTING}, ${orgId}, true)`
+/**
+ * Both settings in one statement, so the second GUC costs no extra round trip.
+ * `is_local = true` is the third argument, and it is the whole story.
+ */
+export const setContext = (ctx: TenantContext) =>
+  sql`select set_config(${ORG_SETTING}, ${ctx.orgId}, true),
+             set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true)`
 
 let handle: Handle | undefined
 
@@ -147,7 +173,7 @@ export async function withOrg<T>(
   handle ??= connect({ max: 10 }).db
   return handle.transaction(async (tx) => {
     await tx.execute(ENTER_APP_ROLE)
-    await tx.execute(setOrgContext(ctx.orgId))
+    await tx.execute(setContext(ctx))
     const { db, revoke } = revocable(tx)
     try {
       // Awaited rather than returned, so `finally` runs after the callback
