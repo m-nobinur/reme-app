@@ -11,7 +11,8 @@ import type { OwnerDataSource } from "./types"
  * from the contracts package and `mock.ts` is deleted in the same PR. Nothing
  * adapts around it: an adapter that outlives the mock is a second seam.
  *
- * `api-seam.test.ts` fails if a second module imports `./mock`, because a seam
- * that is one module only until somebody takes a shortcut is not a seam.
+ * `mock.test.ts` reads every file under `src/` and fails if any module other
+ * than this one imports an implementation, because a seam that is one module
+ * only until somebody takes a shortcut is not a seam.
  */
 export const source: OwnerDataSource = mockSource
