@@ -24,6 +24,16 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    // `cache: false` keeps the gate from replaying its own verdict, but the
+    // build underneath it still restores from cache, and a restore writes the
+    // cached `dist/**` over whatever was there without pruning. Build at one
+    // commit, check out another, and `dist` holds both chunk sets; wrangler
+    // uploads every file matching its module rules, so the gate counts the
+    // stale ones. Measured: one planted 44-byte chunk moved the figure, and a
+    // real dist left over from another commit read 911.90 KiB against a true
+    // 839.59. So `pnpm size` passes `--force`, which reaches the build too and
+    // lets vite empty the directory. Same reason as `TURBO_FORCE=true` in
+    // pre-push: a turbo result is evidence only when the cache was bypassed.
     "size": {
       "dependsOn": ["build"],
       "cache": false
