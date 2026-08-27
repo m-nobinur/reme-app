@@ -10,8 +10,9 @@
  * order agree by coincidence of today's chunk names, and a 2904-byte spread is
  * available from reordering alone.
  *
- * `limit` is the settled 1 MiB budget, an early-warning line far under the
- * platform's 10 MiB. `baseline` is what `main` measures. Drift is checked in
+ * `limit` is the 3 MiB early-warning line ADR-027 set, well under the platform's
+ * 10 MiB, and the startup CPU that ADR measures is the number it is a proxy
+ * for. `baseline` is what `main` measures. Drift is checked in
  * both directions: growth past it raises it in the same diff, and a collapse is
  * a build that silently emitted less, which is the failure this gate exists to
  * catch. Only the server bundle is measured. Static assets under `public/` are
