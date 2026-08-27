@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm"
 import { beforeAll, expect, it } from "vitest"
-import { staff, users } from "../src/schema.ts"
+import { connect } from "../src/client.ts"
+import { events, staff, users } from "../src/schema.ts"
 import { withOrg } from "../src/tenancy.ts"
 import { brightclean, emptyco, mopandbucket } from "./golden.ts"
 import { seedGolden } from "./seed.ts"
@@ -19,6 +20,9 @@ import { seedGolden } from "./seed.ts"
  * and vitest's ten-second default tears the seed down halfway through.
  */
 
+/** Postgres `check_violation`. */
+const CHECK_VIOLATION = "23514"
+
 beforeAll(async () => {
   // Reset rather than plain seed, so this starts from the fixture file
   // regardless of what the last run left. Running it here is also the proof
@@ -33,6 +37,7 @@ it("writes every fixture row on a reset", async () => {
   expect(counts).toEqual({
     orgs: 3,
     users: 3,
+    memberships: 3,
     roles: brightclean.roles.length + mopandbucket.roles.length,
     departments:
       brightclean.departments.length + mopandbucket.departments.length,
@@ -77,6 +82,53 @@ it("shows the smaller org only its own two", async () => {
   )
   expect(rows).toHaveLength(mopandbucket.staff.length)
 })
+
+it("refuses an event that numbers a stream it is not in", async () => {
+  // The pairing `EventEnvelope` carries, in the database, proven rather than
+  // assumed (ADR-028). Written as the migrator, which holds BYPASSRLS, so what
+  // refuses this is the check constraint and not a policy. Both offending
+  // combinations, because a constraint written one way round catches one.
+  const { sql: client, db } = connect()
+  try {
+    const rejected = async (row: typeof events.$inferInsert) => {
+      try {
+        await db.insert(events).values(row)
+      } catch (error) {
+        // drizzle wraps the driver error, so the code can be one level down.
+        const seen = error as { code?: string; cause?: { code?: string } }
+        return seen.code ?? seen.cause?.code
+      }
+      await db.delete(events).where(eq(events.eventId, row.eventId))
+      return undefined
+    }
+    const base = {
+      orgId: brightclean.org.id as string,
+      type: "session.probe",
+      occurredAt: new Date(),
+      idempotencyKey: "01K4SEEDP00000000000000001",
+    }
+    expect(
+      await rejected({
+        ...base,
+        eventId: "01K4SEEDP00000000000000002",
+        sessionId: null,
+        seq: 0,
+      }),
+      "a seq outside a session was accepted"
+    ).toBe(CHECK_VIOLATION)
+    expect(
+      await rejected({
+        ...base,
+        eventId: "01K4SEEDP00000000000000003",
+        sessionId: "10000001-0000-4000-8000-000000009001",
+        seq: null,
+      }),
+      "a session event with no seq was accepted"
+    ).toBe(CHECK_VIOLATION)
+  } finally {
+    await client.end()
+  }
+}, 60_000)
 
 it("gives the unconfigured org an owner and nothing else", async () => {
   const { people, seats } = await withOrg(
