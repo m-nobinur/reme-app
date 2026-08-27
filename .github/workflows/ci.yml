@@ -149,3 +149,11 @@ jobs:
       # container has no pooler in front of it. Everything else runs.
       - name: Tenancy gate
         run: pnpm test:tenancy
+
+      # `apps/api` reaches the database through a Hyperdrive binding, so its
+      # suite skips in the unit job where there is no DATABASE_URL and runs
+      # here, where a claim about the tenant path can be checked against one.
+      # It reads the seeded rows written two steps above, which is what makes
+      # "an absent org sees zero" evidence rather than an empty database.
+      - name: The API reaches the database through the tenant path
+        run: pnpm --filter api test

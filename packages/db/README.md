@@ -250,14 +250,17 @@ holds BYPASSRLS. Closing it needs a login role that lacks BYPASSRLS, and `reme_a
 `NOLOGIN` with no password. Provisioning that credential belongs with the per-environment
 Hyperdrive configuration.
 
-**`withOrg` cannot be used from a script.** It opens its pool lazily on first call, holds it in
-a module-level variable, and exports nothing that closes it, so a Node process that calls
-`withOrg` never exits. Measured 2026-08-27: a script whose only statement was a `select 1`
-inside `withOrg` returned from the callback in 2.5 s and was still running when a 30 s timeout
-killed it. Vitest does not care, which is why the tenancy suite has never hit it, and it is
-why the seed reads back through vitest rather than from the script. Closing it means either an
-exported teardown or a handle passed in by the caller, and both are decisions about the shape
-of the tenancy kit rather than about seeding.
+**A script that uses `withOrg` has to close the pool.** `withOrg` opens one lazily and shares
+it, so a Node process that never calls `closeTenancy` does not exit. Measured 2026-08-28
+against the local container: a script whose only statement was `select 1` returned from the
+callback in 34 ms, was killed by a 25 s timeout at exit 124, and its `process.on("exit")`
+handler never fired; with `closeTenancy` the same script exits in 0.29 s at code 0 and the
+handler fires. Vitest never sees it, because it tears its workers down, which is why the
+tenancy suite never caught it.
+
+That is one of the two shapes the kit has. The other is `tenancy(url)`, a kit over a pool the
+caller owns, which is what a Worker uses: Hyperdrive hands its connection string to the request
+rather than to the environment, and each isolate wants its own pool.
 
 **CI proves this against a lookalike.** The `database` job runs against a
 `pgvector/pgvector:pg17` service container whose `reme` user is a superuser. The whole design
