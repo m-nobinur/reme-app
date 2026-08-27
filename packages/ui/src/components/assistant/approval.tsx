@@ -1,0 +1,156 @@
+import type {
+  ToolCallMessagePartComponent,
+  ToolCallMessagePartProps,
+} from "@assistant-ui/react"
+import {
+  CheckCircleIcon,
+  ProhibitIcon,
+  SealQuestionIcon,
+} from "@phosphor-icons/react"
+import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
+import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
+
+/**
+ * The approval half of the owner attention contract, in the transcript.
+ *
+ * An ApprovalRequest is bound to an immutable target, so the card names every
+ * field of the call the runtime is holding, and answering it is one tap. It is
+ * never optimistic: the transcript shows the decision only after the runtime
+ * has recorded it, which is why the buttons read their state from the part
+ * rather than from a local flag.
+ *
+ * This is the component the thread's tool-call slot renders. Any tool call the
+ * runtime is waiting on a human for is an approval, whatever it is called, and
+ * anything else falls through to `ToolFallback`.
+ */
+
+/** A tool call's input as the rows a person reads before deciding. */
+function targetRows(input: unknown): [string, string][] {
+  if (input == null || typeof input !== "object" || Array.isArray(input)) {
+    return []
+  }
+  return Object.entries(input as Record<string, unknown>).map(
+    ([key, value]) => [
+      key.replace(/[_-]/g, " "),
+      typeof value === "string" ? value : JSON.stringify(value),
+    ]
+  )
+}
+
+function ApprovalTarget({ input }: { input: unknown }) {
+  const rows = targetRows(input)
+  if (rows.length === 0) return null
+
+  return (
+    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+      {rows.map(([label, value]) => (
+        <div className="contents" key={label}>
+          <dt className="text-muted-foreground first-letter:uppercase">
+            {label}
+          </dt>
+          <dd className="min-w-0 break-words font-medium">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/** The card the owner answers. Two buttons, no third state, no confirm step. */
+function ApprovalRequest({
+  toolName,
+  input,
+  reason,
+  respondToApproval,
+}: {
+  toolName: string
+  input: unknown
+  reason: string | undefined
+  respondToApproval: ToolCallMessagePartProps["respondToApproval"]
+}) {
+  return (
+    <section
+      aria-label={`Approval needed: ${toolName}`}
+      className="my-2 rounded-3xl border border-border bg-card p-4"
+      data-slot="approval-request"
+    >
+      <h3 className="flex items-center gap-2 font-medium text-sm">
+        <SealQuestionIcon aria-hidden className="size-4 text-primary" />
+        Needs your approval
+      </h3>
+      {reason ? (
+        <p className="mt-1 max-w-prose text-muted-foreground text-sm">
+          {reason}
+        </p>
+      ) : null}
+      <ApprovalTarget input={input} />
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          onClick={() => respondToApproval({ approved: true })}
+          size="sm"
+          type="button"
+        >
+          <CheckCircleIcon aria-hidden />
+          Approve
+        </Button>
+        <Button
+          onClick={() => respondToApproval({ approved: false })}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <ProhibitIcon aria-hidden />
+          Decline
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+/** What the transcript keeps once the owner has answered. */
+function ApprovalDecision({ approved }: { approved: boolean }) {
+  const Icon = approved ? CheckCircleIcon : ProhibitIcon
+  return (
+    <p
+      className={cn(
+        "flex items-center gap-2 px-1 py-1.5 text-sm",
+        approved ? "text-muted-foreground" : "text-destructive"
+      )}
+      data-slot="approval-decision"
+    >
+      <Icon aria-hidden className="size-4 shrink-0" />
+      {approved ? "You approved this." : "You declined this."}
+    </p>
+  )
+}
+
+const Approval: ToolCallMessagePartComponent = (props) => {
+  const { approval, respondToApproval, toolName } = props
+
+  // Only a real approval gate takes the card. A tool paused on an interrupt has
+  // no approval to respond to, and `ToolFallback` already offers it a way out.
+  if (approval != null && approval.approved === undefined) {
+    return (
+      <ApprovalRequest
+        input={props.args}
+        reason={approval.reason}
+        respondToApproval={respondToApproval}
+        toolName={toolName}
+      />
+    )
+  }
+
+  if (approval?.approved !== undefined) {
+    return (
+      <>
+        <ApprovalDecision approved={approval.approved} />
+        <ToolFallback {...props} />
+      </>
+    )
+  }
+
+  return <ToolFallback {...props} />
+}
+Approval.displayName = "Approval"
+
+export { Approval }

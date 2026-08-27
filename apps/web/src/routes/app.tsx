@@ -1,4 +1,5 @@
 import {
+  ChatCircleIcon,
   CheckCircleIcon,
   FlowArrowIcon,
   HouseIcon,
@@ -31,6 +32,7 @@ export const Route = createFileRoute("/app")({
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: HouseIcon, exact: true },
+  { to: "/app/chat", label: "Chat", icon: ChatCircleIcon, exact: false },
   {
     to: "/app/approvals",
     label: "Approvals",

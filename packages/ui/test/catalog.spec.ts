@@ -135,8 +135,11 @@ for (const theme of ["light", "dark"] as const) {
   })
 
   test(`catalog matches its snapshots in ${theme}`, async ({ page }) => {
+    // Not while writing them: the skip is what a run with no baselines does,
+    // and applying it to `test:update` as well left the first run on a machine
+    // with nothing to write into and nothing to compare against ever after.
     test.skip(
-      !existsSync(BASELINES),
+      !existsSync(BASELINES) && test.info().config.updateSnapshots === "none",
       "no baselines on this machine: pnpm --filter @workspace/ui test:update"
     )
     await page.goto(`/?theme=${theme}`)
