@@ -14,7 +14,9 @@ process.env.WORKOS_MODE = "agent"
 /**
  * What each WorkOS environment is configured with. Redirect URIs and CORS
  * origins are add-only in the WorkOS API, so deleting a line here does not
- * delete it in WorkOS. Removing one is a dashboard action.
+ * delete it in WorkOS. Removing one is an `updateCorsConfig` or
+ * `setRedirectUris` call through the WorkOS MCP server, which takes the full
+ * list and so can shorten it.
  *
  * Staging carries only the local dev origin because it is the only one that
  * exists. The preview and staging hostnames arrive with the deploy stories and
@@ -107,11 +109,14 @@ for (const origin of config.corsOrigins) {
 workos("config", "homepage-url", "set", config.homepageUrl)
 ok(`set        homepage URL ${config.homepageUrl}`)
 
-// The sign-in endpoint has no CLI command and no API endpoint, so it is set by
-// hand once per environment and this script cannot read it back to check.
+// The sign-in endpoint has no CLI command, so this script cannot set it and
+// cannot read it back either: the MCP server exposes the write but no matching
+// query, and the dashboard is the only place the current value is visible.
 console.log("")
-note(`Sign-in endpoint, by hand: ${config.signInEndpoint}`)
-note("It is the Redirects tab of the application in the WorkOS dashboard.")
+note(`Sign-in endpoint, set once per environment: ${config.signInEndpoint}`)
+note("Not the CLI. Either the Redirects tab of the application in the")
+note("dashboard, or updateAuthkitExternalLoginUri through the WorkOS MCP")
+note("server, which is what set it on staging.")
 note(
   "https://workos.com/docs/authkit/vanilla/nodejs#configure-initiate-login-url"
 )
