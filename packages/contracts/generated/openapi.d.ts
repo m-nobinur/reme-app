@@ -240,6 +240,14 @@ export interface components {
       requested_at: string
       expires_at: string | null
     }
+    Org: {
+      /** Format: uuid */
+      org_id: string
+      slug: string
+      name: string
+      /** Format: date-time */
+      created_at: string
+    }
     RuntimeSpec: {
       /** Format: uuid */
       spec_id: string
@@ -297,6 +305,62 @@ export interface components {
       /** Format: date-time */
       expires_at: string
       signature: string
+    }
+    StaffDirectory: {
+      staff: {
+        /** Format: uuid */
+        staff_id: string
+        /** Format: uuid */
+        org_id: string
+        staff_code: string
+        display_name: string
+        /** @enum {string} */
+        kind: "agent" | "human"
+        /** @enum {string} */
+        status:
+          | "draft"
+          | "onboarding"
+          | "active"
+          | "paused"
+          | "suspended"
+          | "offboarding"
+          | "archived"
+        position_title: string | null
+        manager_staff_id: string | null
+        role_id: string | null
+        department_id: string | null
+        /** Format: date-time */
+        created_at: string
+        /** Format: date-time */
+        updated_at: string
+      }[]
+    }
+    StaffMember: {
+      /** Format: uuid */
+      staff_id: string
+      /** Format: uuid */
+      org_id: string
+      staff_code: string
+      display_name: string
+      /** @enum {string} */
+      kind: "agent" | "human"
+      /** @enum {string} */
+      status:
+        | "draft"
+        | "onboarding"
+        | "active"
+        | "paused"
+        | "suspended"
+        | "offboarding"
+        | "archived"
+      position_title: string | null
+      manager_staff_id: string | null
+      role_id: string | null
+      department_id: string | null
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
     }
   }
   responses: never

@@ -6,6 +6,7 @@ import {
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord } from "./fact.ts"
+import { Org, StaffDirectory, StaffMember } from "./org.ts"
 import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
 
 /**
@@ -22,7 +23,10 @@ export const contracts = {
   FactRecord,
   FailureReport,
   InformationRequest,
+  Org,
   RuntimeSpec,
+  StaffDirectory,
+  StaffMember,
 } as const
 
 export type ContractName = keyof typeof contracts
