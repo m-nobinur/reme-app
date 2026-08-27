@@ -101,28 +101,71 @@ function TableSample() {
   )
 }
 
+const active = <Badge variant="secondary">Active</Badge>
+
+/**
+ * The brightclean reporting line, in the shape the staff page draws it: one
+ * root, four reports under the Chief of Staff, two under the Ops Manager, and
+ * one of those paused. `packages/ui` cannot import `@workspace/db`, so this is
+ * written out rather than read from the fixtures. It is written out to the
+ * same shape on purpose: this entry is the only place the tree can be looked
+ * at without signing in, and a single unbranching chain would not show what a
+ * level with siblings in it looks like.
+ */
 const TREE = [
   {
     id: "own",
     title: "Dana Reyes",
     subtitle: "Owner",
     code: "OWN-001",
-    badge: <Badge variant="secondary">Active</Badge>,
+    badge: active,
     reports: [
       {
         id: "cos",
         title: "Maya",
         subtitle: "Chief of Staff",
         code: "COS-001",
-        badge: <Badge variant="secondary">Active</Badge>,
+        badge: active,
         reports: [
+          {
+            id: "dev",
+            title: "Alex",
+            subtitle: "Developer",
+            code: "DEV-001",
+            badge: active,
+            reports: [],
+          },
+          {
+            id: "gro",
+            title: "Nora",
+            subtitle: "Growth",
+            code: "GRO-001",
+            badge: active,
+            reports: [],
+          },
+          {
+            id: "css",
+            title: "Jamie",
+            subtitle: "Client Services",
+            code: "CSS-001",
+            badge: active,
+            reports: [],
+          },
           {
             id: "ops",
             title: "Daniel",
             subtitle: "Ops Manager",
             code: "OPS-001",
-            badge: <Badge variant="secondary">Active</Badge>,
+            badge: active,
             reports: [
+              {
+                id: "bkg",
+                title: "Priya",
+                subtitle: "Booking Coordinator",
+                code: "BKG-001",
+                badge: active,
+                reports: [],
+              },
               {
                 id: "qa",
                 title: "Sam",
