@@ -147,8 +147,10 @@ jobs:
       # would make it binding, needs a paid plan on a private repo.
       #
       # It reads the catalog rather than a list, so a relation that arrives
-      # without a policy fails here rather than in production. Two things it
-      # does not prove. The service container's `reme` user is a superuser, so
+      # without a policy fails here rather than in production, and it now ends
+      # by driving the same denial through the authenticated API in
+      # `apps/api/tenancy`, one line above where the two halves in packages/db
+      # stop. Two things it does not prove. The service container's `reme` user is a superuser, so
       # the Neon-specific fact the design rests on, that `neondb_owner` holds
       # `rolbypassrls`, is never exercised here. And the pooler measurement
       # inside the suite skips: there is no DATABASE_URL_POOLED and this

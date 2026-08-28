@@ -121,10 +121,20 @@ export function toFailure(error: unknown): AuthFailure {
           }
     }
 
-    // Measured: GenericServerException, status 400. Raised by magic auth and
-    // by email verification for a code that is wrong, expired or already spent.
-    // WorkOS does not distinguish the three, so neither do we.
+    // Measured: GenericServerException, status 400. Email verification answers
+    // `invalid_one_time_code` for a code that is wrong, expired or spent, and
+    // magic auth answers `one_time_code_previously_used` for all three of them,
+    // including a code that was never issued. Both measured against staging on
+    // 2026-08-28, replaying a spent code and then offering one that never
+    // existed; the answer was the same either way, which is what stops the form
+    // telling an attacker which of the two they hit.
+    //
+    // Two names, one branch, because the difference is which API was called and
+    // not what the person did wrong. Without the second one a replayed code
+    // fell through to `GENERIC`, which says the sign-in service could not be
+    // reached: a service failure, reported to somebody who mistyped six digits.
     case "invalid_one_time_code":
+    case "one_time_code_previously_used":
       return {
         code: "invalid_one_time_code",
         field: "code",

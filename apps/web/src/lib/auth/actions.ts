@@ -1,8 +1,10 @@
+import { env } from "cloudflare:workers"
 import { createServerFn } from "@tanstack/react-start"
 import { type AuthFailure, toFailure } from "./failure"
 import { digits, record, secret, text } from "./input"
 import { clearPending, readPending, updatePending } from "./pending"
 import { type AuthOutcome, authenticate } from "./session"
+import { throttleSignIn } from "./throttle"
 import { sessionOptions, workos } from "./workos"
 
 /**
@@ -47,18 +49,23 @@ export const signIn = createServerFn({ method: "POST" })
       returnTo: data.returnTo,
     }
   })
-  .handler(
-    async ({ data }): Promise<AuthOutcome> =>
-      authenticate(
-        () =>
-          workos().userManagement.authenticateWithPassword({
-            email: data.email,
-            password: data.password,
-            ...sessionOptions(),
-          }),
-        { email: data.email, returnTo: data.returnTo }
-      )
-  )
+  .handler(async ({ data }): Promise<AuthOutcome> => {
+    // Before the password reaches WorkOS, so a run of guesses costs us nothing
+    // and tells the guesser nothing about whether the address exists.
+    const limited = await throttleSignIn(env.SIGN_IN_LIMIT, data.email)
+    if (limited) {
+      return { status: "failed", failure: limited }
+    }
+    return authenticate(
+      () =>
+        workos().userManagement.authenticateWithPassword({
+          email: data.email,
+          password: data.password,
+          ...sessionOptions(),
+        }),
+      { email: data.email, returnTo: data.returnTo }
+    )
+  })
 
 export const signUp = createServerFn({ method: "POST" })
   .validator((input: unknown) => {

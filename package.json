@@ -16,7 +16,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:ci": "turbo test --filter=!@workspace/ui",
-    "test:tenancy": "pnpm --filter @workspace/db test:tenancy",
+    "test:tenancy": "pnpm --filter @workspace/db test:tenancy && pnpm --filter api test:tenancy",
     "test:seed": "pnpm --filter @workspace/db test:seed",
     "size": "turbo size --force",
     "check:secrets": "turbo check:secrets --force",
