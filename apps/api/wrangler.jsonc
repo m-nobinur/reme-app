@@ -25,6 +25,12 @@
   // ~340 ms that remains in a client-side reading is that client's own leg to
   // Frankfurt and no configuration moves it.
   "placement": { "region": "aws:eu-central-1" },
+  // Explicit rather than inherited. The default has changed three times: before
+  // wrangler 4.34 preview URLs were always on, 4.34 to 4.44 always off, and
+  // 4.44 or later matches `workers_dev`. Preview environments per PR are
+  // `wrangler versions upload --preview-alias`, so a wrangler upgrade that
+  // moved this default again would take every preview URL down with it.
+  "preview_urls": true,
   // `reme-staging-postgres`, created by `node infra/bootstrap.ts staging`. It
   // connects as `reme_app`, which has no BYPASSRLS, so the policies are
   // evaluated against the connecting role and the `SET LOCAL ROLE` inside

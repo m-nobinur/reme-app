@@ -12,24 +12,52 @@ process.chdir(repoRoot)
 process.env.WORKOS_MODE = "agent"
 
 /**
- * What each WorkOS environment is configured with. Redirect URIs and CORS
- * origins are add-only in the WorkOS API, so deleting a line here does not
- * delete it in WorkOS. Removing one is an `updateCorsConfig` or
- * `setRedirectUris` call through the WorkOS MCP server, which takes the full
- * list and so can shorten it.
+ * What each WorkOS environment is configured with. This script only adds:
+ * deleting a line here does not delete it in WorkOS.
  *
- * Staging carries the local dev origin and the deployed one. There is no
- * registered domain on this account, so a deploy answers on `*.workers.dev`,
- * and the subdomain is the account's rather than this project's. A custom
- * hostname, and the wildcard preview DNS that needs it, are deferred to the
- * final phase. `signInEndpoint` is the route the sign-in story builds.
+ * Removing one is a REST call, and the two halves differ. A redirect URI has
+ * `GET /user_management/redirect_uris` and
+ * `DELETE /user_management/redirect_uris/{id}`, so it can be listed and removed
+ * with `workos api`. A CORS origin has a GET and a POST and no DELETE, so
+ * removing one needs `updateCorsConfig` through the WorkOS MCP server, which
+ * takes the full list and can therefore shorten it.
+ *
+ * Staging carries the local dev origin, the deployed one, and one wildcard for
+ * preview environments. There is no registered domain on this account, so a
+ * deploy answers on `*.workers.dev` and the subdomain is the account's rather
+ * than this project's; a custom hostname is deferred to the final phase.
+ * `signInEndpoint` is the route the sign-in story builds.
  */
 const environments = {
   staging: {
     redirectUris: [
       "http://localhost:3000/api/auth/callback",
       "https://reme-web.lifeos.workers.dev/api/auth/callback",
+      // Every preview environment, on one line. A preview is
+      // `wrangler versions upload --preview-alias pr-<number>`, which answers
+      // at `<alias>-reme-web.lifeos.workers.dev`, so each pull request is a new
+      // origin and registering them one at a time would grow this list forever.
+      //
+      // Within the WorkOS wildcard rules, measured against the API rather than
+      // read off them: the wildcard sits in the subdomain furthest from the root
+      // domain, there is only one, and a suffix is allowed. `workers.dev` is a
+      // public suffix and wildcards are refused on those, but the root domain
+      // here is `lifeos.workers.dev` and the call was accepted.
+      //
+      // The `-reme-web` suffix is the whole of what keeps this narrow. The
+      // subdomain is the account's and an unrelated project shares it, and a
+      // wildcard matches one label and no more, so this covers every alias of
+      // this Worker and nothing else. Proven both ways on 2026-08-29:
+      // `probe-reme-web...` reaches the AuthKit bootstrap, `probe-reme-nope...`
+      // is refused with `redirect-uri-invalid`.
+      "https://*-reme-web.lifeos.workers.dev/api/auth/callback",
     ],
+    // No preview entry, deliberately. A CORS origin only matters when a browser
+    // calls api.workos.com directly, and nothing does: sign-in is DR-4a, our own
+    // pages posting to our own server functions, and the only mention of that
+    // host anywhere in `@workos/authkit-tanstack-react-start` is its README.
+    // Adding a wildcard here would also be permanent, because the CORS half of
+    // this API has no delete.
     corsOrigins: [
       "http://localhost:3000",
       "https://reme-web.lifeos.workers.dev",
