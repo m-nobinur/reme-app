@@ -122,6 +122,15 @@
                       "**/db/src/**"
                     ],
                     "message": "apps/web has no database binding and must not import @workspace/db. Reads and writes go through apps/api, which is the only holder of a tenant context (architecture §9.2 layer 1)."
+                  },
+                  {
+                    "group": [
+                      "@base-ui/react",
+                      "@base-ui/react/**",
+                      "@radix-ui/*",
+                      "@radix-ui/**"
+                    ],
+                    "message": "A page reaches a primitive through @workspace/ui, never the library underneath. Exit gate 5 says every page is built exclusively from packages/ui, and until this rule existed that was true by habit. A primitive imported here arrives with no catalog entry, no axe scan and no snapshot, which is the whole cost of the catalog being the only door."
                   }
                 ]
               }
