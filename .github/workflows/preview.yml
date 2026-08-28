@@ -1,0 +1,237 @@
+name: preview
+
+# A preview environment per pull request: one Neon branch for the data, one
+# aliased Worker version per app, and a single comment carrying both URLs.
+#
+# Nothing here deploys. `wrangler versions upload` creates a version and routes
+# no production traffic to it, so a preview cannot take staging down and there
+# is no rollback to rehearse. The version is reachable only at its own preview
+# URL, and it reads the secrets already on the Worker, which is what lets a
+# preview sign in against the WorkOS staging environment without this workflow
+# ever holding a WorkOS credential.
+#
+# There is no wildcard DNS and no zone on this account, so previews live on the
+# account's `*.workers.dev` subdomain, which an unrelated project shares. Every
+# alias therefore carries the worker name and nothing here touches a resource it
+# did not create.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+env:
+  NEON_PROJECT_ID: sparkling-wildflower-04343187
+  # `pr-<number>` satisfies the alias rules on its own and will keep doing so: it
+  # begins with a lowercase letter, holds only lowercase letters, digits and
+  # dashes, and `pr-` plus a seven-digit number plus `-reme-web` is 19 characters
+  # against the 63-character DNS label limit.
+  PREVIEW_ALIAS: pr-${{ github.event.number }}
+  NEON_BRANCH: preview/pr-${{ github.event.number }}
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      web: ${{ steps.urls.outputs.web }}
+      api: ${{ steps.urls.outputs.api }}
+      # The branch name, never its connection string: that string carries a
+      # password, and a job output is readable by every later job and by anyone
+      # who can read the run. A job that needs the database derives the string
+      # from this name and its own NEON_API_KEY.
+      neon_branch: ${{ steps.urls.outputs.neon_branch }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+    steps:
+      # First, and it fails rather than skips. A preview that quietly does not
+      # run is worse than a red job, because the PR then shows no URL and no
+      # reason for the absence.
+      - name: Credentials
+        run: |
+          missing=
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing"
+            echo "Set each with: gh secret set <name>"
+            echo "The Cloudflare token needs Account > Workers Scripts > Edit"
+            echo "and Account > Account Settings > Read, scoped to this account."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Preview URLs
+        id: urls
+        run: |
+          {
+            echo "web=https://$PREVIEW_ALIAS-reme-web.lifeos.workers.dev"
+            echo "api=https://$PREVIEW_ALIAS-reme-api.lifeos.workers.dev"
+            echo "neon_branch=$NEON_BRANCH"
+          } >> "$GITHUB_OUTPUT"
+
+      # A copy-on-write branch of `main`, so it arrives already carrying the
+      # three golden orgs and costs only its own delta against the 0.5 GB the
+      # free plan gives the project. Created once per PR and reused on every
+      # later push, because a branch recreated on each push would lose whatever
+      # the previous run wrote to it.
+      #
+      # The free plan allows 10 branches per project and `main` is one of them,
+      # so nine previews can be open at once. Teardown below is what keeps that
+      # true.
+      - name: Neon branch
+        run: |
+          if npx -y neonctl branches get "$NEON_BRANCH" \
+              --project-id "$NEON_PROJECT_ID" -o json >/dev/null 2>&1; then
+            echo "reusing $NEON_BRANCH"
+          else
+            # --no-secrets, because the default output of a create prints the
+            # branch's connection string, password included, into the run log.
+            npx -y neonctl branches create --project-id "$NEON_PROJECT_ID" \
+              --name "$NEON_BRANCH" --parent main --no-secrets
+          fi
+
+      # What this proves that the `database` job in ci.yml cannot: the PR's
+      # migrations apply to Neon 17.11 over rows that already exist, rather than
+      # to an empty Postgres container. `pnpm db:migrate` refuses a `-pooler`
+      # host itself, so the direct endpoint is asked for and the refusal stays
+      # where it is rather than being restated here.
+      - name: Migrations apply to a copy of staging
+        run: |
+          url=$(npx -y neonctl connection-string "$NEON_BRANCH" \
+            --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
+          case "$url" in
+            postgresql://*) ;;
+            *) echo "::error::neonctl did not answer with a connection string"; exit 1 ;;
+          esac
+          DATABASE_URL="$url" pnpm db:migrate
+
+      # `reme-api` binds the staging Hyperdrive config, so this preview reads
+      # staging data rather than the branch above. Pointing it at the branch
+      # needs a Hyperdrive config per PR, and the free plan allows ten per
+      # account on an account an unrelated project already shares. Nothing reads
+      # the api through a preview yet: `apps/web` has no service binding to it.
+      # Build that seam in the change that gives it a reader.
+      - name: Upload the api version
+        run: >
+          pnpm --filter api exec wrangler versions upload
+          --preview-alias "$PREVIEW_ALIAS"
+          --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
+
+      - run: pnpm --filter web build
+
+      # `--var` overrides the committed `WORKOS_REDIRECT_URI`, which names the
+      # staging hostname. A deployed `reme-web` without a redirect URI that
+      # matches its own hostname answers 500 on every route, the public page
+      # included, because the AuthKit middleware validates config per request.
+      #
+      # WorkOS honours this hostname because the staging environment carries the
+      # wildcard `https://*-reme-web.lifeos.workers.dev/api/auth/callback`, added
+      # by `pnpm workos:config staging`. The wildcard matches one subdomain label
+      # and ends in `-reme-web`, so it covers every alias of this Worker and no
+      # other host on the shared subdomain.
+      - name: Upload the web version
+        run: >
+          pnpm --filter web exec wrangler versions upload
+          --config dist/server/wrangler.json
+          --preview-alias "$PREVIEW_ALIAS"
+          --var "WORKOS_REDIRECT_URI:${{ steps.urls.outputs.web }}/api/auth/callback"
+          --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
+
+      # One comment, edited in place on every push, rather than a new one per
+      # run. `gh` is already on the runner, so this needs no action and no
+      # dependency.
+      - name: Comment the URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB: ${{ steps.urls.outputs.web }}
+          API: ${{ steps.urls.outputs.api }}
+        run: |
+          gh pr comment "${{ github.event.number }}" --edit-last --create-if-none --body "$(
+            cat <<EOF
+          ### Preview
+
+          Owner app: $WEB
+          API: $API
+
+          Sign-in runs against the WorkOS staging environment on this hostname.
+          Both are uploaded versions rather than deployments, so no production
+          traffic reaches them and staging is untouched.
+
+          \`reme-api\` reads the staging database. The Neon branch
+          \`$NEON_BRANCH\` belongs to this pull request and is what the
+          migrations were applied to.
+
+          Commit ${{ github.sha }}.
+          EOF
+          )"
+
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      ARMED: ${{ vars.PREVIEW_TEARDOWN }}
+    steps:
+      # Cloudflare needs no teardown. An uploaded version is not deployed, so it
+      # costs nothing and serves no traffic, and Cloudflare retains the 1000
+      # most recent aliases and drops the least recent by itself.
+      #
+      # Neon does. Nine preview branches fit alongside `main` on the free plan,
+      # so a preview that never tears down is what eventually refuses to create
+      # the tenth.
+      #
+      # Deleting a Neon branch is not a decision this workflow gets to make on
+      # its own, so it is armed by a repository variable and prints what it would
+      # delete until then:
+      #
+      #   gh variable set PREVIEW_TEARDOWN --body on
+      - name: Delete the Neon branch
+        run: |
+          if [ -z "${NEON_API_KEY:-}" ]; then
+            echo "::error::missing repository secret NEON_API_KEY"
+            exit 1
+          fi
+          # A list rather than a `branches get`, so that a rejected credential
+          # fails here instead of reading as "no branch, nothing to delete".
+          # That distinction is the whole value of this step: teardown that
+          # silently stops running fills the branch cap without saying so.
+          if ! branches=$(npx -y neonctl branches list \
+              --project-id "$NEON_PROJECT_ID" -o json); then
+            echo "::error::could not list the branches of $NEON_PROJECT_ID"
+            exit 1
+          fi
+          if ! printf '%s' "$branches" | grep -qF "\"name\": \"$NEON_BRANCH\""; then
+            echo "no branch $NEON_BRANCH, nothing to delete"
+            exit 0
+          fi
+          if [ "${ARMED:-}" != "on" ]; then
+            echo "PREVIEW_TEARDOWN is not \"on\", so nothing was deleted."
+            echo "Would delete Neon branch $NEON_BRANCH in $NEON_PROJECT_ID."
+            echo "Arm it with: gh variable set PREVIEW_TEARDOWN --body on"
+            exit 0
+          fi
+          npx -y neonctl branches delete "$NEON_BRANCH" \
+            --project-id "$NEON_PROJECT_ID"

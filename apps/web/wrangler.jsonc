@@ -5,6 +5,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "observability": { "enabled": true },
+  // Explicit rather than inherited. The default has changed three times: before
+  // wrangler 4.34 preview URLs were always on, 4.34 to 4.44 always off, and
+  // 4.44 or later matches `workers_dev`. Preview environments per PR are
+  // `wrangler versions upload --preview-alias`, so a wrangler upgrade that
+  // moved this default again would take every preview URL down with it. The
+  // vite plugin carries the field through to dist/server/wrangler.json, which
+  // is the config a web deploy actually uploads; verified, not assumed.
+  "preview_urls": true,
   // Not a secret: it is a public URL, it appears in the authorize redirect the
   // browser follows, and WorkOS will only honour it because it is registered on
   // the environment (`pnpm workos:config staging`). It is here rather than in

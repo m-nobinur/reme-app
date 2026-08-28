@@ -118,6 +118,44 @@ Staging shares the account's free-tier daily allowances with that unrelated proj
 Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
 three days of retention. All reset at 00:00 UTC. Nothing here bills.
 
+## Preview environments
+
+Every pull request gets two URLs, in one comment that later pushes edit in place:
+
+```
+https://pr-<number>-reme-web.lifeos.workers.dev
+https://pr-<number>-reme-api.lifeos.workers.dev
+```
+
+`.github/workflows/preview.yml` produces them with `wrangler versions upload --preview-alias
+pr-<number>`. A version is uploaded rather than deployed, so it takes no production traffic
+and leaves staging alone. It runs with the secrets already on the Worker, so the workflow
+holds no WorkOS credential of its own. None of this needs DNS, which is what makes it work on
+an account with no zone.
+
+Sign-in works on a hostname that changes every pull request because the staging WorkOS
+environment carries one wildcard redirect URI,
+`https://*-reme-web.lifeos.workers.dev/api/auth/callback`. A WorkOS wildcard matches one
+subdomain label, so the `-reme-web` suffix keeps it to this Worker and off the rest of the
+shared subdomain. `reme-web` still has to know its own hostname: `--var` sets
+`WORKOS_REDIRECT_URI` per version, because the AuthKit middleware validates that value on every
+request and a deploy without a matching one answers 500 on every route.
+
+Each pull request also gets a Neon branch, `preview/pr-<number>`, branched from `main` and so
+already carrying the golden fixture orgs. The workflow applies the pull request's migrations to
+it. That is more than the Postgres container in `ci.yml` can show, which starts empty: this runs
+on Neon 17.11 over rows that already exist. Preview `reme-api` versions still read the staging
+database, because pointing one at its own branch costs a Hyperdrive config per pull request and
+the free plan allows ten per account.
+
+The free plan allows ten branches per project and `main` is one, so nine previews can be open at
+once. Closing a pull request runs the teardown job. It deletes that branch only when the
+repository variable `PREVIEW_TEARDOWN` reads `on`, and prints what it would delete until then.
+
+Three repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `NEON_API_KEY`.
+The Cloudflare token needs Workers Scripts Edit and Account Settings Read. Without them the
+first step fails and names what is missing rather than skipping quietly.
+
 ## WorkOS environments
 
 Redirect URIs, CORS origins and the homepage URL come from `scripts/workos.mjs`, applied
