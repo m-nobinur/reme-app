@@ -1,7 +1,8 @@
 # ADR-029: Resolving the tenant from the WorkOS organization
 
-Status: accepted, 2026-08-28. Applies to `packages/db`, `apps/api`, `apps/web`, the tenancy suite,
-and every endpoint that needs an `org_id` before it has one.
+Status: accepted, 2026-08-28. Amended 2026-08-29, see "Amendment: WorkOS ignores the idempotency
+key" at the end. Applies to `packages/db`, `apps/api`, `apps/web`, the tenancy suite, and every
+endpoint that needs an `org_id` before it has one.
 
 Changes no DR. It finishes what ADR-024 started: that ADR ruled Reme's `org_id` out of the session
 cookie and said it is "resolved server-side per request from the authenticated user", and left the
@@ -124,6 +125,11 @@ ambiguous, which is the worst possible failure in this position. It is also what
 writer idempotent for free (R5): a retried signup hits the constraint instead of creating a second
 tenant for one WorkOS organization.
 
+*Amended.* That last sentence is wrong and the amendment at the end replaces it. The constraint
+refuses a second row for one WorkOS organization, which is a race, not a replay: a replayed signup
+was arriving with a different organization id, so the constraint never fired. The column and its
+uniqueness stand as decided; only this claim about what they buy does not.
+
 No policy change. `orgs_org_isolation` still reads `id = current_org()` and the new column is
 covered by it like any other column on the row. Not contract-visible either, so no contract PR
 gates this half.
@@ -234,6 +240,10 @@ way. There is no transaction spanning a vendor API and Postgres. What is achieva
 asks for anyway, is that the WorkOS organization is created first and our write is idempotent
 against it: `on conflict (workos_organization_id) do nothing`, so a retry after a crash between the
 two finds the tenant already there and a signup replayed twice produces one org.
+
+*Amended.* This paragraph assumed the vendor call is idempotent under the caller's key. It is not,
+measured twice. The amendment at the end has the measurement and the design that replaced this one.
+The `on conflict` clause survives; the reasoning above it does not.
 
 The write needs no new hole in RLS, which is worth spelling out because the obvious reading is that
 it does. The API generates the org uuid itself, then runs all three inserts inside one
@@ -346,3 +356,177 @@ under RLS without one. The shape that would do it is a policy on `orgs` and `mem
 widens two tenant tables' read policies permanently to save one function, and a policy that reads a
 person rather than an org is the harder thing to reason about at 3am. If someone finds a version
 that does not widen the policies, drop the function and take it.
+
+## Amendment: WorkOS ignores the idempotency key
+
+2026-08-29. Corrects §4 and one sentence of §1. Changes no DR. Raised by the branch that shipped as
+`4807a3e`, which did not wait for this amendment and was right not to: signup was broken without the
+fix.
+
+### The assumption, and the measurement that refutes it
+
+§4 rests on one claim about the provider. Create the WorkOS organization first, make our write
+idempotent against it, and a replayed signup converges. That holds only if a replay asks WorkOS for
+the same organization twice and gets the same organization back. It does not. `POST /organizations`
+ignores `Idempotency-Key`.
+
+The engineer implementing §4 found it: the end-to-end proof of the retry failed by creating a second
+tenant. I reproduced it independently with `@workos-inc/node` against staging, two
+`createOrganization({ name }, { idempotencyKey })` calls with one key:
+
+```
+attempt 1: org_01M14ZVQ3VJQA5H80XX652WDRV
+attempt 2: org_01M14ZVQFX13MQTN28DFANMBGH
+```
+
+Two organizations. Both probes deleted, staging back to zero users and its one pre-existing
+`Test Organization`. The header is genuinely sent, by the SDK and by the handler that calls it. The
+endpoint has no idempotency on it.
+
+Nothing in the original ADR was checked against the provider, and that is the finding under the
+finding. The claim came from R5, which asks every mutating call for an idempotency key, and I read
+the key as a promise the vendor had made rather than as a request we send. B5's stand-in for the
+`Directory` port then agreed with me: it returned one organization id on every call, so the suite
+proved the design against a provider that behaves the way this ADR wished. The stand-in now returns
+a new id per call, the way the real one does. A test double is a claim about a provider, and a claim
+about a provider is measured or it is a wish. Every other measurement in this ADR was run against
+Postgres, and Postgres is not the risky half of a write path that spans two systems.
+
+### Adopt then create
+
+The design that replaced it, in `apps/api/src/org.ts`. Before anything is created, list the caller's
+active organization memberships and adopt the organization they already belong to. Create an
+organization only for someone who belongs to none.
+
+It needs no promise from the vendor, which is the point. An owner replaying signup already belongs
+to the organization their first attempt created, whether that attempt died before our write or
+after it, so the state that decides the answer is one we can read rather than one we hope the
+provider deduplicated. Three layers stand behind it and they fail independently: the idempotency key
+from `apps/web`, stable per person, which R5 asks for and which we now know buys nothing at this
+endpoint; the adopt-then-create read, which is what converges; and `orgs_workos_organization_key`,
+which refuses a second row if two requests race past that read.
+
+One condition on the design, and it is a condition rather than a defect. Adoption trusts that a
+membership the person holds is theirs to be adopted into, and the mirror write that follows records
+`role: 'owner'`. That inference is sound only while this endpoint is the only thing that creates
+WorkOS organizations and the only thing that adds people to them, which is true today. An invitation
+flow, Directory Sync or an admin creating organizations breaks it: a member of someone else's
+organization would adopt it, and the mirror would call them its owner. Nothing today can reach that
+state. The first thing that can must either filter which memberships adopt will take, or stop the
+mirror assuming owner. That is a live trigger and not a hypothetical, because an invitation flow is
+in the product.
+
+### At most one organisation per person, and that is the right boundary
+
+Ruled rather than noted: correct, keep it.
+
+The endpoint is signup, and signup knows one thing about intent, a business name typed into a form.
+A name does not disambiguate. An owner typing a second business name is indistinguishable from an
+owner retrying the form, and guessing between them wrongly either strands a signup or creates a
+duplicate tenant. A second business is not a signup at all. It is an authenticated action by a
+person we already know, from inside a session, carrying an explicit "create another business" intent
+that only a signed-in surface can express.
+
+The boundary therefore sits where the intent changes, which is where a boundary belongs. It is also
+cheap to move: a second business arrives as its own endpoint taking that intent, reusing
+`resolveOrg`, the column and the mirror write unchanged. No migration, no contract break, nothing
+here to undo. A boundary that costs nothing to cross later is a boundary in the right place.
+
+What it costs today, plainly rather than by implication. A person can own one Reme tenant. A cleaner
+who is already a member of their employer's organization and signs up to start their own business
+gets their employer's org back instead of a new one. No tenant boundary is crossed by that: it is an
+organization they already belong to, with the role they already had, and nothing is written. They
+are stuck, the fix is the second-business story rather than a widening of signup, and it is not in
+this phase.
+
+### A signup whose org write fails
+
+The engineer's call, that a failed org write must not fail the sign-in, is right and stands. The
+WorkOS user exists by the time the write runs. Refusing the sign-in leaves a person holding an
+account they cannot reach behind a form that now answers "email already in use", which is worse than
+signed in with nothing to look at, and worse in a way support cannot talk someone out of.
+
+The gap is not the choice. It is that the write is safe to run again and nothing runs it. Today that
+person is signed in, `GET /org` answers 403 `org.unresolved`, and only a hand-run write recovers
+them.
+
+What closes it is small enough that it should be closed rather than accepted. The authed surface
+already has to handle a session that resolves to no organisation, because that state is reachable
+for a second or two on every normal signup. That handler is the retry point: post `/org` again with
+the same key on the next request the person makes. The endpoint converges by adoption, so the retry
+is safe by construction, the person is already signed in, and none of it needs a queue, a workflow
+or a second endpoint. Until it lands, a failed org write is a person who signs in to nothing. Open
+item 32 in the phase file, and it belongs to the story that builds the no-organisation state rather
+than to a new ADR.
+
+### What the rest of this ADR keeps
+
+Checked one at a time, because the engineer's reading was that none of it moves and a reading is not
+a ruling.
+
+`resolve_org` is untouched. It takes two vendor ids out of the sealed session and answers with an
+`orgs.id` or nothing. It is indifferent to how the organization came to exist, and none of its
+refusals depended on the vendor deduplicating anything. The `SECURITY DEFINER` argument, the pinned
+`search_path`, the revoke from `PUBLIC` and the four suite cases stand exactly as written.
+
+`orgs.workos_organization_id` stands, nullable and unique, for the reasons given. Only §1's claim
+about what the uniqueness buys was wrong, and it is corrected in place above. The constraint refuses
+two rows for one organization, which is a race. A replay arriving with a different organization id
+is not a race, and the constraint was never going to catch it.
+
+The `INSERT ... RETURNING` finding stands, and it is a fact about Postgres rather than about WorkOS:
+the SELECT policy is applied to returned rows. The shipped writer generates its uuids in the worker
+and reads the user row back with a plain select, which is that finding and ADR-028's
+`users_self_read` working together, both as designed.
+
+One cross-reference to correct rather than leave to be found. ADR-028's amendment justifies
+`users_self_read` with two live paths, "an owner creating a second business, and a retry of a signup
+that wrote `users` and then failed". The first is no longer reachable through this endpoint. The
+policy is unaffected: the retry path alone requires it, and it is the path that runs on every signup
+that adopts.
+
+### Two more things the SDK's types do not say
+
+Both measured on the same day, both on the refresh that puts the new organisation into the session,
+and both carried here because they constrain the order this write path runs in rather than one
+file's internals.
+
+`CookieSession.refresh({ organizationId })` throws when the user is not a member of that
+organization. It does not return `{ authenticated: false }`. The error is an `OauthException`
+carrying `organization_membership_not_found`, and `classifyTerminalRefreshError` in
+`@workos-inc/node` 10.11.0 matches only `invalid_grant`, `mfa_enrollment` and `sso_required`, so it
+classifies nothing, `classifyRetryableRefreshError` classifies nothing, and the error is rethrown.
+As a design constraint: the membership exists before the refresh, which is the order `createOrg`
+already runs in, and any caller of `refresh` catches or inherits an exception the type does not
+admit to.
+
+`sealedSession` is optional on the refresh success branch too, `sealedSession?: string` on
+`RefreshSessionSuccessResponse`, and a terminal failure carries none at all. Writing the result into
+the cookie without checking it writes `undefined`, which reads back as no cookie, which is a
+sign-out. The rule this leaves: write a refresh result only when it is both authenticated and
+carries a seal, and fall back to the session already held. Signed in without an organisation is
+recoverable. Signed out by a cookie we wrote ourselves is not.
+
+### What this ADR does not carry
+
+`session.absent` covering three distinct failures, no cookie, a cookie that unseals to `{}`, and a
+token whose signature fails, stays as it is and stays out of this ADR. The indistinguishability is
+deliberate and it is ADR-024's, not this one's: a caller who can tell a malformed seal from a bad
+signature learns whether the value they hold is well formed, and that is a probe we are not handing
+out to save ourselves debugging time. The suite asserting the three are indistinguishable is
+asserting the right thing.
+
+What cost the time is that a mismatched `WORKOS_COOKIE_PASSWORD` between the two workers presents as
+"no cookie", and that is an operator's fact rather than a design decision. It goes where someone
+debugging a broken sign-in will look, which is item 31 in the phase file, whose fix, `pnpm bootstrap`
+writing one generated password into both `.dev.vars`, is also what stops the mismatch happening.
+
+### Change if
+
+Anything other than signup creates WorkOS organizations or adds people to them. Adoption stops being
+safe on that day, and the filter named above lands in the same change rather than after it.
+
+Or WorkOS honours `Idempotency-Key` on `POST /organizations`. That does not bring the original design
+back, because adopt-then-create is the better one regardless: it converges on state we can read
+rather than on a vendor's promise, and it costs one list call. It would only mean the key stops
+being decoration.
