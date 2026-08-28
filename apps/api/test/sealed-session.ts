@@ -36,7 +36,7 @@ export const COOKIE_PASSWORD = "x".repeat(32)
 
 /** A seal made with this is one we did not make. Same length, different key. */
 export const OTHER_PASSWORD = "y".repeat(32)
-export const CLIENT_ID = "client_d4_negative_tests"
+export const CLIENT_ID = "client_auth_negative_tests"
 
 const encoder = new TextEncoder()
 
@@ -72,7 +72,7 @@ async function keypair(): Promise<CryptoKeyPair> {
 const published = await keypair()
 const unpublished = await keypair()
 
-const KID = "d4-published"
+const KID = "published"
 
 async function jwks() {
   const jwk = (await crypto.subtle.exportKey("jwk", published.publicKey)) as {

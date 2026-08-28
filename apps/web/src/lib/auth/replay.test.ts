@@ -5,10 +5,10 @@ import { toFailure } from "./failure"
 /**
  * Replaying a one-time credential, at the two places it can be replayed.
  *
- * The story asked for a replayed magic-auth code. We do not implement magic
+ * A magic-auth code has nowhere here to be replayed. We do not implement magic
  * auth: nothing in `actions.ts` calls `createMagicAuth` or
- * `authenticateWithMagicAuth`, so there is no code path here to replay one
- * through, and a test that pretended otherwise would be testing a stub.
+ * `authenticateWithMagicAuth`, so there is no code path to replay one through,
+ * and a test that pretended otherwise would be testing a stub.
  *
  * What there is, and what these cases cover:
  *
