@@ -7,12 +7,12 @@
   // through comes from the Node compatibility layer.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // `id` is a placeholder, and unlike `kv_namespaces` this binding cannot omit
-  // it: wrangler's own config schema marks it required and every documented
-  // example carries one. No Hyperdrive configuration exists on the account
-  // (`wrangler hyperdrive list` is empty) and creating one is the owner's call,
-  // so the real id arrives with the infrastructure story that creates it per
-  // environment and points it at `reme_app`.
+  // `reme-staging-postgres`, created by `node infra/bootstrap.ts staging`. It
+  // connects as `reme_app`, which has no BYPASSRLS, so the policies are
+  // evaluated against the connecting role and the `SET LOCAL ROLE` inside
+  // `withOrg` is the second layer rather than the only one. Query caching is
+  // off: Hyperdrive keys its cache on the query and its parameters, and the
+  // org context is in neither, so two tenants would share a cache entry.
   //
   // `wrangler dev` never reads the id. It connects to whatever
   // `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` holds, which is
@@ -21,13 +21,10 @@
   // `localConnectionString` field would do the same job and is not used,
   // because a connection string in a committed file is a password in a
   // committed file (R9), and the secret scan refuses it.
-  //
-  // A deploy fails on the placeholder id, which is the honest failure: there is
-  // nothing to deploy to.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "0000000000000000000000000000000f"
+      "id": "51fda187d78445c6852dbc334d9ac7ed"
     }
   ]
 }

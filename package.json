@@ -30,6 +30,7 @@
     "@workspace/config": "workspace:*",
     "@workspace/db": "workspace:*",
     "@biomejs/biome": "2.5.10",
+    "postgres": "3.4.9",
     "turbo": "^2.9.18",
     "typescript": "^6"
   },

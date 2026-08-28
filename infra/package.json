@@ -1,0 +1,4 @@
+{
+  "//": "Not a workspace package: pnpm-workspace.yaml globs apps/* and packages/* only. This file exists so node reads infra/*.ts as ESM, which the repo root is not.",
+  "type": "module"
+}
