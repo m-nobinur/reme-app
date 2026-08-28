@@ -66,6 +66,58 @@ Secrets never enter a committed file. `.env.example` carries names and shapes,
 `.env.local` carries values and is gitignored, and `packages/config` validates both so a
 missing one fails at boot naming the variable.
 
+## Staging
+
+Every Cloudflare and Postgres resource staging needs is created by one script, from code.
+Nothing is made in a dashboard.
+
+```sh
+node infra/bootstrap.ts staging
+```
+
+A second run changes nothing and exits 0. Each line says how it knows: `unchanged` on the
+Hyperdrive config and the KV namespace is the account's own list answer, `unchanged` on the
+database role is a `pg_roles` read, and `matches` compares the id the account holds against
+the id committed in the Worker's `wrangler.jsonc`. `present` on a secret is weaker on
+purpose and the script says so: wrangler exposes no read for a secret value, so it can only
+tell that the name exists, not that the value still matches `.env.local`.
+
+What it makes, and the names, which carry the project and the environment because this
+account also serves an unrelated project:
+
+| Resource | Name | Bound as |
+| --- | --- | --- |
+| Hyperdrive config | `reme-staging-postgres` | `HYPERDRIVE` in `apps/api` |
+| KV namespace | `reme-staging-web-cache` | `CACHE` in `apps/web` |
+| Postgres login | `reme_app` gains a password | the Hyperdrive origin credential |
+
+Hyperdrive connects as `reme_app`, which has no `BYPASSRLS`, so the policies are evaluated
+against the connecting role and the `SET LOCAL ROLE` inside `withOrg` is a second layer
+rather than the only one. The password is generated at create time, handed to Hyperdrive and
+not stored; if the Hyperdrive config is ever missing, the next run mints a new one. Query
+caching is off, and that is a tenancy decision: Hyperdrive keys its cache on the query text
+and its parameters, the org context is in neither, so two tenants would share a cache entry.
+
+The script does not deploy, and a Worker that has never been deployed has nowhere to hold a
+secret. `apps/api` also cannot deploy until the Hyperdrive id is committed. So a virgin
+environment goes: run the script, commit the two ids it prints, deploy, run it again.
+
+```sh
+pnpm --filter api exec wrangler deploy
+pnpm --filter web build
+pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json
+```
+
+There is no registered domain on this account and no zone, so both Workers answer on
+`*.workers.dev`: <https://reme-web.lifeos.workers.dev> and
+<https://reme-api.lifeos.workers.dev>. The subdomain is the account's, not this project's.
+A custom hostname, and the wildcard preview DNS that depends on one, are deferred to the
+final phase.
+
+Staging shares the account's free-tier daily allowances with that unrelated project: 100,000
+Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
+three days of retention. All reset at 00:00 UTC. Nothing here bills.
+
 ## WorkOS environments
 
 Redirect URIs, CORS origins and the homepage URL come from `scripts/workos.mjs`, applied
@@ -117,12 +169,17 @@ Our own pages, not the WorkOS-hosted ones (DR-4a): `/sign-in`, `/sign-up`, `/ver
 
 `apps/web` owns the session (ADR-026). `authkitMiddleware` runs on every request from
 `src/start.ts`; the pages post to `createServerFn` handlers in `src/lib/auth/`, which call
-`@workos-inc/node` and seal the session there (ADR-024). There is no `apps/api` in this repo
-yet and nothing here needs one: no flow in the list touches the database.
+`@workos-inc/node` and seal the session there (ADR-024). No flow in that list touches the
+database; `apps/api` reads the same sealed cookie for the flows that do.
 
 The Worker reads `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI` and
 `WORKOS_COOKIE_PASSWORD` from its own bindings. Locally that is `apps/web/.dev.vars`, which
-`pnpm bootstrap` writes and `.gitignore` covers; deployed it is `wrangler secret put`.
+`pnpm bootstrap` writes and `.gitignore` covers. Deployed, the first three are wrangler
+secrets set by `infra/bootstrap.ts` and the redirect URI is a `vars` entry in
+`apps/web/wrangler.jsonc`, because it is a public URL rather than a secret and the AuthKit
+middleware validates it on every request, the marketing page included.
+`WORKOS_COOKIE_PASSWORD` is the same value on both Workers: it is the seal `apps/web` writes
+and `apps/api` reads, so two values means `apps/api` sees every session as empty.
 `pnpm check:secrets` scans the built `dist/client` and fails if any of them, or
 `@workos-inc/node`, reaches a file a browser downloads.
 

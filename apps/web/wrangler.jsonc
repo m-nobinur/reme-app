@@ -5,9 +5,21 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "observability": { "enabled": true },
-  // No id: wrangler provisions this locally for dev and preview. The deployed
-  // namespace is created from code when the infrastructure story lands.
-  "kv_namespaces": [{ "binding": "CACHE" }],
+  // Not a secret: it is a public URL, it appears in the authorize redirect the
+  // browser follows, and WorkOS will only honour it because it is registered on
+  // the environment (`pnpm workos:config staging`). It is here rather than in
+  // `wrangler secret` because the AuthKit middleware validates it on every
+  // request, the public marketing page included, so a deploy without it answers
+  // 500 on `/` rather than only on a sign-in.
+  "vars": {
+    "WORKOS_REDIRECT_URI": "https://reme-web.lifeos.workers.dev/api/auth/callback"
+  },
+  // `reme-staging-web-cache`, created by `node infra/bootstrap.ts staging`. Dev
+  // and preview still run against a local simulation of it; the id only decides
+  // which namespace a deploy binds.
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "f5c3036a297e4612bba96014b7975d81" }
+  ],
   // The sign-in form's limit, five attempts per address per minute. Needs no
   // resource to exist and no id from an account: `namespace_id` is a counter
   // name local to this Worker, so unlike Hyperdrive this one is real in dev,

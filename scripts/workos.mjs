@@ -18,15 +18,22 @@ process.env.WORKOS_MODE = "agent"
  * `setRedirectUris` call through the WorkOS MCP server, which takes the full
  * list and so can shorten it.
  *
- * Staging carries only the local dev origin because it is the only one that
- * exists. The preview and staging hostnames arrive with the deploy stories and
- * are added here in the same change that creates them. `signInEndpoint` is the
- * route the sign-in story builds; nothing serves it yet.
+ * Staging carries the local dev origin and the deployed one. There is no
+ * registered domain on this account, so a deploy answers on `*.workers.dev`,
+ * and the subdomain is the account's rather than this project's. A custom
+ * hostname, and the wildcard preview DNS that needs it, are deferred to the
+ * final phase. `signInEndpoint` is the route the sign-in story builds.
  */
 const environments = {
   staging: {
-    redirectUris: ["http://localhost:3000/api/auth/callback"],
-    corsOrigins: ["http://localhost:3000"],
+    redirectUris: [
+      "http://localhost:3000/api/auth/callback",
+      "https://reme-web.lifeos.workers.dev/api/auth/callback",
+    ],
+    corsOrigins: [
+      "http://localhost:3000",
+      "https://reme-web.lifeos.workers.dev",
+    ],
     homepageUrl: "http://localhost:3000",
     signInEndpoint: "http://localhost:3000/sign-in",
   },
