@@ -56,6 +56,12 @@ jobs:
       # runner is not the thing paying for it.
       - run: pnpm test:ci
 
+      # Tier 1 in replay, per the eng guide's suite table. There are no
+      # scenarios yet, so what this proves today is the layer under them: the
+      # recorded fixture replays twice to the hash it is pinned to. An eval
+      # scored against a context that drifts between runs scores noise.
+      - run: pnpm eval --tier 1
+
       # Bundles the worker and gzips it. Needs no Cloudflare credentials: the
       # dry run never talks to the API.
       - run: pnpm size
