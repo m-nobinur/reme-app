@@ -41,6 +41,7 @@ vi.mock("@workos/authkit-tanstack-react-start", () => ({
 vi.mock("./pending", () => ({
   setPending: (...args: unknown[]) => setPending(...args),
   clearPending: () => clearPending(),
+  readPending: async () => null,
 }))
 
 vi.mock("./workos", () => ({

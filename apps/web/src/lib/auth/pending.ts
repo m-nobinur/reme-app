@@ -34,6 +34,14 @@ export type PendingAuth = {
   returnTo?: string
   /** Offered when WorkOS asks the person to pick an organisation. */
   organizations?: Array<{ id: string; name: string }>
+  /**
+   * The business name typed on the signup form, carried until there is a
+   * session to create the organisation under. Signup rarely ends in a session
+   * on the first call: the environment requires a verified email, so the name
+   * has to survive the hop to /verify-email or it is gone by the time anything
+   * can act on it.
+   */
+  orgName?: string
 }
 
 const NAME = "reme-auth-flow"

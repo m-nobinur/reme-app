@@ -75,12 +75,12 @@ async function currentOrg(
 }
 
 /**
- * R5. The key goes to WorkOS, which is where it has to be: the vendor call is
- * the half that cannot be undone, and its own idempotency is what makes a retry
- * adopt the organization it already created rather than make a second one. Our
- * write is idempotent against that result through
- * `orgs_workos_organization_key`, so no keyed-results table is needed for this
- * endpoint. The one that mutates rows a tenant can see will need one.
+ * R5. The key is required and forwarded to WorkOS, and it is not what makes
+ * this endpoint safe to run twice: `POST /organizations` ignores it, measured
+ * and written up in `org.ts`. The replay is the owner's own membership, and our
+ * write is idempotent against it through `orgs_workos_organization_key`, so no
+ * keyed-results table is needed for this endpoint. The one that mutates rows a
+ * tenant can see will need one.
  */
 function idempotencyKey(request: Request): string | null {
   const key = request.headers.get("idempotency-key")?.trim()

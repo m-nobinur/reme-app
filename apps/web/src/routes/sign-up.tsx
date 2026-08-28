@@ -12,6 +12,7 @@ export const Route = createFileRoute("/sign-up")({ component: SignUp })
 function SignUp() {
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
+  const [businessName, setBusinessName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const { run, pending, result } = useSubmit(signUp)
@@ -39,7 +40,7 @@ function SignUp() {
         onSubmit={async (event) => {
           event.preventDefault()
           const outcome = await run({
-            data: { firstName, lastName, email, password },
+            data: { firstName, lastName, businessName, email, password },
           })
           if (outcome.status !== "failed") {
             window.location.assign(outcome.redirectTo)
@@ -69,6 +70,16 @@ function SignUp() {
             value={lastName}
           />
         </div>
+
+        <Field
+          autoComplete="organization"
+          id="business-name"
+          label="Business name"
+          maxLength={120}
+          onChange={(event) => setBusinessName(event.target.value)}
+          required
+          value={businessName}
+        />
 
         <Field
           autoComplete="email"

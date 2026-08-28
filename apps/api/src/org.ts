@@ -62,10 +62,10 @@ export type Directory = {
     requestOptions: { idempotencyKey: string }
   ) => Promise<{ id: string }>
   listOrganizationMemberships: (options: {
-    organizationId: string
     userId: string
+    statuses?: ("active" | "inactive" | "pending")[]
     limit: number
-  }) => Promise<{ data: { id: string }[] }>
+  }) => Promise<{ data: { id: string; organizationId: string }[] }>
   createOrganizationMembership: (options: {
     organizationId: string
     userId: string
@@ -92,11 +92,28 @@ function slugFor(name: string, orgId: string): string {
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
  * stopped asking for it: no transaction spans a vendor API and Postgres. What
- * holds instead is that the vendor call is idempotent under the caller's key
- * and our write is idempotent against its result, so a crash between the two
- * leaves a WorkOS organization we adopt on the retry rather than a second
- * tenant. `orgs_workos_organization_key` is what makes the second half true,
- * and `resolveOrg` is how the retry finds what it already wrote.
+ * holds instead is that a retry converges on one tenant, and the thing that
+ * makes it converge is the membership rather than the idempotency key.
+ *
+ * ADR-029 assumed the vendor call was idempotent under the caller's key. It is
+ * not, measured against WorkOS staging on 2026-08-29: two `POST /organizations`
+ * with an identical `Idempotency-Key` answered 201 twice with two different
+ * organization ids. The header is sent, by the SDK and by the handler, and the
+ * endpoint ignores it. So a signup replayed after a crash was
+ * producing a second organization, a second `orgs` row and a second tenant for
+ * one owner, which is exactly the case a half-finished signup is.
+ *
+ * The membership does not have that problem. An owner replaying signup already
+ * belongs to the organization the first attempt created, so this reads that
+ * first and adopts it, and only creates an organization for someone who belongs
+ * to none. That converges whether the first attempt died before our write or
+ * after it, and it needs no promise from the vendor. `resolveOrg` then finds
+ * whatever we already wrote, and `orgs_workos_organization_key` refuses a
+ * second row for one organization if two requests race.
+ *
+ * The consequence, and it is deliberate: this endpoint creates at most one
+ * organisation per person. It is the signup writer, and a second business for
+ * the same owner is a different story with a different shape.
  *
  * Our three inserts run in one `withOrg` under the id this function generated,
  * so no policy is widened for them: `orgs_org_isolation` passes because the
@@ -116,35 +133,37 @@ export async function createOrg(
     displayName: string | null
   }
 ): Promise<Org> {
-  const organization = await directory.createOrganization(
-    { name: input.name },
-    { idempotencyKey: input.idempotencyKey }
-  )
+  // The replay, and it has to be the first thing that happens: everything
+  // after it either creates a vendor resource or writes a row.
+  const existing = await directory.listOrganizationMemberships({
+    userId: input.workosUserId,
+    statuses: ["active"],
+    limit: 1,
+  })
+  const adopted = existing.data[0]
+  const organization = adopted
+    ? { id: adopted.organizationId }
+    : await directory.createOrganization(
+        { name: input.name },
+        { idempotencyKey: input.idempotencyKey }
+      )
+  const membership =
+    adopted ??
+    (await directory.createOrganizationMembership({
+      organizationId: organization.id,
+      userId: input.workosUserId,
+    }))
+
   const identity = {
     workosUserId: input.workosUserId,
     workosOrganizationId: organization.id,
   }
-
-  // Read before create, not as an optimisation: this is the replay. A retry
-  // gets the same WorkOS organization back from the idempotency key, and this
-  // is where it finds the tenant it already made.
+  // Where a retry that got all the way through last time stops.
   const replayed = await resolveOrg(kit, identity)
   if (replayed) {
     const org = await readOrg(kit, replayed)
     if (org) return org
   }
-
-  const existing = await directory.listOrganizationMemberships({
-    organizationId: organization.id,
-    userId: input.workosUserId,
-    limit: 1,
-  })
-  const membership =
-    existing.data[0] ??
-    (await directory.createOrganizationMembership({
-      organizationId: organization.id,
-      userId: input.workosUserId,
-    }))
 
   const orgId = crypto.randomUUID()
   const written = await kit.withOrg(

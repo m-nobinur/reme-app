@@ -157,14 +157,35 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   const WORKOS_USER = "user_probe_api_writer"
   const WORKOS_MEMBERSHIP = "om_probe_api_writer"
 
+  /**
+   * A stand-in that behaves the way WorkOS actually behaves, which is the only
+   * reason these cases mean anything.
+   *
+   * Measured against staging on 2026-08-29: `POST /organizations` ignores
+   * `Idempotency-Key`. Two requests carrying an identical key answered 201
+   * twice, with two different organization ids. So this hands back a new id
+   * every time it is called, and a writer that leaned on the key to replay
+   * fails here instead of in a signup.
+   *
+   * The memberships list is what does replay, so it answers from what has been
+   * created, the way the real one does.
+   */
   let calls = 0
+  const created: { id: string; organizationId: string }[] = []
   const directory: Directory = {
     createOrganization: async () => {
       calls += 1
-      return { id: WORKOS_ORG }
+      return { id: `${WORKOS_ORG}_${calls}` }
     },
-    listOrganizationMemberships: async () => ({ data: [] }),
-    createOrganizationMembership: async () => ({ id: WORKOS_MEMBERSHIP }),
+    listOrganizationMemberships: async () => ({ data: created.slice(0, 1) }),
+    createOrganizationMembership: async ({ organizationId }) => {
+      const membership = {
+        id: `${WORKOS_MEMBERSHIP}_${created.length + 1}`,
+        organizationId,
+      }
+      created.push(membership)
+      return membership
+    },
   }
 
   const input = {
@@ -182,7 +203,7 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     // which is also what a second business by the same owner does.
     const written = await resolveOrg(kit, {
       workosUserId: WORKOS_USER,
-      workosOrganizationId: WORKOS_ORG,
+      workosOrganizationId: `${WORKOS_ORG}_1`,
     })
     if (written) {
       await kit.withOrg({ orgId: written }, async (db) => {
@@ -204,7 +225,7 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   it("resolves that org from the pair the session carries", async () => {
     const resolved = await resolveOrg(kit, {
       workosUserId: WORKOS_USER,
-      workosOrganizationId: WORKOS_ORG,
+      workosOrganizationId: `${WORKOS_ORG}_1`,
     })
     const org = await readOrg(kit, resolved as string)
     expect(org?.name).toBe(input.name)
@@ -213,12 +234,14 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   it("replays rather than making a second tenant", async () => {
     const first = await resolveOrg(kit, {
       workosUserId: WORKOS_USER,
-      workosOrganizationId: WORKOS_ORG,
+      workosOrganizationId: `${WORKOS_ORG}_1`,
     })
     const again = await createOrg(kit, directory, input)
     expect(again.org_id).toBe(first)
-    // And the vendor was asked again, which is what makes the key load-bearing:
-    // idempotency lives in WorkOS for this call, not in a table here.
-    expect(calls).toBeGreaterThan(1)
+    // And no second organization was asked for. This is the assertion that
+    // catches the real failure: the writer used to create one per attempt and
+    // rely on the idempotency key to give the same one back, which WorkOS does
+    // not do. The membership the owner already holds is what replays.
+    expect(calls).toBe(1)
   })
 })
