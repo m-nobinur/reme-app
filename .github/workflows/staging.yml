@@ -1,0 +1,192 @@
+name: staging
+
+# Staging serves what `main` says, within minutes of the merge.
+#
+# The failure this exists to prevent was measured, not imagined: `apps/web` sat
+# three commits behind `main` for hours, so the sign-in rate limiter was
+# believed present and was measurably absent, and seven attempts in five seconds
+# all succeeded. A hand deploy is a step someone forgets. This is the step
+# nobody has to remember.
+#
+# It is not gated on `ci`. The two answer different questions: `ci` says whether
+# the code is sound, this says what staging is currently running. Making the
+# deploy wait on `ci` would only delay the truth and would not stop a bad merge,
+# because nothing on the Free plan stops a bad merge. A red run here means
+# staging is broken, and staging being broken is the accurate report on `main`.
+#
+# Nothing rolls back automatically, and that is a decision. `wrangler rollback`
+# puts old code back and does not put an old schema back, so an automatic
+# rollback would quietly pair the previous Worker with this run's migrations and
+# lean on expand/contract without saying so. It would also make staging green
+# while `main` is red, which is the same drift this workflow exists to end. The
+# failure summary prints the two commands, and a person decides. E5 drills
+# rollback where the tradeoff is the other way round, on production.
+
+on:
+  push:
+    branches: [main]
+  # The same run, on demand: the deploy is idempotent, so this is also the
+  # supported way to put staging back in step by hand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, and never cancelled mid-flight. A cancelled run can leave the
+# migrations applied with neither Worker updated.
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+env:
+  NEON_PROJECT_ID: sparkling-wildflower-04343187
+  WEB: https://reme-web.lifeos.workers.dev
+  API: https://reme-api.lifeos.workers.dev
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+    steps:
+      # First, and it fails rather than skips, for the reason preview.yml gives:
+      # a deploy that quietly does not run leaves staging stale with nothing
+      # saying so, which is the exact failure this workflow exists to end.
+      - name: Credentials
+        run: |
+          missing=
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing"
+            echo "Set each with: gh secret set <name>"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Before the Workers, because migrations are expand/contract (R10): a new
+      # column is nullable or defaulted and a drop ships a release after the code
+      # stopped reading it, so the new schema is safe under the old code and the
+      # gap between this step and the deploys below is a gap nothing falls into.
+      # The reverse order is not safe: new code against the old schema is exactly
+      # the pairing expand/contract does not promise.
+      #
+      # Idempotent by construction. `pnpm db:migrate` takes a session advisory
+      # lock, applies what the journal says is pending, and prints "nothing to
+      # migrate" on a second run. It refuses a `-pooler` host itself, so the
+      # direct endpoint is asked for here and the refusal stays where it is.
+      - name: Migrate the staging database
+        run: |
+          url=$(npx -y neonctl connection-string main \
+            --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
+          case "$url" in
+            postgresql://*) ;;
+            *) echo "::error::neonctl did not answer with a connection string"; exit 1 ;;
+          esac
+          DATABASE_URL="$url" pnpm db:migrate
+
+      - name: Deploy the api
+        run: >
+          pnpm --filter api exec wrangler deploy
+          --message "${{ github.sha }}"
+
+      # Straight after its own deploy, before the web build spends two minutes:
+      # a broken api should be red as early as this run can say so.
+      #
+      # `/health` is not a `select 1`. It asserts the four things `withOrg`
+      # promises on a live connection, so this catches a credential pointed at a
+      # role holding BYPASSRLS and a migration that dropped a policy, neither of
+      # which changes the status code of anything else.
+      - name: The api answers on the tenant path
+        run: |
+          body=$(curl -sS --max-time 30 "$API/health") || {
+            echo "::error::$API/health did not answer"; exit 1; }
+          echo "$body"
+          echo "$body" | jq -e '
+            .status == "ok" and .role == "reme_app"
+            and .bypasses_rls == false and .rows_for_absent_org == 0' >/dev/null || {
+            echo "::error::/health answered, and not with the guarantees it promises"
+            exit 1; }
+
+      - run: pnpm --filter web build
+
+      - name: Deploy the web app
+        run: >
+          pnpm --filter web exec wrangler deploy
+          --config dist/server/wrangler.json
+          --message "${{ github.sha }}"
+
+      # The web worker needs its own check and cannot borrow the api's. A
+      # deployed `reme-web` without `WORKOS_REDIRECT_URI` answers 500 on every
+      # route, the public page included, because the AuthKit middleware
+      # validates config per request; the api is untouched by that and answers
+      # 200 throughout. `/` is the one page that is public by design, so a 200
+      # here is the whole config having survived the deploy.
+      - name: The web worker serves its public page
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$WEB/")
+          [ "$code" = 200 ] || {
+            echo "::error::$WEB/ answered $code"; exit 1; }
+          echo "$WEB/ answered $code"
+
+      # Only chromium, and only after both health checks have passed: this is
+      # the slowest thing in the run and the least likely to be the first to
+      # notice a broken deploy.
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      # The owner path against the deployed staging build: a real sign-in
+      # through the form, the dashboard, the org tree, the chat replay and the
+      # approvals inbox. It creates one throwaway WorkOS user per run on the
+      # staging environment and asserts its own deletion, so staging goes back
+      # to zero users whether this passes or fails.
+      #
+      # `WORKOS_API_KEY` is checked here rather than in the credentials step
+      # above, because a missing smoke credential is not a reason to refuse to
+      # deploy. It fails the run either way: this gate never skips.
+      - name: Smoke
+        run: |
+          if [ -z "${WORKOS_API_KEY:-}" ]; then
+            echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"
+            echo "Set it from the staging environment: gh secret set WORKOS_API_KEY"
+            exit 1
+          fi
+          E2E_BASE_URL="$WEB" pnpm e2e
+
+      # What a person needs in the first thirty seconds of reading a red run,
+      # written where the failure email points. There is no rollback above, so
+      # the commands are here rather than implied.
+      - name: What a red run means
+        if: failure()
+        run: |
+          {
+            echo "## Staging is red on \`${GITHUB_SHA:0:7}\`"
+            echo
+            echo "Nothing was rolled back. Staging serves whatever \`main\` says,"
+            echo "which is what makes it worth reading. The fix is a revert or a"
+            echo "forward fix; both redeploy through this workflow."
+            echo
+            echo "To put the previous build back by hand in the meantime:"
+            echo
+            echo '```sh'
+            echo "pnpm --filter api exec wrangler rollback"
+            echo "pnpm --filter web exec wrangler rollback"
+            echo '```'
+            echo
+            echo "A rollback moves code and not schema. Any migration this run"
+            echo "applied stays applied."
+          } >> "$GITHUB_STEP_SUMMARY"
