@@ -27,6 +27,9 @@ test-results/
 playwright-report/
 blob-report/
 __screenshots__/
+# The e2e suite's sealed session cookie and the id of the throwaway WorkOS
+# account it belongs to. A live credential, so R9 rather than the binary rule.
+qa/e2e/.auth/
 
 # local dev
 .wrangler/
