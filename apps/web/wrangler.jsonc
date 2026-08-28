@@ -12,7 +12,12 @@
   // request, the public marketing page included, so a deploy without it answers
   // 500 on `/` rather than only on a sign-in.
   "vars": {
-    "WORKOS_REDIRECT_URI": "https://reme-web.lifeos.workers.dev/api/auth/callback"
+    "WORKOS_REDIRECT_URI": "https://reme-web.lifeos.workers.dev/api/auth/callback",
+    // Where signup posts the org write (ADR-029). Not a secret and not a
+    // service binding: a binding would also decide whether apps/api gets a
+    // public hostname at all, which is a design question this does not settle.
+    // The local value goes in apps/web/.dev.vars, which `pnpm bootstrap` writes.
+    "REME_API_URL": "https://reme-api.lifeos.workers.dev"
   },
   // `reme-staging-web-cache`, created by `node infra/bootstrap.ts staging`. Dev
   // and preview still run against a local simulation of it; the id only decides

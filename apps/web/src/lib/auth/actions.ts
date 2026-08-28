@@ -75,6 +75,12 @@ export const signUp = createServerFn({ method: "POST" })
       password: secret(data.password),
       firstName: text(data.firstName, 128),
       lastName: text(data.lastName, 128),
+      // The business, not the tenant. `record()` refuses a payload that names
+      // an organisation in any spelling, and this is not one of them: it is a
+      // display name the API turns into a WorkOS organization it creates
+      // itself, so nothing a caller sends here selects a tenant. 120 is the
+      // contract's bound.
+      businessName: text(data.businessName, 120),
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
@@ -91,6 +97,11 @@ export const signUp = createServerFn({ method: "POST" })
     // Straight into a sign-in rather than a second form. The environment
     // requires a verified email, so this answers `email_verification_required`
     // and lands the person on /verify-email with the code already sent.
+    //
+    // `orgName` rides along because the organisation cannot be created until
+    // there is a session to create it under, which is usually two pages later.
+    // `authenticate` carries it in the flow cookie and creates the org at the
+    // moment the session lands (ADR-029).
     return authenticate(
       () =>
         workos().userManagement.authenticateWithPassword({
@@ -98,7 +109,7 @@ export const signUp = createServerFn({ method: "POST" })
           password: data.password,
           ...sessionOptions(),
         }),
-      { email: data.email }
+      { email: data.email, orgName: data.businessName }
     )
   })
 

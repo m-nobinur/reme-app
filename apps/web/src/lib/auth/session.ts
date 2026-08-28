@@ -1,7 +1,8 @@
 import { getAuthkit } from "@workos/authkit-tanstack-react-start"
 import type { AuthenticationResponse } from "@workos-inc/node"
 import { type AuthFailure, asRecord, toFailure } from "./failure"
-import { clearPending, setPending } from "./pending"
+import { createOrgForSession } from "./org"
+import { clearPending, readPending, setPending } from "./pending"
 import { safeReturnTo } from "./redirect-target"
 import { workos } from "./workos"
 
@@ -71,14 +72,56 @@ async function resolveUserId(
 }
 
 /**
+ * Creates the organisation a signup asked for, and returns the session to
+ * write: the refreshed one if it worked, the one we already have if it did not.
+ *
+ * Not fatal, deliberately. The WorkOS user exists by the time this runs, so
+ * refusing the sign-in would leave the person with an account they cannot get
+ * into and a signup form that now answers "email already in use". Signed in
+ * without an organisation is a state the app already has a shape for, and the
+ * write is safe to run again.
+ */
+async function provisionOrg(
+  response: AuthenticationResponse,
+  orgName: string | undefined
+): Promise<string> {
+  const sealedSession = response.sealedSession as string
+  // Nothing to create: no signup started this, or the session already resolves
+  // to an organisation.
+  if (!orgName || response.organizationId) {
+    return sealedSession
+  }
+  try {
+    return await createOrgForSession({
+      sealedSession,
+      workosUserId: response.user.id,
+      name: orgName,
+    })
+  } catch (error) {
+    // The message and nothing else. This runs a line after a sealed session
+    // and a password, and a Worker logs to an account-wide sink (R9).
+    console.error(
+      JSON.stringify({
+        at: "signup.org",
+        message: error instanceof Error ? error.message : "unknown",
+      })
+    )
+    return sealedSession
+  }
+}
+
+/**
  * Runs one `authenticateWith*` call and turns whatever comes back into an
  * outcome: a session, the next page in the flow, or a message.
  */
 export async function authenticate(
   attempt: () => Promise<AuthenticationResponse>,
-  options: { email: string; returnTo?: unknown }
+  options: { email: string; returnTo?: unknown; orgName?: string }
 ): Promise<AuthOutcome> {
   const returnTo = safeReturnTo(options.returnTo)
+  // Read before the attempt, because the attempt clears it on success and the
+  // business name a signup started with is in there.
+  const pending = await readPending()
   try {
     const response = await attempt()
     if (!response.sealedSession) {
@@ -86,7 +129,9 @@ export async function authenticate(
       // programming error rather than a state a person can be in.
       throw new Error("WorkOS returned no sealed session.")
     }
-    await writeSession(response.sealedSession)
+    await writeSession(
+      await provisionOrg(response, options.orgName ?? pending?.orgName)
+    )
     await clearPending()
     return { status: "signed-in", redirectTo: returnTo }
   } catch (error) {
@@ -104,7 +149,14 @@ export async function authenticate(
         const organizations = Array.isArray(rawData.organizations)
           ? (rawData.organizations as Array<{ id: string; name: string }>)
           : undefined
-        await setPending({ token, userId, email, returnTo, organizations })
+        await setPending({
+          token,
+          userId,
+          email,
+          returnTo,
+          organizations,
+          orgName: options.orgName ?? pending?.orgName,
+        })
         return { status: "next", redirectTo: STEP_PATH[code] }
       }
       // A step we cannot carry forward, because the token or the user is
