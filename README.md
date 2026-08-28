@@ -222,6 +222,31 @@ does not fail a build — so `pnpm lint` runs `scripts/lint/colour-rule.mjs` fir
 lints a fixture with known answers and exits non-zero if the rule stops matching what it
 is supposed to match, or starts matching what it is not.
 
+## End-to-end smoke
+
+`qa/e2e` walks the owner path in a browser: sign in, dashboard, org tree, the Chief of
+Staff chat replay, the approvals inbox, plus a WCAG 2.2 AA scan of each assembled page.
+
+```sh
+E2E_BASE_URL=https://reme-web.lifeos.workers.dev pnpm e2e
+E2E_BASE_URL=http://localhost:3000 pnpm e2e        # against your own `pnpm dev`
+```
+
+The suite names no environment. It takes a base URL and runs the same way against a local
+dev server, staging, or a pull request's preview at
+`https://pr-<number>-reme-web.lifeos.workers.dev`. It needs `WORKOS_API_KEY` in
+`.env.local` or in the environment, because it creates its own throwaway account on the
+WorkOS staging environment and deletes it again in the teardown. The address is unique to
+each run, which is also what keeps the sign-in rate limit (five per address per minute)
+out of the way when you run the suite repeatedly.
+
+Everything it asserts is a read. A preview deploy points at the staging database, so PRs
+and staging share one set of rows and a scenario that wrote anything would collide as soon
+as two PRs were open.
+
+Traces are written on failure only, into the gitignored `test-results/`, along with the
+sealed session cookie under `qa/e2e/.auth/`. Neither belongs in git.
+
 ## Conventions
 
 - **Migrations are expand/contract only**; adding a tenant table without an RLS policy fails the build by design.
