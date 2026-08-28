@@ -118,6 +118,33 @@ Staging shares the account's free-tier daily allowances with that unrelated proj
 Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
 three days of retention. All reset at 00:00 UTC. Nothing here bills.
 
+### Every merge deploys
+
+The commands above are the manual path and are no longer the normal one.
+`.github/workflows/staging.yml` runs on every push to `main`, and on
+`workflow_dispatch` when you want to put staging back in step by hand. In order: migrate the
+Neon `main` branch through its direct endpoint, deploy `reme-api`, check `/health`, build and
+deploy `reme-web`, check that the public page answers 200, then run `qa/e2e` against the
+deployed app.
+
+Migrations run before the Workers because migrations are expand/contract: the new schema is
+safe under the code already deployed, and the reverse order is the pairing expand/contract
+does not promise. `pnpm db:migrate` takes an advisory lock and prints `nothing to migrate` on
+a second run, so a re-run costs nothing.
+
+Both health checks exist because neither covers the other. `/health` asserts what `withOrg`
+promises on a live connection, so it catches a role that gained `BYPASSRLS` and a migration
+that dropped a policy. The web check is a plain 200 on `/`, which is what catches a deploy
+that lost `WORKOS_REDIRECT_URI`: the AuthKit middleware validates config per request, so that
+Worker answers 500 on every route while the api answers 200 throughout.
+
+**Nothing rolls back automatically.** `wrangler rollback` moves code and not schema, so an
+automatic rollback would pair the previous Worker with this run's migrations. It would also
+make staging green while `main` was red, which is the drift the workflow exists to end.
+A red run leaves staging serving the broken build, mails the owner through GitHub's default
+Actions notification, and writes the two rollback commands into the run summary for a person
+to decide on.
+
 ## Preview environments
 
 Every pull request gets two URLs, in one comment that later pushes edit in place:
@@ -152,9 +179,11 @@ The free plan allows ten branches per project and `main` is one, so nine preview
 once. Closing a pull request runs the teardown job. It deletes that branch only when the
 repository variable `PREVIEW_TEARDOWN` reads `on`, and prints what it would delete until then.
 
-Three repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `NEON_API_KEY`.
-The Cloudflare token needs Workers Scripts Edit and Account Settings Read. Without them the
-first step fails and names what is missing rather than skipping quietly.
+Four repository secrets, between this workflow and the staging deploy: `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, `NEON_API_KEY`, and `WORKOS_API_KEY`, which only the staging deploy
+needs, for the throwaway account the smoke suite signs in as. The Cloudflare token needs
+Workers Scripts Edit and Account Settings Read. Without them the first step fails and names
+what is missing rather than skipping quietly.
 
 ## WorkOS environments
 
@@ -269,6 +298,9 @@ Staff chat replay, the approvals inbox, plus a WCAG 2.2 AA scan of each assemble
 E2E_BASE_URL=https://reme-web.lifeos.workers.dev pnpm e2e
 E2E_BASE_URL=http://localhost:3000 pnpm e2e        # against your own `pnpm dev`
 ```
+
+It runs on every merge to `main` against the staging deploy, as the last gate in
+`.github/workflows/staging.yml`.
 
 The suite names no environment. It takes a base URL and runs the same way against a local
 dev server, staging, or a pull request's preview at
