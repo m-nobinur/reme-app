@@ -20,7 +20,6 @@
   // request, the public marketing page included, so a deploy without it answers
   // 500 on `/` rather than only on a sign-in.
   "vars": {
-    "WORKOS_REDIRECT_URI": "https://reme-web.lifeos.workers.dev/api/auth/callback",
     // Where signup posts the org write (ADR-029). Not a secret and not a
     // service binding: a binding would also decide whether apps/api gets a
     // public hostname at all, which is a design question this does not settle.
