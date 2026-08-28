@@ -7,6 +7,24 @@
   // through comes from the Node compatibility layer.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // The worker runs next to the database, not next to the reader. Measured on
+  // staging before this line existed: `/staff` p95 3499 ms from Dhaka against a
+  // database in eu-central-1, with `cpuTime` 6 to 45 ms. So it was never
+  // compute and never the reader's own link, which answers `/nope` in 30 ms. It
+  // was `withOrg` issuing five sequential statements plus a connection
+  // handshake, each paying a Dhaka to Frankfurt round trip.
+  //
+  // A read is one request from the reader and many to Postgres, which is the
+  // shape placement exists for. Revisit if the database moves or if a read ever
+  // fans out to something the reader is closer to than Frankfurt.
+  //
+  // Measured after, on the deployed worker: server-side `wallTime` p50 67 ms,
+  // p95 98 ms, against p50 1729 to 2025 ms before. From a Dhaka client the
+  // database's own share, taken as the difference between `/health` and the
+  // `/nope` route that touches no database, is p50 59 ms and p95 41 ms; the
+  // ~340 ms that remains in a client-side reading is that client's own leg to
+  // Frankfurt and no configuration moves it.
+  "placement": { "region": "aws:eu-central-1" },
   // `reme-staging-postgres`, created by `node infra/bootstrap.ts staging`. It
   // connects as `reme_app`, which has no BYPASSRLS, so the policies are
   // evaluated against the connecting role and the `SET LOCAL ROLE` inside
