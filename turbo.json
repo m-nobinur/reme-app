@@ -2,6 +2,11 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "globalEnv": ["NEON_OFFLINE"],
+  // The eval runner's Langfuse switch. Pass-through rather than `globalEnv`
+  // because `pnpm eval` is not a turbo task, so hashing it would invalidate
+  // every cached task on a variable none of them read. Declared here because
+  // `noUndeclaredEnvVars` reads this file and lint fails on warnings.
+  "globalPassThroughEnv": ["LANGFUSE_SECRET_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

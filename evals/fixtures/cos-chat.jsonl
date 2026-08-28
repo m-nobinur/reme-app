@@ -1,0 +1,150 @@
+{"fixture":"cos-chat","turns":["opening","approved","denied"],"sessions":{"approve":["opening","approved"],"deny":["opening","denied"]},"hash":"sha256:d856294143b1d6da907ff1c3217a5f88e9ce1f7085b05604bc4b8eab99d0b6a8"}
+{"turn":"opening","chunk":{"type":"start"}}
+{"turn":"opening","chunk":{"type":"start-step"}}
+{"turn":"opening","chunk":{"type":"reasoning-start","id":"reasoning_week"}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"Three "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"assignments "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"closed "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"this "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"week "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"and "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"one "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"is "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"waiting "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"on "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"a "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"decision. "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"The "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"site "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"revision "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"is "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"the "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"only "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"thing "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"blocked "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"on "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"the "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"owner, "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"so "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"it "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"goes "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"last "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"and "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"everything "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"else "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"is "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"a "}}
+{"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"summary."}}
+{"turn":"opening","chunk":{"type":"reasoning-end","id":"reasoning_week"}}
+{"turn":"opening","chunk":{"type":"tool-input-start","toolCallId":"call_read_week","toolName":"read_week"}}
+{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_read_week","toolName":"read_week","input":{"org":"brightclean","window":"last_7_days"}}}
+{"turn":"opening","chunk":{"type":"tool-output-available","toolCallId":"call_read_week","output":{"assignmentsClosed":3,"enquiriesAnswered":11,"blocked":["site revision rev_2f41c9 awaiting approval"]}}}
+{"turn":"opening","chunk":{"type":"text-start","id":"text_report"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Here "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"is "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"week "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"for "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"**Brightclean**.\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"- "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Three "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"assignments "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"closed, "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"including "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"two "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"quote "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"follow-ups "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"you "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"asked "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"me "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"to "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"chase.\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"- "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Eleven "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"enquiries "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"answered, "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"all "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"within "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"hour.\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"- "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"One "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"thing "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"is "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"waiting "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"on "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"you.\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"I "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"have "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"a "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"site "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"revision "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"ready. "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"It "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"corrects "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"service-area "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"list "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"and "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"two "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"opening "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"hours "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"you "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"changed "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"on "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Tuesday."}}
+{"turn":"opening","chunk":{"type":"text-end","id":"text_report"}}
+{"turn":"opening","chunk":{"type":"tool-input-start","toolCallId":"call_publish_revision","toolName":"publish_revision"}}
+{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_publish_revision","toolName":"publish_revision","input":{"org":"brightclean","revision":"rev_2f41c9","domain":"brightclean.mypareme.app","changes":3}}}
+{"turn":"opening","chunk":{"type":"tool-approval-request","approvalId":"approval_publish_revision","toolCallId":"call_publish_revision","reason":"Publishing a revision changes what visitors see."}}
+{"turn":"opening","chunk":{"type":"finish-step"}}
+{"turn":"opening","chunk":{"type":"finish"}}
+{"turn":"approved","chunk":{"type":"start"}}
+{"turn":"approved","chunk":{"type":"start-step"}}
+{"turn":"approved","chunk":{"type":"tool-output-available","toolCallId":"call_publish_revision","output":{"published":true,"revision":"rev_2f41c9","url":"https://brightclean.mypareme.app"}}}
+{"turn":"approved","chunk":{"type":"text-start","id":"text_published"}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"Published. "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"brightclean.mypareme.app "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"is "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"serving "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"revision "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"rev_2f41c9, "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"and "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"the "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"previous "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"one "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"stays "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"available "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"for "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"a "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"rollback."}}
+{"turn":"approved","chunk":{"type":"text-end","id":"text_published"}}
+{"turn":"approved","chunk":{"type":"finish-step"}}
+{"turn":"approved","chunk":{"type":"finish"}}
+{"turn":"denied","chunk":{"type":"start"}}
+{"turn":"denied","chunk":{"type":"start-step"}}
+{"turn":"denied","chunk":{"type":"tool-output-denied","toolCallId":"call_publish_revision"}}
+{"turn":"denied","chunk":{"type":"text-start","id":"text_held"}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"Left "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"unpublished. "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"rev_2f41c9 "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"stays "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"in "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"preview "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"and "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"I "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"will "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"not "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"raise "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"it "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"again "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"unless "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"you "}}
+{"turn":"denied","chunk":{"type":"text-delta","id":"text_held","delta":"ask."}}
+{"turn":"denied","chunk":{"type":"text-end","id":"text_held"}}
+{"turn":"denied","chunk":{"type":"finish-step"}}
+{"turn":"denied","chunk":{"type":"finish"}}
