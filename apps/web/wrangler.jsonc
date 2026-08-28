@@ -7,5 +7,21 @@
   "observability": { "enabled": true },
   // No id: wrangler provisions this locally for dev and preview. The deployed
   // namespace is created from code when the infrastructure story lands.
-  "kv_namespaces": [{ "binding": "CACHE" }]
+  "kv_namespaces": [{ "binding": "CACHE" }],
+  // The sign-in form's limit, five attempts per address per minute. Needs no
+  // resource to exist and no id from an account: `namespace_id` is a counter
+  // name local to this Worker, so unlike Hyperdrive this one is real in dev,
+  // preview and production from the day it lands.
+  //
+  // `period` takes 10 or 60 and nothing else. The reasoning behind the number,
+  // and what this deliberately does not defend against, is in
+  // src/lib/auth/throttle.ts; a test asserts this block against the constants
+  // there, so the two cannot drift.
+  "ratelimits": [
+    {
+      "name": "SIGN_IN_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ]
 }

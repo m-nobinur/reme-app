@@ -232,6 +232,14 @@ has to show org A its own row and org B none of it through `withOrg`. `users` is
 entry (ADR-028): a person is one row however many orgs they work in, because that is the grain
 WorkOS keeps them at, and `memberships` carries the org.
 
+The gate has a second half outside this package. `pnpm test:tenancy` runs `apps/api/tenancy/`
+after this directory, where the same denial is driven through the authenticated API: a real
+HTTP request carrying a real sealed session cookie, answered by the routes an owner's browser
+reaches. Everything here and in `withOrg` stops one line below where an org id is decided, so
+neither can see a handler that read `?org_id=` and passed it on. It lives in `apps/api` because
+the dependency direction only goes one way, and it runs from here because a gate assembled out
+of two commands is one command away from being half a gate.
+
 `tenancy/pooler.test.ts` is the measurement behind the second point above. It needs
 `DATABASE_URL_POOLED` and skips without one, which is what it does in CI: the service
 container there has no pooler in front of it. The assertion that runs everywhere is in
