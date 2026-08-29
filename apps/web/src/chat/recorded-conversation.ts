@@ -41,13 +41,14 @@ const PUBLISH_TOOL_CALL = "call_publish_revision"
 const APPROVAL_ID = "approval_publish_revision"
 
 /**
- * The immutable target the approval is bound to. §7.3 requires one. No org key
- * and no business in the hostname: the tenant is the session's, never a field
- * in the payload (R3).
+ * The immutable target the approval is bound to. §7.3 requires one. No org key:
+ * the tenant is the session's, never a field in the payload (R3). The hostname
+ * is the one RFC 2606 reserves, so it can never be a tenant's own; anything
+ * under `remeai.co.uk` sits in the `{slug}` namespace ADR-030 hands out.
  */
 const PUBLISH_INPUT = {
   revision: "rev_2f41c9",
-  domain: "example.remeai.co.uk",
+  domain: "example.com",
   changes: 3,
 }
 

@@ -1,4 +1,4 @@
-{"fixture":"cos-chat","turns":["opening","approved","denied"],"sessions":{"approve":["opening","approved"],"deny":["opening","denied"]},"hash":"sha256:0de7f0120eb0a3936377cdc9a84a514d4c44fb8635560458bc67c7600b016e37"}
+{"fixture":"cos-chat","turns":["opening","approved","denied"],"sessions":{"approve":["opening","approved"],"deny":["opening","denied"]},"hash":"sha256:75461c82023724e3ead33cd3542c10b896599e6425786ffdc71655a04ade6044"}
 {"turn":"opening","chunk":{"type":"start"}}
 {"turn":"opening","chunk":{"type":"start-step"}}
 {"turn":"opening","chunk":{"type":"reasoning-start","id":"reasoning_week"}}
@@ -111,16 +111,16 @@
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Tuesday."}}
 {"turn":"opening","chunk":{"type":"text-end","id":"text_report"}}
 {"turn":"opening","chunk":{"type":"tool-input-start","toolCallId":"call_publish_revision","toolName":"publish_revision"}}
-{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_publish_revision","toolName":"publish_revision","input":{"revision":"rev_2f41c9","domain":"example.remeai.co.uk","changes":3}}}
+{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_publish_revision","toolName":"publish_revision","input":{"revision":"rev_2f41c9","domain":"example.com","changes":3}}}
 {"turn":"opening","chunk":{"type":"tool-approval-request","approvalId":"approval_publish_revision","toolCallId":"call_publish_revision","reason":"Publishing a revision changes what visitors see."}}
 {"turn":"opening","chunk":{"type":"finish-step"}}
 {"turn":"opening","chunk":{"type":"finish"}}
 {"turn":"approved","chunk":{"type":"start"}}
 {"turn":"approved","chunk":{"type":"start-step"}}
-{"turn":"approved","chunk":{"type":"tool-output-available","toolCallId":"call_publish_revision","output":{"published":true,"revision":"rev_2f41c9","url":"https://example.remeai.co.uk"}}}
+{"turn":"approved","chunk":{"type":"tool-output-available","toolCallId":"call_publish_revision","output":{"published":true,"revision":"rev_2f41c9","url":"https://example.com"}}}
 {"turn":"approved","chunk":{"type":"text-start","id":"text_published"}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"Published. "}}
-{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"example.remeai.co.uk "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"example.com "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"is "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"serving "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"revision "}}

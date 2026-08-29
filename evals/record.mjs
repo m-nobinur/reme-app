@@ -11,9 +11,10 @@ import { replay } from "./replay.mjs"
  * without reaching into an app. Re-run it when the recording changes and read
  * the diff, which is the whole point of a golden fixture.
  *
- * This file is the only thing in `evals/` that reaches into `apps/web`, and it
- * runs by hand rather than in CI. When a real runtime replaces the mock, this
- * is what gets repointed at it.
+ * This file is the only thing in `evals/` that reaches into `apps/web`. CI runs
+ * it on every PR and fails when the fixture it writes differs from the one in
+ * the tree, so a recording change has to be committed with its diff. When a
+ * real runtime replaces the mock, this is what gets repointed at it.
  */
 
 const SOURCE = "../apps/web/src/chat/recorded-conversation.ts"
