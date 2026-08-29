@@ -2,7 +2,20 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "reme-web",
   "compatibility_date": "2026-08-26",
-  "compatibility_flags": ["nodejs_compat"],
+  // `global_fetch_strictly_public` is what lets this Worker call `apps/api` at
+  // all. Both live on the account's `workers.dev` subdomain, which is one zone,
+  // and a same-zone `fetch()` from one Worker to another fails with Cloudflare
+  // error 1042 unless this flag is set: without it the request is routed to the
+  // zone's origin, ignoring the Worker mapped to the URL. Measured, not read:
+  // `/app` answered 500 on a preview and 200 from the same code locally, where
+  // the call leaves the machine and is not same-zone.
+  //
+  // It is the flag rather than a service binding because ADR-029 already chose
+  // the public URL, and a binding decides whether `apps/api` has a public
+  // hostname at all, which is a design question this does not settle. Every
+  // other `fetch()` here already goes to the public internet (WorkOS), so
+  // routing them all that way changes nothing else.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "main": "@tanstack/react-start/server-entry",
   "observability": { "enabled": true },
   // Explicit rather than inherited. The default has changed three times: before
