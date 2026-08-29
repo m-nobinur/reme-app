@@ -5,12 +5,15 @@ import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
 import { Field } from "@workspace/ui/components/field"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import { Logo } from "@workspace/ui/components/logo"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { useEffect, useState } from "react"
 import {
   confirmMfa,
   getPendingAuth,
   startMfaEnrolment,
 } from "@/lib/auth/actions"
+import { codeProblem } from "@/lib/auth/code"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/mfa-setup")({
@@ -25,8 +28,8 @@ export const Route = createFileRoute("/mfa-setup")({
 })
 
 function MfaSetup() {
-  const [code, setCode] = useState("")
   const [showSecret, setShowSecret] = useState(false)
+  const [localProblem, setLocalProblem] = useState<string | undefined>()
   const enrol = useSubmit(startMfaEnrolment)
   const verify = useSubmit(confirmMfa)
 
@@ -43,11 +46,17 @@ function MfaSetup() {
     enrol.result && "failure" in enrol.result ? enrol.result.failure : undefined
   const failure =
     verify.result?.status === "failed" ? verify.result.failure : undefined
+  const codeError =
+    localProblem ?? (failure?.field === "code" ? failure.message : undefined)
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
-      description="Scan this with an authenticator app, then type the code it shows to verify it worked."
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
+      description="An authenticator app gives a fresh code every thirty seconds, so a stolen password is not enough on its own."
       footer={
         <Link
           className="text-foreground underline underline-offset-4"
@@ -68,35 +77,72 @@ function MfaSetup() {
 
       {enrolment ? (
         <>
-          <div className="flex flex-col items-center gap-3">
-            {/* WorkOS returns the QR code as a data: PNG, so there is no image
-                host involved and nothing to load across the network. */}
-            <img
-              alt="QR code for your authenticator app"
-              className="size-44 rounded-2xl bg-card p-2"
-              src={enrolment.qrCode}
-            />
-            {showSecret ? (
-              <p className="w-full break-all rounded-2xl bg-muted px-3 py-2 text-center font-mono text-xs">
-                {enrolment.secret}
-              </p>
-            ) : (
-              <Button
-                onClick={() => setShowSecret(true)}
-                size="sm"
-                type="button"
-                variant="ghost"
+          <ol className="flex flex-col gap-4 text-sm">
+            <li className="flex gap-3">
+              <span
+                aria-hidden
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-xs"
               >
-                Cannot scan it? Show the key instead
-              </Button>
-            )}
-          </div>
+                1
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Scan this in your authenticator</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Google Authenticator, 1Password, Authy and Bitwarden all work.
+                </p>
+                <div className="mt-3 flex flex-col items-center gap-3">
+                  {/* WorkOS returns the QR code as a data: PNG, so there is no
+                      image host involved and nothing to load across the
+                      network. White ground because a QR code is only readable
+                      as dark-on-light, in either theme. */}
+                  <img
+                    alt="QR code for your authenticator app"
+                    className="size-44 rounded-2xl bg-card p-2"
+                    src={enrolment.qrCode}
+                  />
+                  {showSecret ? (
+                    <p className="w-full break-all rounded-2xl bg-muted px-3 py-2 text-center font-mono text-xs">
+                      {enrolment.secret}
+                    </p>
+                  ) : (
+                    <Button
+                      onClick={() => setShowSecret(true)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Cannot scan it? Show the key instead
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span
+                aria-hidden
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-xs"
+              >
+                2
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Type the code it shows</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  That proves the app and this account agree before we rely on
+                  it.
+                </p>
+              </div>
+            </li>
+          </ol>
 
           <AuthForm
             className="mt-6"
-            onSubmit={async (event) => {
-              event.preventDefault()
-              const outcome = await verify.run({ data: { code } })
+            onSubmit={async (values) => {
+              const problem = codeProblem(values.code)
+              setLocalProblem(problem)
+              if (problem) {
+                return
+              }
+              const outcome = await verify.run({ data: { code: values.code } })
               if (outcome.status !== "failed") {
                 window.location.assign(outcome.redirectTo)
               }
@@ -106,23 +152,19 @@ function MfaSetup() {
               <Alert variant="error">{failure.message}</Alert>
             ) : null}
 
-            <Field
-              error={failure?.field === "code" ? failure.message : undefined}
-              id="code"
-              label="Code from the app"
-            >
-              <CodeInput
-                aria-invalid={failure?.field === "code" ? true : undefined}
-                id="code"
-                onChange={(event) => setCode(event.target.value)}
-                required
-                value={code}
-              />
+            <Field error={codeError} id="code" label="Code from the app">
+              {(wiring) => (
+                <CodeInput
+                  {...wiring}
+                  name="code"
+                  onChange={() => setLocalProblem(undefined)}
+                />
+              )}
             </Field>
 
-            <Button disabled={verify.pending || code.length < 6} type="submit">
-              {verify.pending ? "Confirming…" : "Confirm and sign in"}
-            </Button>
+            <SubmitButton pending={verify.pending} pendingLabel="Confirming…">
+              Confirm and sign in
+            </SubmitButton>
           </AuthForm>
         </>
       ) : null}

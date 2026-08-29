@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
+import { Logo } from "@workspace/ui/components/logo"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 
 export const Route = createFileRoute("/")({ component: Landing })
@@ -9,8 +10,13 @@ function Landing() {
   return (
     <div className="min-h-svh bg-background text-foreground">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
-        <span className="font-semibold tracking-tight">Reme</span>
-        <ThemeToggle />
+        <Logo />
+        <div className="flex items-center gap-2">
+          <Link className={buttonVariants({ variant: "ghost" })} to="/sign-in">
+            Sign in
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
       <main className="mx-auto max-w-3xl px-6 py-16">
         <h1 className="max-w-2xl text-balance font-semibold text-4xl tracking-tight">

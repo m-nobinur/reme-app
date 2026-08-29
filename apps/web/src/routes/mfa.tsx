@@ -1,16 +1,18 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
-import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
 import { Field } from "@workspace/ui/components/field"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import { Logo } from "@workspace/ui/components/logo"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { useEffect, useState } from "react"
 import {
   confirmMfa,
   getPendingAuth,
   startMfaChallenge,
 } from "@/lib/auth/actions"
+import { CODE_LENGTH, codeProblem } from "@/lib/auth/code"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/mfa")({
@@ -25,7 +27,7 @@ export const Route = createFileRoute("/mfa")({
 })
 
 function MfaChallenge() {
-  const [code, setCode] = useState("")
+  const [localProblem, setLocalProblem] = useState<string | undefined>()
   const challenge = useSubmit(startMfaChallenge)
   const verify = useSubmit(confirmMfa)
 
@@ -44,11 +46,17 @@ function MfaChallenge() {
       : undefined
   const failure =
     verify.result?.status === "failed" ? verify.result.failure : undefined
+  const codeError =
+    localProblem ?? (failure?.field === "code" ? failure.message : undefined)
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
-      description="Open your authenticator app and enter the code it shows."
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
+      description="Open the authenticator app on your phone and enter the code it shows for Reme."
       footer={
         <Link
           className="text-foreground underline underline-offset-4"
@@ -69,9 +77,13 @@ function MfaChallenge() {
 
       {started ? (
         <AuthForm
-          onSubmit={async (event) => {
-            event.preventDefault()
-            const outcome = await verify.run({ data: { code } })
+          onSubmit={async (values) => {
+            const problem = codeProblem(values.code)
+            setLocalProblem(problem)
+            if (problem) {
+              return
+            }
+            const outcome = await verify.run({ data: { code: values.code } })
             if (outcome.status !== "failed") {
               window.location.assign(outcome.redirectTo)
             }
@@ -82,23 +94,24 @@ function MfaChallenge() {
           ) : null}
 
           <Field
-            error={failure?.field === "code" ? failure.message : undefined}
+            error={codeError}
+            hint="The code changes every thirty seconds. If it is refused, wait for the next one."
             id="code"
-            label="Six-digit code"
+            label={`${CODE_LENGTH}-digit code`}
           >
-            <CodeInput
-              aria-invalid={failure?.field === "code" ? true : undefined}
-              autoFocus
-              id="code"
-              onChange={(event) => setCode(event.target.value)}
-              required
-              value={code}
-            />
+            {(wiring) => (
+              <CodeInput
+                {...wiring}
+                autoFocus
+                name="code"
+                onChange={() => setLocalProblem(undefined)}
+              />
+            )}
           </Field>
 
-          <Button disabled={verify.pending || code.length < 6} type="submit">
-            {verify.pending ? "Checking…" : "Verify"}
-          </Button>
+          <SubmitButton pending={verify.pending} pendingLabel="Checking…">
+            Verify
+          </SubmitButton>
         </AuthForm>
       ) : null}
     </AuthCard>

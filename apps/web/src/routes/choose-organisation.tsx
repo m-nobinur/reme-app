@@ -1,8 +1,11 @@
+import { CaretRightIcon, SpinnerGapIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard } from "@workspace/ui/components/auth-card"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { Logo } from "@workspace/ui/components/logo"
+import { useState } from "react"
 import { chooseOrganization, getPendingAuth } from "@/lib/auth/actions"
 import { useSubmit } from "@/lib/auth/use-submit"
 
@@ -19,14 +22,27 @@ export const Route = createFileRoute("/choose-organisation")({
 
 function ChooseOrganisation() {
   const pending = Route.useLoaderData()
+  // Which row was clicked, so the spinner lands on the one being opened rather
+  // than on all of them at once.
+  const [opening, setOpening] = useState<string | null>(null)
   const { run, pending: busy, result } = useSubmit(chooseOrganization)
 
   const failure = result?.status === "failed" ? result.failure : undefined
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
-      description={`${pending.email} belongs to more than one. Pick the one to work in.`}
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
+      description={
+        <>
+          <span className="text-foreground">{pending.email}</span> belongs to
+          more than one. Pick the one to work in. You can switch later without
+          signing in again.
+        </>
+      }
       footer={
         <Link
           className="text-foreground underline underline-offset-4"
@@ -49,24 +65,36 @@ function ChooseOrganisation() {
           title="No organisations to show"
         />
       ) : (
-        <ul className="mt-2 flex flex-col gap-2">
+        <ul className="flex flex-col gap-2">
           {pending.organizations.map((org) => (
             <li key={org.id}>
               <Button
-                className="w-full justify-start"
-                disabled={busy}
+                aria-busy={opening === org.id || undefined}
+                aria-disabled={busy || undefined}
+                className="h-11 w-full justify-between aria-disabled:opacity-60"
                 onClick={async () => {
+                  if (busy) {
+                    return
+                  }
+                  setOpening(org.id)
                   const outcome = await run({
                     data: { organizationId: org.id },
                   })
                   if (outcome.status !== "failed") {
                     window.location.assign(outcome.redirectTo)
+                    return
                   }
+                  setOpening(null)
                 }}
                 type="button"
                 variant="outline"
               >
                 {org.name}
+                {opening === org.id ? (
+                  <SpinnerGapIcon aria-hidden className="animate-spin" />
+                ) : (
+                  <CaretRightIcon aria-hidden />
+                )}
               </Button>
             </li>
           ))}

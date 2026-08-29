@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
-import { Button } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
+import { Logo } from "@workspace/ui/components/logo"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { useState } from "react"
 import { requestPasswordReset } from "@/lib/auth/actions"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -12,7 +13,9 @@ export const Route = createFileRoute("/forgot-password")({
 })
 
 function ForgotPassword() {
-  const [email, setEmail] = useState("")
+  // Only so the confirmation can name the address back. It is set on submit
+  // rather than on every keystroke, because the field itself is uncontrolled.
+  const [sentTo, setSentTo] = useState("")
   const { run, pending, result } = useSubmit(requestPasswordReset)
 
   const sent = result && "sent" in result
@@ -20,11 +23,15 @@ function ForgotPassword() {
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
       description={
         sent
           ? undefined
-          : "We will email you a link to set a new one. The link is good for fifteen minutes."
+          : "We will email you a link to set a new one. The link is good for fifteen minutes and works once."
       }
       footer={
         <Link
@@ -41,15 +48,21 @@ function ForgotPassword() {
         // WorkOS answers 404 for an unknown address and the server function
         // swallows it, so this page cannot be used to find out who is a
         // customer.
-        <Alert variant="success">
-          If there is an account for {email}, a reset link is on its way. It
-          expires in fifteen minutes.
-        </Alert>
+        <div className="flex flex-col gap-4">
+          <Alert variant="success">
+            If there is an account for {sentTo}, a reset link is on its way. It
+            expires in fifteen minutes.
+          </Alert>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Nothing arrived? Check the spam folder, then try again in a minute.
+            The link opens a page here where you set the new password.
+          </p>
+        </div>
       ) : (
         <AuthForm
-          onSubmit={async (event) => {
-            event.preventDefault()
-            await run({ data: { email } })
+          onSubmit={async (values) => {
+            setSentTo(values.email)
+            await run({ data: { email: values.email } })
           }}
         >
           {failure ? <Alert variant="error">{failure.message}</Alert> : null}
@@ -57,17 +70,19 @@ function ForgotPassword() {
           <Field
             autoComplete="email"
             autoFocus
+            hint="The address you sign in with."
             id="email"
+            inputMode="email"
             label="Email"
-            onChange={(event) => setEmail(event.target.value)}
+            name="email"
+            placeholder="name@yourbusiness.com"
             required
             type="email"
-            value={email}
           />
 
-          <Button disabled={pending} type="submit">
-            {pending ? "Sending…" : "Email me a reset link"}
-          </Button>
+          <SubmitButton pending={pending} pendingLabel="Sending…">
+            Email me a reset link
+          </SubmitButton>
         </AuthForm>
       )}
     </AuthCard>

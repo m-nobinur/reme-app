@@ -2,6 +2,13 @@ import { Input } from "@workspace/ui/components/input"
 import { cn } from "@workspace/ui/lib/utils"
 import type { ComponentProps, ReactNode } from "react"
 
+/** What a caller-supplied control has to carry for the label and error to reach it. */
+type FieldWiring = {
+  id: string
+  "aria-describedby": string | undefined
+  "aria-invalid": true | undefined
+}
+
 /**
  * A labelled input with its hint and its error, wired together.
  *
@@ -19,33 +26,40 @@ function Field({
   className,
   children,
   ...props
-}: Omit<ComponentProps<typeof Input>, "id"> & {
+  // `children` is dropped from the input's own props rather than narrowed: an
+  // intersection with `ReactNode` would leave the render-prop branch below
+  // unassignable.
+}: Omit<ComponentProps<typeof Input>, "id" | "children"> & {
   label: string
   hint?: ReactNode
   error?: string
   id: string
-  /** Rendered in place of the default input, for a control this file does not own. */
-  children?: ReactNode
+  /**
+   * Rendered in place of the default input, for a control this file does not
+   * own. Given a function, it is handed the wiring to spread on whatever it
+   * renders — which is the only way a caller gets the describedby ids without
+   * rebuilding `${id}-hint` from the outside and drifting from it.
+   */
+  children?: ReactNode | ((wiring: FieldWiring) => ReactNode)
 }) {
   const hintId = `${id}-hint`
   const errorId = `${id}-error`
   const describedBy =
     [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") ||
     undefined
+  const wiring: FieldWiring = {
+    id,
+    "aria-describedby": describedBy,
+    "aria-invalid": error ? true : undefined,
+  }
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)} data-slot="field">
       <label className="font-medium text-sm" htmlFor={id}>
         {label}
       </label>
-      {children ?? (
-        <Input
-          aria-describedby={describedBy}
-          aria-invalid={error ? true : undefined}
-          id={id}
-          {...props}
-        />
-      )}
+      {typeof children === "function" ? children(wiring) : children}
+      {children ? null : <Input {...wiring} {...props} />}
       {hint ? (
         <p className="text-muted-foreground text-xs" id={hintId}>
           {hint}
@@ -60,4 +74,5 @@ function Field({
   )
 }
 
+export type { FieldWiring }
 export { Field }

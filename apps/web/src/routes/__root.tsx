@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router"
+import { formGuardScript } from "@workspace/ui/components/auth-card"
 import { themeInitScript } from "@workspace/ui/components/theme-toggle"
 
 import appCss from "@workspace/ui/globals.css?url"
@@ -42,6 +43,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed literal from this repo, with nothing interpolated into it
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
+        {/* Also inline and blocking, and for the same class of reason: it has
+            to be listening before the body is parsed, or a submit can happen in
+            front of the guard that exists to catch it. See auth-card.tsx. */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed literal from this repo, with nothing interpolated into it
+          dangerouslySetInnerHTML={{ __html: formGuardScript }}
         />
       </head>
       <body>

@@ -4,12 +4,15 @@ import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
 import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
 import { Field } from "@workspace/ui/components/field"
+import { Logo } from "@workspace/ui/components/logo"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { useState } from "react"
 import {
   getPendingAuth,
   resendVerification,
   verifyEmail,
 } from "@/lib/auth/actions"
+import { CODE_LENGTH, codeProblem } from "@/lib/auth/code"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/verify-email")({
@@ -27,18 +30,30 @@ export const Route = createFileRoute("/verify-email")({
 
 function VerifyEmail() {
   const pending = Route.useLoaderData()
-  const [code, setCode] = useState("")
+  const [localProblem, setLocalProblem] = useState<string | undefined>()
   const verify = useSubmit(verifyEmail)
   const resend = useSubmit(resendVerification)
 
   const failure =
     verify.result?.status === "failed" ? verify.result.failure : undefined
   const resendFailure = resend.result?.failure
+  const codeError =
+    localProblem ?? (failure?.field === "code" ? failure.message : undefined)
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
-      description={`We sent a six-digit code to ${pending.email}. It expires shortly.`}
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
+      description={
+        <>
+          We sent a {CODE_LENGTH}-digit code to{" "}
+          <span className="text-foreground">{pending.email}</span>. Enter it
+          here to finish setting up your account.
+        </>
+      }
       footer={
         <Link
           className="text-foreground underline underline-offset-4"
@@ -50,9 +65,13 @@ function VerifyEmail() {
       title="Check your email"
     >
       <AuthForm
-        onSubmit={async (event) => {
-          event.preventDefault()
-          const outcome = await verify.run({ data: { code } })
+        onSubmit={async (values) => {
+          const problem = codeProblem(values.code)
+          setLocalProblem(problem)
+          if (problem) {
+            return
+          }
+          const outcome = await verify.run({ data: { code: values.code } })
           if (outcome.status !== "failed") {
             window.location.assign(outcome.redirectTo)
           }
@@ -71,25 +90,27 @@ function VerifyEmail() {
         ) : null}
 
         <Field
-          error={failure?.field === "code" ? failure.message : undefined}
+          error={codeError}
+          hint="It is in the email we just sent, and it expires shortly. Codes are digits only."
           id="code"
-          label="Six-digit code"
+          label={`${CODE_LENGTH}-digit code`}
         >
-          <CodeInput
-            aria-invalid={failure?.field === "code" ? true : undefined}
-            autoFocus
-            id="code"
-            onChange={(event) => setCode(event.target.value)}
-            required
-            value={code}
-          />
+          {(wiring) => (
+            <CodeInput
+              {...wiring}
+              autoFocus
+              name="code"
+              onChange={() => setLocalProblem(undefined)}
+            />
+          )}
         </Field>
 
-        <Button disabled={verify.pending || code.length < 6} type="submit">
-          {verify.pending ? "Checking…" : "Verify email"}
-        </Button>
+        <SubmitButton pending={verify.pending} pendingLabel="Checking…">
+          Verify email
+        </SubmitButton>
 
         <Button
+          aria-busy={resend.pending || undefined}
           disabled={resend.pending}
           onClick={() => resend.run(undefined)}
           type="button"
@@ -97,6 +118,11 @@ function VerifyEmail() {
         >
           {resend.pending ? "Sending…" : "Send a new code"}
         </Button>
+
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Once this is verified you go straight into your workspace. Nothing is
+          sent to any of your customers.
+        </p>
       </AuthForm>
     </AuthCard>
   )
