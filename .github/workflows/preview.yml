@@ -14,6 +14,24 @@ name: preview
 # account's `*.workers.dev` subdomain, which an unrelated project shares. Every
 # alias therefore carries the worker name and nothing here touches a resource it
 # did not create.
+#
+# The smoke runs here, against the preview, which is what C6 asked for and what
+# was true only after merge until now.
+#
+# The trigger stays `pull_request` and specifically not `pull_request_target`.
+# That is the whole of the fork answer: GitHub withholds repository secrets from
+# a workflow triggered by `pull_request` on a fork, so a fork PR gets no
+# credentials at all and fails on the Credentials step below rather than handing
+# a WorkOS key to code nobody has read. `pull_request_target` would run with
+# secrets against a checkout the contributor controls, which is the shape that
+# leaks. Adding `WORKOS_API_KEY` to this workflow therefore widens nothing: the
+# people who can open a branch PR on this private repository are the people who
+# already hold the key.
+#
+# What changes that: the first outside contributor, or this repository going
+# public. From then on a fork PR gets no preview and no smoke, so the gate has
+# to be re-run by a maintainer against a reviewed commit rather than granted to
+# the fork. Decide that when the first fork PR arrives, not before.
 
 on:
   pull_request:
@@ -186,6 +204,39 @@ jobs:
           Commit ${{ github.sha }}.
           EOF
           )"
+
+      # After the comment, so a red smoke still leaves the URL on the PR to look
+      # at. Only chromium: this suite drives one browser and installing three
+      # costs the job a minute it does not get back.
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      # The owner path against this PR's own preview. Ten tests: a real sign-in
+      # through the form on the preview hostname, which the wildcard redirect URI
+      # exists for, then the dashboard, the staff directory, the chat replay, the
+      # approvals inbox and four page-grain axe scans.
+      #
+      # It creates one throwaway WorkOS user per run on a per-run address and
+      # asserts its own deletion, so two open pull requests running at once do
+      # not collide: the addresses differ, the sign-in rate limiter is keyed on
+      # the address, and the reaper only removes accounts older than an hour.
+      # Everything it asserts is a read, which is what makes it safe against the
+      # staging database two previews share.
+      #
+      # `WORKOS_API_KEY` is scoped to this step rather than the job, so it is not
+      # in the environment of the build, the migration or the uploads. It fails
+      # rather than skips: a gate that quietly does not run is the defect this
+      # step exists to close.
+      - name: Smoke
+        env:
+          WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+          E2E_BASE_URL: ${{ steps.urls.outputs.web }}
+        run: |
+          if [ -z "${WORKOS_API_KEY:-}" ]; then
+            echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"
+            echo "Set it from the staging environment: gh secret set WORKOS_API_KEY"
+            exit 1
+          fi
+          pnpm e2e
 
   teardown:
     if: github.event.action == 'closed'
