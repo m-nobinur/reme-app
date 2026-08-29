@@ -79,7 +79,7 @@ function SignUp() {
 
         <Field
           autoComplete="organization"
-          hint="This names the workspace Reme sets up for you, and it is how the assistant refers to your business. You can change it later."
+          hint="This names your workspace, and it is what the assistant calls your business. You can change it later."
           id="business-name"
           label="Business name"
           maxLength={120}
@@ -107,7 +107,7 @@ function SignUp() {
           // Both halves of the policy this environment enforces, measured
           // rather than assumed: see packages/ui/src/lib/password-policy.ts.
           // There are no character-class rules, so none are claimed here.
-          hint={`At least ${PASSWORD_POLICY.minLength} characters, and not something easy to guess. A few unrelated words beat a short password with symbols in it.`}
+          hint={`At least ${PASSWORD_POLICY.minLength} characters. A few unrelated words beat symbols.`}
           id="password"
           label="Password"
           minLength={PASSWORD_POLICY.minLength}

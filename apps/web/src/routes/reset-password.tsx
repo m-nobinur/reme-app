@@ -121,7 +121,7 @@ function ResetPassword() {
           autoComplete="new-password"
           autoFocus
           error={failure?.field === "newPassword" ? failure.message : undefined}
-          hint={`At least ${PASSWORD_POLICY.minLength} characters, and not something easy to guess. A few unrelated words beat a short password with symbols in it.`}
+          hint={`At least ${PASSWORD_POLICY.minLength} characters. A few unrelated words beat symbols.`}
           id="password"
           label="New password"
           minLength={PASSWORD_POLICY.minLength}

@@ -57,13 +57,20 @@ function AuthCard({
       )}
       {...props}
     >
-      {/* The one place in the product a person can be before they have an
-          account, so it is the one place the theme control has to exist too. */}
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-
-      {brand}
+      {/* Landmarks rather than plain boxes, and it is not decoration: axe's
+          `region` rule fails any content outside one, and the wordmark, the
+          theme control and the footer line all sat outside `main`. Every page
+          in this flow failed it in both themes until this was three elements
+          instead of one. The toggle is positioned against the outer box, so
+          nesting it here changes the markup and not the layout. */}
+      <header className="flex w-full max-w-sm justify-center">
+        {brand}
+        {/* The one place in the product a person can be before they have an
+            account, so it is the one place the theme control has to exist too. */}
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
+      </header>
 
       <main className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
         <h1 className="font-semibold text-xl tracking-tight">{title}</h1>
@@ -76,7 +83,7 @@ function AuthCard({
       </main>
 
       {footer ? (
-        <p className="text-muted-foreground text-sm">{footer}</p>
+        <footer className="text-muted-foreground text-sm">{footer}</footer>
       ) : null}
     </div>
   )
