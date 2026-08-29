@@ -22,7 +22,7 @@
     "size": "turbo size --force",
     "check:secrets": "turbo check:secrets --force",
     "lint": "node scripts/lint/colour-rule.mjs && node scripts/lint/icon-library.mjs && biome check --error-on-warnings",
-    "lint:ci": "node scripts/lint/colour-rule.mjs && biome ci --error-on-warnings",
+    "lint:ci": "node scripts/lint/colour-rule.mjs && node scripts/lint/icon-library.mjs && biome ci --error-on-warnings",
     "lint:fix": "biome check --write --unsafe",
     "lint:classes": "biome check --write --unsafe --only=nursery/useSortedClasses",
     "format": "biome format --write"
