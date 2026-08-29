@@ -66,7 +66,15 @@ if (
   fail("canonical() is order-dependent, so no hash below can be trusted")
 }
 
-for (const name of readdirSync(dir("./fixtures")).sort()) {
+// The floor. With no scenarios yet, replaying the fixtures is all this gate
+// does, so an empty `fixtures/` would make `pnpm eval` a green step that ran
+// nothing. Same rule as scripts/floor.mjs and the secret scan.
+const fixtureNames = readdirSync(dir("./fixtures")).sort()
+if (fixtureNames.length === 0) {
+  fail("evals/fixtures holds no fixtures, so this run checked nothing")
+}
+
+for (const name of fixtureNames) {
   const fixture = loadFixture(dir(`./fixtures/${name}`))
   const first = replay(fixture)
   const second = replay(fixture)
