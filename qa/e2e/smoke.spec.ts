@@ -5,70 +5,34 @@ import { visit } from "./visit"
 /**
  * The owner smoke path, signed in as the session `auth.setup.ts` sealed.
  *
- * Every screen here reads the golden fixture organisations through the MSW
- * mock (C5), so `brightclean` is what a fresh session sees and the expected
- * shapes below are that organisation's, written out rather than derived. They
- * are the story's own wording: Dana Reyes at the root, Maya beneath her, four
- * siblings under Maya, Priya and Sam under Daniel, Sam paused. A test that
- * recomputes the tree from the same data the page reads agrees with the page
- * whatever either of them does.
+ * Every screen here reads `apps/api` under that session. It used to read the
+ * golden fixtures through a mock, and the assertions were `brightclean`'s
+ * reporting lines: Dana Reyes at the root, Maya beneath her. That is the whole
+ * point of what changed. The suite's account is created for the run and belongs
+ * to no organisation, so what it must see now is the empty state on every
+ * screen and no trace of anyone else's business.
+ *
+ * The empty case is not a weaker test than the fixture one, it is a different
+ * one. A page showing a business the signed-in person has nothing to do with
+ * looks identical to a cross-tenant leak, and these are the assertions that
+ * fail on it.
  */
-
-type TreeNode = { name: string; badge: string; reports: TreeNode[] }
-
-/** `brightclean`'s reporting lines, as the org tree is required to draw them. */
-const EXPECTED_TREE: TreeNode[] = [
-  {
-    name: "Dana Reyes",
-    badge: "Active",
-    reports: [
-      {
-        name: "Maya",
-        badge: "Active",
-        reports: [
-          { name: "Alex", badge: "Active", reports: [] },
-          { name: "Nora", badge: "Active", reports: [] },
-          { name: "Jamie", badge: "Active", reports: [] },
-          {
-            name: "Daniel",
-            badge: "Active",
-            reports: [
-              { name: "Priya", badge: "Active", reports: [] },
-              { name: "Sam", badge: "Paused", reports: [] },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-]
 
 /**
- * The rendered tree as data.
- *
- * Read structurally rather than as text, because the failure this exists to
- * catch is a correct set of names hung off the wrong parents, and every
- * text-level assertion passes on that.
+ * Names that were on these screens yesterday and must not be on them under a
+ * real session. Fictional fixture businesses, so nothing here is a secret; the
+ * value is that each one is a string only the mock could produce.
  */
-function readTree(page: Page): Promise<TreeNode[]> {
-  return page
-    .locator('ul[aria-label="Reporting lines"]')
-    .evaluate((root: Element) => {
-      const read = (list: Element): TreeNode[] =>
-        [...list.children]
-          .filter((child) => child.tagName === "LI")
-          .map((item) => {
-            const card = item.querySelector(":scope > div")
-            const nested = item.querySelector(":scope > ul")
-            return {
-              name: card?.querySelector(":scope > span")?.textContent ?? "",
-              badge:
-                card?.querySelector('[data-slot="badge"]')?.textContent ?? "",
-              reports: nested ? read(nested) : [],
-            }
-          })
-      return read(root)
-    })
+const FIXTURE_CONTENT = ["Brightclean", "Mop & Bucket", "Dana Reyes", "Maya"]
+
+async function expectNoFixtureContent(page: Page) {
+  const body = await page.locator("body").innerText()
+  for (const name of FIXTURE_CONTENT) {
+    expect(
+      body,
+      `${name} reached a session that has no claim on it`
+    ).not.toContain(name)
+  }
 }
 
 /** The number on one dashboard tile, found by the label above it. */
@@ -93,25 +57,41 @@ test("the dashboard counts agree with the staff directory", async ({
   for (const count of [staffCount, waiting, pipeline]) {
     expect(Number.isInteger(count)).toBe(true)
   }
+  // This account has no organisation, so every tile is a zero. A number here is
+  // either a leak or a fixture, and both are defects.
+  expect([staffCount, waiting, pipeline]).toEqual([0, 0, 0])
+  await expectNoFixtureContent(page)
 
   // The invariant, not a copy of the number: the tile says "active", so it has
   // to be the count of people the directory shows as active. Two screens, one
-  // server, and a filter that only one of them implements.
+  // server, and a filter that only one of them implements. The directory draws
+  // no table at all when it is empty, which is the same answer as zero rows.
   await visit(page, "/app/staff")
   const active = page
     .getByRole("table")
     .getByRole("row")
     .filter({ has: page.getByText("Active", { exact: true }) })
   await expect(active).toHaveCount(staffCount)
-  expect(staffCount).toBeGreaterThan(0)
 })
 
-test("the org tree draws the reporting lines", async ({ page }) => {
+test("the staff directory tells a new owner it is empty", async ({ page }) => {
   await visit(page, "/app/staff")
   await expect(
-    page.getByRole("heading", { name: "Reporting lines" })
+    page.getByRole("heading", { name: "Staff", exact: true, level: 1 })
   ).toBeVisible()
-  expect(await readTree(page)).toEqual(EXPECTED_TREE)
+
+  // The empty state, and it has to be visible rather than merely present: a
+  // page that rendered nothing at all would satisfy every absence below.
+  await expect(page.getByText("No staff yet")).toBeVisible()
+  await expect(page.getByRole("table")).toHaveCount(0)
+  await expect(
+    page.getByRole("heading", { name: "Reporting lines" })
+  ).toHaveCount(0)
+  await expectNoFixtureContent(page)
+
+  // The switcher names the state rather than inventing an organisation, which
+  // is the one place on the shell where a fabricated name would look normal.
+  await expect(page.getByRole("combobox")).toContainText("No organisation")
 })
 
 test("the chat surface replays the recorded conversation", async ({ page }) => {
@@ -136,9 +116,7 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   await expect(approval.getByRole("button", { name: "Decline" })).toBeVisible()
 })
 
-test("the approvals inbox lists decisions with both answers in reach", async ({
-  page,
-}) => {
+test("the approvals inbox has nothing to decide", async ({ page }) => {
   await visit(page, "/app/approvals")
   // Level 1 and exact, because the page also carries a screen-reader-only h2
   // "Approvals waiting on you" and Playwright matches accessible names by
@@ -148,23 +126,15 @@ test("the approvals inbox lists decisions with both answers in reach", async ({
     page.getByRole("heading", { name: "Approvals", exact: true, level: 1 })
   ).toBeVisible()
 
-  const cards = page.getByRole("listitem").filter({ hasText: "Approve" })
-  await expect(cards.first()).toBeVisible()
-  const waiting = await cards.count()
-  expect(waiting).toBeGreaterThan(0)
-
-  // One tap each, neither behind a menu: the §7.3 shape the card exists for.
+  // No endpoint publishes approvals yet, so the honest screen is the empty one.
+  // An approval card here would be a decision this owner was never asked for,
+  // which is the §7.3 failure worth failing on rather than the absence of one.
+  await expect(page.getByText("Nothing waiting on you")).toBeVisible()
   await expect(
-    cards.first().getByRole("button", { name: "Approve" })
-  ).toBeVisible()
-  await expect(
-    cards.first().getByRole("button", { name: "Decline" })
-  ).toBeVisible()
-
-  // The filter is the one interactive thing on this page that changes what is
-  // listed, and an empty result has to say so rather than render nothing.
-  await page.getByLabel("Filter approvals").fill("zzz-no-such-approval")
-  await expect(page.getByText("No matches")).toBeVisible()
+    page.getByRole("listitem").filter({ hasText: "Approve" })
+  ).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0)
+  await expectNoFixtureContent(page)
 })
 
 /**
