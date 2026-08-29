@@ -9,8 +9,8 @@
     "db:migrate": "node scripts/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir test",
-    "test:tenancy": "vitest run --dir tenancy",
-    "test:seed": "vitest run --dir fixtures"
+    "test:tenancy": "node ../../scripts/floor.mjs db-tenancy -- vitest run --dir tenancy",
+    "test:seed": "node ../../scripts/floor.mjs db-seed -- vitest run --dir fixtures"
   },
   "dependencies": {
     "@workspace/config": "workspace:*",

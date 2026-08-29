@@ -18,7 +18,11 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      // Hashed, because it changes what the suite runs. `apps/api` passes 15
+      // cases without a database and 23 with one; without this both hash the
+      // same and a run that had one hands its verdict to a run that does not.
+      "env": ["DATABASE_URL"]
     },
     // Not cached, unlike every other test task. This one compares screenshots
     // against per-platform baselines, so its result depends on the machine it
