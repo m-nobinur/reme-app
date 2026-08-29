@@ -50,5 +50,27 @@
       "binding": "HYPERDRIVE",
       "id": "51fda187d78445c6852dbc334d9ac7ed"
     }
-  ]
+  ],
+  // Production. Everything above is staging, which is what the default
+  // environment has always been; naming that is a later cleanup.
+  //
+  // Bindings do not inherit, so the Hyperdrive config is declared again and
+  // points at `reme-prod-postgres`, which fronts the `reme-prod` Neon project
+  // rather than a branch of the staging one (ADR-030's sibling reasoning: a
+  // branch would have arrived holding the golden fixtures). Placement,
+  // compatibility flags and observability do inherit.
+  "env": {
+    "production": {
+      "name": "reme-api-production",
+      // Off, unlike staging: preview aliases exist for the per-PR flow, and a
+      // production Worker has no per-PR flow. Fewer URLs answering as prod.
+      "preview_urls": false,
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "42db5d04bb0e4249b3e5a88e62549218"
+        }
+      ]
+    }
+  }
 }

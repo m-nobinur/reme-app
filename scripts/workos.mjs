@@ -51,6 +51,11 @@ const environments = {
       // `probe-reme-web...` reaches the AuthKit bootstrap, `probe-reme-nope...`
       // is refused with `redirect-uri-invalid`.
       "https://*-reme-web.lifeos.workers.dev/api/auth/callback",
+      // Production, on the one hostname every business shares (ADR-030). It
+      // sits on the staging environment because production runs against the
+      // staging WorkOS environment until launch (open item 13), so this list is
+      // every origin that signs anyone in, across all three environments.
+      "https://preview.remeai.co.uk/api/auth/callback",
     ],
     // No preview entry, deliberately. A CORS origin only matters when a browser
     // calls api.workos.com directly, and nothing does: sign-in is DR-4a, our own
@@ -61,6 +66,7 @@ const environments = {
     corsOrigins: [
       "http://localhost:3000",
       "https://reme-web.lifeos.workers.dev",
+      "https://preview.remeai.co.uk",
     ],
     homepageUrl: "http://localhost:3000",
     signInEndpoint: "http://localhost:3000/sign-in",

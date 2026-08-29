@@ -64,6 +64,27 @@ const environments = {
     secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
     workers: ["reme-web", "reme-api"],
   },
+  /**
+   * Its own Neon project rather than a branch of the staging one, and that is
+   * the whole point: a branch inherits its parent's rows, so a production
+   * database branched from staging arrives holding the golden fixture orgs.
+   * Measured, not theorised. A separate project starts empty, takes the
+   * migrations from the journal, and cannot be reached by a mistyped command
+   * aimed at staging. The free plan carries both.
+   *
+   * The secrets are the staging WorkOS environment's, by decision: there are no
+   * customers before launch and the production environment's API key cannot be
+   * minted from any surface. Open item 13 lists what that defers.
+   */
+  prod: {
+    neonProject: "super-brook-02913792",
+    neonBranch: "main",
+    neonOwner: "neondb_owner",
+    hyperdrive: "reme-prod-postgres",
+    kv: "reme-prod-web-cache",
+    secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
+    workers: ["reme-web-production", "reme-api-production"],
+  },
 } as const
 
 const name = (process.argv[2] ?? "staging") as keyof typeof environments
