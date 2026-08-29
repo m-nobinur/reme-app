@@ -382,11 +382,26 @@ for (const worker of config.workers) {
 
 console.log("")
 note(`${name} resources are in place. Deploy with:`)
-note("pnpm --filter api exec wrangler deploy")
-note("pnpm --filter web build")
-note(
-  "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
-)
+// The commands differ per environment, and the staging forms aimed at
+// production are silent: they deploy the staging Worker and the operator reads
+// a green run. `CLOUDFLARE_ENV` is read by the vite plugin at build time, so
+// the web build has to be repeated for whichever environment comes next.
+if (name === "prod") {
+  note("pnpm --filter api exec wrangler deploy --env production")
+  note("CLOUDFLARE_ENV=production pnpm --filter web build")
+  note(
+    "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
+  )
+  note("")
+  note("That build is flattened to production. Run `pnpm --filter web build`")
+  note("again before deploying the default environment.")
+} else {
+  note("pnpm --filter api exec wrangler deploy")
+  note("pnpm --filter web build")
+  note(
+    "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
+  )
+}
 note("")
 note("A Worker that reads `not deployed` above has no secrets yet. Deploy it,")
 note("then run this again: the secrets are set on the run after the first one.")

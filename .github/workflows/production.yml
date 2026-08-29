@@ -3,10 +3,11 @@ name: production
 # Production deploys on a tag, and only on a tag.
 #
 # "Gated" has to mean something the Free plan can do. Environments with required
-# reviewers need a paid plan, so the gate is that nothing here runs on a push to
-# a branch: a merge to `main` reaches staging and cannot reach production. A
-# release is `git tag v0.1.0 && git push --tags`, which is an act with a name on
-# it, and `workflow_dispatch` is the same run for a redeploy by hand.
+# reviewers need a paid plan, so the gate is the `Tag refs only` step below: a
+# merge to `main` reaches staging, and neither a branch push nor a
+# `workflow_dispatch` aimed at a branch gets past that step. A release is
+# `git tag v0.1.0 && git push --tags`, which is an act with a name on it, and a
+# dispatch selecting a tag is the same run for a redeploy by hand.
 #
 # Every step below was run by hand against the real environment on 2026-08-30
 # before it was written down, in this order, including the rollback. This file
@@ -48,6 +49,15 @@ jobs:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
     steps:
+      # A dispatch can select any branch, and this job would then run that
+      # branch's migrations against the production Neon project. Fails rather
+      # than skips, so an operator who picked a branch by mistake reads why.
+      - name: Tag refs only
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::production runs on a tag. Select one, or push v<version>."
+          exit 1
+
       - name: Credentials
         run: |
           missing=
