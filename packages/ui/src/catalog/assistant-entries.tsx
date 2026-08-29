@@ -26,7 +26,9 @@ import { useState } from "react"
  * every assistant component reads a thread runtime, and one fixture thread per
  * entry is what puts each of them in the context it actually renders in.
  *
- * Everything here is invented. Brightclean is a fixture organisation.
+ * Everything here is invented, and it names no organisation: a tool call in a
+ * catalog carries the same arguments a real one does, and the tenant is never
+ * one of them (R3).
  */
 
 /** A thread over fixed messages. Nothing sends; the composer is disabled. */
@@ -78,8 +80,7 @@ const ask = (text: string): ThreadMessageLike => ({
 
 const PUBLISH_TARGET = {
   changes: 3,
-  domain: "brightclean.mypareme.app",
-  org: "brightclean",
+  domain: "example.com",
   revision: "rev_2f41c9",
 }
 
@@ -103,7 +104,7 @@ const toolCall = (state: keyof typeof TOOL_STATES): ThreadMessageLike => ({
   content: [
     { text: `The ${state} call:`, type: "text" },
     {
-      args: { org: "brightclean", window: "last_7_days" },
+      args: { window: "last_7_days" },
       result:
         state === "complete"
           ? { assignmentsClosed: 3, enquiriesAnswered: 11 }
@@ -175,14 +176,14 @@ const TOOL_GROUP: ThreadMessageLike[] = [
   {
     content: [
       {
-        args: { org: "brightclean" },
+        args: {},
         result: { assignmentsClosed: 3 },
         toolCallId: "call_a",
         toolName: "read_week",
         type: "tool-call",
       },
       {
-        args: { org: "brightclean" },
+        args: {},
         result: { enquiries: 11 },
         toolCallId: "call_b",
         toolName: "read_enquiries",
@@ -236,7 +237,7 @@ const CONVERSATION: ThreadMessageLike[] = [
         type: "reasoning",
       },
       {
-        args: { org: "brightclean", window: "last_7_days" },
+        args: { window: "last_7_days" },
         result: { assignmentsClosed: 3, enquiriesAnswered: 11 },
         toolCallId: "call_read_week",
         toolName: "read_week",

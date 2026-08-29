@@ -1,4 +1,4 @@
-{"fixture":"cos-chat","turns":["opening","approved","denied"],"sessions":{"approve":["opening","approved"],"deny":["opening","denied"]},"hash":"sha256:d856294143b1d6da907ff1c3217a5f88e9ce1f7085b05604bc4b8eab99d0b6a8"}
+{"fixture":"cos-chat","turns":["opening","approved","denied"],"sessions":{"approve":["opening","approved"],"deny":["opening","denied"]},"hash":"sha256:75461c82023724e3ead33cd3542c10b896599e6425786ffdc71655a04ade6044"}
 {"turn":"opening","chunk":{"type":"start"}}
 {"turn":"opening","chunk":{"type":"start-step"}}
 {"turn":"opening","chunk":{"type":"reasoning-start","id":"reasoning_week"}}
@@ -37,15 +37,27 @@
 {"turn":"opening","chunk":{"type":"reasoning-delta","id":"reasoning_week","delta":"summary."}}
 {"turn":"opening","chunk":{"type":"reasoning-end","id":"reasoning_week"}}
 {"turn":"opening","chunk":{"type":"tool-input-start","toolCallId":"call_read_week","toolName":"read_week"}}
-{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_read_week","toolName":"read_week","input":{"org":"brightclean","window":"last_7_days"}}}
+{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_read_week","toolName":"read_week","input":{"window":"last_7_days"}}}
 {"turn":"opening","chunk":{"type":"tool-output-available","toolCallId":"call_read_week","output":{"assignmentsClosed":3,"enquiriesAnswered":11,"blocked":["site revision rev_2f41c9 awaiting approval"]}}}
 {"turn":"opening","chunk":{"type":"text-start","id":"text_report"}}
-{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Here "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"This "}}
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"is "}}
-{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"the "}}
-{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"week "}}
-{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"for "}}
-{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"**Brightclean**.\n"}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"a "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"preview "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"of "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"how "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"I "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"report, "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"on "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"made-up "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"numbers. "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"I "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"am "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"not "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"reading "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"your "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"business "}}
+{"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"yet.\n"}}
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"\n"}}
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"- "}}
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Three "}}
@@ -99,16 +111,16 @@
 {"turn":"opening","chunk":{"type":"text-delta","id":"text_report","delta":"Tuesday."}}
 {"turn":"opening","chunk":{"type":"text-end","id":"text_report"}}
 {"turn":"opening","chunk":{"type":"tool-input-start","toolCallId":"call_publish_revision","toolName":"publish_revision"}}
-{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_publish_revision","toolName":"publish_revision","input":{"org":"brightclean","revision":"rev_2f41c9","domain":"brightclean.mypareme.app","changes":3}}}
+{"turn":"opening","chunk":{"type":"tool-input-available","toolCallId":"call_publish_revision","toolName":"publish_revision","input":{"revision":"rev_2f41c9","domain":"example.com","changes":3}}}
 {"turn":"opening","chunk":{"type":"tool-approval-request","approvalId":"approval_publish_revision","toolCallId":"call_publish_revision","reason":"Publishing a revision changes what visitors see."}}
 {"turn":"opening","chunk":{"type":"finish-step"}}
 {"turn":"opening","chunk":{"type":"finish"}}
 {"turn":"approved","chunk":{"type":"start"}}
 {"turn":"approved","chunk":{"type":"start-step"}}
-{"turn":"approved","chunk":{"type":"tool-output-available","toolCallId":"call_publish_revision","output":{"published":true,"revision":"rev_2f41c9","url":"https://brightclean.mypareme.app"}}}
+{"turn":"approved","chunk":{"type":"tool-output-available","toolCallId":"call_publish_revision","output":{"published":true,"revision":"rev_2f41c9","url":"https://example.com"}}}
 {"turn":"approved","chunk":{"type":"text-start","id":"text_published"}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"Published. "}}
-{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"brightclean.mypareme.app "}}
+{"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"example.com "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"is "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"serving "}}
 {"turn":"approved","chunk":{"type":"text-delta","id":"text_published","delta":"revision "}}

@@ -7,6 +7,12 @@
   // every cached task on a variable none of them read. Declared here because
   // `noUndeclaredEnvVars` reads this file and lint fails on warnings.
   "globalPassThroughEnv": ["LANGFUSE_SECRET_KEY"],
+  // The floor gate is part of every blocking suite's verdict, and it lives
+  // outside the packages that run it. Without these two in the hash, raising a
+  // floor leaves `test` cached: turbo replays the old pass and prints the old
+  // floor. CI restores that cache across runs, so the gate would ratchet on
+  // paper only.
+  "globalDependencies": ["scripts/floor.mjs", "scripts/floors.json"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -18,7 +24,19 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      // Declared so turbo passes it through under strict `envMode`. Without
+      // this, `api#test` never saw a DATABASE_URL at all and its 8 live cases
+      // skipped under `pnpm test` even on a developer machine that had a
+      // database. It is hashed as well, so the 15-case run and the 23-case run
+      // cache separately.
+      //
+      // Consequence: `.githooks/pre-push` runs `pnpm test` with
+      // `TURBO_FORCE=true`, so a developer with DATABASE_URL exported at an
+      // unmigrated or unseeded database now fails the push where it used to
+      // skip clean. Intended. A suite failing against a broken database is
+      // information.
+      "env": ["DATABASE_URL"]
     },
     // Not cached, unlike every other test task. This one compares screenshots
     // against per-platform baselines, so its result depends on the machine it

@@ -1,0 +1,187 @@
+name: production
+
+# Production deploys on a tag, and only on a tag.
+#
+# "Gated" has to mean something the Free plan can do. Environments with required
+# reviewers need a paid plan, so the gate is the `Tag refs only` step below: a
+# merge to `main` reaches staging, and neither a branch push nor a
+# `workflow_dispatch` aimed at a branch gets past that step. A release is
+# `git tag v0.1.0 && git push --tags`, which is an act with a name on it, and a
+# dispatch selecting a tag is the same run for a redeploy by hand.
+#
+# Every step below was run by hand against the real environment on 2026-08-30
+# before it was written down, in this order, including the rollback. This file
+# is the transcript of that, not a plan for it.
+#
+# Nothing rolls back automatically, for the reason staging.yml gives and one
+# more: `wrangler rollback` moves code and not schema, so an automatic rollback
+# would pair the previous Worker with this run's migrations without saying so.
+# The failure summary prints the command and a person decides.
+# docs/runbook-production.md carries the measured numbers.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  # The production Neon project, not a branch of the staging one. A branch
+  # inherits its parent's rows, and the first attempt at this arrived holding
+  # the golden fixture orgs.
+  NEON_PROJECT_ID: super-brook-02913792
+  WEB: https://preview.remeai.co.uk
+  API: https://reme-api-production.lifeos.workers.dev
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+    steps:
+      # A dispatch can select any branch, and this job would then run that
+      # branch's migrations against the production Neon project. Fails rather
+      # than skips, so an operator who picked a branch by mistake reads why.
+      - name: Tag refs only
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::production runs on a tag. Select one, or push v<version>."
+          exit 1
+
+      - name: Credentials
+        run: |
+          missing=
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Before the Workers, because migrations are expand/contract (R10): the
+      # new schema is safe under the old code, and the reverse is not.
+      #
+      # The direct endpoint, not the pooled one. `pnpm db:migrate` refuses a
+      # `-pooler` host itself because its advisory lock is session-scoped.
+      - name: Migrate the production database
+        run: |
+          url=$(npx -y neonctl connection-string main \
+            --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
+          case "$url" in
+            postgresql://*pooler*) echo "::error::neonctl answered with the pooled endpoint"; exit 1 ;;
+            postgresql://*) ;;
+            *) echo "::error::neonctl did not answer with a connection string"; exit 1 ;;
+          esac
+          DATABASE_URL="$url" pnpm db:migrate
+
+      # The tag name reaches the shell through the environment, never through
+      # `${{ }}` interpolation into `run:`. A tag is attacker-controlled input
+      # anywhere the push permission is wider than it is here, and the habit is
+      # cheaper to keep than to audit.
+      - name: Deploy the api
+        env:
+          RELEASE: ${{ github.ref_name }} ${{ github.sha }}
+        run: >
+          pnpm --filter api exec wrangler deploy --env production
+          --message "$RELEASE"
+
+      # Straight after its own deploy, before the web build spends two minutes.
+      # Not a `select 1`: it asserts the four things `withOrg` promises on a live
+      # connection, so it catches a credential pointed at a role holding
+      # BYPASSRLS and a migration that dropped a policy.
+      - name: The api answers on the tenant path
+        run: |
+          body=$(curl -sS --max-time 30 "$API/health") || {
+            echo "::error::$API/health did not answer"; exit 1; }
+          echo "$body"
+          echo "$body" | jq -e '
+            .status == "ok" and .role == "reme_app"
+            and .bypasses_rls == false and .rows_for_absent_org == 0' >/dev/null || {
+            echo "::error::/health answered, and not with the guarantees it promises"
+            exit 1; }
+
+      # CLOUDFLARE_ENV is read by the vite plugin at BUILD time, not at deploy
+      # time: the build writes a deploy config flattened to one environment, and
+      # wrangler refuses to deploy a bundle built for a different one.
+      - name: Build the web app for production
+        run: CLOUDFLARE_ENV=production pnpm --filter web build
+
+      - name: Deploy the web app
+        env:
+          RELEASE: ${{ github.ref_name }} ${{ github.sha }}
+        run: >
+          pnpm --filter web exec wrangler deploy
+          --config dist/server/wrangler.json
+          --message "$RELEASE"
+
+      # A deployed reme-web-production without its secrets answers 500 on every
+      # route, the public page included, because the AuthKit middleware
+      # validates config per request. Measured on the first production deploy.
+      # So a 200 here is the whole config having survived.
+      - name: The web worker serves its public page
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$WEB/")
+          [ "$code" = 200 ] || { echo "::error::$WEB/ answered $code"; exit 1; }
+          echo "$WEB/ answered $code"
+
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      # The owner path against the deployed production build: a real sign-in
+      # through the form, the dashboard, the org tree, the chat replay and the
+      # approvals inbox. It creates one throwaway WorkOS user per run and
+      # asserts its own deletion.
+      #
+      # Worth knowing before launch: production shares the staging WorkOS
+      # environment (open item 13), so this account is created on the same user
+      # pool production signs people into. Harmless with no customers, and it
+      # needs a read-only path before there are any.
+      - name: Smoke
+        run: |
+          if [ -z "${WORKOS_API_KEY:-}" ]; then
+            echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"
+            exit 1
+          fi
+          E2E_BASE_URL="$WEB" pnpm e2e
+
+      - name: What a red run means
+        if: failure()
+        run: |
+          {
+            echo "## Production is red on \`${GITHUB_REF_NAME}\`"
+            echo
+            echo "Nothing was rolled back. Measured on 2026-08-30: a rollback"
+            echo "returns in 7.8 s and \`/health\` is green 8.4 s after it is issued."
+            echo
+            echo '```sh'
+            echo "npx wrangler versions list --cwd apps/api --env production"
+            echo "npx wrangler rollback <version-id> --cwd apps/api --env production --yes --message 'why'"
+            echo '```'
+            echo
+            echo "A rollback moves code and not schema. Any migration this run"
+            echo "applied stays applied; expand/contract is what makes the old"
+            echo "code safe against the new schema."
+            echo
+            echo "Full runbook: docs/runbook-production.md"
+          } >> "$GITHUB_STEP_SUMMARY"

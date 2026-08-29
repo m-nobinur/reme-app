@@ -64,6 +64,27 @@ const environments = {
     secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
     workers: ["reme-web", "reme-api"],
   },
+  /**
+   * Its own Neon project rather than a branch of the staging one, and that is
+   * the whole point: a branch inherits its parent's rows, so a production
+   * database branched from staging arrives holding the golden fixture orgs.
+   * Measured, not theorised. A separate project starts empty, takes the
+   * migrations from the journal, and cannot be reached by a mistyped command
+   * aimed at staging. The free plan carries both.
+   *
+   * The secrets are the staging WorkOS environment's, by decision: there are no
+   * customers before launch and the production environment's API key cannot be
+   * minted from any surface. Open item 13 lists what that defers.
+   */
+  prod: {
+    neonProject: "super-brook-02913792",
+    neonBranch: "main",
+    neonOwner: "neondb_owner",
+    hyperdrive: "reme-prod-postgres",
+    kv: "reme-prod-web-cache",
+    secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
+    workers: ["reme-web-production", "reme-api-production"],
+  },
 } as const
 
 const name = (process.argv[2] ?? "staging") as keyof typeof environments
@@ -361,11 +382,26 @@ for (const worker of config.workers) {
 
 console.log("")
 note(`${name} resources are in place. Deploy with:`)
-note("pnpm --filter api exec wrangler deploy")
-note("pnpm --filter web build")
-note(
-  "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
-)
+// The commands differ per environment, and the staging forms aimed at
+// production are silent: they deploy the staging Worker and the operator reads
+// a green run. `CLOUDFLARE_ENV` is read by the vite plugin at build time, so
+// the web build has to be repeated for whichever environment comes next.
+if (name === "prod") {
+  note("pnpm --filter api exec wrangler deploy --env production")
+  note("CLOUDFLARE_ENV=production pnpm --filter web build")
+  note(
+    "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
+  )
+  note("")
+  note("That build is flattened to production. Run `pnpm --filter web build`")
+  note("again before deploying the default environment.")
+} else {
+  note("pnpm --filter api exec wrangler deploy")
+  note("pnpm --filter web build")
+  note(
+    "pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json"
+  )
+}
 note("")
 note("A Worker that reads `not deployed` above has no secrets yet. Deploy it,")
 note("then run this again: the secrets are set on the run after the first one.")

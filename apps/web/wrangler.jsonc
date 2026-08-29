@@ -61,5 +61,42 @@
       "namespace_id": "1001",
       "simple": { "limit": 5, "period": 60 }
     }
-  ]
+  ],
+  // Production, on the one hostname every business shares (ADR-030). The
+  // tenant is resolved from the session's `org_id` claim, never from the host,
+  // so there is nothing per-tenant here and there never should be.
+  //
+  // `custom_domain: true` makes wrangler create and own the DNS record, which
+  // is why no record is written by hand and none is committed anywhere.
+  //
+  // Bindings do not inherit, so vars, KV and the rate limit are declared again.
+  // The KV id is `reme-prod-web-cache`; the rate limit is a counter name local
+  // to the Worker, so production gets its own bucket by virtue of being its own
+  // Worker rather than by carrying a different number.
+  "env": {
+    "production": {
+      "name": "reme-web-production",
+      "preview_urls": false,
+      "routes": [
+        {
+          "pattern": "preview.remeai.co.uk",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "WORKOS_REDIRECT_URI": "https://preview.remeai.co.uk/api/auth/callback",
+        "REME_API_URL": "https://reme-api-production.lifeos.workers.dev"
+      },
+      "kv_namespaces": [
+        { "binding": "CACHE", "id": "8e089aa00e324970a824ca2768201502" }
+      ],
+      "ratelimits": [
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1001",
+          "simple": { "limit": 5, "period": 60 }
+        }
+      ]
+    }
+  }
 }

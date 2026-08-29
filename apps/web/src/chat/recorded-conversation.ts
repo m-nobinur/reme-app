@@ -6,8 +6,10 @@ import type { UIMessageChunk } from "ai"
  * against until the real runtime lands: same wire format, same part types, same
  * order, so swapping in a live endpoint changes the route and nothing else.
  *
- * Everything in it is invented. Brightclean is a fixture organisation, and no
- * figure here describes a real business.
+ * It names no business. Reporting a fixture organisation's week to whoever is
+ * signed in is the defect that failed exit gate 9 on the staff directory: a
+ * screen about someone else's business reads as a cross-tenant leak. The
+ * figures are still invented, so the turn opens by saying so.
  */
 
 /** Milliseconds between chunks, so a replay streams rather than arrives. */
@@ -38,11 +40,15 @@ const REVIEW_TOOL_CALL = "call_read_week"
 const PUBLISH_TOOL_CALL = "call_publish_revision"
 const APPROVAL_ID = "approval_publish_revision"
 
-/** The immutable target the approval is bound to. §7.3 requires one. */
+/**
+ * The immutable target the approval is bound to. §7.3 requires one. No org key:
+ * the tenant is the session's, never a field in the payload (R3). The hostname
+ * is the one RFC 2606 reserves, so it can never be a tenant's own; anything
+ * under `remeai.co.uk` sits in the `{slug}` namespace ADR-030 hands out.
+ */
 const PUBLISH_INPUT = {
-  org: "brightclean",
   revision: "rev_2f41c9",
-  domain: "brightclean.mypareme.app",
+  domain: "example.com",
   changes: 3,
 }
 
@@ -68,7 +74,7 @@ const OPENING: RecordedChunk[] = [
       type: "tool-input-available",
       toolCallId: REVIEW_TOOL_CALL,
       toolName: "read_week",
-      input: { org: "brightclean", window: "last_7_days" },
+      input: { window: "last_7_days" },
     },
   },
   {
@@ -85,7 +91,7 @@ const OPENING: RecordedChunk[] = [
   },
   ...text(
     "text_report",
-    `Here is the week for **Brightclean**.
+    `This is a preview of how I report, on made-up numbers. I am not reading your business yet.
 
 - Three assignments closed, including the two quote follow-ups you asked me to chase.
 - Eleven enquiries answered, all within the hour.
