@@ -151,7 +151,8 @@ export type OwnerDataSource = {
   attention: (orgId: string) => Promise<AttentionItem[]>
   approvals: (orgId: string) => Promise<ApprovalItem[]>
   pipeline: (orgId: string) => Promise<PipelineItem[]>
-  profile: (orgId: string) => Promise<BusinessProfile>
+  /** Null where the session has no organisation, the same as `orgs()` empty. */
+  profile: (orgId: string) => Promise<BusinessProfile | null>
   activity: (orgId: string) => Promise<ActivityItem[]>
   /**
    * Answer one approval. Takes the approval's own id and nothing derived from
