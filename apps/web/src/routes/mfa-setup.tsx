@@ -93,11 +93,17 @@ function MfaSetup() {
                 <div className="mt-3 flex flex-col items-center gap-3">
                   {/* WorkOS returns the QR code as a data: PNG, so there is no
                       image host involved and nothing to load across the
-                      network. White ground because a QR code is only readable
-                      as dark-on-light, in either theme. */}
+                      network.
+
+                      `bg-scan-surface`, not `bg-card`: the PNG has a
+                      transparent background, and on the dark card its modules
+                      sat on near-black, where no camera can read them. That
+                      token is the one colour in the system that does not flip
+                      with the theme, because dark-on-light is what a QR scanner
+                      requires rather than what a design prefers. */}
                   <img
                     alt="QR code for your authenticator app"
-                    className="size-44 rounded-2xl bg-card p-2"
+                    className="size-44 rounded-2xl bg-scan-surface p-2"
                     src={enrolment.qrCode}
                   />
                   {showSecret ? (
