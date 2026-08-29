@@ -47,6 +47,7 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
+  --color-scan-surface: var(--scan-surface);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
@@ -84,6 +85,12 @@
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
+  /* The ground under a QR code, and the one token that is the same in both
+     themes on purpose. A QR code is only decodable as dark modules on a light
+     field, and WorkOS returns its PNG with a transparent background, so on a
+     dark card the modules sit on near-black and the camera has nothing to read.
+     Not a theme decision: a scanner requirement. */
+  --scan-surface: oklch(1 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.511 0.096 186.391);
@@ -135,6 +142,8 @@
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
+  /* Deliberately not flipped. See the note in :root. */
+  --scan-surface: oklch(1 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
   /* The preset ships a darker teal here than in light, so `text-primary` on the

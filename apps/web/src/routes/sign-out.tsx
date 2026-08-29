@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { signOut } from "@workos/authkit-tanstack-react-start"
+import { AuthCard } from "@workspace/ui/components/auth-card"
 import { LoadingState } from "@workspace/ui/components/loading-state"
 import { abandonFlow } from "@/lib/auth/actions"
 
@@ -13,5 +14,12 @@ export const Route = createFileRoute("/sign-out")({
     await abandonFlow()
     await signOut({ data: { returnTo: "/" } })
   },
-  component: () => <LoadingState className="m-6" label="Signing you out" />,
+  // The same frame as the rest of the flow. On a slow network this is the last
+  // screen of the product a person sees, and a bare skeleton on an unstyled
+  // page is not the note to leave on.
+  component: () => (
+    <AuthCard description="One moment." title="Signing you out">
+      <LoadingState label="Signing you out" />
+    </AuthCard>
+  ),
 })

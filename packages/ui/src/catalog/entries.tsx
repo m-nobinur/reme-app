@@ -18,9 +18,16 @@ import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { ListFilter } from "@workspace/ui/components/list-filter"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import { Logo, LogoMark } from "@workspace/ui/components/logo"
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
+import {
+  PasswordField,
+  StrengthBar,
+} from "@workspace/ui/components/password-field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import type { PasswordVerdict } from "@workspace/ui/lib/password-policy"
 import type { ReactNode } from "react"
 import { assistantCatalog } from "./assistant-entries"
 import { productCatalog } from "./product-entries"
@@ -38,6 +45,26 @@ const FIXTURE_ORGS = [
   { id: "brightclean", name: "Brightclean" },
   { id: "mopandbucket", name: "Mop and Bucket" },
 ]
+
+/** Two fixed points on the meter, so the snapshot is a picture and not a race. */
+const FIXTURE_VERDICTS: Record<"weak" | "strong", PasswordVerdict> = {
+  weak: {
+    score: 1,
+    meetsLength: true,
+    meetsStrength: false,
+    acceptable: false,
+    suggestions: [],
+    scored: true,
+  },
+  strong: {
+    score: 4,
+    meetsLength: true,
+    meetsStrength: true,
+    acceptable: true,
+    suggestions: [],
+    scored: true,
+  },
+}
 
 const NAV = [
   { href: "/app", label: "Dashboard", icon: HouseIcon },
@@ -183,6 +210,73 @@ const catalog: CatalogEntry[] = [
         <Field id="catalog-authform-email" label="Email" type="email" />
         <Button type="button">Send the link</Button>
       </AuthForm>
+    ),
+  },
+  {
+    name: "Logo",
+    render: () => (
+      <div className="flex flex-wrap items-center gap-6">
+        <Logo />
+        <Logo className="text-lg" />
+      </div>
+    ),
+  },
+  {
+    name: "LogoMark",
+    render: () => (
+      <div className="flex flex-wrap items-end gap-4 text-primary">
+        <LogoMark className="size-5" />
+        <LogoMark className="size-8" />
+        <LogoMark className="size-12" />
+      </div>
+    ),
+  },
+  {
+    name: "PasswordField",
+    render: () => (
+      <div className="flex max-w-sm flex-col gap-4">
+        <PasswordField
+          autoComplete="current-password"
+          hint="The password you sign in with."
+          id="catalog-password"
+          label="Password"
+          name="catalog-password"
+          placeholder="Your password"
+        />
+        <PasswordField
+          autoComplete="new-password"
+          error="That password is not strong enough. Try a longer one."
+          id="catalog-password-invalid"
+          label="New password"
+          name="catalog-password-invalid"
+          placeholder="At least 10 characters"
+        />
+      </div>
+    ),
+  },
+  {
+    // The bar on its own, in both of the answers it has. It is driven from a
+    // literal verdict rather than by typing into a field, because the snapshot
+    // has to be the same picture on every run and scoring is asynchronous.
+    name: "StrengthBar",
+    render: () => (
+      <div className="flex max-w-sm flex-col gap-3">
+        <StrengthBar verdict={FIXTURE_VERDICTS.weak} />
+        <StrengthBar verdict={FIXTURE_VERDICTS.strong} />
+      </div>
+    ),
+  },
+  {
+    name: "SubmitButton",
+    render: () => (
+      <div className="flex max-w-sm flex-col gap-3">
+        <SubmitButton pendingLabel="Signing in…" type="button">
+          Sign in
+        </SubmitButton>
+        <SubmitButton pending pendingLabel="Signing in…" type="button">
+          Sign in
+        </SubmitButton>
+      </div>
     ),
   },
   {

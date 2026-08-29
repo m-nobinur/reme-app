@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
-import { Button, buttonVariants } from "@workspace/ui/components/button"
-import { Field } from "@workspace/ui/components/field"
+import { buttonVariants } from "@workspace/ui/components/button"
+import { Logo } from "@workspace/ui/components/logo"
+import { PasswordField } from "@workspace/ui/components/password-field"
+import { SubmitButton } from "@workspace/ui/components/submit-button"
+import { PASSWORD_POLICY } from "@workspace/ui/lib/password-policy"
 import { useState } from "react"
 import { resetPassword } from "@/lib/auth/actions"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -20,8 +23,6 @@ export const Route = createFileRoute("/reset-password")({
 
 function ResetPassword() {
   const { token = "" } = Route.useSearch()
-  const [password, setPassword] = useState("")
-  const [confirmation, setConfirmation] = useState("")
   const [mismatch, setMismatch] = useState<string | undefined>()
   const { run, pending, result } = useSubmit(resetPassword)
 
@@ -35,7 +36,11 @@ function ResetPassword() {
   if (done) {
     return (
       <AuthCard
-        brand={<Link to="/">Reme</Link>}
+        brand={
+          <Link to="/">
+            <Logo />
+          </Link>
+        }
         title="Your password is changed"
       >
         <Alert variant="success">
@@ -55,7 +60,11 @@ function ResetPassword() {
   if (linkIsDead) {
     return (
       <AuthCard
-        brand={<Link to="/">Reme</Link>}
+        brand={
+          <Link to="/">
+            <Logo />
+          </Link>
+        }
         description="Reset links last fifteen minutes and work once."
         title="This link no longer works"
       >
@@ -63,6 +72,10 @@ function ResetPassword() {
           {failure?.message ??
             "This link has expired or has already been used. Ask for a new one."}
         </Alert>
+        {/* The default variant, not outline. This is the only thing to do on
+            this page, and in dark mode the outline variant is a transparent
+            box with a 10% border, which reads as a caption rather than as the
+            way forward. */}
         <Link
           className={buttonVariants({ className: "mt-6 w-full" })}
           to="/forgot-password"
@@ -75,7 +88,11 @@ function ResetPassword() {
 
   return (
     <AuthCard
-      brand={<Link to="/">Reme</Link>}
+      brand={
+        <Link to="/">
+          <Logo />
+        </Link>
+      }
       description="Pick something you have not used here before."
       footer={
         <Link
@@ -88,49 +105,50 @@ function ResetPassword() {
       title="Set a new password"
     >
       <AuthForm
-        onSubmit={async (event) => {
-          event.preventDefault()
-          if (password !== confirmation) {
+        onSubmit={async (values) => {
+          if (values.password !== values.confirmation) {
             setMismatch("The two passwords do not match.")
             return
           }
           setMismatch(undefined)
-          await run({ data: { token, password } })
+          await run({ data: { token, password: values.password } })
         }}
       >
         {failure && !failure.field ? (
           <Alert variant="error">{failure.message}</Alert>
         ) : null}
 
-        <Field
+        <PasswordField
           autoComplete="new-password"
           autoFocus
           error={failure?.field === "newPassword" ? failure.message : undefined}
-          hint="At least 10 characters."
+          hint={`At least ${PASSWORD_POLICY.minLength} characters. A few unrelated words beat symbols.`}
           id="password"
           label="New password"
-          minLength={10}
-          onChange={(event) => setPassword(event.target.value)}
+          minLength={PASSWORD_POLICY.minLength}
+          name="password"
+          placeholder="At least 10 characters"
           required
-          type="password"
-          value={password}
+          strength
         />
 
-        <Field
+        <PasswordField
           autoComplete="new-password"
           error={mismatch}
           id="confirmation"
           label="New password again"
-          minLength={10}
-          onChange={(event) => setConfirmation(event.target.value)}
+          minLength={PASSWORD_POLICY.minLength}
+          name="confirmation"
+          // Cleared as soon as they start fixing it, rather than sitting there
+          // contradicting what is now on screen.
+          onChange={() => setMismatch(undefined)}
+          placeholder="Type it once more"
           required
-          type="password"
-          value={confirmation}
         />
 
-        <Button disabled={pending} type="submit">
-          {pending ? "Saving…" : "Change password"}
-        </Button>
+        <SubmitButton pending={pending} pendingLabel="Saving…">
+          Change password
+        </SubmitButton>
       </AuthForm>
     </AuthCard>
   )
