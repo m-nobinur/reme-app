@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { getAuth } from "@workos/authkit-tanstack-react-start"
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -11,6 +12,7 @@ import {
   OPENING,
   type RecordedChunk,
 } from "@/chat/recorded-conversation"
+import { ownerFrom } from "@/lib/tenant"
 
 /**
  * Replays the recorded Chief of Staff conversation over the AI SDK v7 UI
@@ -60,6 +62,22 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // The backend of an authed page, so it answers like one. Without this
+        // an anonymous POST cost 4.08s of worker time and 7 KiB per request,
+        // measured on the deployed staging worker: a compute amplifier on a
+        // plan whose whole budget is shared with another project. It replays a
+        // recording rather than calling a model, so nothing leaked, and that is
+        // the only reason this was cheap to leave open rather than free.
+        //
+        // 401 rather than the layout's redirect: this is a `fetch` from the
+        // chat client, and a 307 to /sign-in would arrive as an opaque parse
+        // failure instead of an answer the caller can act on.
+        if (!ownerFrom(await getAuth())) {
+          return Response.json(
+            { error: "This request carries no session we can read." },
+            { status: 401 }
+          )
+        }
         const { messages } = (await request.json()) as {
           messages: UIMessage[]
         }
