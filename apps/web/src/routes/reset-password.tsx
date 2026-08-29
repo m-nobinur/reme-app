@@ -72,11 +72,12 @@ function ResetPassword() {
           {failure?.message ??
             "This link has expired or has already been used. Ask for a new one."}
         </Alert>
+        {/* The default variant, not outline. This is the only thing to do on
+            this page, and in dark mode the outline variant is a transparent
+            box with a 10% border, which reads as a caption rather than as the
+            way forward. */}
         <Link
-          className={buttonVariants({
-            variant: "outline",
-            className: "mt-6 w-full",
-          })}
+          className={buttonVariants({ className: "mt-6 w-full" })}
           to="/forgot-password"
         >
           Send me a new link
