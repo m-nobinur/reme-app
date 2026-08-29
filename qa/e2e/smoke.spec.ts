@@ -22,16 +22,29 @@ import { visit } from "./visit"
  * Names that were on these screens yesterday and must not be on them under a
  * real session. Fictional fixture businesses, so nothing here is a secret; the
  * value is that each one is a string only the mock could produce.
+ *
+ * The hostname is on the list because the chat recording used to publish to
+ * `brightclean.mypareme.app`, and a tenant hostname naming someone else's
+ * business is the same defect as their staff directory.
  */
-const FIXTURE_CONTENT = ["Brightclean", "Mop & Bucket", "Dana Reyes", "Maya"]
+const FIXTURE_CONTENT = [
+  "Brightclean",
+  "Mop & Bucket",
+  "Dana Reyes",
+  "Maya",
+  "brightclean.mypareme.app",
+]
 
 async function expectNoFixtureContent(page: Page) {
-  const body = await page.locator("body").innerText()
+  // Folded, so a screen that title-cases or lowercases one of these still
+  // fails. `toContain` is case-sensitive and the list already carries one name
+  // twice because of it.
+  const body = (await page.locator("body").innerText()).toLowerCase()
   for (const name of FIXTURE_CONTENT) {
     expect(
       body,
       `${name} reached a session that has no claim on it`
-    ).not.toContain(name)
+    ).not.toContain(name.toLowerCase())
   }
 }
 
@@ -105,15 +118,24 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   // proves the tool and approval parts render rather than falling through to
   // the raw tool fallback. Both wait longer than the default because the
   // replay carries the inter-chunk delays a live model run would have had.
-  await expect(page.getByText("Here is the week for")).toBeVisible({
-    timeout: 30_000,
-  })
+  await expect(page.getByText("This is a preview of how I report")).toBeVisible(
+    { timeout: 30_000 }
+  )
 
   const approval = page.locator('[data-slot="approval-request"]')
   await expect(approval).toBeVisible({ timeout: 30_000 })
   await expect(approval).toContainText("rev_2f41c9")
   await expect(approval.getByRole("button", { name: "Approve" })).toBeVisible()
   await expect(approval.getByRole("button", { name: "Decline" })).toBeVisible()
+
+  // The hole this suite used to have: every other screen was scanned and this
+  // one was not, so the recording named `Brightclean` to whoever was signed in
+  // for as long as gate 9 was recorded as met. After the stream, because a scan
+  // of an empty thread passes without reading anything the replay produced.
+  // Narrower than it reads: this test never answers the approval, so it sees
+  // the opening turn and not the APPROVED and DENIED branches. Both are clean,
+  // checked by hand; a test that answers the approval would cover them.
+  await expectNoFixtureContent(page)
 })
 
 test("the approvals inbox has nothing to decide", async ({ page }) => {
