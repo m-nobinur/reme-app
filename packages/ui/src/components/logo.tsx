@@ -26,18 +26,19 @@ function LogoMark({ className, ...props }: ComponentProps<"svg">) {
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
-      {/* Down from the lead node, then out to each report. Square cap on the
-          join so the corner reads as a corner at small sizes. */}
+      {/* Down from the lead node to the rail, then down to each report. One
+          path, so the corners stay joined at any size. */}
+      <path d="M12 7.5V10.5" stroke="currentColor" strokeWidth="1.75" />
       <path
-        d="M7 9.5v4.25a1.5 1.5 0 0 0 1.5 1.5H17"
+        d="M6 14V12a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 18 12v2"
         stroke="currentColor"
-        strokeLinecap="round"
         strokeWidth="1.75"
       />
-      <path d="M17 15.25V17" stroke="currentColor" strokeWidth="1.75" />
-      <circle cx="7" cy="7" fill="currentColor" r="3.25" />
-      <circle cx="8.5" cy="18.5" fill="currentColor" opacity="0.55" r="2" />
-      <circle cx="17" cy="18.5" fill="currentColor" opacity="0.55" r="2" />
+      {/* Hierarchy by size rather than by opacity: a faded node reads as
+          disabled, and at 20px it reads as smudged. */}
+      <circle cx="12" cy="4.5" fill="currentColor" r="3" />
+      <circle cx="6" cy="16.5" fill="currentColor" r="2.5" />
+      <circle cx="18" cy="16.5" fill="currentColor" r="2.5" />
     </svg>
   )
 }
