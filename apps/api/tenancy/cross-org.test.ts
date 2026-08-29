@@ -24,7 +24,24 @@ import { cookieHeader, env, stubJwksFetch } from "../test/sealed-session.ts"
  * so "no rows" and "another org's rows" are distinguishable.
  */
 
+/**
+ * No `DATABASE_URL`, no gate. This throws rather than skipping, because a
+ * blocking suite that exits 0 having run nothing is the failure this repo keeps
+ * finding: 21 skipped tests read as green in every summary that matters. The
+ * `packages/db` half already fails here, inside `connect()`, and the two halves
+ * of one gate cannot disagree about what a missing database means.
+ *
+ * Same shape as the secret scan, which refuses an empty `dist/client` rather
+ * than passing it: nothing to check is a failure, not a pass.
+ */
 const url = process.env.DATABASE_URL
+if (!url) {
+  throw new Error(
+    "DATABASE_URL is not set, so the cross-org gate has nothing to deny against. " +
+      "It is blocking and cannot be skipped: start Postgres and point DATABASE_URL at it " +
+      "(pnpm bootstrap, or a Neon branch), then rerun pnpm test:tenancy."
+  )
+}
 
 const noted = (error: unknown) => console.error("waitUntil", error)
 const ctx = {
@@ -70,7 +87,7 @@ function as(
   )
 }
 
-describe.skipIf(!url)("the fixtures this suite denies against", () => {
+describe("the fixtures this suite denies against", () => {
   it("has more than one org, each with a person and an id", () => {
     // The whole matrix below is generated from this list. An empty or
     // single-entry list would make every cross-org case vacuous and every
@@ -89,7 +106,7 @@ describe.skipIf(!url)("the fixtures this suite denies against", () => {
   })
 })
 
-describe.skipIf(!url)("a session reads its own org and only its own", () => {
+describe("a session reads its own org and only its own", () => {
   it.each(ORGS)("$slug", async (org) => {
     const response = await as(org, "/org")
     expect(response.status, `${org.slug} could not read itself`).toBe(200)
@@ -125,126 +142,118 @@ describe.skipIf(!url)("a session reads its own org and only its own", () => {
   })
 })
 
-describe.skipIf(!url)(
-  "a session cannot name an org it does not belong to",
-  () => {
-    /** Every ordered pair of different orgs: this person, that organisation. */
-    const crossed = ORGS.flatMap((person) =>
-      ORGS.filter((org) => org.orgId !== person.orgId).map((org) => ({
-        person,
-        org,
-        name: `${person.slug} claiming ${org.slug}`,
-      }))
-    )
+describe("a session cannot name an org it does not belong to", () => {
+  /** Every ordered pair of different orgs: this person, that organisation. */
+  const crossed = ORGS.flatMap((person) =>
+    ORGS.filter((org) => org.orgId !== person.orgId).map((org) => ({
+      person,
+      org,
+      name: `${person.slug} claiming ${org.slug}`,
+    }))
+  )
 
-    it.each(crossed)("$name", async ({ person, org }) => {
-      for (const path of ["/org", "/staff"]) {
-        const response = await worker.fetch(
-          new Request(`http://api.invalid${path}`, {
-            headers: await cookieHeader({
-              sub: person.workosUserId,
-              org_id: org.workosOrganizationId,
-              role: "owner",
-            }),
-          }),
-          env(url as string),
-          ctx
-        )
-        // 403 and not 404: the resolver refuses a pair it cannot join, and it
-        // gives the same answer for "no org selected" and "an org we do not
-        // mirror" on purpose, so a caller cannot use it to learn which
-        // organizations exist.
-        expect(response.status, `${path} answered ${response.status}`).toBe(403)
-        expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-          "org.unresolved"
-        )
-      }
-    })
-
-    it("refuses a session with no organisation at all", async () => {
-      // Open item 21: a session minted before the org existed carries no
-      // org_id claim. It has to be a refusal rather than a default.
-      const [first] = ORGS
-      const response = await as(
-        { workosUserId: first?.workosUserId as string },
-        "/org"
-      )
-      expect(response.status).toBe(403)
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "org.unresolved"
-      )
-    })
-
-    it("refuses an organisation nothing mirrors", async () => {
-      const [first] = ORGS
-      const response = await as(
-        {
-          workosUserId: first?.workosUserId as string,
-          workosOrganizationId: "org_that_is_not_in_our_database",
-        },
-        "/org"
-      )
-      expect(response.status).toBe(403)
-    })
-  }
-)
-
-describe.skipIf(!url)(
-  "the org is the session's, whatever the request says",
-  () => {
-    /**
-     * The rule R3 states, driven at the only point it can actually be broken.
-     *
-     * `test/org.test.ts` sends the same spellings with no session and gets 401,
-     * which proves the router refuses an anonymous request and nothing about
-     * where an org id comes from. Here the session is valid, the request is
-     * answered, and the answer has to be the session's org rather than the one
-     * in the query string. A handler that read the query would pass every other
-     * case in this file and fail only this one.
-     */
-    it.each(["org_id", "orgId", "organization_id", "organizationId", "org"])(
-      "ignores ?%s",
-      async (key) => {
-        const [mine, theirs] = ORGS
-        if (!(mine && theirs)) return
-        for (const value of [theirs.orgId, theirs.workosOrganizationId]) {
-          const response = await as(
-            mine,
-            `/org?${key}=${encodeURIComponent(value)}`
-          )
-          expect(response.status, `${key}=${value}`).toBe(200)
-          const body = Org.parse(await response.json())
-          expect(body.org_id, `${key}=${value} changed the org`).toBe(
-            mine.orgId
-          )
-        }
-      }
-    )
-
-    it("ignores a header naming another org", async () => {
-      const [mine, theirs] = ORGS
-      if (!(mine && theirs)) return
-      const headers = await cookieHeader({
-        sub: mine.workosUserId,
-        org_id: mine.workosOrganizationId,
-        role: "owner",
-      })
+  it.each(crossed)("$name", async ({ person, org }) => {
+    for (const path of ["/org", "/staff"]) {
       const response = await worker.fetch(
-        new Request("http://api.invalid/staff", {
-          headers: {
-            ...headers,
-            "x-org-id": theirs.orgId,
-            "x-organization-id": theirs.workosOrganizationId,
-          },
+        new Request(`http://api.invalid${path}`, {
+          headers: await cookieHeader({
+            sub: person.workosUserId,
+            org_id: org.workosOrganizationId,
+            role: "owner",
+          }),
         }),
         env(url as string),
         ctx
       )
-      expect(response.status).toBe(200)
-      const directory = StaffDirectory.parse(await response.json())
-      for (const member of directory.staff) {
-        expect(member.org_id).toBe(mine.orgId)
+      // 403 and not 404: the resolver refuses a pair it cannot join, and it
+      // gives the same answer for "no org selected" and "an org we do not
+      // mirror" on purpose, so a caller cannot use it to learn which
+      // organizations exist.
+      expect(response.status, `${path} answered ${response.status}`).toBe(403)
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "org.unresolved"
+      )
+    }
+  })
+
+  it("refuses a session with no organisation at all", async () => {
+    // Open item 21: a session minted before the org existed carries no
+    // org_id claim. It has to be a refusal rather than a default.
+    const [first] = ORGS
+    const response = await as(
+      { workosUserId: first?.workosUserId as string },
+      "/org"
+    )
+    expect(response.status).toBe(403)
+    expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+      "org.unresolved"
+    )
+  })
+
+  it("refuses an organisation nothing mirrors", async () => {
+    const [first] = ORGS
+    const response = await as(
+      {
+        workosUserId: first?.workosUserId as string,
+        workosOrganizationId: "org_that_is_not_in_our_database",
+      },
+      "/org"
+    )
+    expect(response.status).toBe(403)
+  })
+})
+
+describe("the org is the session's, whatever the request says", () => {
+  /**
+   * The rule R3 states, driven at the only point it can actually be broken.
+   *
+   * `test/org.test.ts` sends the same spellings with no session and gets 401,
+   * which proves the router refuses an anonymous request and nothing about
+   * where an org id comes from. Here the session is valid, the request is
+   * answered, and the answer has to be the session's org rather than the one
+   * in the query string. A handler that read the query would pass every other
+   * case in this file and fail only this one.
+   */
+  it.each(["org_id", "orgId", "organization_id", "organizationId", "org"])(
+    "ignores ?%s",
+    async (key) => {
+      const [mine, theirs] = ORGS
+      if (!(mine && theirs)) return
+      for (const value of [theirs.orgId, theirs.workosOrganizationId]) {
+        const response = await as(
+          mine,
+          `/org?${key}=${encodeURIComponent(value)}`
+        )
+        expect(response.status, `${key}=${value}`).toBe(200)
+        const body = Org.parse(await response.json())
+        expect(body.org_id, `${key}=${value} changed the org`).toBe(mine.orgId)
       }
+    }
+  )
+
+  it("ignores a header naming another org", async () => {
+    const [mine, theirs] = ORGS
+    if (!(mine && theirs)) return
+    const headers = await cookieHeader({
+      sub: mine.workosUserId,
+      org_id: mine.workosOrganizationId,
+      role: "owner",
     })
-  }
-)
+    const response = await worker.fetch(
+      new Request("http://api.invalid/staff", {
+        headers: {
+          ...headers,
+          "x-org-id": theirs.orgId,
+          "x-organization-id": theirs.workosOrganizationId,
+        },
+      }),
+      env(url as string),
+      ctx
+    )
+    expect(response.status).toBe(200)
+    const directory = StaffDirectory.parse(await response.json())
+    for (const member of directory.staff) {
+      expect(member.org_id).toBe(mine.orgId)
+    }
+  })
+})
