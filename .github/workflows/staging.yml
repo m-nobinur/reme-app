@@ -40,9 +40,9 @@ concurrency:
 
 env:
   NEON_PROJECT_ID: sparkling-wildflower-04343187
-  WEB: https://reme-web.lifeos.workers.dev
-  API: https://reme-api.lifeos.workers.dev
-  ORCHESTRATOR: https://reme-orchestrator.lifeos.workers.dev
+  WEB: https://staging.remeai.co.uk
+  API: https://staging-api.remeai.co.uk
+  ORCHESTRATOR: https://staging-orchestrator.remeai.co.uk
 
 jobs:
   staging:

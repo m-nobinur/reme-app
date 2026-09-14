@@ -29,8 +29,14 @@
   // wrangler 4.34 preview URLs were always on, 4.34 to 4.44 always off, and
   // 4.44 or later matches `workers_dev`. Preview environments per PR are
   // `wrangler versions upload --preview-alias`, so a wrangler upgrade that
-  // moved this default again would take every preview URL down with it.
+  // moved this default again would take every preview URL down with it. Load
+  // bearing now that `workers_dev` is off: the default follows it.
   "preview_urls": true,
+  // The hostname is ADR-030's. `custom_domain: true` makes wrangler create and
+  // own the DNS record and the certificate. `workers_dev` is off so the Worker
+  // answers in one place; measured 2026-09-14 that preview aliases survive it.
+  "workers_dev": false,
+  "routes": [{ "pattern": "staging-api.remeai.co.uk", "custom_domain": true }],
   // `reme-staging-postgres`, created by `node infra/bootstrap.ts staging`. It
   // connects as `reme_app`, which has no BYPASSRLS, so the policies are
   // evaluated against the connecting role and the `SET LOCAL ROLE` inside
@@ -65,6 +71,8 @@
       // Off, unlike staging: preview aliases exist for the per-PR flow, and a
       // production Worker has no per-PR flow. Fewer URLs answering as prod.
       "preview_urls": false,
+      "workers_dev": false,
+      "routes": [{ "pattern": "api.remeai.co.uk", "custom_domain": true }],
       "hyperdrive": [
         {
           "binding": "HYPERDRIVE",

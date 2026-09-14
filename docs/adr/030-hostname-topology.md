@@ -1,7 +1,7 @@
 # ADR-030: One hostname for the app, one per tenant for the site
 
-Status: accepted, 2026-08-30. Amended 2026-09-14: the preview hostname shape changed, see the
-decision and the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
+the service Workers got hostnames, see the decision and the last two consequences. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -31,6 +31,13 @@ business's own domain when they are ready.
 **Revision previews are `preview-v{n}-{slug}.remeai.co.uk`**, flat rather than nested. `n` is the
 site's own version counter and `slug` is the business's. The first draft of this ADR wrote
 `preview-{rev}` with a revision id; amended 2026-09-14.
+
+**The service Workers are one hostname each, per environment.** Staging is `staging`,
+`staging-api` and `staging-orchestrator` under `remeai.co.uk`; production is `preview` (`app`
+after launch), `api` and `orchestrator`. Each is a wrangler custom domain, so wrangler owns the
+DNS record and the certificate and nothing is written by hand. The deployed Workers answer on
+these hostnames and not on the account's `workers.dev` subdomain. Pull request previews stay on
+`workers.dev`, because Cloudflare issues preview aliases nowhere else.
 
 ## Why the app is not per-tenant
 
@@ -71,7 +78,7 @@ flat for the same reason, which is why it is not `v{n}.{slug}.preview`.
 
 The cost of one level is that tenant slugs share a namespace with our own hostnames, so the
 reserved list is not optional: `app`, `www`, `api`, `admin`, `mail`, `staging`, `preview`, `docs`,
-`status`, and the `preview-` prefix. That list belongs in the same change as the first
+`status`, `orchestrator`, and the `preview-` and `staging-` prefixes. That list belongs in the same change as the first
 owner-chosen slug and nowhere earlier, because nothing chooses a slug today.
 
 ## How it is served
@@ -114,3 +121,12 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   `preview-` prefix. A DNS label is at most 63 characters, and `preview-v` plus a counter takes
   about twelve of them, so the owner-chosen-slug story caps the slug at 48. The two-revision
   retention rule that gives `v{n}` its meaning is ADR-031's.
+- Amended 2026-09-14. Until this amendment only `reme-web-production` had a hostname on the zone
+  and the other four deployed Workers answered on `lifeos.workers.dev`, a subdomain named after
+  the account and shared with an unrelated project. Every deployed Worker now has a hostname of
+  its own, listed in the decision, and `workers_dev` is off so each answers in one place. The
+  reserved list grew by `orchestrator` and the `staging-` prefix. Two things follow for P2: a
+  route pattern on the zone runs before a custom domain, so the `*.remeai.co.uk/*` route on the
+  sites Worker will see requests for these hostnames first and must pass them through with
+  `fetch(request)`, which Cloudflare routes to the custom domain's Worker; and a custom domain
+  refuses a hostname that already has a CNAME, which the wildcard record is not.

@@ -108,12 +108,10 @@ pnpm --filter web build
 pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json
 ```
 
-There is no registered domain on this account and no zone, so the Workers answer on
-`*.workers.dev`: <https://reme-web.lifeos.workers.dev>, <https://reme-api.lifeos.workers.dev>
-and <https://reme-orchestrator.lifeos.workers.dev>. The subdomain is the account's, not this
-project's.
-A custom hostname, and the wildcard preview DNS that depends on one, are deferred to the
-final phase.
+Staging answers on <https://staging.remeai.co.uk>, <https://staging-api.remeai.co.uk> and
+<https://staging-orchestrator.remeai.co.uk>, each a wrangler custom domain that the deploy
+creates (ADR-030). The account's `*.workers.dev` subdomain is off for deployed Workers and
+carries only pull request previews. The wildcard record for tenant sites is P2's.
 
 Staging shares the account's free-tier daily allowances with that unrelated project: 100,000
 Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
@@ -158,8 +156,8 @@ https://pr-<number>-reme-api.lifeos.workers.dev
 `.github/workflows/preview.yml` produces them with `wrangler versions upload --preview-alias
 pr-<number>`. A version is uploaded rather than deployed, so it takes no production traffic
 and leaves staging alone. It runs with the secrets already on the Worker, so the workflow
-holds no WorkOS credential of its own. None of this needs DNS, which is what makes it work on
-an account with no zone.
+holds no WorkOS credential of its own. Previews stay on `workers.dev` because Cloudflare
+issues preview aliases nowhere else.
 
 Sign-in works on a hostname that changes every pull request because the staging WorkOS
 environment carries one wildcard redirect URI,
@@ -296,7 +294,7 @@ is supposed to match, or starts matching what it is not.
 Staff chat replay, the approvals inbox, plus a WCAG 2.2 AA scan of each assembled page.
 
 ```sh
-E2E_BASE_URL=https://reme-web.lifeos.workers.dev pnpm e2e
+E2E_BASE_URL=https://staging.remeai.co.uk pnpm e2e
 E2E_BASE_URL=http://localhost:3000 pnpm e2e        # against your own `pnpm dev`
 ```
 

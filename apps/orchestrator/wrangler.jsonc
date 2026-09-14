@@ -12,6 +12,10 @@
   "observability": { "enabled": true },
   "placement": { "region": "aws:eu-central-1" },
   "preview_urls": true,
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true }
+  ],
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
   ],
@@ -26,6 +30,10 @@
     "production": {
       "name": "reme-orchestrator-production",
       "preview_urls": false,
+      "workers_dev": false,
+      "routes": [
+        { "pattern": "orchestrator.remeai.co.uk", "custom_domain": true }
+      ],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],

@@ -10,10 +10,10 @@ name: preview
 # preview sign in against the WorkOS staging environment without this workflow
 # ever holding a WorkOS credential.
 #
-# There is no wildcard DNS and no zone on this account, so previews live on the
-# account's `*.workers.dev` subdomain, which an unrelated project shares. Every
-# alias therefore carries the worker name and nothing here touches a resource it
-# did not create.
+# Previews live on the account's `*.workers.dev` subdomain, which an unrelated
+# project shares, because Cloudflare issues preview aliases nowhere else; the
+# deployed Workers themselves answer on `remeai.co.uk` (ADR-030). Every alias
+# carries the worker name and nothing here touches a resource it did not create.
 #
 # The smoke runs here, against the preview, which is what C6 asked for and what
 # was true only after merge until now.
