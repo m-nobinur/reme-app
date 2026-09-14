@@ -24,14 +24,15 @@ import {
 
 /**
  * The §8.4 properties M2 promises, driven against a real database because the
- * guarantees live in constraints and transactions, not in TypeScript. Fails
- * without `DATABASE_URL` rather than skipping: a floor that counts skipped
- * cases is a gate that proves nothing.
+ * guarantees live in constraints and transactions, not in TypeScript.
  */
 const url = process.env.DATABASE_URL
-if (!url) throw new Error("state.test.ts needs DATABASE_URL")
+// Skipped rather than failed without a database, the way the api suite does:
+// the unit job has none, and `floors.json` carries a `+db` floor so the
+// database job is where these count.
+const live = describe.skipIf(!url)
 
-const kit: Tenancy = tenancy(url)
+const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
 
 const NON_TERMINAL = (
@@ -225,10 +226,10 @@ async function current(ids: { orgId: string; assignmentId: string }) {
 
 let sharedOrg: string
 beforeAll(async () => {
-  sharedOrg = await freshOrg()
+  if (url) sharedOrg = await freshOrg()
 })
 
-describe("no transition without an event", () => {
+live("no transition without an event", () => {
   it("every transition row cites a state_changed event, one per version", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -296,7 +297,7 @@ describe("no transition without an event", () => {
   }, 120_000)
 })
 
-describe("cancel", () => {
+live("cancel", () => {
   it.each(NON_TERMINAL)("is legal from %s, and idempotent", async (state) => {
     const ids = await newAssignment(await freshOrg())
     await walk(ids, PATH[state])
@@ -317,7 +318,7 @@ describe("cancel", () => {
   )
 })
 
-describe("the optimistic lock", () => {
+live("the optimistic lock", () => {
   it("rejects a stale expected_version as transient and moves nothing", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: -3, max: 6 }), async (offset) => {
@@ -378,7 +379,7 @@ describe("the optimistic lock", () => {
   })
 })
 
-describe("two assignments on one site serialise", () => {
+live("two assignments on one site serialise", () => {
   it("the second stays queued until the first settles, with one site.locked event", async () => {
     const org = await freshOrg()
     const first = await newAssignment(org)
