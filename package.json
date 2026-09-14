@@ -9,6 +9,7 @@
     "workos:config": "node scripts/workos.mjs",
     "eval": "node evals/run.mjs",
     "record": "node evals/record.mjs",
+    "builder": "node scripts/builder.mjs",
     "db:generate": "pnpm --filter @workspace/db db:generate",
     "db:migrate": "pnpm --filter @workspace/db db:migrate",
     "build": "turbo build",

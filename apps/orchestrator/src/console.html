@@ -1,0 +1,145 @@
+<!doctype html>
+<!--
+  FIXME: a test surface. Delete this file and the /console route the moment the
+  owner screens in apps/web read these routes over the service binding. It is
+  vanilla JS on purpose: no build step, no packages/ui, nothing to keep.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Builder console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; color: #222; background: #fafafa; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  fieldset { border: 1px solid #ccc; margin: 0 0 12px; padding: 8px 12px; }
+  legend { font-weight: 600; }
+  label { display: inline-block; margin-right: 12px; }
+  input, textarea, select, button { font: inherit; }
+  input[type=text], input[type=password] { width: 22em; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 4em; }
+  button { margin-right: 6px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 2px 8px 2px 0; vertical-align: top; }
+  tr.selected { background: #e8f0fe; }
+  pre { background: #fff; border: 1px solid #ddd; padding: 8px; max-height: 40vh; overflow: auto; font-size: 12px; }
+  #status { color: #a00; white-space: pre-wrap; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Builder console</h1>
+<fieldset>
+  <legend>Connection</legend>
+  <label>Token <input id="token" type="password" autocomplete="off"></label>
+  <label>Business slug <input id="org" type="text" value="brightclean"></label>
+  <button type="button" id="refresh">Refresh</button>
+  <span id="status"></span>
+</fieldset>
+<div class="grid">
+  <div>
+    <fieldset>
+      <legend>Create</legend>
+      <label>Goal <input id="goal" type="text" value="Build the site from the canonical facts."></label>
+      <label>Model <select id="model"><option>A</option><option>B</option></select></label>
+      <button type="button" id="create">Create site.build</button>
+    </fieldset>
+    <fieldset>
+      <legend>Assignments</legend>
+      <table id="list"><thead><tr><th>State</th><th>Kind</th><th>Id</th><th>v</th></tr></thead><tbody></tbody></table>
+    </fieldset>
+  </div>
+  <div>
+    <fieldset>
+      <legend>Selected <code id="selected">none</code></legend>
+      <textarea id="text" placeholder="An answer to the open information request, or a steer for the running conversation"></textarea>
+      <label>Request id <input id="request" type="text" placeholder="for answer"></label>
+      <div>
+        <button type="button" id="answer">Answer</button>
+        <button type="button" id="steer">Steer</button>
+        <button type="button" id="approve">Approve latest revision</button>
+        <button type="button" id="rollback">Rollback</button>
+        <button type="button" id="cancel">Cancel</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Events</legend>
+      <pre id="events">select an assignment</pre>
+    </fieldset>
+  </div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id)
+  // Refresh errors are already on screen in #status; nothing else to do.
+  const shown = () => undefined
+  const token = $("token")
+  token.value = sessionStorage.getItem("orchestrator_token") || ""
+  token.addEventListener("change", () => sessionStorage.setItem("orchestrator_token", token.value))
+  let selected = null
+  let latestRevision = null
+
+  async function call(method, path, body) {
+    const org = encodeURIComponent($("org").value.trim())
+    const headers = token.value ? { authorization: `Bearer ${token.value}` } : {}
+    if (body) headers["content-type"] = "application/json"
+    if (method === "POST") headers["idempotency-key"] = crypto.randomUUID()
+    const res = await fetch(`${path}${path.includes("?") ? "&" : "?"}org=${org}`, {
+      method, headers, body: body ? JSON.stringify(body) : undefined,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      $("status").textContent = `${res.status} ${json.class || ""} ${json.code || ""}: ${json.message || ""}`
+      throw new Error(json.code || String(res.status))
+    }
+    $("status").textContent = ""
+    return json
+  }
+
+  async function refresh() {
+    const { assignments } = await call("GET", "/assignments")
+    const rows = assignments.map((a) =>
+      `<tr data-id="${a.assignment_id}" class="${a.assignment_id === selected ? "selected" : ""}">` +
+      `<td>${a.state}</td><td>${a.kind}</td><td><code>${a.assignment_id.slice(0, 8)}</code></td><td>${a.expected_version}</td></tr>`)
+    $("list").querySelector("tbody").innerHTML = rows.join("")
+    for (const tr of $("list").querySelectorAll("tr[data-id]")) {
+      tr.addEventListener("click", () => { selected = tr.dataset.id; $("selected").textContent = selected; refresh(); })
+    }
+    if (selected) await showEvents()
+  }
+
+  async function showEvents() {
+    const [{ events }, { revisions }] = await Promise.all([
+      call("GET", `/assignments/${selected}/events`),
+      call("GET", `/assignments/${selected}`),
+    ])
+    latestRevision = revisions[0] ? revisions[0].revision_id : null
+    $("events").textContent = events
+      .map((e) => `${e.event_id}  seq=${e.seq === null ? "-" : e.seq}  ${e.type}\n    ${JSON.stringify(e.payload)}`)
+      .join("\n")
+  }
+
+  $("refresh").addEventListener("click", () => refresh().catch(shown))
+  $("create").addEventListener("click", async () => {
+    const a = await call("POST", "/assignments", { goal: $("goal").value, model: $("model").value })
+    selected = a.assignment_id
+    $("selected").textContent = selected
+    await refresh()
+  })
+  const post = (action, body) => async () => {
+    if (!selected) return
+    await call("POST", `/assignments/${selected}/${action}`, body())
+    await refresh()
+  }
+  $("answer").addEventListener("click", post("answer", () => ({ request_id: $("request").value.trim(), value: $("text").value })))
+  $("steer").addEventListener("click", post("steer", () => ({ message: $("text").value })))
+  $("approve").addEventListener("click", post("approve", () => ({ revision_id: latestRevision })))
+  $("cancel").addEventListener("click", post("cancel", () => ({})))
+  $("rollback").addEventListener("click", async () => {
+    await call("POST", "/assignments/rollback", {})
+    await refresh()
+  })
+  setInterval(() => { if (token.value) refresh().catch(shown) }, 2000)
+</script>
+</body>
+</html>
