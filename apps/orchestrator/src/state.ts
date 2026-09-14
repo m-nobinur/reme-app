@@ -1,0 +1,334 @@
+import type { AssignmentState, TaintLabel } from "@workspace/contracts"
+import {
+  assignments,
+  assignmentTransitions,
+  eq,
+  events,
+  type OrgScopedDb,
+  sql,
+  type Tenancy,
+} from "@workspace/db"
+import { ulid } from "ulid"
+
+/**
+ * The §8.4 state machine, as data. State truth is the `assignments` row and
+ * the Workflow is only the executor: every step here runs one transaction
+ * that bumps `version`, appends the event and writes the transition row, or
+ * does nothing at all.
+ */
+
+export const TERMINAL: readonly AssignmentState[] = [
+  "published",
+  "failed",
+  "cancelled",
+]
+
+/** Repairing is entered at most this many times per assignment (§8.4). */
+export const REPAIR_LIMIT = 3
+
+/**
+ * Where each state may be entered from. §8.4's direct `Validating →
+ * Implementing` edge is not here: this track routes a gate failure through
+ * `repairing`, so the bound on repairs counts gate failures too. `paused` and
+ * `cancelled` are legal from every non-terminal state and are handled below,
+ * as is resuming from `paused`, which returns to the state the pause left.
+ */
+const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
+  queued: [],
+  briefing: ["queued"],
+  planning: ["briefing"],
+  implementing: ["planning", "blocked_on_information", "repairing"],
+  validating: ["implementing", "revising"],
+  preview_ready: ["validating"],
+  awaiting_review: ["preview_ready"],
+  revising: ["awaiting_review"],
+  release_candidate: ["awaiting_review", "blocked_on_approval"],
+  published: ["release_candidate"],
+  blocked_on_information: ["implementing"],
+  blocked_on_approval: ["awaiting_review"],
+  repairing: ["implementing", "validating"],
+  paused: [],
+  failed: ["repairing"],
+  cancelled: [],
+}
+
+export type TransitionErrorClass = "transient" | "validation" | "resource"
+
+/** R4: the code and class travel; the message is for a log, never a model. */
+export class TransitionError extends Error {
+  constructor(
+    readonly code: string,
+    readonly errorClass: TransitionErrorClass,
+    message: string
+  ) {
+    super(message)
+    this.name = "TransitionError"
+  }
+}
+
+export type Ids = { orgId: string; assignmentId: string }
+
+type Row = typeof assignments.$inferSelect
+
+async function lockRow(db: OrgScopedDb, assignmentId: string): Promise<Row> {
+  const [row] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.id, assignmentId))
+    .for("update")
+  if (!row) {
+    throw new TransitionError(
+      "assignment.not_found",
+      "resource",
+      `no assignment ${assignmentId} in this org`
+    )
+  }
+  return row
+}
+
+async function repairsSoFar(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(assignmentTransitions)
+    .where(
+      sql`${assignmentTransitions.assignmentId} = ${assignmentId} and ${assignmentTransitions.toState} = 'repairing'`
+    )
+  return Number(row?.n ?? 0)
+}
+
+/** The state a pause left, read from the transition that entered `paused`. */
+async function pausedFrom(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<AssignmentState | null> {
+  const [row] = await db
+    .select({ from: assignmentTransitions.fromState })
+    .from(assignmentTransitions)
+    .where(
+      sql`${assignmentTransitions.assignmentId} = ${assignmentId} and ${assignmentTransitions.toState} = 'paused'`
+    )
+    .orderBy(sql`${assignmentTransitions.version} desc`)
+    .limit(1)
+  return row?.from ?? null
+}
+
+export type AppendEvent = {
+  orgId: string
+  assignmentId: string
+  staffId: string | null
+  type: string
+  payload: Record<string, unknown>
+  taint?: TaintLabel[]
+}
+
+/**
+ * One row in `events`, belonging to no session (ADR-028). A fresh ULID is safe
+ * as the idempotency key only because every caller appends inside the same
+ * transaction as the write it describes: the two commit or roll back together.
+ */
+export async function appendEvent(
+  db: OrgScopedDb,
+  event: AppendEvent
+): Promise<string> {
+  const eventId = ulid()
+  await db.insert(events).values({
+    eventId,
+    orgId: event.orgId,
+    staffId: event.staffId,
+    assignmentId: event.assignmentId,
+    sessionId: null,
+    seq: null,
+    type: event.type,
+    occurredAt: new Date(),
+    idempotencyKey: ulid(),
+    taint: event.taint ?? [],
+    payload: event.payload,
+  })
+  return eventId
+}
+
+export type TransitionInput = Ids & {
+  to: AssignmentState
+  expectedVersion: number
+  reason?: string
+  payload?: Record<string, unknown>
+}
+
+export type Transition = {
+  from: AssignmentState
+  to: AssignmentState
+  version: number
+  eventId: string
+}
+
+/**
+ * The one way a state changes. Inside the caller's transaction: lock the row,
+ * check the version the caller saw, check the edge is legal, bump, append the
+ * event, write the transition row. Any refusal is typed (§28.1): a stale
+ * version is `transient` because it is a race the caller re-reads through, an
+ * illegal edge is `validation` because retrying cannot make it legal.
+ */
+export async function transition(
+  db: OrgScopedDb,
+  input: TransitionInput
+): Promise<Transition> {
+  const row = await lockRow(db, input.assignmentId)
+  if (row.version !== input.expectedVersion) {
+    throw new TransitionError(
+      "assignment.stale_version",
+      "transient",
+      `expected version ${input.expectedVersion}, row is at ${row.version}`
+    )
+  }
+  const from = row.state
+  const to = input.to
+  const illegal = (why: string) =>
+    new TransitionError(
+      "assignment.illegal_transition",
+      "validation",
+      `${from} -> ${to}: ${why}`
+    )
+
+  if (TERMINAL.includes(from)) throw illegal("the assignment is finished")
+  if (to === "paused" || to === "cancelled") {
+    if (from === to) throw illegal("already there")
+  } else if (from === "paused") {
+    const origin = await pausedFrom(db, row.id)
+    if (to !== origin) throw illegal(`a pause resumes to ${origin}`)
+  } else if (!ENTERED_FROM[to].includes(from)) {
+    throw illegal("not an edge of the state machine")
+  }
+  if (to === "repairing" && (await repairsSoFar(db, row.id)) >= REPAIR_LIMIT) {
+    throw new TransitionError(
+      "assignment.repair_budget_exhausted",
+      "validation",
+      `repairing was entered ${REPAIR_LIMIT} times already`
+    )
+  }
+
+  const version = row.version + 1
+  try {
+    await db
+      .update(assignments)
+      .set({ state: to, version, updatedAt: new Date() })
+      .where(eq(assignments.id, row.id))
+  } catch (error) {
+    // The site lock (§13): another site assignment in this org is between
+    // claim and a terminal state. The caller decides whether to wait. Drizzle
+    // wraps the driver's error, so the constraint name is on the cause.
+    const cause = (error as { cause?: unknown }).cause ?? error
+    if (
+      (cause as { constraint_name?: string }).constraint_name ===
+      "assignments_site_writer_key"
+    ) {
+      throw new TransitionError(
+        "site.locked",
+        "resource",
+        "another assignment is writing this site"
+      )
+    }
+    throw error
+  }
+  const eventId = await appendEvent(db, {
+    orgId: row.orgId,
+    assignmentId: row.id,
+    staffId: row.staffId,
+    type: "assignment.state_changed",
+    payload: { from, to, version, ...input.payload },
+  })
+  await db.insert(assignmentTransitions).values({
+    orgId: row.orgId,
+    assignmentId: row.id,
+    fromState: from,
+    toState: to,
+    version,
+    eventId,
+    reason: input.reason ?? null,
+  })
+  return { from, to, version, eventId }
+}
+
+/**
+ * Move to `to` from whatever the row is at now. For the Workflow, which is
+ * the row's single writer between claim and settlement: the version it reads
+ * under the lock is the version it expects. `apply` runs in the same
+ * transaction, for a step that writes more than the transition.
+ */
+export function advance(
+  kit: Tenancy,
+  ids: Ids,
+  to: AssignmentState,
+  options: {
+    reason?: string
+    payload?: Record<string, unknown>
+    apply?: (db: OrgScopedDb, row: Row) => Promise<Record<string, unknown>>
+  } = {}
+): Promise<Transition> {
+  return kit.withOrg({ orgId: ids.orgId }, async (db) => {
+    const row = await lockRow(db, ids.assignmentId)
+    const extra = options.apply ? await options.apply(db, row) : {}
+    return transition(db, {
+      ...ids,
+      to,
+      expectedVersion: row.version,
+      reason: options.reason,
+      payload: { ...options.payload, ...extra },
+    })
+  })
+}
+
+/**
+ * Cancel is legal from every non-terminal state and idempotent (§13 rule 3).
+ * Returns the row's state afterwards, `cancelled` or the terminal state it was
+ * already in.
+ */
+export function cancel(kit: Tenancy, ids: Ids): Promise<AssignmentState> {
+  return kit.withOrg({ orgId: ids.orgId }, async (db) => {
+    const row = await lockRow(db, ids.assignmentId)
+    if (TERMINAL.includes(row.state)) return row.state
+    await transition(db, {
+      ...ids,
+      to: "cancelled",
+      expectedVersion: row.version,
+      reason: "cancelled from the console",
+    })
+    return "cancelled"
+  })
+}
+
+/**
+ * Take the site lock by entering `briefing`. `false` when another assignment
+ * holds it, in which case the row stays `queued` and one `site.locked` event
+ * is appended on the first refusal only, so a long wait is one line in the
+ * log rather than one per poll.
+ */
+export async function claim(
+  kit: Tenancy,
+  ids: Ids,
+  firstAttempt: boolean
+): Promise<boolean> {
+  try {
+    await advance(kit, ids, "briefing")
+    return true
+  } catch (error) {
+    if (!(error instanceof TransitionError) || error.code !== "site.locked") {
+      throw error
+    }
+  }
+  if (firstAttempt) {
+    await kit.withOrg({ orgId: ids.orgId }, async (db) => {
+      const row = await lockRow(db, ids.assignmentId)
+      await appendEvent(db, {
+        orgId: row.orgId,
+        assignmentId: row.id,
+        staffId: row.staffId,
+        type: "site.locked",
+        payload: { waiting_in: row.state },
+      })
+    })
+  }
+  return false
+}

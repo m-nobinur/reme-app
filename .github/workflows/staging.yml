@@ -42,6 +42,7 @@ env:
   NEON_PROJECT_ID: sparkling-wildflower-04343187
   WEB: https://reme-web.lifeos.workers.dev
   API: https://reme-api.lifeos.workers.dev
+  ORCHESTRATOR: https://reme-orchestrator.lifeos.workers.dev
 
 jobs:
   staging:
@@ -122,6 +123,23 @@ jobs:
             and .bypasses_rls == false and .rows_for_absent_org == 0' >/dev/null || {
             echo "::error::/health answered, and not with the guarantees it promises"
             exit 1; }
+
+      # Built by Vite first: flue generates the entry and merges the Durable
+      # Object bindings into the config wrangler deploys. Open item 46: deploy
+      # while no assignment is between Implementing and Validating; the check
+      # is a human one until the deploy job reads the table.
+      - run: pnpm --filter orchestrator build
+
+      - name: Deploy the orchestrator
+        run: >
+          pnpm --filter orchestrator exec wrangler deploy
+          --config dist/reme_orchestrator/wrangler.json
+          --message "${{ github.sha }}"
+
+      - name: The orchestrator answers
+        run: |
+          curl -sSf --max-time 30 "$ORCHESTRATOR/health" | jq -e '.status == "ok"' >/dev/null || {
+            echo "::error::$ORCHESTRATOR/health did not answer ok"; exit 1; }
 
       - run: pnpm --filter web build
 

@@ -2,12 +2,15 @@ import { eq } from "drizzle-orm"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
 import {
+  assignments,
+  assignmentTransitions,
   departments,
   events,
   facts,
   memberships,
   orgs,
   roles,
+  siteRevisions,
   staff,
   staffEvents,
   users,
@@ -188,6 +191,53 @@ export async function seedTwoOrgs() {
       type: "staff.hired",
       occurredAt: new Date(),
       idempotencyKey: ulid(tag, 2),
+    })
+    // The builder track's rows: an assignment, the event its one transition
+    // wrote, the transition citing that event, and a revision of the site.
+    await db.insert(assignments).values({
+      id: per(tag, 10),
+      orgId: org,
+      staffId: per(tag, 4),
+      createdByStaffId: per(tag, 4),
+      kind: "site.build",
+      state: "briefing",
+      version: 1,
+      goal: "Tenancy probe",
+      acceptanceCriteria: ["probe"],
+      factSnapshotId: per(tag, 5),
+      budgetUsd: 1,
+      idempotencyKey: ulid(tag, 4),
+    })
+    await db.insert(events).values({
+      eventId: ulid(tag, 3),
+      orgId: org,
+      staffId: per(tag, 4),
+      assignmentId: per(tag, 10),
+      sessionId: null,
+      seq: null,
+      type: "assignment.state_changed",
+      occurredAt: new Date(),
+      idempotencyKey: ulid(tag, 5),
+      payload: { from: "queued", to: "briefing", version: 1 },
+    })
+    await db.insert(assignmentTransitions).values({
+      id: per(tag, 11),
+      orgId: org,
+      assignmentId: per(tag, 10),
+      fromState: "queued",
+      toState: "briefing",
+      version: 1,
+      eventId: ulid(tag, 3),
+    })
+    await db.insert(siteRevisions).values({
+      id: per(tag, 12),
+      orgId: org,
+      siteId: org,
+      assignmentId: per(tag, 10),
+      version: 1,
+      sourceKey: `sites/${org}/${per(tag, 12)}/source.tar.zst`,
+      artifactPrefix: `sites/${org}/${per(tag, 12)}/dist/`,
+      manifestKey: `sites/${org}/${per(tag, 12)}/manifest.json`,
     })
   }
   await sql.end()

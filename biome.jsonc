@@ -73,6 +73,42 @@
                   {
                     "group": ["**/packages/*/**"],
                     "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  },
+                  {
+                    "group": ["@flue/*", "@earendil-works/*"],
+                    "message": "packages/facade is the only importer of flue and Pi (R2). Agent modules take hooks from the facade."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The one file allowed to import `@flue/vite`: the orchestrator's build
+      // has to load the plugin that scans agents and generates their Durable
+      // Objects. Narrower than the apps block, so the relative-reach pattern
+      // is repeated rather than inherited.
+      "includes": ["apps/orchestrator/vite.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/packages/*/**"],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  },
+                  {
+                    "group": [
+                      "@flue/runtime",
+                      "@flue/sdk",
+                      "@earendil-works/*"
+                    ],
+                    "message": "Only @flue/vite is allowed here, for the build. Runtime imports belong in packages/facade (R2)."
                   }
                 ]
               }

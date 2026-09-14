@@ -236,6 +236,24 @@ export type Tenancy = {
  * that organization. Null is the ordinary answer for a signed-in person whose
  * org we do not mirror yet, not an error.
  */
+/**
+ * The org a slug names, for the operator console (M3), which addresses a
+ * business by its slug and holds no session. The same definer path as
+ * `resolveOrg`: a null for an unknown slug, never an error that says so.
+ */
+export async function resolveOrgBySlug(
+  kit: Tenancy,
+  slug: string
+): Promise<string | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{ org_id: string | null }>(
+      sql`select public.resolve_org_by_slug(${slug}) as org_id`
+    )
+    return rows[0]?.org_id ?? null
+  })
+}
+
 export async function resolveOrg(
   kit: Tenancy,
   identity: Identity

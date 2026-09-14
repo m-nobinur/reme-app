@@ -33,6 +33,9 @@ qa/e2e/.auth/
 
 # local dev
 .wrangler/
+# flue's generated entry and merged wrangler config (apps/orchestrator)
+.flue-vite/
+.flue-vite.wrangler.jsonc
 .vercel/
 .DS_Store
 *.local

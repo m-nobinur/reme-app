@@ -1,12 +1,15 @@
 import { inArray, sql } from "drizzle-orm"
 import { connect } from "../src/client.ts"
 import {
+  assignments,
+  assignmentTransitions,
   departments,
   events,
   facts,
   memberships,
   orgs,
   roles,
+  siteRevisions,
   staff,
   staffEvents,
   users,
@@ -95,6 +98,13 @@ export async function clearOrgs(
   userIds: readonly string[]
 ) {
   const ids = [...orgIds]
+  // The builder track's tables first: a transition cites an event, and both
+  // cite the assignment.
+  await tx
+    .delete(assignmentTransitions)
+    .where(inArray(assignmentTransitions.orgId, ids))
+  await tx.delete(siteRevisions).where(inArray(siteRevisions.orgId, ids))
+  await tx.delete(assignments).where(inArray(assignments.orgId, ids))
   await tx.delete(events).where(inArray(events.orgId, ids))
   await tx.delete(staffEvents).where(inArray(staffEvents.orgId, ids))
   await tx.delete(facts).where(inArray(facts.orgId, ids))

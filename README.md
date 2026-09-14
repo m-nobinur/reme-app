@@ -87,7 +87,7 @@ account also serves an unrelated project:
 
 | Resource | Name | Bound as |
 | --- | --- | --- |
-| Hyperdrive config | `reme-staging-postgres` | `HYPERDRIVE` in `apps/api` |
+| Hyperdrive config | `reme-staging-postgres` | `HYPERDRIVE` in `apps/api` and `apps/orchestrator` |
 | KV namespace | `reme-staging-web-cache` | `CACHE` in `apps/web` |
 | Postgres login | `reme_app` gains a password | the Hyperdrive origin credential |
 
@@ -108,9 +108,10 @@ pnpm --filter web build
 pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json
 ```
 
-There is no registered domain on this account and no zone, so both Workers answer on
-`*.workers.dev`: <https://reme-web.lifeos.workers.dev> and
-<https://reme-api.lifeos.workers.dev>. The subdomain is the account's, not this project's.
+There is no registered domain on this account and no zone, so the Workers answer on
+`*.workers.dev`: <https://reme-web.lifeos.workers.dev>, <https://reme-api.lifeos.workers.dev>
+and <https://reme-orchestrator.lifeos.workers.dev>. The subdomain is the account's, not this
+project's.
 A custom hostname, and the wildcard preview DNS that depends on one, are deferred to the
 final phase.
 

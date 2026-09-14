@@ -61,8 +61,20 @@ const environments = {
      * is the seal `apps/web` writes and `apps/api` reads, so two values means
      * `apps/api` reads every session as `{}`.
      */
-    secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
-    workers: ["reme-web", "reme-api"],
+    secrets: {
+      "reme-web": [
+        "WORKOS_API_KEY",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_COOKIE_PASSWORD",
+      ],
+      "reme-api": [
+        "WORKOS_API_KEY",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_COOKIE_PASSWORD",
+      ],
+      // The console bearer and nothing else: this Worker holds no session.
+      "reme-orchestrator": ["ORCHESTRATOR_TOKEN"],
+    },
   },
   /**
    * Its own Neon project rather than a branch of the staging one, and that is
@@ -82,8 +94,19 @@ const environments = {
     neonOwner: "neondb_owner",
     hyperdrive: "reme-prod-postgres",
     kv: "reme-prod-web-cache",
-    secrets: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD"],
-    workers: ["reme-web-production", "reme-api-production"],
+    secrets: {
+      "reme-web-production": [
+        "WORKOS_API_KEY",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_COOKIE_PASSWORD",
+      ],
+      "reme-api-production": [
+        "WORKOS_API_KEY",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_COOKIE_PASSWORD",
+      ],
+      "reme-orchestrator-production": ["ORCHESTRATOR_TOKEN"],
+    },
   },
 } as const
 
@@ -340,7 +363,7 @@ const localEnv = new Map(
     })
 )
 
-for (const worker of config.workers) {
+for (const [worker, secrets] of Object.entries(config.secrets)) {
   // A Worker that has never been deployed has nowhere to hold a secret, and
   // `reme-api` cannot deploy until the Hyperdrive id above is in its config. So
   // this is a note and not a failure: deploy, then run this again.
@@ -358,7 +381,7 @@ for (const worker of config.workers) {
   const already = new Set(
     json<{ name: string }[]>(deployed).map((entry) => entry.name)
   )
-  for (const secret of config.secrets) {
+  for (const secret of secrets) {
     if (already.has(secret)) {
       ok(`${state("present")}${worker} ${secret}`)
       continue
@@ -369,7 +392,9 @@ for (const worker of config.workers) {
         `${secret} is empty in .env.local, so ${worker} cannot have it`,
         secret === "WORKOS_COOKIE_PASSWORD"
           ? "openssl rand -base64 32   (the same value on both Workers)"
-          : "Take it from the WorkOS dashboard for this environment."
+          : secret === "ORCHESTRATOR_TOKEN"
+            ? "openssl rand -hex 32   (the console's bearer, see .env.example)"
+            : "Take it from the WorkOS dashboard for this environment."
       )
     }
     cli("npx", ["wrangler", "secret", "put", secret, "--name", worker], {

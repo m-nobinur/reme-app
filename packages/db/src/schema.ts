@@ -564,6 +564,9 @@ export const events = pgTable(
     }),
     // R5: a consumer that runs twice upserts onto the same row.
     unique("events_org_idempotency_key").on(t.orgId, t.idempotencyKey),
+    // So a row in another table can cite an event and its org in one foreign
+    // key, and never an event that belongs to a different tenant.
+    unique("events_id_org_key").on(t.eventId, t.orgId),
     // The aggregate replay reads: one seq per session, no gaps to argue about.
     // No WHERE any more, because a row with no session now has no seq either
     // and two of those do not collide: NULLs are distinct in a unique index.
@@ -592,5 +595,203 @@ export const events = pgTable(
       sql`type ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$'`
     ),
     orgIsolation("events"),
+  ]
+)
+
+/** The §8.4 state machine. The same sixteen values as the contract's enum. */
+export const assignmentState = pgEnum("assignment_state", [
+  "queued",
+  "briefing",
+  "planning",
+  "implementing",
+  "validating",
+  "preview_ready",
+  "awaiting_review",
+  "revising",
+  "release_candidate",
+  "published",
+  "blocked_on_information",
+  "blocked_on_approval",
+  "repairing",
+  "paused",
+  "failed",
+  "cancelled",
+])
+
+export const assignmentPriority = pgEnum("assignment_priority", [
+  "low",
+  "normal",
+  "high",
+  "urgent",
+])
+
+/** ADR-031. `published` means activated at least once, never "live now". */
+export const siteRevisionStatus = pgEnum("site_revision_status", [
+  "building",
+  "preview",
+  "published",
+  "retired",
+])
+
+/**
+ * `Assignment` (§19), owned by the orchestrator. State truth is this row;
+ * Workflows is the executor (§8.4). `version` is the optimistic lock the
+ * contract calls `expected_version`: a transition carrying a stale one is
+ * refused, and every successful one bumps it and writes a transition row.
+ */
+export const assignments = pgTable(
+  "assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Assignee. A `staff` row, so a human can occupy it unchanged. */
+    staffId: uuid("staff_id").notNull(),
+    createdByStaffId: uuid("created_by_staff_id").notNull(),
+    parentAssignmentId: uuid("parent_assignment_id"),
+    revisionOfAssignmentId: uuid("revision_of_assignment_id"),
+    /** Dotted, e.g. `site.build`, `site.revise`. */
+    kind: text("kind").notNull(),
+    state: assignmentState("state").notNull().default("queued"),
+    version: integer("version").notNull().default(0),
+    goal: text("goal").notNull(),
+    acceptanceCriteria: jsonb("acceptance_criteria")
+      .$type<string[]>()
+      .notNull(),
+    factSnapshotId: uuid("fact_snapshot_id").notNull(),
+    packRefs: jsonb("pack_refs")
+      .$type<{ key: string; version: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    budgetUsd: doublePrecision("budget_usd").notNull(),
+    deadline: timestamp("deadline", { withTimezone: true }),
+    priority: assignmentPriority("priority").notNull().default("normal"),
+    /** The Workflows instance driving this row, once one exists. */
+    workflowInstanceId: text("workflow_instance_id"),
+    /** §13.1: a duplicate create replays this row rather than making another. */
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("assignments_id_org_key").on(t.id, t.orgId),
+    unique("assignments_org_idempotency_key").on(t.orgId, t.idempotencyKey),
+    foreignKey({
+      name: "assignments_staff_fk",
+      columns: [t.staffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    foreignKey({
+      name: "assignments_created_by_fk",
+      columns: [t.createdByStaffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    foreignKey({
+      name: "assignments_parent_fk",
+      columns: [t.parentAssignmentId, t.orgId],
+      foreignColumns: [t.id, t.orgId],
+    }),
+    foreignKey({
+      name: "assignments_revision_of_fk",
+      columns: [t.revisionOfAssignmentId, t.orgId],
+      foreignColumns: [t.id, t.orgId],
+    }),
+    // §13: one writing assignment per site. One site per org today, so the
+    // key is the org; a second site changes the Assignment contract first
+    // (ADR-031). A writer is any site assignment between claim and a terminal
+    // state, and `paused` releases the lock so a parked build cannot hold a
+    // site for good. The loser stays `queued` (§13's "second assignment
+    // queues") and the orchestrator's claim step is what catches the refusal.
+    uniqueIndex("assignments_site_writer_key")
+      .on(t.orgId)
+      .where(
+        sql`kind like 'site.%' and state not in ('queued', 'paused', 'published', 'failed', 'cancelled')`
+      ),
+    check(
+      "assignments_kind_is_dotted",
+      sql`kind ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$'`
+    ),
+    check("assignments_budget_positive", sql`budget_usd > 0`),
+    check("assignments_version_nonnegative", sql`version >= 0`),
+    orgIsolation("assignments"),
+  ]
+)
+
+/**
+ * One row per transition, written in the same transaction as the `assignments`
+ * update and the event. "No transition without an event" (§8.4) holds by the
+ * NOT NULL foreign key here, and the property suite in `apps/orchestrator`
+ * proves the event is the right one.
+ */
+export const assignmentTransitions = pgTable(
+  "assignment_transitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    assignmentId: uuid("assignment_id").notNull(),
+    fromState: assignmentState("from_state").notNull(),
+    toState: assignmentState("to_state").notNull(),
+    /** The assignment's `version` after this transition. */
+    version: integer("version").notNull(),
+    eventId: char("event_id", { length: 26 }).notNull(),
+    reason: text("reason"),
+    createdAt,
+  },
+  (t) => [
+    foreignKey({
+      name: "assignment_transitions_assignment_fk",
+      columns: [t.assignmentId, t.orgId],
+      foreignColumns: [assignments.id, assignments.orgId],
+    }),
+    foreignKey({
+      name: "assignment_transitions_event_fk",
+      columns: [t.eventId, t.orgId],
+      foreignColumns: [events.eventId, events.orgId],
+    }),
+    unique("assignment_transitions_version_key").on(t.assignmentId, t.version),
+    // The repair budget (§8.4, at most three) is a count over this index.
+    index("assignment_transitions_to_state_idx").on(t.assignmentId, t.toState),
+    orgIsolation("assignment_transitions"),
+  ]
+)
+
+/**
+ * `SiteRevision` (ADR-031). `version` is the site's own counter; the `v{n}`
+ * tag is derived from it and never stored. Rows outlive their files: retention
+ * deletes the R2 prefix and leaves the summary readable.
+ */
+export const siteRevisions = pgTable(
+  "site_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** One site per org today, seeded equal to `org_id`; baked into R2 keys. */
+    siteId: uuid("site_id").notNull(),
+    assignmentId: uuid("assignment_id").notNull(),
+    version: integer("version").notNull(),
+    summary: text("summary"),
+    sourceKey: text("source_key").notNull(),
+    artifactPrefix: text("artifact_prefix").notNull(),
+    manifestKey: text("manifest_key").notNull(),
+    status: siteRevisionStatus("status").notNull().default("building"),
+    retireAfter: timestamp("retire_after", { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("site_revisions_id_org_key").on(t.id, t.orgId),
+    unique("site_revisions_site_version_key").on(t.siteId, t.version),
+    foreignKey({
+      name: "site_revisions_assignment_fk",
+      columns: [t.assignmentId, t.orgId],
+      foreignColumns: [assignments.id, assignments.orgId],
+    }),
+    check("site_revisions_version_positive", sql`version > 0`),
+    orgIsolation("site_revisions"),
   ]
 )
