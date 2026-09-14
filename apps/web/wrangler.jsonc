@@ -3,12 +3,13 @@
   "name": "reme-web",
   "compatibility_date": "2026-08-26",
   // `global_fetch_strictly_public` is what lets this Worker call `apps/api` at
-  // all. Both live on the account's `workers.dev` subdomain, which is one zone,
-  // and a same-zone `fetch()` from one Worker to another fails with Cloudflare
-  // error 1042 unless this flag is set: without it the request is routed to the
-  // zone's origin, ignoring the Worker mapped to the URL. Measured, not read:
-  // `/app` answered 500 on a preview and 200 from the same code locally, where
-  // the call leaves the machine and is not same-zone.
+  // all. Both live on one zone, `remeai.co.uk` (and before the custom domains,
+  // the account's `workers.dev` subdomain), and a same-zone `fetch()` from one
+  // Worker to another fails with Cloudflare error 1042 unless this flag is
+  // set: without it the request is routed to the zone's origin, ignoring the
+  // Worker mapped to the URL. Measured, not read: `/app` answered 500 on a
+  // preview and 200 from the same code locally, where the call leaves the
+  // machine and is not same-zone.
   //
   // It is the flag rather than a service binding because ADR-029 already chose
   // the public URL, and a binding decides whether `apps/api` has a public
@@ -24,8 +25,12 @@
   // `wrangler versions upload --preview-alias`, so a wrangler upgrade that
   // moved this default again would take every preview URL down with it. The
   // vite plugin carries the field through to dist/server/wrangler.json, which
-  // is the config a web deploy actually uploads; verified, not assumed.
+  // is the config a web deploy actually uploads; verified, not assumed. Load
+  // bearing now that `workers_dev` is off: the default follows it.
   "preview_urls": true,
+  // Staging's hostname (ADR-030), a custom domain like production's below.
+  "workers_dev": false,
+  "routes": [{ "pattern": "staging.remeai.co.uk", "custom_domain": true }],
   // Not a secret: it is a public URL, it appears in the authorize redirect the
   // browser follows, and WorkOS will only honour it because it is registered on
   // the environment (`pnpm workos:config staging`). It is here rather than in
@@ -33,12 +38,12 @@
   // request, the public marketing page included, so a deploy without it answers
   // 500 on `/` rather than only on a sign-in.
   "vars": {
-    "WORKOS_REDIRECT_URI": "https://reme-web.lifeos.workers.dev/api/auth/callback",
+    "WORKOS_REDIRECT_URI": "https://staging.remeai.co.uk/api/auth/callback",
     // Where signup posts the org write (ADR-029). Not a secret and not a
     // service binding: a binding would also decide whether apps/api gets a
     // public hostname at all, which is a design question this does not settle.
     // The local value goes in apps/web/.dev.vars, which `pnpm bootstrap` writes.
-    "REME_API_URL": "https://reme-api.lifeos.workers.dev"
+    "REME_API_URL": "https://staging-api.remeai.co.uk"
   },
   // `reme-staging-web-cache`, created by `node infra/bootstrap.ts staging`. Dev
   // and preview still run against a local simulation of it; the id only decides
@@ -77,6 +82,7 @@
     "production": {
       "name": "reme-web-production",
       "preview_urls": false,
+      "workers_dev": false,
       "routes": [
         {
           "pattern": "preview.remeai.co.uk",
@@ -85,7 +91,7 @@
       ],
       "vars": {
         "WORKOS_REDIRECT_URI": "https://preview.remeai.co.uk/api/auth/callback",
-        "REME_API_URL": "https://reme-api-production.lifeos.workers.dev"
+        "REME_API_URL": "https://api.remeai.co.uk"
       },
       "kv_namespaces": [
         { "binding": "CACHE", "id": "8e089aa00e324970a824ca2768201502" }

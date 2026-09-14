@@ -37,7 +37,7 @@ env:
   # the golden fixture orgs.
   NEON_PROJECT_ID: super-brook-02913792
   WEB: https://preview.remeai.co.uk
-  API: https://reme-api-production.lifeos.workers.dev
+  API: https://api.remeai.co.uk
 
 jobs:
   production:

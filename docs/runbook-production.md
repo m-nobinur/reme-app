@@ -4,7 +4,7 @@ Written 2026-08-30 from the drill, not before it. Every number here was measured
 `reme-api-production`.
 
 Production is `preview.remeai.co.uk` (`reme-web-production`) and
-`reme-api-production.lifeos.workers.dev`, on the `reme-prod` Neon project
+`api.remeai.co.uk` (`reme-api-production`), on the `reme-prod` Neon project
 (`super-brook-02913792`). Staging is separate in every one of those: its own Workers, its own
 Hyperdrive, its own Neon project. A merge to `main` cannot reach production.
 
@@ -44,7 +44,7 @@ so it catches a credential pointed at a role holding BYPASSRLS and a migration t
 policy, neither of which changes the status code of anything else.
 
 ```sh
-curl -s https://reme-api-production.lifeos.workers.dev/health
+curl -s https://api.remeai.co.uk/health
 ```
 
 All four have to hold:
@@ -70,7 +70,7 @@ DATABASE_URL=<direct, non-pooled, reme-prod> pnpm db:migrate
 
 # 2. The api, then its health check before the web build spends two minutes.
 pnpm --filter api exec wrangler deploy --env production
-curl -s https://reme-api-production.lifeos.workers.dev/health
+curl -s https://api.remeai.co.uk/health
 
 # 3. The web app. CLOUDFLARE_ENV is read at BUILD time by the vite plugin, not at deploy time.
 CLOUDFLARE_ENV=production pnpm --filter web build

@@ -23,16 +23,16 @@ process.env.WORKOS_MODE = "agent"
  * takes the full list and can therefore shorten it.
  *
  * Staging carries the local dev origin, the deployed one, and one wildcard for
- * preview environments. There is no registered domain on this account, so a
- * deploy answers on `*.workers.dev` and the subdomain is the account's rather
- * than this project's; a custom hostname is deferred to the final phase.
+ * preview environments. Previews answer on `*.workers.dev`, the account's
+ * subdomain rather than this project's, because Cloudflare issues preview
+ * aliases nowhere else; the deployed Workers answer on `remeai.co.uk` (ADR-030).
  * `signInEndpoint` is the route the sign-in story builds.
  */
 const environments = {
   staging: {
     redirectUris: [
       "http://localhost:3000/api/auth/callback",
-      "https://reme-web.lifeos.workers.dev/api/auth/callback",
+      "https://staging.remeai.co.uk/api/auth/callback",
       // Every preview environment, on one line. A preview is
       // `wrangler versions upload --preview-alias pr-<number>`, which answers
       // at `<alias>-reme-web.lifeos.workers.dev`, so each pull request is a new
@@ -65,7 +65,7 @@ const environments = {
     // this API has no delete.
     corsOrigins: [
       "http://localhost:3000",
-      "https://reme-web.lifeos.workers.dev",
+      "https://staging.remeai.co.uk",
       "https://preview.remeai.co.uk",
     ],
     homepageUrl: "http://localhost:3000",
