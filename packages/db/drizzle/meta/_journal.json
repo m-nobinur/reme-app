@@ -43,6 +43,13 @@
       "when": 1787864247924,
       "tag": "0005_org_workos_link_and_self_read",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789398355167,
+      "tag": "0006_builder_assignments",
+      "breakpoints": true
     }
   ]
 }

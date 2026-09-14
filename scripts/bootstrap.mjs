@@ -63,6 +63,7 @@ loadLocalEnv()
 // all. Generating them separately is a day lost to the wrong error message.
 const WEB_DEV_VARS = "apps/web/.dev.vars"
 const API_DEV_VARS = "apps/api/.dev.vars"
+const ORCHESTRATOR_DEV_VARS = "apps/orchestrator/.dev.vars"
 const SEAL = "WORKOS_COOKIE_PASSWORD"
 
 // Read out of the file rather than out of process.env. The values are copied
@@ -118,6 +119,12 @@ for (const [path, lines] of [
     ],
   ],
   [API_DEV_VARS, shared],
+  // The console bearer only. This Worker holds no WorkOS configuration: the
+  // owner screens reach it over a service binding later, never with a session.
+  [
+    ORCHESTRATOR_DEV_VARS,
+    [`ORCHESTRATOR_TOKEN=${fromLocalEnv("ORCHESTRATOR_TOKEN")}`],
+  ],
 ]) {
   if (existsSync(path)) {
     ok(`${path} exists, left as it is`)

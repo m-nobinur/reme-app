@@ -182,3 +182,9 @@ jobs:
       # "an absent org sees zero" evidence rather than an empty database.
       - name: The API reaches the database through the tenant path
         run: pnpm --filter api test
+
+      # The §8.4 properties: no transition without an event, cancel from every
+      # non-terminal state, stale versions refused, one writer per site. They
+      # live in constraints and transactions, so only a database can run them.
+      - name: The assignment state machine holds
+        run: pnpm --filter orchestrator test

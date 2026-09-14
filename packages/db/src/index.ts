@@ -17,6 +17,7 @@ export {
   closeTenancy,
   ORG_SETTING,
   resolveOrg,
+  resolveOrgBySlug,
   tenancy,
   USER_SETTING,
   withOrg,
