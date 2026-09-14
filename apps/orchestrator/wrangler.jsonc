@@ -1,0 +1,41 @@
+// The orchestrator (C3): the assignment state machine as a Workflow, the
+// console routes, and from N3 the Developer agent's Durable Object. The shape
+// is `apps/api`'s: Hyperdrive to the same database, placed beside it, the
+// default environment is staging. Flue adds `main` and the per-agent Durable
+// Object bindings at build time into `.flue-vite.wrangler.jsonc`; never author
+// a `FLUE_*` binding here.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reme-orchestrator",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "placement": { "region": "aws:eu-central-1" },
+  "preview_urls": true,
+  "hyperdrive": [
+    { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
+  ],
+  "workflows": [
+    {
+      "name": "reme-assignment",
+      "binding": "ASSIGNMENTS",
+      "class_name": "AssignmentWorkflow"
+    }
+  ],
+  "env": {
+    "production": {
+      "name": "reme-orchestrator-production",
+      "preview_urls": false,
+      "hyperdrive": [
+        { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
+      ],
+      "workflows": [
+        {
+          "name": "reme-assignment-production",
+          "binding": "ASSIGNMENTS",
+          "class_name": "AssignmentWorkflow"
+        }
+      ]
+    }
+  }
+}

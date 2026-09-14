@@ -1,0 +1,31 @@
+{
+  "name": "orchestrator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "node ../../scripts/floor.mjs orchestrator-state -- vitest run --dir test",
+    "size": "node scripts/size.mjs"
+  },
+  "dependencies": {
+    "@workspace/contracts": "workspace:*",
+    "@workspace/db": "workspace:*",
+    "hono": "4.13.7",
+    "ulid": "3.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.54.9",
+    "@flue/runtime": "2.0.6",
+    "@flue/vite": "2.0.6",
+    "@types/node": "^22",
+    "fast-check": "^4.9.0",
+    "typescript": "^6",
+    "vite": "8.3.0",
+    "vitest": "^4.1.11",
+    "wrangler": "4.131.2"
+  }
+}

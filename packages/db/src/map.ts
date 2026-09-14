@@ -1,10 +1,19 @@
 import type {
+  Assignment,
   EventEnvelope,
   FactRecord,
   Org,
+  SiteRevision,
   StaffMember,
 } from "@workspace/contracts"
-import type { events, facts, orgs, staff } from "./schema.ts"
+import type {
+  assignments,
+  events,
+  facts,
+  orgs,
+  siteRevisions,
+  staff,
+} from "./schema.ts"
 
 /**
  * Row to contract. Four shapes exist in both `packages/contracts` and this
@@ -85,5 +94,49 @@ export function toEventEnvelope(
     idempotency_key: row.idempotencyKey,
     taint: row.taint,
     payload: row.payload,
+  }
+}
+
+/** `version` is `expected_version` on the wire: the lock a caller must echo. */
+export function toAssignment(row: typeof assignments.$inferSelect): Assignment {
+  return {
+    assignment_id: row.id,
+    org_id: row.orgId,
+    staff_id: row.staffId,
+    created_by_staff_id: row.createdByStaffId,
+    parent_assignment_id: row.parentAssignmentId,
+    revision_of_assignment_id: row.revisionOfAssignmentId,
+    kind: row.kind,
+    state: row.state,
+    expected_version: row.version,
+    goal: row.goal,
+    acceptance_criteria: row.acceptanceCriteria,
+    fact_snapshot_id: row.factSnapshotId,
+    pack_refs: row.packRefs,
+    budget_usd: row.budgetUsd,
+    deadline: iso(row.deadline),
+    priority: row.priority,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  }
+}
+
+export function toSiteRevision(
+  row: typeof siteRevisions.$inferSelect
+): SiteRevision {
+  return {
+    revision_id: row.id,
+    org_id: row.orgId,
+    site_id: row.siteId,
+    assignment_id: row.assignmentId,
+    version: row.version,
+    summary: row.summary,
+    source_key: row.sourceKey,
+    artifact_prefix: row.artifactPrefix,
+    manifest_key: row.manifestKey,
+    status: row.status,
+    retire_after: iso(row.retireAfter),
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   }
 }

@@ -132,6 +132,21 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       }
     },
   },
+  // The builder console's way in: a slug to an org id, and null for a slug
+  // nothing holds, so a caller cannot enumerate what exists by error class.
+  resolve_org_by_slug: {
+    probe: async (raw) => {
+      const call = async (slug: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select public.resolve_org_by_slug(${slug}) as org_id`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [await call("tenancy-probe-a"), await call("tenancy-probe-b")],
+        refused: [await call("tenancy-probe-c"), await call("")],
+      }
+    },
+  },
 }
 
 /**

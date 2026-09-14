@@ -62,6 +62,7 @@ jobs:
     outputs:
       web: ${{ steps.urls.outputs.web }}
       api: ${{ steps.urls.outputs.api }}
+      orchestrator: ${{ steps.urls.outputs.orchestrator }}
       # The branch name, never its connection string: that string carries a
       # password, and a job output is readable by every later job and by anyone
       # who can read the run. A job that needs the database derives the string
@@ -106,6 +107,7 @@ jobs:
           {
             echo "web=https://$PREVIEW_ALIAS-reme-web.lifeos.workers.dev"
             echo "api=https://$PREVIEW_ALIAS-reme-api.lifeos.workers.dev"
+            echo "orchestrator=https://$PREVIEW_ALIAS-reme-orchestrator.lifeos.workers.dev"
             echo "neon_branch=$NEON_BRANCH"
           } >> "$GITHUB_OUTPUT"
 
@@ -157,6 +159,18 @@ jobs:
           --preview-alias "$PREVIEW_ALIAS"
           --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
 
+      # Built by Vite first, because flue generates the entry and merges the
+      # Durable Object bindings into the config wrangler reads. Same staging
+      # Hyperdrive as the api, for the same reason.
+      - run: pnpm --filter orchestrator build
+
+      - name: Upload the orchestrator version
+        run: >
+          pnpm --filter orchestrator exec wrangler versions upload
+          --config dist/reme_orchestrator/wrangler.json
+          --preview-alias "$PREVIEW_ALIAS"
+          --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
+
       - run: pnpm --filter web build
 
       # `--var` overrides the committed `WORKOS_REDIRECT_URI`, which names the
@@ -185,6 +199,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           WEB: ${{ steps.urls.outputs.web }}
           API: ${{ steps.urls.outputs.api }}
+          ORCHESTRATOR: ${{ steps.urls.outputs.orchestrator }}
         run: |
           gh pr comment "${{ github.event.number }}" --edit-last --create-if-none --body "$(
             cat <<EOF
@@ -192,6 +207,7 @@ jobs:
 
           Owner app: $WEB
           API: $API
+          Orchestrator: $ORCHESTRATOR
 
           Sign-in runs against the WorkOS staging environment on this hostname.
           Both are uploaded versions rather than deployments, so no production

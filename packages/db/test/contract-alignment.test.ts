@@ -1,21 +1,36 @@
 import {
+  Assignment,
+  AssignmentState,
   EventEnvelope,
   FactProvenance,
   FactRecord,
   Org,
+  SiteRevision,
   StaffMember,
   TaintLabel,
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
+  toAssignment,
   toEventEnvelope,
   toFactRecord,
   toOrg,
+  toSiteRevision,
   toStaffMember,
 } from "../src/map.ts"
-import type { events, facts, orgs, staff } from "../src/schema.ts"
+import type {
+  assignments,
+  events,
+  facts,
+  orgs,
+  siteRevisions,
+  staff,
+} from "../src/schema.ts"
 import {
+  assignmentPriority,
+  assignmentState,
   factSource,
+  siteRevisionStatus,
   staffKind,
   staffStatus,
   taintLabel,
@@ -44,6 +59,22 @@ describe("enums match the contract", () => {
 
   it("staff lifecycle states", () => {
     expect(staffStatus.enumValues).toEqual(StaffMember.shape.status.options)
+  })
+
+  it("assignment states", () => {
+    expect(assignmentState.enumValues).toEqual(AssignmentState.options)
+  })
+
+  it("assignment priorities", () => {
+    expect(assignmentPriority.enumValues).toEqual(
+      Assignment.shape.priority.options
+    )
+  })
+
+  it("site revision statuses", () => {
+    expect(siteRevisionStatus.enumValues).toEqual(
+      SiteRevision.shape.status.options
+    )
   })
 })
 
@@ -107,6 +138,60 @@ describe("rows map onto contracts", () => {
     createdAt: now,
     updatedAt: now,
   }
+
+  const assignmentRow: typeof assignments.$inferSelect = {
+    id: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e76",
+    orgId: orgRow.id,
+    staffId: staffRow.id,
+    createdByStaffId: staffRow.id,
+    parentAssignmentId: null,
+    revisionOfAssignmentId: null,
+    kind: "site.build",
+    state: "queued",
+    version: 0,
+    goal: "Build the first site revision from the canonical fact snapshot.",
+    acceptanceCriteria: ["Every price on the page matches a canonical fact"],
+    factSnapshotId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e77",
+    packRefs: [{ key: "cleaning", version: "0.1.0" }],
+    budgetUsd: 12.5,
+    deadline: null,
+    priority: "normal",
+    workflowInstanceId: null,
+    idempotencyKey: "01K3ZPQRSTVWXYZ01234567892",
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const revisionRow: typeof siteRevisions.$inferSelect = {
+    id: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e78",
+    orgId: orgRow.id,
+    siteId: orgRow.id,
+    assignmentId: assignmentRow.id,
+    version: 1,
+    summary: null,
+    sourceKey: "sites/x/y/source.tar.zst",
+    artifactPrefix: "sites/x/y/dist/",
+    manifestKey: "sites/x/y/manifest.json",
+    status: "preview",
+    retireAfter: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  it("an assignments row is an Assignment, with version as the lock", () => {
+    const parsed = Assignment.parse(toAssignment(assignmentRow))
+    expect(parsed.expected_version).toBe(0)
+  })
+
+  it("the workflow instance and idempotency key stay behind", () => {
+    const keys = Object.keys(toAssignment(assignmentRow))
+    expect(keys).not.toContain("workflow_instance_id")
+    expect(keys).not.toContain("idempotency_key")
+  })
+
+  it("a site_revisions row is a SiteRevision", () => {
+    expect(() => SiteRevision.parse(toSiteRevision(revisionRow))).not.toThrow()
+  })
 
   it("an orgs row is an Org", () => {
     expect(() => Org.parse(toOrg(orgRow))).not.toThrow()
