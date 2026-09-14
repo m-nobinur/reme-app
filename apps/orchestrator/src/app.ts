@@ -17,7 +17,8 @@ import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import type { AssignmentParams } from "./cloudflare.ts"
-import { cancel, TransitionError } from "./state.ts"
+import consoleHtml from "./console.html?raw"
+import { appendEvent, cancel, TransitionError } from "./state.ts"
 
 /**
  * The console routes (M3 drives them). A bearer secret is the whole of the
@@ -55,6 +56,10 @@ const app = new Hono<ConsoleEnv>()
 
 app.get("/health", (c) => c.json({ status: "ok" }))
 
+// FIXME: a test surface, see the comment at the top of console.html. Delete
+// with it once the owner screens read these routes.
+app.get("/console", (c) => c.html(consoleHtml))
+
 /** The console, mounted at `/assignments` below. */
 const console_ = new Hono<ConsoleEnv>({ strict: false })
 
@@ -87,7 +92,15 @@ console_.use("*", async (c, next) => {
   try {
     await next()
   } finally {
-    c.executionCtx.waitUntil(kit.close())
+    // Outside a Worker (the route test) there is no execution context.
+    let ctx: ExecutionContext | null = null
+    try {
+      ctx = c.executionCtx
+    } catch {
+      ctx = null
+    }
+    if (ctx) ctx.waitUntil(kit.close())
+    else await kit.close()
   }
 })
 
@@ -138,8 +151,12 @@ console_.post("/", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     kind?: unknown
     goal?: unknown
+    model?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
+  // Which of the two coding defaults this assignment runs on (the plan's
+  // `--model A|B`). Recorded on the log for the spec resolver to read (N2).
+  const model = body.model === "B" ? "B" : "A"
   const goal =
     typeof body.goal === "string" && body.goal.trim()
       ? body.goal.trim()
@@ -188,6 +205,13 @@ console_.post("/", async (c) => {
       })
       .returning()
     if (!row) throw new Error("insert returned no row")
+    await appendEvent(db, {
+      orgId,
+      assignmentId: row.id,
+      staffId: chief.id,
+      type: "assignment.created",
+      payload: { kind, model, goal },
+    })
     return { row, replayed: false }
   })
   if ("missing" in result) {
@@ -310,6 +334,27 @@ console_.post("/:id/cancel", async (c) => {
   }
   return c.json({ assignment_id: id, state })
 })
+
+/**
+ * The routes whose stories have not landed answer 501 with the story that
+ * lands them, the way the router's `/api/*` does until ingest exists. The
+ * console script and page already post to them, so every later done-when is
+ * exercised through the same commands.
+ */
+const notYet = (story: string, what: string) => (c: Context) =>
+  c.json(
+    envelope({
+      class: "resource",
+      code: "route.not_implemented",
+      message: `${what} lands with story ${story}.`,
+      detail: { story },
+    }),
+    501
+  )
+console_.post("/:id/answer", notYet("N3", "Answering an information request"))
+console_.post("/:id/steer", notYet("N3", "Steering the running conversation"))
+console_.post("/:id/approve", notYet("P3", "Approving a revision"))
+console_.post("/rollback", notYet("P3", "Rolling a site back"))
 
 function notFound(c: Context, id: string) {
   return failure(c, 404, {
