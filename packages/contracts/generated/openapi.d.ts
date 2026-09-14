@@ -118,8 +118,55 @@ export interface components {
       /** Format: date-time */
       requested_at: string
     }
+    CompletionReport: {
+      /** Format: uuid */
+      report_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      assignment_id: string
+      /** Format: uuid */
+      session_id: string
+      /** Format: uuid */
+      revision_id: string
+      summary: string
+      changes: {
+        path: string
+        reason: string
+      }[]
+      screenshots: string[]
+      checks: {
+        check: string
+        exit_code: number
+        output_key: string | null
+      }[]
+      risks: string[]
+      decisions_needed: string[]
+      /** Format: date-time */
+      reported_at: string
+    }
     CreateOrgRequest: {
       name: string
+    }
+    DeploymentManifest: {
+      /** Format: uuid */
+      revision_id: string
+      /** Format: uuid */
+      site_id: string
+      /** Format: uuid */
+      org_id: string
+      routes: {
+        path: string
+        file: string
+      }[]
+      headers: {
+        [key: string]: string
+      }
+      files: {
+        [key: string]: string
+      }
+      /** Format: date-time */
+      built_at: string
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -223,6 +270,20 @@ export interface components {
       /** Format: date-time */
       reported_at: string
     }
+    InformationAnswer: {
+      /** Format: uuid */
+      answer_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      assignment_id: string
+      /** Format: uuid */
+      request_id: string
+      /** Format: uuid */
+      fact_id: string
+      /** Format: date-time */
+      answered_at: string
+    }
     InformationRequest: {
       /** Format: uuid */
       request_id: string
@@ -250,6 +311,30 @@ export interface components {
       name: string
       /** Format: date-time */
       created_at: string
+    }
+    ProgressEvent: {
+      /** @enum {string} */
+      state:
+        | "queued"
+        | "briefing"
+        | "planning"
+        | "implementing"
+        | "validating"
+        | "preview_ready"
+        | "awaiting_review"
+        | "revising"
+        | "release_candidate"
+        | "published"
+        | "blocked_on_information"
+        | "blocked_on_approval"
+        | "repairing"
+        | "paused"
+        | "failed"
+        | "cancelled"
+      phase: string
+      metrics: {
+        [key: string]: number
+      }
     }
     RuntimeSpec: {
       /** Format: uuid */
@@ -309,6 +394,28 @@ export interface components {
       expires_at: string
       signature: string
     }
+    SiteRevision: {
+      /** Format: uuid */
+      revision_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      site_id: string
+      /** Format: uuid */
+      assignment_id: string
+      version: number
+      summary: string | null
+      source_key: string
+      artifact_prefix: string
+      manifest_key: string
+      /** @enum {string} */
+      status: "building" | "preview" | "published" | "retired"
+      retire_after: string | null
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
     StaffDirectory: {
       staff: {
         /** Format: uuid */
@@ -364,6 +471,26 @@ export interface components {
       created_at: string
       /** Format: date-time */
       updated_at: string
+    }
+    ValidationReport: {
+      /** Format: uuid */
+      report_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      assignment_id: string
+      /** Format: uuid */
+      revision_id: string
+      gates: {
+        /** @enum {string} */
+        gate: "build" | "types" | "links" | "structured_data" | "content"
+        passed: boolean
+        evidence_key: string | null
+        offending_node: string | null
+        message: string | null
+      }[]
+      /** Format: date-time */
+      produced_at: string
     }
   }
   responses: never

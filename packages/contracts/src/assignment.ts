@@ -72,6 +72,22 @@ export const InformationRequest = z.strictObject({
 })
 
 /**
+ * `InformationAnswer` (§7.2). The answer is written to canonical facts first
+ * and returned by reference: the Developer never sees "the owner said", it
+ * sees a `FactRecord`. Carrying the value here as well would be a second copy
+ * of truth that can contradict the fact, so the ref is the whole contract.
+ */
+export const InformationAnswer = z.strictObject({
+  answer_id: Uuid,
+  org_id: Uuid,
+  assignment_id: Uuid,
+  request_id: Uuid,
+  /** The `FactRecord` version this answer produced, `owner_stated`. */
+  fact_id: Uuid,
+  answered_at: Timestamp,
+})
+
+/**
  * What an approval binds to (§7.3). A discriminated union, not one object
  * with four optional fields: a stale approval must not be able to name a
  * different target than the one it was granted for.
@@ -112,5 +128,6 @@ export const ApprovalRequest = z.strictObject({
 export type AssignmentState = z.infer<typeof AssignmentState>
 export type Assignment = z.infer<typeof Assignment>
 export type InformationRequest = z.infer<typeof InformationRequest>
+export type InformationAnswer = z.infer<typeof InformationAnswer>
 export type ApprovalTarget = z.infer<typeof ApprovalTarget>
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>

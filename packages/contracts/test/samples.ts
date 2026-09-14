@@ -7,6 +7,8 @@ const ASSIGNMENT = "3c4d5e6f-7081-4c8d-9e0f-3a4b5c6d7e8f"
 const NOW = "2026-08-26T09:30:00Z"
 const LATER = "2026-08-27T09:30:00+01:00"
 const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
+const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
+const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 
 /**
  * One valid instance per contract. The round-trip suite mutates these, so they
@@ -63,8 +65,54 @@ export const samples: Record<ContractName, unknown> = {
     audit_id: "92a3b4c5-d6e7-42a3-8465-900112233445",
     requested_at: NOW,
   },
+  CompletionReport: {
+    report_id: "d6e7f809-1a2b-46e7-a8a9-334455667788",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    session_id: SESSION,
+    revision_id: REVISION,
+    summary: "Built the first revision: home, services and contact pages.",
+    changes: [
+      { path: "src/site-config.ts", reason: "Filled hours from the snapshot" },
+      { path: "src/pages/services.astro", reason: "One card per service" },
+    ],
+    screenshots: [
+      `sites/${ORG}/${REVISION}/screenshots/home-390.png`,
+      `sites/${ORG}/${REVISION}/screenshots/home-1440.png`,
+    ],
+    checks: [
+      { check: "astro check", exit_code: 0, output_key: null },
+      {
+        check: "astro build",
+        exit_code: 0,
+        output_key: `sites/${ORG}/${REVISION}/checks/build.log`,
+      },
+    ],
+    risks: ["No verified reviews yet, so the reviews section is omitted"],
+    decisions_needed: [],
+    reported_at: NOW,
+  },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
+  },
+  DeploymentManifest: {
+    revision_id: REVISION,
+    site_id: ORG,
+    org_id: ORG,
+    routes: [
+      { path: "/", file: "index.html" },
+      { path: "/services/", file: "services/index.html" },
+    ],
+    headers: {
+      "content-security-policy": "default-src 'self'",
+      "x-content-type-options": "nosniff",
+    },
+    files: {
+      "index.html": SHA,
+      "services/index.html": SHA,
+      "_astro/index.B3kXq2.css": SHA,
+    },
+    built_at: NOW,
   },
   ErrorEnvelope: {
     class: "permission",
@@ -120,6 +168,14 @@ export const samples: Record<ContractName, unknown> = {
     attempt: 2,
     reported_at: NOW,
   },
+  InformationAnswer: {
+    answer_id: "e7f8091a-2b3c-47f8-b9ba-445566778899",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
+    fact_id: "a3b4c5d6-e7f8-43b4-9576-011223344556",
+    answered_at: NOW,
+  },
   InformationRequest: {
     request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
     org_id: ORG,
@@ -142,6 +198,11 @@ export const samples: Record<ContractName, unknown> = {
     slug: "brightclean",
     name: "Brightclean Cleaning Co. (fixture)",
     created_at: NOW,
+  },
+  ProgressEvent: {
+    state: "implementing",
+    phase: "build",
+    metrics: { files_changed: 2, build_seconds: 4.2 },
   },
   RuntimeSpec: {
     spec_id: "c5d6e7f8-091a-45d6-9798-223344556677",
@@ -179,6 +240,21 @@ export const samples: Record<ContractName, unknown> = {
     expires_at: LATER,
     signature: "ed25519:AbC123",
   },
+  SiteRevision: {
+    revision_id: REVISION,
+    org_id: ORG,
+    site_id: ORG,
+    assignment_id: ASSIGNMENT,
+    version: 1,
+    summary: null,
+    source_key: `sites/${ORG}/${REVISION}/source.tar.zst`,
+    artifact_prefix: `sites/${ORG}/${REVISION}/dist/`,
+    manifest_key: `sites/${ORG}/${REVISION}/manifest.json`,
+    status: "preview",
+    retire_after: null,
+    created_at: NOW,
+    updated_at: NOW,
+  },
   StaffDirectory: {
     staff: [
       {
@@ -210,5 +286,28 @@ export const samples: Record<ContractName, unknown> = {
     department_id: null,
     created_at: NOW,
     updated_at: NOW,
+  },
+  ValidationReport: {
+    report_id: "f8091a2b-3c4d-4809-8acb-556677889900",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    revision_id: REVISION,
+    gates: [
+      {
+        gate: "build",
+        passed: true,
+        evidence_key: `sites/${ORG}/${REVISION}/gates/build.log`,
+        offending_node: null,
+        message: null,
+      },
+      {
+        gate: "content",
+        passed: false,
+        evidence_key: null,
+        offending_node: "main > section.pricing > li:nth-child(2)",
+        message: "Price £45 has no matching canonical fact",
+      },
+    ],
+    produced_at: NOW,
   },
 }
