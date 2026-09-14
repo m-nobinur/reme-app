@@ -1,6 +1,7 @@
 # ADR-030: One hostname for the app, one per tenant for the site
 
-Status: accepted, 2026-08-30. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+Status: accepted, 2026-08-30. Amended 2026-09-14: the preview hostname shape changed, see the
+decision and the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -27,7 +28,9 @@ A third surface, the revision preview, is the site plane's and inherits the site
 **A tenant site is one hostname per business**, `{slug}.remeai.co.uk` by default, and the
 business's own domain when they are ready.
 
-**Revision previews are `preview-{rev}.remeai.co.uk`**, flat rather than nested.
+**Revision previews are `preview-v{n}-{slug}.remeai.co.uk`**, flat rather than nested. `n` is the
+site's own version counter and `slug` is the business's. The first draft of this ADR wrote
+`preview-{rev}` with a revision id; amended 2026-09-14.
 
 ## Why the app is not per-tenant
 
@@ -63,8 +66,8 @@ Every reason is a reason the app does not have:
 
 `{slug}.remeai.co.uk`, not `{slug}.sites.remeai.co.uk`. Free Universal SSL covers the apex and
 **first-level subdomains only**; a second level needs Advanced Certificate Manager at $10/month or
-an uploaded wildcard certificate that somebody has to remember to renew. `preview-{rev}` is flat
-for the same reason, which is why it is not `{rev}.preview`.
+an uploaded wildcard certificate that somebody has to remember to renew. `preview-v{n}-{slug}` is
+flat for the same reason, which is why it is not `v{n}.{slug}.preview`.
 
 The cost of one level is that tenant slugs share a namespace with our own hostnames, so the
 reserved list is not optional: `app`, `www`, `api`, `admin`, `mail`, `staging`, `preview`, `docs`,
@@ -104,3 +107,10 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   owner-chosen slug removes the first guarantee and leaves only the second.
 - Nothing in Phase 1 changes. No tenant site exists, and the only hostname this phase needs is the
   app's.
+- Amended 2026-09-14. A preview hostname is `preview-v{n}-{slug}`, not `preview-{rev}`. A
+  revision id is unique but unreadable and says nothing about whose site it is; the version and
+  the slug say both. The pair is unique by construction, because `n` is the site's counter and
+  `orgs_slug_unique` holds the slug. The label stays one level deep and under the reserved
+  `preview-` prefix. A DNS label is at most 63 characters, and `preview-v` plus a counter takes
+  about twelve of them, so the owner-chosen-slug story caps the slug at 48. The two-revision
+  retention rule that gives `v{n}` its meaning is ADR-031's.
