@@ -93,7 +93,7 @@ console_.use("*", async (c, next) => {
     await next()
   } finally {
     // Outside a Worker (the route test) there is no execution context.
-    let ctx: ExecutionContext | null = null
+    let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
     try {
       ctx = c.executionCtx
     } catch {
