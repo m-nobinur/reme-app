@@ -39,8 +39,8 @@ function stop(message: string, ...fixes: string[]): never {
 
 /**
  * What each environment is made of. Every name is prefixed `reme-` and carries
- * the environment, because this account also serves an unrelated project and a
- * collision here would be one project reconfiguring another's storage.
+ * the environment, so a name can never collide with another resource on the
+ * account and reconfigure storage it does not own.
  *
  * The ids are not here. They arrive from the create calls below and are
  * committed into the two wrangler configs, which is where a deploy reads them;

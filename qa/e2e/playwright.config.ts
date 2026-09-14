@@ -9,7 +9,7 @@ import { STORAGE_STATE } from "./workos"
  * It targets a base URL and nothing else. There is no dev server started here
  * and no environment named in the suite, so the same run answers for a local
  * `pnpm dev`, for staging, and for a per-PR preview. Point `E2E_BASE_URL` at
- * it. Preview hostnames are `https://pr-<number>-reme-web.lifeos.workers.dev`,
+ * it. Preview hostnames are `https://pr-<number>-reme-web.beapp.workers.dev`,
  * and WorkOS accepts them through a wildcard redirect URI, so a preview run
  * needs no per-PR provisioning. What the suite needs from wherever it points is
  * a WorkOS environment it can create a user on, which is `staging` for all

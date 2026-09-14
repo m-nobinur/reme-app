@@ -122,8 +122,8 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   about twelve of them, so the owner-chosen-slug story caps the slug at 48. The two-revision
   retention rule that gives `v{n}` its meaning is ADR-031's.
 - Amended 2026-09-14. Until this amendment only `reme-web-production` had a hostname on the zone
-  and the other four deployed Workers answered on `lifeos.workers.dev`, a subdomain named after
-  the account and shared with an unrelated project. Every deployed Worker now has a hostname of
+  and the other four deployed Workers answered only on the account's `workers.dev` subdomain.
+  Every deployed Worker now has a hostname of
   its own, listed in the decision, and `workers_dev` is off so each answers in one place. The
   reserved list grew by `orchestrator` and the `staging-` prefix. Two things follow for P2: a
   route pattern on the zone runs before a custom domain, so the `*.remeai.co.uk/*` route on the

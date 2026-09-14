@@ -82,8 +82,8 @@ the id committed in the Worker's `wrangler.jsonc`. `present` on a secret is weak
 purpose and the script says so: wrangler exposes no read for a secret value, so it can only
 tell that the name exists, not that the value still matches `.env.local`.
 
-What it makes, and the names, which carry the project and the environment because this
-account also serves an unrelated project:
+What it makes, and the names, which carry the project and the environment so no two
+resources on the account can collide:
 
 | Resource | Name | Bound as |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ Staging answers on <https://staging.remeai.co.uk>, <https://staging-api.remeai.c
 creates (ADR-030). The account's `*.workers.dev` subdomain is off for deployed Workers and
 carries only pull request previews. The wildcard record for tenant sites is P2's.
 
-Staging shares the account's free-tier daily allowances with that unrelated project: 100,000
+The free-tier daily allowances are per account, not per Worker: 100,000
 Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
 three days of retention. All reset at 00:00 UTC. Nothing here bills.
 
@@ -149,8 +149,8 @@ to decide on.
 Every pull request gets two URLs, in one comment that later pushes edit in place:
 
 ```
-https://pr-<number>-reme-web.lifeos.workers.dev
-https://pr-<number>-reme-api.lifeos.workers.dev
+https://pr-<number>-reme-web.beapp.workers.dev
+https://pr-<number>-reme-api.beapp.workers.dev
 ```
 
 `.github/workflows/preview.yml` produces them with `wrangler versions upload --preview-alias
@@ -161,7 +161,7 @@ issues preview aliases nowhere else.
 
 Sign-in works on a hostname that changes every pull request because the staging WorkOS
 environment carries one wildcard redirect URI,
-`https://*-reme-web.lifeos.workers.dev/api/auth/callback`. A WorkOS wildcard matches one
+`https://*-reme-web.beapp.workers.dev/api/auth/callback`. A WorkOS wildcard matches one
 subdomain label, so the `-reme-web` suffix keeps it to this Worker and off the rest of the
 shared subdomain. `reme-web` still has to know its own hostname: `--var` sets
 `WORKOS_REDIRECT_URI` per version, because the AuthKit middleware validates that value on every
@@ -303,7 +303,7 @@ It runs on every merge to `main` against the staging deploy, as the last gate in
 
 The suite names no environment. It takes a base URL and runs the same way against a local
 dev server, staging, or a pull request's preview at
-`https://pr-<number>-reme-web.lifeos.workers.dev`. It needs `WORKOS_API_KEY` in
+`https://pr-<number>-reme-web.beapp.workers.dev`. It needs `WORKOS_API_KEY` in
 `.env.local` or in the environment, because it creates its own throwaway account on the
 WorkOS staging environment and deletes it again in the teardown. The address is unique to
 each run, which is also what keeps the sign-in rate limit (five per address per minute)
