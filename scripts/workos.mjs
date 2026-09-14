@@ -23,9 +23,8 @@ process.env.WORKOS_MODE = "agent"
  * takes the full list and can therefore shorten it.
  *
  * Staging carries the local dev origin, the deployed one, and one wildcard for
- * preview environments. Previews answer on `*.workers.dev`, the account's
- * subdomain rather than this project's, because Cloudflare issues preview
- * aliases nowhere else; the deployed Workers answer on `remeai.co.uk` (ADR-030).
+ * preview environments. Previews answer on `beapp.workers.dev`, the account's
+ * subdomain, because Cloudflare issues preview aliases nowhere else; the deployed Workers answer on `remeai.co.uk` (ADR-030).
  * `signInEndpoint` is the route the sign-in story builds.
  */
 const environments = {
@@ -35,22 +34,22 @@ const environments = {
       "https://staging.remeai.co.uk/api/auth/callback",
       // Every preview environment, on one line. A preview is
       // `wrangler versions upload --preview-alias pr-<number>`, which answers
-      // at `<alias>-reme-web.lifeos.workers.dev`, so each pull request is a new
+      // at `<alias>-reme-web.beapp.workers.dev`, so each pull request is a new
       // origin and registering them one at a time would grow this list forever.
       //
       // Within the WorkOS wildcard rules, measured against the API rather than
       // read off them: the wildcard sits in the subdomain furthest from the root
       // domain, there is only one, and a suffix is allowed. `workers.dev` is a
       // public suffix and wildcards are refused on those, but the root domain
-      // here is `lifeos.workers.dev` and the call was accepted.
+      // here is `beapp.workers.dev` and the call was accepted.
       //
       // The `-reme-web` suffix is the whole of what keeps this narrow. The
-      // subdomain is the account's and an unrelated project shares it, and a
-      // wildcard matches one label and no more, so this covers every alias of
-      // this Worker and nothing else. Proven both ways on 2026-08-29:
+      // subdomain is the account's rather than this Worker's, and a wildcard
+      // matches one label and no more, so this covers every alias of this
+      // Worker and nothing else. Proven both ways on 2026-08-29:
       // `probe-reme-web...` reaches the AuthKit bootstrap, `probe-reme-nope...`
       // is refused with `redirect-uri-invalid`.
-      "https://*-reme-web.lifeos.workers.dev/api/auth/callback",
+      "https://*-reme-web.beapp.workers.dev/api/auth/callback",
       // Production, on the one hostname every business shares (ADR-030). It
       // sits on the staging environment because production runs against the
       // staging WorkOS environment until launch (open item 13), so this list is

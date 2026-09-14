@@ -10,10 +10,10 @@ name: preview
 # preview sign in against the WorkOS staging environment without this workflow
 # ever holding a WorkOS credential.
 #
-# Previews live on the account's `*.workers.dev` subdomain, which an unrelated
-# project shares, because Cloudflare issues preview aliases nowhere else; the
-# deployed Workers themselves answer on `remeai.co.uk` (ADR-030). Every alias
-# carries the worker name and nothing here touches a resource it did not create.
+# Previews live on the account's `beapp.workers.dev` subdomain, because
+# Cloudflare issues preview aliases nowhere else; the deployed Workers answer on
+# `remeai.co.uk` (ADR-030). Every alias carries the worker name and nothing here
+# touches a resource it did not create.
 #
 # The smoke runs here, against the preview, which is what C6 asked for and what
 # was true only after merge until now.
@@ -105,9 +105,9 @@ jobs:
         id: urls
         run: |
           {
-            echo "web=https://$PREVIEW_ALIAS-reme-web.lifeos.workers.dev"
-            echo "api=https://$PREVIEW_ALIAS-reme-api.lifeos.workers.dev"
-            echo "orchestrator=https://$PREVIEW_ALIAS-reme-orchestrator.lifeos.workers.dev"
+            echo "web=https://$PREVIEW_ALIAS-reme-web.beapp.workers.dev"
+            echo "api=https://$PREVIEW_ALIAS-reme-api.beapp.workers.dev"
+            echo "orchestrator=https://$PREVIEW_ALIAS-reme-orchestrator.beapp.workers.dev"
             echo "neon_branch=$NEON_BRANCH"
           } >> "$GITHUB_OUTPUT"
 
@@ -150,7 +150,7 @@ jobs:
       # `reme-api` binds the staging Hyperdrive config, so this preview reads
       # staging data rather than the branch above. Pointing it at the branch
       # needs a Hyperdrive config per PR, and the free plan allows ten per
-      # account on an account an unrelated project already shares. Nothing reads
+      # account. Nothing reads
       # the api through a preview yet: `apps/web` has no service binding to it.
       # Build that seam in the change that gives it a reader.
       - name: Upload the api version
@@ -179,7 +179,7 @@ jobs:
       # included, because the AuthKit middleware validates config per request.
       #
       # WorkOS honours this hostname because the staging environment carries the
-      # wildcard `https://*-reme-web.lifeos.workers.dev/api/auth/callback`, added
+      # wildcard `https://*-reme-web.beapp.workers.dev/api/auth/callback`, added
       # by `pnpm workos:config staging`. The wildcard matches one subdomain label
       # and ends in `-reme-web`, so it covers every alias of this Worker and no
       # other host on the shared subdomain.
