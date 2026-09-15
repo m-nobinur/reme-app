@@ -3,6 +3,7 @@
   FIXME: a test surface. Delete this file and the /console route the moment the
   owner screens in apps/web read these routes over the service binding. It is
   vanilla JS on purpose: no build step, no packages/ui, nothing to keep.
+  Everything a build or the model wrote is set as text, never as HTML.
 -->
 <html lang="en">
 <head>
@@ -10,136 +11,775 @@
 <title>Builder console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; color: #222; background: #fafafa; }
-  h1 { font-size: 18px; margin: 0 0 12px; }
-  fieldset { border: 1px solid #ccc; margin: 0 0 12px; padding: 8px 12px; }
-  legend { font-weight: 600; }
-  label { display: inline-block; margin-right: 12px; }
-  input, textarea, select, button { font: inherit; }
-  input[type=text], input[type=password] { width: 22em; }
-  textarea { width: 100%; box-sizing: border-box; min-height: 4em; }
-  button { margin-right: 6px; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { text-align: left; padding: 2px 8px 2px 0; vertical-align: top; }
-  tr.selected { background: #e8f0fe; }
-  pre { background: #fff; border: 1px solid #ddd; padding: 8px; max-height: 40vh; overflow: auto; font-size: 12px; }
-  #status { color: #a00; white-space: pre-wrap; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  :root {
+    --bg: #f5f6f8; --panel: #fff; --line: #e2e5ea; --text: #1a1d23; --muted: #677084;
+    --accent: #3d5bd9; --accent-text: #fff;
+    --ok: #1a7f37; --ok-bg: #e6f4ea; --bad: #c42b2b; --bad-bg: #fcebeb;
+    --wait: #946200; --wait-bg: #fff3d4; --run: #3d5bd9; --run-bg: #eaeefe;
+    --radius: 12px; color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1116; --panel: #171a21; --line: #2a2f3a; --text: #e5e7eb; --muted: #98a1b2;
+      --accent: #8098ff; --accent-text: #0f1116;
+      --ok: #5cc47f; --ok-bg: #15271c; --bad: #ff7d75; --bad-bg: #2d1718;
+      --wait: #e2b547; --wait-bg: #2a2313; --run: #8098ff; --run-bg: #1b2140;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h2 { font-size: 20px; line-height: 1.3; margin: 0 0 4px; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 650; margin-right: auto; }
+  .brand small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .org { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .org input { width: 150px; }
+  .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .conn.ok::before { background: var(--ok); }
+  .conn.bad::before { background: var(--bad); }
+
+  main { max-width: 1240px; margin: 0 auto; padding: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .side { padding: 14px; position: sticky; top: 72px; max-height: calc(100vh - 92px); overflow: auto; }
+  .view { padding: 24px; }
+  .label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; text-decoration: none; font-weight: 550; white-space: nowrap; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn.block { width: 100%; }
+  .btn:disabled { opacity: 0.5; cursor: default; filter: none; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  textarea { width: 100%; resize: vertical; }
+  .field { display: grid; gap: 6px; margin: 18px 0 12px; }
+  .field > span { font-weight: 600; font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .row.end { justify-content: flex-end; }
+  .row.between { justify-content: space-between; }
+  details.box { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 14px; margin: 12px 0; }
+  details.box[open] { padding-bottom: 14px; }
+  details.box > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+
+  .facts { display: grid; gap: 6px; }
+  .fact { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); gap: 12px; align-items: start; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; }
+  .fact.changed { border-color: var(--accent); background: var(--run-bg); }
+  .fact.invalid { border-color: var(--bad); background: var(--bad-bg); }
+  .fact-key { display: grid; gap: 1px; padding-top: 6px; overflow-wrap: anywhere; }
+  .fact-key code { font-size: 13px; }
+  .fact-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fact-fields > input { flex: 1 1 200px; min-width: 0; }
+  .fact-fields textarea { font-size: 12px; }
+  .sub { display: grid; gap: 2px; flex: 1 1 130px; min-width: 0; }
+  .sub input { width: 100%; }
+
+  .builds { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .build { width: 100%; text-align: left; display: grid; gap: 4px; padding: 10px; border-radius: 8px; border: 1px solid transparent; background: none; cursor: pointer; }
+  .build:hover { background: var(--bg); }
+  .build[aria-current] { background: var(--run-bg); border-color: var(--line); }
+  .build-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .build-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { padding: 10px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); }
+  .pill.run { background: var(--run-bg); color: var(--run); }
+  .pill.run::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s ease-in-out infinite; }
+  .pill.wait { background: var(--wait-bg); color: var(--wait); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) { .pill.run::before { animation: none; } }
+
+  .head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; }
+  .grow { flex: 1 1 320px; min-width: 0; }
+  .head h2 { margin: 8px 0 4px; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  details.brief > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details.brief p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; padding: 10px 12px; background: var(--bg); border-radius: 8px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 18px 0 8px; }
+  .metrics div { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+  .metrics dt { font-size: 12px; color: var(--muted); }
+  .metrics dd { margin: 2px 0 0; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .gates { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 0; }
+  .chip { font-size: 12px; padding: 3px 9px; border-radius: 6px; font-weight: 600; }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); }
+  .chip.bad { background: var(--bad-bg); color: var(--bad); }
+  .notice { border: 1px solid var(--wait); background: var(--wait-bg); border-radius: var(--radius); padding: 12px 14px; margin: 16px 0 0; }
+  .notice p { margin-top: 4px; }
+
+  .timeline { list-style: none; margin: 0; padding: 0; max-height: 44vh; overflow: auto; border-left: 2px solid var(--line); }
+  .timeline li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; padding: 5px 0 5px 14px; position: relative; overflow-wrap: anywhere; }
+  .timeline li::before { content: ""; position: absolute; left: -5px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .timeline .t-ok::before { background: var(--ok); }
+  .timeline .t-bad::before { background: var(--bad); }
+  .timeline .t-ask::before { background: var(--wait); }
+  .timeline .t-you::before, .timeline .t-start::before { background: var(--accent); }
+  .timeline .t-tools > span { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .raw { max-height: 44vh; overflow: auto; margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  .composer { margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--bg); display: grid; gap: 8px; }
+  .composer:focus-within { border-color: var(--accent); }
+  .composer textarea { border: 0; background: transparent; padding: 2px; min-height: 48px; }
+  .composer textarea:focus { outline: none; }
+  .publish { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+  .connect { max-width: 520px; margin: 56px auto; padding: 28px; display: grid; gap: 14px; }
+  .connect input { flex: 1 1 240px; }
+  .error { color: var(--bad); }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 8px; background: var(--text); color: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); z-index: 3; }
+  .toast.bad { background: var(--bad); color: #fff; }
+
+  @media (max-width: 860px) {
+    .workspace { grid-template-columns: 1fr; }
+    .side { position: static; max-height: none; }
+    .fact { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<h1>Builder console</h1>
-<fieldset>
-  <legend>Connection</legend>
-  <label>Token <input id="token" type="password" autocomplete="off"></label>
-  <label>Business slug <input id="org" type="text" value="brightclean"></label>
-  <button type="button" id="refresh">Refresh</button>
-  <span id="status"></span>
-</fieldset>
-<div class="grid">
-  <div>
-    <fieldset>
-      <legend>Create</legend>
-      <label>Goal <input id="goal" type="text" value="Build the site from the canonical facts."></label>
-      <label>Model <select id="model"><option>A</option><option>B</option></select></label>
-      <button type="button" id="create">Create site.build</button>
-    </fieldset>
-    <fieldset>
-      <legend>Assignments</legend>
-      <table id="list"><thead><tr><th>State</th><th>Kind</th><th>Id</th><th>v</th></tr></thead><tbody></tbody></table>
-    </fieldset>
-  </div>
-  <div>
-    <fieldset>
-      <legend>Selected <code id="selected">none</code></legend>
-      <textarea id="text" placeholder="An answer to the open information request, or a steer for the running conversation"></textarea>
-      <label>Request id <input id="request" type="text" placeholder="for answer"></label>
-      <div>
-        <button type="button" id="answer">Answer</button>
-        <button type="button" id="steer">Steer</button>
-        <button type="button" id="approve">Approve latest revision</button>
-        <button type="button" id="rollback">Rollback</button>
-        <button type="button" id="cancel">Cancel</button>
+<header class="bar">
+  <div class="brand">Reme builder<small>staging console</small></div>
+  <label class="org">Business
+    <input id="org" list="orgs" autocomplete="off" spellcheck="false">
+  </label>
+  <datalist id="orgs">
+    <option value="brightclean"></option>
+    <option value="mopandbucket"></option>
+    <option value="emptyco"></option>
+  </datalist>
+  <span id="conn" class="conn">Not connected</span>
+  <button id="token-button" class="btn ghost small" type="button">Token</button>
+</header>
+
+<main>
+  <section id="connect" class="panel connect" hidden>
+    <h2>Connect to the orchestrator</h2>
+    <p class="muted">Every call carries the console token. Run <code>pnpm builder console</code> in the repo: it opens this page and puts the token on your clipboard. The token stays in this browser.</p>
+    <p id="connect-message" class="error small"></p>
+    <form id="token-form" class="row">
+      <input id="token" type="password" autocomplete="off" placeholder="Paste the console token" aria-label="Console token" required>
+      <button class="btn primary" type="submit">Connect</button>
+    </form>
+    <div class="row between">
+      <button id="forget" class="link" type="button">Forget the saved token</button>
+      <button id="back" class="link" type="button">Back to builds</button>
+    </div>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+    <aside class="panel side">
+      <button id="new" class="btn primary block" type="button">New build</button>
+      <div class="label">Builds</div>
+      <ol id="list" class="builds"></ol>
+    </aside>
+
+    <section id="compose" class="panel view" hidden>
+      <h2>New build</h2>
+      <p class="muted">The Developer builds from the business facts and your brief. Prices, contact details, hours and the service area always come from the facts; the brief shapes everything else.</p>
+      <form id="compose-form">
+        <label class="field"><span>Brief</span>
+          <textarea id="goal" rows="5" maxlength="4000" placeholder="Build the site from the canonical facts."></textarea>
+        </label>
+        <details class="box" open>
+          <summary>Business facts <span id="facts-count" class="muted"></span></summary>
+          <div id="facts" class="facts"></div>
+          <div class="row between" style="margin-top: 10px">
+            <span id="facts-note" class="muted small"></span>
+            <button id="save-facts" class="btn small" type="button" disabled>Save changes</button>
+          </div>
+        </details>
+        <details class="box">
+          <summary>Options</summary>
+          <div class="row">
+            <label class="org">Model
+              <select id="model"><option value="A">A (default)</option><option value="B">B</option></select>
+            </label>
+            <label class="org">Leave out a fact
+              <select id="withhold"><option value="">None</option></select>
+            </label>
+          </div>
+          <p class="muted small" style="margin-top: 8px">Leaving out a required fact makes the Developer stop and ask for it.</p>
+        </details>
+        <div class="row end"><button id="start" class="btn primary" type="submit">Start build</button></div>
+      </form>
+    </section>
+
+    <section id="detail" class="panel view" hidden>
+      <div class="head">
+        <div class="grow">
+          <div class="row">
+            <span id="d-state" class="pill"></span>
+            <code id="d-id" class="muted small"></code>
+            <span id="d-when" class="muted small"></span>
+          </div>
+          <h2 id="d-title">Build</h2>
+          <details class="brief"><summary>Brief</summary><p id="d-goal"></p></details>
+        </div>
+        <div class="actions">
+          <button id="d-preview" class="btn primary" type="button" hidden>Open preview ↗</button>
+          <button id="d-cancel" class="btn danger" type="button" hidden>Cancel build</button>
+        </div>
       </div>
-    </fieldset>
-    <fieldset>
-      <legend>Events</legend>
-      <pre id="events">select an assignment</pre>
-    </fieldset>
+      <dl id="d-metrics" class="metrics"></dl>
+      <div id="d-gates" class="gates" hidden></div>
+      <div id="d-question" class="notice" hidden></div>
+      <div class="label">Activity <button id="raw-toggle" class="link" type="button">Show raw events</button></div>
+      <ol id="d-timeline" class="timeline"></ol>
+      <pre id="d-raw" class="raw" hidden></pre>
+      <form id="follow" class="composer">
+        <textarea id="follow-text" rows="2" aria-label="Message"></textarea>
+        <div class="row between">
+          <span id="follow-hint" class="muted small"></span>
+          <button id="follow-send" class="btn primary" type="submit">Send</button>
+        </div>
+      </form>
+      <div class="publish row between">
+        <span class="muted small">Publishing a revision and rolling back.</span>
+        <span class="row">
+          <button id="d-approve" class="btn small" type="button">Approve latest revision</button>
+          <button id="d-rollback" class="btn small" type="button">Roll back</button>
+        </span>
+      </div>
+    </section>
   </div>
-</div>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
 <script>
   const $ = (id) => document.getElementById(id)
-  // Refresh errors are already on screen in #status; nothing else to do.
-  const shown = () => undefined
-  const token = $("token")
-  token.value = sessionStorage.getItem("orchestrator_token") || ""
-  token.addEventListener("change", () => sessionStorage.setItem("orchestrator_token", token.value))
-  let selected = null
-  let latestRevision = null
+
+  /** An element with text children only: nothing here is ever parsed as HTML. */
+  function h(tag, props = {}, ...children) {
+    const el = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) {
+      if (v === undefined || v === null || v === false) continue
+      if (k === "class") el.className = v
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v)
+      else el.setAttribute(k, v === true ? "" : String(v))
+    }
+    for (const child of children.flat()) {
+      if (child === undefined || child === null || child === false) continue
+      el.append(child instanceof Node ? child : document.createTextNode(String(child)))
+    }
+    return el
+  }
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k) } catch { return null } },
+    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k) } catch { /* blocked storage: the page keeps working, it just forgets */ } },
+  }
+
+  const RUNNING = new Set(["queued", "briefing", "planning", "implementing", "validating", "repairing", "release_candidate"])
+  const WAITING = new Set(["blocked_on_information", "blocked_on_approval", "awaiting_review", "paused"])
+  const FOLLOW_UP_FROM = new Set(["preview_ready", "awaiting_review", "failed", "cancelled"])
+  const TERMINAL = new Set(["published", "failed", "cancelled"])
+  const tone = (s) => RUNNING.has(s) ? "run" : WAITING.has(s) ? "wait" : s === "preview_ready" || s === "published" ? "ok" : s === "failed" ? "bad" : ""
+  const words = (s) => String(s || "").replaceAll("_", " ")
+
+  const state = {
+    token: store.get("reme_console_token") || "",
+    org: store.get("reme_console_org") || "brightclean",
+    view: "compose",
+    selected: null,
+    current: null,
+    preview: null,
+    openRequest: null,
+    mode: null,
+  }
 
   async function call(method, path, body) {
-    const org = encodeURIComponent($("org").value.trim())
-    const headers = token.value ? { authorization: `Bearer ${token.value}` } : {}
+    const headers = { authorization: `Bearer ${state.token}` }
     if (body) headers["content-type"] = "application/json"
     if (method === "POST") headers["idempotency-key"] = crypto.randomUUID()
-    const res = await fetch(`${path}${path.includes("?") ? "&" : "?"}org=${org}`, {
-      method, headers, body: body ? JSON.stringify(body) : undefined,
-    })
+    let res
+    try {
+      res = await fetch(`${path}${path.includes("?") ? "&" : "?"}org=${encodeURIComponent(state.org)}`, {
+        method, headers, body: body ? JSON.stringify(body) : undefined,
+      })
+    } catch {
+      setConn("bad", "Unreachable")
+      throw new Error("The orchestrator did not answer.")
+    }
     const json = await res.json().catch(() => ({}))
     if (!res.ok) {
-      $("status").textContent = `${res.status} ${json.class || ""} ${json.code || ""}: ${json.message || ""}`
-      throw new Error(json.code || String(res.status))
+      const error = new Error(json.message || `The orchestrator answered ${res.status}.`)
+      error.status = res.status
+      throw error
     }
-    $("status").textContent = ""
+    setConn("ok", "Connected")
     return json
   }
 
-  async function refresh() {
-    const { assignments } = await call("GET", "/assignments")
-    const rows = assignments.map((a) =>
-      `<tr data-id="${a.assignment_id}" class="${a.assignment_id === selected ? "selected" : ""}">` +
-      `<td>${a.state}</td><td>${a.kind}</td><td><code>${a.assignment_id.slice(0, 8)}</code></td><td>${a.expected_version}</td></tr>`)
-    $("list").querySelector("tbody").innerHTML = rows.join("")
-    for (const tr of $("list").querySelectorAll("tr[data-id]")) {
-      tr.addEventListener("click", () => { selected = tr.dataset.id; $("selected").textContent = selected; refresh(); })
+  function setConn(kind, text) {
+    $("conn").className = `conn ${kind}`
+    $("conn").textContent = text
+  }
+
+  let toastTimer
+  function toast(message, kind = "") {
+    const t = $("toast")
+    t.textContent = message
+    t.className = `toast ${kind}`
+    t.hidden = false
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => { t.hidden = true }, 6000)
+  }
+
+  function fail(error) {
+    if (error.status === 401) {
+      setConn("bad", "Token refused")
+      return showConnect("The orchestrator refused this token. Paste it again.")
     }
-    if (selected) await showEvents()
+    toast(error.message || String(error), "bad")
   }
 
-  async function showEvents() {
-    const [{ events }, { revisions }] = await Promise.all([
-      call("GET", `/assignments/${selected}/events`),
-      call("GET", `/assignments/${selected}`),
+  /** Runs a click once: the button is disabled until it settles. */
+  async function act(button, fn) {
+    button.disabled = true
+    try { await fn() } catch (error) { fail(error) } finally { button.disabled = false; dirty() }
+  }
+
+  function ago(iso) {
+    const s = Math.round((Date.now() - Date.parse(iso)) / 1000)
+    if (s < 60) return "just now"
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`
+    return new Date(iso).toLocaleDateString()
+  }
+  const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+
+  /** A build's name: its latest follow-up, or the first line of its brief. */
+  function titleOf(goal) {
+    const lines = String(goal).split("\n").map((l) => l.trim()).filter(Boolean)
+    const follow = lines.filter((l) => l.startsWith("Follow-up: ")).pop()
+    return follow ? `↳ ${follow.slice("Follow-up: ".length)}` : lines[0] || "Build"
+  }
+
+  // Views
+
+  function showConnect(message = "") {
+    $("connect").hidden = false
+    $("workspace").hidden = true
+    $("connect-message").textContent = message
+    $("back").hidden = !state.token
+    if (!state.token) setConn("", "Not connected")
+    $("token").focus()
+  }
+
+  async function boot() {
+    if (!state.token) return showConnect()
+    $("connect").hidden = true
+    $("workspace").hidden = false
+    try {
+      await refreshList()
+      if (state.view === "detail" && state.selected) await select(state.selected)
+      else await showCompose()
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  async function showCompose() {
+    state.view = "compose"
+    state.selected = null
+    $("compose").hidden = false
+    $("detail").hidden = true
+    markSelected()
+    await loadFacts()
+  }
+
+  async function select(id) {
+    state.view = "detail"
+    state.selected = id
+    state.preview = null
+    $("compose").hidden = true
+    $("detail").hidden = false
+    $("d-timeline").replaceChildren()
+    markSelected()
+    await refreshDetail()
+  }
+
+  function markSelected() {
+    for (const b of $("list").querySelectorAll("button.build")) {
+      if (b.dataset.id === state.selected) b.setAttribute("aria-current", "true")
+      else b.removeAttribute("aria-current")
+    }
+  }
+
+  async function refreshList() {
+    const { assignments } = await call("GET", "/assignments")
+    $("list").replaceChildren(...(assignments.length
+      ? assignments.map((a) => h("li", {},
+          h("button", { type: "button", class: "build", "data-id": a.assignment_id, onclick: () => select(a.assignment_id).catch(fail) },
+            h("span", { class: "build-top" },
+              h("span", { class: `pill ${tone(a.state)}` }, words(a.state)),
+              h("time", { class: "muted small", datetime: a.created_at }, ago(a.created_at))),
+            h("span", { class: "build-title", title: a.goal }, titleOf(a.goal)))))
+      : [h("li", { class: "empty muted" }, "No builds yet for this business.")]))
+    markSelected()
+  }
+
+  // Facts
+
+  const PLAIN = ["string", "number", "boolean"]
+  const cast = (was, text) =>
+    typeof was === "number" ? (text.trim() === "" || Number.isNaN(Number(text)) ? undefined : Number(text))
+    : typeof was === "boolean" ? (text === "true" ? true : text === "false" ? false : undefined)
+    : text
+
+  function valueInput(value, name) {
+    const el = h("input", { type: typeof value === "number" ? "number" : "text", step: typeof value === "number" ? "any" : undefined, "aria-label": name, spellcheck: "false" })
+    el.value = String(value)
+    el.addEventListener("input", dirty)
+    return el
+  }
+
+  /** One fact, edited in the shape it already has. */
+  function factRow(fact) {
+    const row = h("div", { class: "fact" })
+    const v = fact.value
+    let fields
+    if (v && typeof v === "object" && !Array.isArray(v) && Object.values(v).every((x) => PLAIN.includes(typeof x))) {
+      const parts = Object.entries(v).map(([k, was]) => [k, was, valueInput(was, `${fact.key} ${words(k)}`)])
+      fields = parts.map(([k, , el]) => h("label", { class: "sub" }, h("span", { class: "muted small" }, words(k)), el))
+      row.readValue = () => {
+        const out = {}
+        for (const [k, was, el] of parts) {
+          const next = cast(was, el.value)
+          if (next === undefined) return undefined
+          out[k] = next
+        }
+        return out
+      }
+    } else if (PLAIN.includes(typeof v)) {
+      const el = valueInput(v, fact.key)
+      fields = [el]
+      row.readValue = () => cast(v, el.value)
+    } else {
+      const el = h("textarea", { rows: 2, class: "mono", "aria-label": fact.key, spellcheck: "false" })
+      el.value = JSON.stringify(v)
+      el.addEventListener("input", dirty)
+      fields = [el]
+      row.readValue = () => { try { return JSON.parse(el.value) } catch { return undefined } }
+    }
+    row.fact = fact
+    row.append(
+      h("div", { class: "fact-key" }, h("code", {}, fact.key), h("span", { class: "muted small" }, `v${fact.version} · ${words(fact.provenance?.source)}`)),
+      h("div", { class: "fact-fields" }, fields))
+    return row
+  }
+
+  async function loadFacts() {
+    const { facts } = await call("GET", "/assignments/facts")
+    $("facts").replaceChildren(...(facts.length ? facts.map(factRow) : [h("p", { class: "muted" }, "This business holds no facts yet.")]))
+    $("facts-count").textContent = facts.length ? `· ${facts.length}` : ""
+    const keep = $("withhold").value
+    $("withhold").replaceChildren(h("option", { value: "" }, "None"), ...facts.map((f) => h("option", { value: f.key }, f.key)))
+    $("withhold").value = facts.some((f) => f.key === keep) ? keep : ""
+    dirty()
+  }
+
+  function changedFacts() {
+    const changed = []
+    let invalid = 0
+    for (const row of $("facts").querySelectorAll(".fact")) {
+      const value = row.readValue()
+      row.classList.toggle("invalid", value === undefined)
+      if (value === undefined) { invalid++; continue }
+      const moved = JSON.stringify(value) !== JSON.stringify(row.fact.value)
+      row.classList.toggle("changed", moved)
+      if (moved) changed.push({ key: row.fact.key, value })
+    }
+    return { changed, invalid }
+  }
+
+  function dirty() {
+    if ($("compose").hidden) return
+    const { changed, invalid } = changedFacts()
+    $("save-facts").disabled = changed.length === 0 || invalid > 0
+    $("facts-note").textContent = invalid
+      ? "Fix the highlighted value first."
+      : changed.length
+        ? `${changed.length} changed. Saved when you start the build, or now.`
+        : "Edits are saved as owner-stated facts; earlier versions are kept."
+  }
+
+  async function saveFacts() {
+    const { changed, invalid } = changedFacts()
+    if (invalid) throw new Error("A fact value is not valid.")
+    if (!changed.length) return 0
+    await call("POST", "/assignments/facts", { facts: changed })
+    await loadFacts()
+    return changed.length
+  }
+
+  // A build
+
+  function numbers(events) {
+    let turns = 0, input = 0, cached = 0, cost = 0, tools = 0, failed = 0
+    for (const e of events) {
+      if (e.type === "runtime.turn") {
+        const u = e.payload.response?.usage || {}
+        turns++
+        input += u.input || 0
+        cached += u.cacheRead || 0
+        cost += u.cost?.total || 0
+      } else if (e.type === "runtime.tool") {
+        tools++
+        if (e.payload.isError) failed++
+      }
+    }
+    const hit = input + cached ? Math.round((cached / (input + cached)) * 100) : 0
+    return [["Turns", turns], ["Cost", `$${cost.toFixed(4)}`], ["Cached input", `${hit}%`], ["Tool calls", failed ? `${tools} (${failed} failed)` : tools]]
+  }
+
+  function describe(e) {
+    const p = e.payload || {}
+    switch (e.type) {
+      case "assignment.created": return ["start", p.follow_up_of ? `Follow-up on #${String(p.follow_up_of).slice(0, 8)} requested` : "Build requested"]
+      case "facts.snapshot_taken": return ["facts", `Read ${(p.facts || []).length} business facts${p.withheld?.length ? `, leaving out ${p.withheld.join(", ")}` : ""}`]
+      case "assignment.state_changed": return ["state", `${words(p.from)} → ${words(p.to)}`]
+      case "information.requested": return ["ask", `Asked for ${p.field}`]
+      case "information.answered": return ["answer", "Answer saved as a fact"]
+      case "assignment.steered": return ["you", `You: ${p.message}`]
+      case "assignment.validation_reported": {
+        const gates = p.gates || []
+        const failed = gates.filter((g) => !g.passed)
+        return failed.length ? ["bad", `Gates failed: ${failed.map((g) => words(g.gate)).join(", ")}`] : ["ok", `All ${gates.length} gates passed`]
+      }
+      default: return e.type.startsWith("runtime.") ? null : ["other", e.type]
+    }
+  }
+
+  /** The log a person reads: tool calls grouped between the events that matter. */
+  function timeline(events) {
+    const items = []
+    let group = null
+    const flush = () => {
+      if (!group) return
+      const text = [...group.counts].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(" · ")
+      items.push(item(group.at, "tools", group.failed ? `${text} · ${group.failed} failed` : text))
+      group = null
+    }
+    for (const e of events) {
+      if (e.type === "runtime.tool") {
+        group ??= { at: e.occurred_at, counts: new Map(), failed: 0 }
+        const name = e.payload.toolName || "tool"
+        group.counts.set(name, (group.counts.get(name) || 0) + 1)
+        if (e.payload.isError) group.failed++
+        continue
+      }
+      const said = describe(e)
+      if (!said) continue
+      flush()
+      items.push(item(e.occurred_at, ...said))
+    }
+    flush()
+    return items
+  }
+  const item = (at, kind, text) => h("li", { class: `t-${kind}` }, h("time", { class: "muted small" }, clock(at)), h("span", {}, text))
+
+  function composer(a) {
+    if (RUNNING.has(a.state)) return { mode: "steer", button: "Steer", placeholder: "Tell the Developer something mid-build, e.g. keep the tagline under eight words", hint: "Joins the running conversation at its next turn." }
+    if (a.state === "blocked_on_information") return { mode: "answer", button: "Answer", placeholder: state.openRequest ? `Your answer for ${state.openRequest.field}` : "Your answer", hint: "Saved as a business fact, then the build carries on." }
+    if (FOLLOW_UP_FROM.has(a.state)) return { mode: "follow-up", button: "Send follow-up", placeholder: "Ask for a change, e.g. make the home page intro warmer and shorter", hint: "Starts a new build with this added to the brief and replaces this preview. Until revise lands it rebuilds from the starter, in about two minutes." }
+    return { mode: null, button: "Send", placeholder: `Nothing to send while the build is ${words(a.state)}.`, hint: "" }
+  }
+
+  async function refreshDetail() {
+    const id = state.selected
+    if (!id) return
+    const [{ assignment: a, revisions }, { events }] = await Promise.all([
+      call("GET", `/assignments/${id}`),
+      call("GET", `/assignments/${id}/events`),
     ])
-    latestRevision = revisions[0] ? revisions[0].revision_id : null
-    $("events").textContent = events
-      .map((e) => `${e.event_id}  seq=${e.seq === null ? "-" : e.seq}  ${e.type}\n    ${JSON.stringify(e.payload)}`)
-      .join("\n")
+    if (state.selected !== id) return
+    state.current = { a, revisions }
+
+    $("d-state").className = `pill ${tone(a.state)}`
+    $("d-state").textContent = words(a.state)
+    $("d-id").textContent = `#${a.assignment_id.slice(0, 8)}`
+    $("d-id").title = a.assignment_id
+    $("d-when").textContent = ago(a.created_at)
+    $("d-title").textContent = titleOf(a.goal)
+    $("d-goal").textContent = a.goal
+    $("d-cancel").hidden = TERMINAL.has(a.state)
+    $("d-metrics").replaceChildren(...numbers(events).map(([k, v]) => h("div", {}, h("dt", {}, k), h("dd", {}, v))))
+
+    const report = events.filter((e) => e.type === "assignment.validation_reported").pop()
+    $("d-gates").hidden = !report
+    if (report) {
+      $("d-gates").replaceChildren(
+        h("span", { class: "muted small" }, `Gates on revision ${String(report.payload.revision_id).slice(0, 8)}`),
+        ...(report.payload.gates || []).map((g) => h("span", { class: `chip ${g.passed ? "ok" : "bad"}`, title: g.passed ? "Passed" : [g.message, g.offending_node].filter(Boolean).join(" · ") }, `${g.passed ? "✓" : "✕"} ${words(g.gate)}`)))
+    }
+
+    const answered = new Set(events.filter((e) => e.type === "information.answered").map((e) => e.payload.request_id))
+    const open = a.state === "blocked_on_information"
+      ? events.filter((e) => e.type === "information.requested" && !answered.has(e.payload.request_id)).pop()
+      : null
+    state.openRequest = open ? open.payload : null
+    $("d-question").hidden = !open
+    if (open) {
+      $("d-question").replaceChildren(
+        h("strong", {}, "The Developer needs a fact: "), h("code", {}, String(open.payload.field)),
+        open.payload.why ? h("p", {}, String(open.payload.why)) : null,
+        h("p", { class: "muted small" }, "Answer it below."))
+    }
+
+    const list = $("d-timeline")
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40
+    list.replaceChildren(...timeline(events))
+    if (atBottom) list.scrollTop = list.scrollHeight
+    if (!$("d-raw").hidden) {
+      $("d-raw").textContent = events.map((e) => `${e.event_id}  seq=${e.seq ?? "-"}  ${e.type}\n    ${JSON.stringify(e.payload)}`).join("\n")
+    }
+
+    const c = composer(a)
+    state.mode = c.mode
+    $("follow-text").placeholder = c.placeholder
+    $("follow-text").disabled = !c.mode
+    $("follow-send").textContent = c.button
+    $("follow-send").disabled = !c.mode
+    $("follow-hint").textContent = c.hint
+
+    const latest = revisions[0]
+    const stale = !state.preview || state.preview.revision_id !== latest?.revision_id || Date.parse(state.preview.expires_at) - Date.now() < 5 * 60 * 1000
+    if (latest && stale) {
+      state.preview = await call("GET", `/assignments/${id}/preview`)
+        .catch(() => ({ revision_id: latest.revision_id, url: null, expires_at: new Date(Date.now() + 36e5).toISOString() }))
+    }
+    const link = $("d-preview")
+    link.hidden = !latest || !state.preview?.url
+    if (!link.hidden) {
+      link.title = `Revision ${state.preview.revision_id.slice(0, 8)}, link good until ${new Date(state.preview.expires_at).toLocaleString()}`
+    }
   }
 
-  $("refresh").addEventListener("click", () => refresh().catch(shown))
-  $("create").addEventListener("click", async () => {
-    const a = await call("POST", "/assignments", { goal: $("goal").value, model: $("model").value })
-    selected = a.assignment_id
-    $("selected").textContent = selected
-    await refresh()
+  // Wiring
+
+  $("org").value = state.org
+  $("org").addEventListener("change", () => {
+    state.org = $("org").value.trim()
+    store.set("reme_console_org", state.org)
+    state.view = "compose"
+    boot()
   })
-  const post = (action, body) => async () => {
-    if (!selected) return
-    await call("POST", `/assignments/${selected}/${action}`, body())
-    await refresh()
-  }
-  $("answer").addEventListener("click", post("answer", () => ({ request_id: $("request").value.trim(), value: $("text").value })))
-  $("steer").addEventListener("click", post("steer", () => ({ message: $("text").value })))
-  $("approve").addEventListener("click", post("approve", () => ({ revision_id: latestRevision })))
-  $("cancel").addEventListener("click", post("cancel", () => ({})))
-  $("rollback").addEventListener("click", async () => {
+  $("token-form").addEventListener("submit", (ev) => {
+    ev.preventDefault()
+    state.token = $("token").value.trim()
+    $("token").value = ""
+    store.set("reme_console_token", state.token)
+    boot()
+  })
+  $("forget").addEventListener("click", () => {
+    state.token = ""
+    store.set("reme_console_token", "")
+    showConnect()
+  })
+  $("back").addEventListener("click", () => boot())
+  $("token-button").addEventListener("click", () => showConnect())
+  $("new").addEventListener("click", () => showCompose().catch(fail))
+  $("save-facts").addEventListener("click", () => act($("save-facts"), async () => {
+    toast(`Saved ${await saveFacts()} facts.`)
+  }))
+  $("compose-form").addEventListener("submit", (ev) => {
+    ev.preventDefault()
+    act($("start"), async () => {
+      const saved = await saveFacts()
+      const withhold = $("withhold").value
+      const a = await call("POST", "/assignments", {
+        goal: $("goal").value.trim() || undefined,
+        model: $("model").value,
+        withhold: withhold ? [withhold] : [],
+      })
+      toast(saved ? `Saved ${saved} facts and started the build.` : "Build started.")
+      await refreshList()
+      await select(a.assignment_id)
+    })
+  })
+  $("follow").addEventListener("submit", (ev) => {
+    ev.preventDefault()
+    act($("follow-send"), async () => {
+      const text = $("follow-text").value.trim()
+      const id = state.selected
+      if (!text || !id) return
+      if (state.mode === "steer") {
+        await call("POST", `/assignments/${id}/steer`, { message: text })
+        toast("Sent to the Developer.")
+      } else if (state.mode === "answer") {
+        if (!state.openRequest) throw new Error("There is no open question to answer.")
+        await call("POST", `/assignments/${id}/answer`, { request_id: state.openRequest.request_id, value: text })
+        toast("Answer saved.")
+      } else if (state.mode === "follow-up") {
+        const next = await call("POST", `/assignments/${id}/follow-up`, { text })
+        $("follow-text").value = ""
+        await refreshList()
+        return select(next.assignment_id)
+      } else {
+        return
+      }
+      $("follow-text").value = ""
+      await refreshDetail()
+    })
+  })
+  $("follow-text").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) $("follow").requestSubmit()
+  })
+  // Opened straight from the click, with the link fetched beforehand, so no popup blocker stops it.
+  $("d-preview").addEventListener("click", () => {
+    if (state.preview?.url) window.open(state.preview.url, "_blank", "noopener,noreferrer")
+  })
+  $("d-cancel").addEventListener("click", () => act($("d-cancel"), async () => {
+    await call("POST", `/assignments/${state.selected}/cancel`, {})
+    await Promise.all([refreshList(), refreshDetail()])
+  }))
+  $("d-approve").addEventListener("click", () => act($("d-approve"), async () => {
+    const revision = state.current?.revisions[0]
+    if (!revision) throw new Error("This build has no revision to approve yet.")
+    await call("POST", `/assignments/${state.selected}/approve`, { revision_id: revision.revision_id })
+    await refreshDetail()
+  }))
+  $("d-rollback").addEventListener("click", () => act($("d-rollback"), async () => {
     await call("POST", "/assignments/rollback", {})
-    await refresh()
+    toast("Rolled back.")
+  }))
+  $("raw-toggle").addEventListener("click", () => {
+    $("d-raw").hidden = !$("d-raw").hidden
+    $("d-timeline").hidden = !$("d-raw").hidden
+    $("raw-toggle").textContent = $("d-raw").hidden ? "Show raw events" : "Show activity"
+    refreshDetail().catch(fail)
   })
-  setInterval(() => { if (token.value) refresh().catch(shown) }, 2000)
+
+  let polling = false
+  setInterval(async () => {
+    if (polling || !state.token || document.hidden || $("workspace").hidden) return
+    polling = true
+    try {
+      await refreshList()
+      if (state.view === "detail") await refreshDetail()
+    } catch (error) {
+      if (error.status === 401) fail(error)
+    } finally {
+      polling = false
+    }
+  }, 2500)
+
+  boot()
 </script>
 </body>
 </html>

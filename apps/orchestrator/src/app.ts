@@ -1,4 +1,8 @@
-import { type ErrorEnvelope, InformationAnswer } from "@workspace/contracts"
+import {
+  type ErrorEnvelope,
+  InformationAnswer,
+  type TaintLabel,
+} from "@workspace/contracts"
 import {
   assignments,
   eq,
@@ -13,6 +17,7 @@ import {
   tenancy,
   toAssignment,
   toEventEnvelope,
+  toFactRecord,
   toSiteRevision,
 } from "@workspace/db"
 import { init } from "@workspace/facade"
@@ -20,6 +25,12 @@ import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
+import {
+  creationChoices,
+  followUpGoal,
+  GOAL_MAX,
+  updateFacts,
+} from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
 import {
@@ -51,6 +62,20 @@ const failure = (
   body: Omit<ErrorEnvelope, "occurred_at">
 ) => c.json(envelope(body), status)
 
+/** §13.1: every console call that makes something carries an Idempotency-Key. */
+const idempotencyKey = (c: Context) => {
+  const key = c.req.header("idempotency-key")?.trim()
+  return key && key.length <= 255 ? key : null
+}
+
+const keyMissing = (c: Context) =>
+  failure(c, 400, {
+    class: "validation",
+    code: "idempotency_key.missing",
+    message: "This request needs an Idempotency-Key header.",
+    detail: {},
+  })
+
 const unauthenticated = () =>
   envelope({
     class: "permission",
@@ -80,7 +105,14 @@ app.get("/health", (c) => c.json({ status: "ok" }))
 
 // FIXME: a test surface, see the comment at the top of console.html. Delete
 // with it once the owner screens read these routes.
-app.get("/console", (c) => c.html(consoleHtml))
+app.get("/console", (c) =>
+  c.html(consoleHtml, 200, {
+    // The page's own script and style are inline; it fetches only this origin.
+    "content-security-policy":
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "referrer-policy": "no-referrer",
+  })
+)
 
 /** The console, mounted at `/assignments` below. */
 const console_ = new Hono<ConsoleEnv>({ strict: false })
@@ -182,15 +214,8 @@ console_.get("/", async (c) => {
  * of Staff, by staff code, because that is who the console stands in for.
  */
 console_.post("/", async (c) => {
-  const key = c.req.header("idempotency-key")?.trim()
-  if (!key || key.length > 255) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "idempotency_key.missing",
-      message: "This request needs an Idempotency-Key header.",
-      detail: {},
-    })
-  }
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as {
     kind?: unknown
     goal?: unknown
@@ -219,7 +244,36 @@ console_.post("/", async (c) => {
       detail: { kind },
     })
   }
+  // The goal is rendered into the Developer's instructions on every turn.
+  if (goal.length > GOAL_MAX) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "goal.too_long",
+      message: `A goal is at most ${GOAL_MAX} characters.`,
+      detail: { length: goal.length, max: GOAL_MAX },
+    })
+  }
+  return createAssignment(c, key, { kind, goal, model, withhold })
+})
 
+/**
+ * Both console calls that make an assignment end here: the row, its
+ * `assignment.created` event and the instance, replayed by idempotency key.
+ */
+async function createAssignment(
+  c: Context<ConsoleEnv>,
+  key: string,
+  input: {
+    kind: string
+    goal: string
+    model: "A" | "B"
+    withhold: string[]
+    followUpOf?: string
+  }
+) {
+  const { kind, goal, model, withhold, followUpOf } = input
+  // A follow-up's text is a change request, tainted as P5's will be.
+  const taint: TaintLabel[] = followUpOf ? ["untrusted_input"] : []
   const orgId = c.get("orgId")
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [existing] = await db
@@ -260,7 +314,14 @@ console_.post("/", async (c) => {
       assignmentId: row.id,
       staffId: chief.id,
       type: "assignment.created",
-      payload: { kind, model, goal, withhold },
+      payload: {
+        kind,
+        model,
+        goal,
+        withhold,
+        ...(followUpOf ? { follow_up_of: followUpOf } : {}),
+      },
+      taint,
     })
     return { row, replayed: false }
   })
@@ -274,7 +335,7 @@ console_.post("/", async (c) => {
   }
   if (!result.replayed) await start(c, result.row.id, orgId)
   return c.json(toAssignment(result.row), result.replayed ? 200 : 201)
-})
+}
 
 /**
  * Create the instance for a row, with the assignment id as the instance id so
@@ -316,6 +377,151 @@ console_.post("/:id/start", async (c) => {
   }
   await start(c, row.id, orgId)
   return c.json(toAssignment(row), 202)
+})
+
+/** The org's current facts, for the console to show and edit. Before `/:id`, which would take the path. */
+console_.get("/facts", async (c) => {
+  const rows = await c
+    .get("kit")
+    .withOrg({ orgId: c.get("orgId") }, (db) =>
+      db
+        .select()
+        .from(facts)
+        .where(sql`${facts.validTo} is null`)
+        .orderBy(facts.key)
+    )
+  return c.json({ facts: rows.map(toFactRecord) })
+})
+
+/** The most facts one call restates, and the longest value as JSON text. */
+const FACTS_MAX = 20
+const FACT_VALUE_MAX = 1000
+
+/**
+ * The console restating facts the org holds (architect ruling on the
+ * console). `updateFacts` owns the rules; this route owns the request's shape.
+ */
+console_.post("/facts", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const body = (await c.req.json().catch(() => ({}))) as { facts?: unknown }
+  const changes = (Array.isArray(body.facts) ? body.facts : []) as {
+    key?: unknown
+    value?: unknown
+  }[]
+  const wellFormed =
+    changes.length > 0 &&
+    changes.length <= FACTS_MAX &&
+    new Set(changes.map((f) => f?.key)).size === changes.length &&
+    changes.every(
+      (f) =>
+        typeof f?.key === "string" &&
+        f.key.length > 0 &&
+        f.key.length <= 100 &&
+        f.value !== undefined &&
+        JSON.stringify(f.value).length <= FACT_VALUE_MAX
+    )
+  if (!wellFormed) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "facts.malformed",
+      message: `Name 1 to ${FACTS_MAX} distinct fact keys, each with a value of at most ${FACT_VALUE_MAX} characters as JSON.`,
+      detail: {},
+    })
+  }
+  const orgId = c.get("orgId")
+  const result = await c.get("kit").withOrg({ orgId }, (db) =>
+    updateFacts(db, {
+      orgId,
+      idempotencyKey: key,
+      changes: changes as { key: string; value: unknown }[],
+    })
+  )
+  if (result.outcome === "unknown_key") {
+    return failure(c, 404, {
+      class: "resource",
+      code: "fact.not_found",
+      message:
+        "This business holds no fact with that key; the console only restates facts it holds.",
+      detail: { key: result.key },
+    })
+  }
+  if (result.outcome === "shape_changed") {
+    return failure(c, 400, {
+      class: "validation",
+      code: "fact.shape_changed",
+      message: "A fact keeps the shape of its current value.",
+      detail: { key: result.key },
+    })
+  }
+  return c.json({ facts: result.facts }, result.replayed ? 200 : 201)
+})
+
+/** A build no one is still working on, which a follow-up may continue. */
+const FOLLOW_UP_FROM = new Set([
+  "preview_ready",
+  "awaiting_review",
+  "failed",
+  "cancelled",
+])
+
+/**
+ * A follow-up on a finished build (architect ruling on the console): a new
+ * `site.build` whose goal is the previous one plus the change, joined here
+ * from the row so no client sends it. It rebuilds from the starter and
+ * supersedes the preview; revise (P5) replaces this route. A running build
+ * takes a steer instead.
+ */
+console_.post("/:id/follow-up", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const body = (await c.req.json().catch(() => ({}))) as { text?: unknown }
+  const text = typeof body.text === "string" ? body.text.trim() : ""
+  if (!text) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "follow_up.empty",
+      message: "A follow-up carries text.",
+      detail: {},
+    })
+  }
+  const id = c.req.param("id")
+  const orgId = c.get("orgId")
+  const previous = await c.get("kit").withOrg({ orgId }, async (db) => {
+    const [row] = await db
+      .select()
+      .from(assignments)
+      .where(eq(assignments.id, id))
+    if (!row) return null
+    const choices = await creationChoices(db, { orgId, assignmentId: id })
+    return { row, choices }
+  })
+  if (!previous) return notFound(c, id)
+  if (!FOLLOW_UP_FROM.has(previous.row.state)) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "assignment.not_finished",
+      message:
+        "This build is still in progress: steer it, or answer its question.",
+      detail: { state: previous.row.state },
+    })
+  }
+  const goal = followUpGoal(previous.row.goal, text)
+  if (!goal) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "goal.too_long",
+      message: `A goal is at most ${GOAL_MAX} characters, its follow-ups included.`,
+      detail: { max: GOAL_MAX },
+    })
+  }
+  return createAssignment(c, key, {
+    kind: "site.build",
+    goal,
+    model: previous.choices.model,
+    withhold: [],
+    followUpOf: id,
+  })
 })
 
 console_.get("/:id", async (c) => {

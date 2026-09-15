@@ -6,6 +6,8 @@ import {
   facts,
   type OrgScopedDb,
   sql,
+  staff,
+  supersedeFact,
   toFactRecord,
 } from "@workspace/db"
 import {
@@ -89,6 +91,108 @@ export async function creationChoices(
     ? payload.withhold.filter((k): k is string => typeof k === "string")
     : []
   return { withhold, model: payload.model === "B" ? "B" : "A" }
+}
+
+/** The longest goal an assignment takes, in characters: it is in every turn's instructions. */
+export const GOAL_MAX = 4000
+
+/** A follow-up's goal: the goal it continues, then the change. Null past the cap, never cut. */
+export function followUpGoal(goal: string, text: string): string | null {
+  const next = `${goal}\n\nFollow-up: ${text}`
+  return next.length > GOAL_MAX ? null : next
+}
+
+/** What a fact value keeps across versions: its JSON type, and an object's keys. */
+const shape = (value: unknown): string => {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "array"
+  if (typeof value === "object") {
+    return `object:${Object.keys(value).sort().join(",")}`
+  }
+  return typeof value
+}
+
+type WrittenFact = { key: string; fact_id: string; version: number }
+
+export type FactsUpdate =
+  | { outcome: "written"; replayed: boolean; facts: WrittenFact[] }
+  | { outcome: "unknown_key"; key: string }
+  | { outcome: "shape_changed"; key: string }
+
+/**
+ * The console standing in for the CoS (§15, architect ruling on the console):
+ * a person restates facts the org already holds. A key with no current fact,
+ * or a value of another shape, refuses the whole batch before anything is
+ * written, so no one invents a claim category (R8). The writes and their one
+ * `facts.updated` event share the caller's transaction; the idempotency key
+ * rides in that event because no row of its own holds it.
+ */
+export async function updateFacts(
+  db: OrgScopedDb,
+  input: {
+    orgId: string
+    idempotencyKey: string
+    changes: readonly { key: string; value: unknown }[]
+  }
+): Promise<FactsUpdate> {
+  const [done] = await db
+    .select({ payload: events.payload })
+    .from(events)
+    .where(
+      sql`${events.type} = 'facts.updated' and ${events.payload}->>'idempotency_key' = ${input.idempotencyKey}`
+    )
+    .limit(1)
+  if (done) {
+    return {
+      outcome: "written",
+      replayed: true,
+      facts: done.payload.facts as WrittenFact[],
+    }
+  }
+  const current = await db
+    .select()
+    .from(facts)
+    .where(sql`${facts.validTo} is null`)
+  const planned = []
+  for (const change of input.changes) {
+    const row = current.find((r) => r.key === change.key)
+    if (!row) return { outcome: "unknown_key", key: change.key }
+    if (shape(row.value) !== shape(change.value)) {
+      return { outcome: "shape_changed", key: change.key }
+    }
+    planned.push({ ...change, factType: row.factType })
+  }
+  const [chief] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(eq(staff.staffCode, "COS-001"))
+  const written: WrittenFact[] = []
+  for (const change of planned) {
+    const result = await supersedeFact(db, {
+      orgId: input.orgId,
+      key: change.key,
+      factType: change.factType,
+      value: change.value,
+      provenance: {
+        source: "owner_stated",
+        confidence: 1,
+        verifiedByStaffId: chief?.id ?? null,
+      },
+    })
+    written.push({
+      key: change.key,
+      fact_id: result.factId,
+      version: result.version,
+    })
+  }
+  await appendEvent(db, {
+    orgId: input.orgId,
+    assignmentId: null,
+    staffId: chief?.id ?? null,
+    type: "facts.updated",
+    payload: { idempotency_key: input.idempotencyKey, facts: written },
+  })
+  return { outcome: "written", replayed: false, facts: written }
 }
 
 /**

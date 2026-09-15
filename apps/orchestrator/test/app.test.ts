@@ -100,6 +100,37 @@ describe("the page", () => {
     expect(res.headers.get("content-type")).toContain("text/html")
     expect(await res.text()).toContain("FIXME")
   })
+
+  it("may talk only to its own origin and never be framed", async () => {
+    const res = await app.request("/console", {}, env)
+    const csp = res.headers.get("content-security-policy") ?? ""
+    expect(csp).toContain("connect-src 'self'")
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer")
+  })
+})
+
+describe("creating an assignment", () => {
+  it("refuses a goal longer than 4,000 characters before touching a row", async () => {
+    const res = await app.request(
+      "/assignments?org=brightclean",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+          "idempotency-key": "k1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ goal: "x".repeat(4001) }),
+      },
+      env
+    )
+    expect(res.status).toBe(400)
+    expect(await envelope(res)).toMatchObject({
+      class: "validation",
+      code: "goal.too_long",
+    })
+  })
 })
 
 describe("routes whose story has not landed", () => {
@@ -151,6 +182,66 @@ describe("routes whose story has not landed", () => {
       expect(await envelope(res)).toMatchObject({ class: "validation", code })
     }
   )
+
+  const post = (
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = authed
+  ) =>
+    app.request(
+      `${path}?org=brightclean`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "idempotency-key": "k1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+      env
+    )
+
+  it.each([
+    ["no facts", { facts: [] }],
+    [
+      "too many facts",
+      {
+        facts: Array.from({ length: 21 }, (_, i) => ({
+          key: `k.${i}`,
+          value: "v",
+        })),
+      },
+    ],
+    ["a key that is not a string", { facts: [{ key: 1, value: "v" }] }],
+    ["no value", { facts: [{ key: "business.phone" }] }],
+    [
+      "a value past 1,000 characters",
+      { facts: [{ key: "business.name", value: "x".repeat(1001) }] },
+    ],
+  ])(
+    "facts refuses %s as facts.malformed, behind the bearer",
+    async (_, body) => {
+      expect((await post("/assignments/facts", body, {})).status).toBe(401)
+      const res = await post("/assignments/facts", body)
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({
+        class: "validation",
+        code: "facts.malformed",
+      })
+    }
+  )
+
+  it("follow-up refuses an empty text as follow_up.empty, behind the bearer", async () => {
+    const body = { text: "  " }
+    expect((await post("/assignments/x/follow-up", body, {})).status).toBe(401)
+    const res = await post("/assignments/x/follow-up", body)
+    expect(res.status).toBe(400)
+    expect(await envelope(res)).toMatchObject({
+      class: "validation",
+      code: "follow_up.empty",
+    })
+  })
 
   it("a slug nothing holds is 404 before any of them", async () => {
     const res = await app.request(
