@@ -2,9 +2,13 @@
 import { site } from "../../site-config"
 
 interface Props {
+  /** The page's own title; the business name is appended. */
   title: string
+  /** The meta and Open Graph description, read from a site field. */
   description?: string
+  /** Items from src/structured-data.ts; the schema.org context is added here. */
   jsonLd?: Record<string, unknown>[]
+  /** Keeps the page out of search results, as the 404 page does. */
   noindex?: boolean
 }
 

@@ -8,7 +8,9 @@
     "build": "astro build",
     "typecheck": "astro check",
     "test": "astro build && node ../../scripts/floor.mjs starter-site -- vitest run --dir test",
-    "size": "node scripts/size.mjs"
+    "size": "node scripts/size.mjs",
+    "manifests": "node scripts/manifests.ts && biome format --write manifests.json",
+    "check:drift": "pnpm manifests && git diff --exit-code -- manifests.json src/components"
   },
   "dependencies": {
     "astro": "7.3.2"
@@ -20,9 +22,11 @@
     "parse5": "8.0.1",
     "schema-dts": "2.0.0",
     "typescript": "5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "yaml": "2.9.0"
   },
   "exports": {
-    "./site-config": "./src/site-config.ts"
+    "./site-config": "./src/site-config.ts",
+    "./manifests.json": "./manifests.json"
   }
 }

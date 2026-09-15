@@ -1,0 +1,18 @@
+component: Section
+path: src/components/Section/Section.astro
+summary: A titled block of page content below the hero.
+props:
+  - name: heading
+    type: string
+    required: true
+    description: The section's h2, read from a site field.
+constraints:
+  - Wrap it in the condition its content needs, so an empty section never
+    renders.
+examples:
+  - "{site.serviceArea && (<Section
+    heading={site.serviceAreaHeading}><p>{site.serviceArea}</p></Section>)}"
+forbidden:
+  - a Section with no content
+  - literal text in heading
+source: generated

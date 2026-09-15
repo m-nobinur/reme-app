@@ -1,0 +1,11 @@
+component: SiteFooter
+path: src/components/SiteFooter/SiteFooter.astro
+summary: The footer with business name, service area and contact details.
+props: []
+constraints:
+  - The Base layout renders it on every page.
+examples:
+  - "<SiteFooter />"
+forbidden:
+  - using it in a page
+source: generated
