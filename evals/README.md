@@ -13,9 +13,9 @@ Two passes.
 2. The tier's scenarios run. Each is a `tier-<n>/*.eval.mjs` whose default
    export throws on failure.
 
-There are no scenarios. The runtimes they would score land in Phase 3, so the
-tier directories do not exist yet: the PR that writes the first scenario creates
-its directory. An absent tier reads as zero rather than as an error.
+Tier 1 has one scenario, `tier-1/developer-contract.eval.mjs`, over the two
+recorded Developer sessions below. Tiers 2 and 3 have none yet; an absent tier
+reads as zero rather than as an error.
 
 | Tier | What it covers |
 | --- | --- |
@@ -37,6 +37,21 @@ review is not golden.
 
 `record.mjs` is the only file here that reaches into `apps/web`, and it runs by
 hand rather than in CI. Point it at the real runtime when there is one.
+
+`pnpm record:session <org> <assignment id> <name>` freezes one Developer
+session from the orchestrator's event log (`ORCHESTRATOR_URL`,
+`ORCHESTRATOR_TOKEN`) into `fixtures/<name>.jsonl`: a header with `kind:
+"session"`, then one event envelope per line. Only what a scenario reads is
+kept: the events the facade's `deriveContext` folds, each tool call with its
+result, and the `information.requested` and `assignment.completion_reported`
+rows. Deltas are dropped; they are most of the bytes and the fold skips them.
+The runner hashes a session fixture with the facade's `contextHash`, so the
+`eval` and `record:session` scripts run node with
+`--experimental-transform-types`, which the facade's TypeScript needs.
+
+`developer-build` is a build on the golden org with every fact present, run on
+staging on 2026-09-15; `developer-asks` is the same build with `business.phone`
+withheld from the snapshot, recorded while it waited on the answer.
 
 ## The hash
 

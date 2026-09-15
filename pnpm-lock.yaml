@@ -14,9 +14,15 @@ importers:
       '@workspace/config':
         specifier: workspace:*
         version: link:packages/config
+      '@workspace/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
       '@workspace/db':
         specifier: workspace:*
         version: link:packages/db
+      '@workspace/facade':
+        specifier: workspace:*
+        version: link:packages/facade
       postgres:
         specifier: 3.4.9
         version: 3.4.9

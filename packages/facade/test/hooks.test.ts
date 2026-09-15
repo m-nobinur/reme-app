@@ -107,7 +107,7 @@ describe("the guarded tool set", () => {
     mkdir: async () => undefined,
     rm: async () => undefined,
   }
-  // The adapter is structural; the six tools only touch the verbs above.
+  // The adapter is structural; the five tools only touch the verbs above.
   const tools = guardedTools(policy)(sandbox as never, { subagents: {} })
   const tool = (name: string) => {
     const found = tools.find((t) => t.name === name)
@@ -115,9 +115,9 @@ describe("the guarded tool set", () => {
     return found
   }
 
-  it("keeps the six tools, in flue's names", () => {
+  it("keeps five of flue's tools, in flue's names, and leaves edit to the agent", () => {
     expect(new Set(tools.map((t) => t.name))).toEqual(
-      new Set(["bash", "edit", "glob", "grep", "read", "write"])
+      new Set(["bash", "glob", "grep", "read", "write"])
     )
   })
 
