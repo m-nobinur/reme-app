@@ -8,5 +8,5 @@
   "orchestrator-unit": 10,
   "orchestrator-unit+db": 40,
   "orchestrator-probe": 5,
-  "facade-unit": 43
+  "facade-unit": 48
 }

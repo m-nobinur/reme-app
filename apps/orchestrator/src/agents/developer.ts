@@ -282,7 +282,7 @@ const edit = defineTool({
     )
     if (refusal) throw new Error(`edit refused: ${refusal}`)
     const original = await harness.sandbox.readFile(data.path)
-    const next = applyEdits(original, data.edits)
+    const next = applyEdits(original, data.edits, data.path)
     await harness.sandbox.writeFile(data.path, next)
     return { output: { path: data.path, edits: data.edits.length } }
   },
