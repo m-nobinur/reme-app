@@ -79,6 +79,8 @@ const environments = {
       "reme-orchestrator": [
         "ORCHESTRATOR_TOKEN",
         "RUNTIME_SPEC_KEY",
+        // Signs the console preview links; the router shares it (ADR-032).
+        "PREVIEW_KEY",
         "OPENROUTER_API_KEY",
         "REME_MODEL_PRIMARY",
         "REME_MODEL_DEFAULT",
