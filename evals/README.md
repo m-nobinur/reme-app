@@ -53,13 +53,15 @@ The runner hashes a session fixture with the facade's `contextHash`, so the
 `eval` and `record:session` scripts run node with
 `--experimental-transform-types`, which the facade's TypeScript needs.
 
-`developer-build` is a build on the golden org with every fact present, run on
-staging on 2026-09-15; `developer-asks` is the same build with `business.phone`
-withheld from the snapshot, recorded while it waited on the answer.
-`developer-edit-recovery` is a build whose goal made its first call an edit,
-before any read, with an anchor quoted in single quotes where the file has
-double quotes; it was refused with Pi's message, read the files, retried and
-built, run on staging on 2026-09-15.
+All three were recorded on staging on 2026-09-16, seeded from
+`packages/starter-site` (N5). `developer-build` is a build on the golden org
+with every fact present. `developer-asks` is the same build with
+`business.phone` withheld from the snapshot, recorded after it asked. It was
+then cancelled. `developer-edit-recovery` is a build whose goal made its first
+call an edit, before any read, quoting `businessName: ''` where
+`src/site-config.ts` has double quotes; it was refused with Pi's message, read
+the files, retried and built. `tier-1/developer-edits.eval.mjs` lists the
+files the seed ships, and changes when the seed does.
 
 ## The hash
 
