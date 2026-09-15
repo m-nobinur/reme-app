@@ -1,0 +1,11 @@
+---
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+---
+
+<Base title="Contact">
+  <h1>Contact</h1>
+  {site.phone && <p>Phone: <a href={`tel:${site.phone}`}>{site.phone}</a></p>}
+  {site.email && <p>Email: <a href={`mailto:${site.email}`}>{site.email}</a></p>}
+  {site.weekdayHours && <p>Weekdays {site.weekdayHours}</p>}
+</Base>

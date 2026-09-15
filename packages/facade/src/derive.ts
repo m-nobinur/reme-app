@@ -47,5 +47,5 @@ export function deriveContext(
 }
 
 /** The hash a recorded session is pinned to. */
-export const contextHash = (events: readonly EventEnvelope[]) =>
+export const contextHash = (events: readonly EventEnvelope[]): string =>
   canonicalHash(deriveContext(events))

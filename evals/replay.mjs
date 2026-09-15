@@ -27,6 +27,17 @@ export function loadFixture(path) {
   return { ...header, turns }
 }
 
+/**
+ * Reads a recorded Developer session, or null when the file is a chunk-stream
+ * fixture. Line 1 is the header, every other line is one event envelope.
+ */
+export function loadSession(path) {
+  const [head, ...rest] = readFileSync(path, "utf8").trimEnd().split("\n")
+  const header = JSON.parse(head)
+  if (header.kind !== "session") return null
+  return { ...header, events: rest.map((line) => JSON.parse(line)) }
+}
+
 /** The chunks of a session, in order, across the turns it is composed of. */
 function sessionChunks(fixture, turnNames) {
   return turnNames.flatMap((name) => fixture.turns.get(name))

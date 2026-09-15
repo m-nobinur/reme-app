@@ -23,6 +23,10 @@ vi.mock("../src/sandbox.ts", () => ({
   },
 }))
 
+// The agent module binds to a Durable Object at import time; the routes that
+// dispatch to it stop at the bearer or the row in this suite.
+vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
+
 const { default: app } = await import("../src/app.ts")
 
 /**
@@ -101,8 +105,6 @@ describe("routes whose story has not landed", () => {
   const authed = { authorization: "Bearer test-token" }
 
   it.each([
-    ["/assignments/x/answer", "N3"],
-    ["/assignments/x/steer", "N3"],
     ["/assignments/x/approve", "P3"],
     ["/assignments/rollback", "P3"],
   ])("%s answers 501 naming %s, behind the bearer", async (path, story) => {
@@ -125,6 +127,29 @@ describe("routes whose story has not landed", () => {
       detail: { story },
     })
   })
+
+  it.each([
+    ["/assignments/x/answer", "answer.malformed"],
+    ["/assignments/x/steer", "steer.empty"],
+  ])(
+    "%s refuses an empty body as %s, behind the bearer",
+    async (path, code) => {
+      const unauthenticated = await app.request(
+        `${path}?org=brightclean`,
+        { method: "POST" },
+        env
+      )
+      expect(unauthenticated.status).toBe(401)
+
+      const res = await app.request(
+        `${path}?org=brightclean`,
+        { method: "POST", headers: authed },
+        env
+      )
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({ class: "validation", code })
+    }
+  )
 
   it("a slug nothing holds is 404 before any of them", async () => {
     const res = await app.request(

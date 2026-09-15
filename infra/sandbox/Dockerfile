@@ -20,6 +20,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 # image keeps apt's download cache on purpose; this image does not.
 RUN npm install -g pnpm@${PNPM_VERSION} playwright@${PLAYWRIGHT_VERSION} \
   && playwright install --with-deps chromium-headless-shell \
+  && apt-get install -y --no-install-recommends zstd \
   && apt-get clean \
   && rm -rf /var/cache/apt/archives /var/lib/apt/lists/* /root/.npm /root/.cache \
   && chmod -R a+rX /opt/pw-browsers

@@ -38,7 +38,7 @@
   "containers": [
     {
       "class_name": "RemeSandbox",
-      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:3f4b63d0e56ca6bb891bd99eb7e7a794c145aad21b56e3ad7a7096c4acd79940",
+      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:aa763dd04f43f42b46fc76056550ebf7fe7f2d9efee75cbcc7c1957f67135c22",
       "instance_type": "standard-2",
       "max_instances": 5
     }
@@ -46,7 +46,20 @@
   "durable_objects": {
     "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RemeSandbox"] }],
+  // `FlueDeveloperAgent` is the class flue generates for the Developer agent
+  // (src/agents/developer.ts); the migration is ours to author, the binding
+  // is flue's. Append-only, per the DO migration rules.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RemeSandbox"] },
+    { "tag": "v2", "new_sqlite_classes": ["FlueDeveloperAgent"] }
+  ],
+  // Site artifacts and source snapshots, `sites/{site_id}/{revision_id}/...`
+  // (ADR-031). The same bucket under the name the Sandbox SDK's backups read,
+  // so a container checkpoint lands beside the revision it belongs to.
+  "r2_buckets": [
+    { "binding": "SITES", "bucket_name": "reme-sites" },
+    { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites" }
+  ],
   "env": {
     "production": {
       "name": "reme-orchestrator-production",
@@ -69,14 +82,19 @@
       "containers": [
         {
           "class_name": "RemeSandbox",
-          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:3f4b63d0e56ca6bb891bd99eb7e7a794c145aad21b56e3ad7a7096c4acd79940",
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:aa763dd04f43f42b46fc76056550ebf7fe7f2d9efee75cbcc7c1957f67135c22",
           "instance_type": "standard-2",
           "max_instances": 5
         }
       ],
       "durable_objects": {
         "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
-      }
+      },
+      // Created by infra/bootstrap.ts when production is first bootstrapped.
+      "r2_buckets": [
+        { "binding": "SITES", "bucket_name": "reme-sites-production" },
+        { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites-production" }
+      ]
     }
   }
 }

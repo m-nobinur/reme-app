@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { contextHash } from "@workspace/facade"
 import { exportRun } from "./langfuse.mjs"
-import { canonical, loadFixture, replay } from "./replay.mjs"
+import { canonical, loadFixture, loadSession, replay } from "./replay.mjs"
 
 /**
  * `pnpm eval [--tier 1|2|3]`, the §16.3 eval runner.
@@ -75,9 +76,15 @@ if (fixtureNames.length === 0) {
 }
 
 for (const name of fixtureNames) {
-  const fixture = loadFixture(dir(`./fixtures/${name}`))
-  const first = replay(fixture)
-  const second = replay(fixture)
+  // Two kinds: a chunk stream the chat surface recorded, folded here, and a
+  // Developer session the orchestrator logged, folded by the facade (§10.6).
+  const session = loadSession(dir(`./fixtures/${name}`))
+  const fixture = session ?? loadFixture(dir(`./fixtures/${name}`))
+  const fold = session
+    ? () => contextHash(session.events)
+    : () => replay(fixture)
+  const first = fold()
+  const second = fold()
   if (first !== second) {
     fail(`${fixture.fixture} replayed twice and differed: ${first} ${second}`)
   } else if (first !== fixture.hash) {

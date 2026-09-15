@@ -1,21 +1,25 @@
-import type { ErrorEnvelope } from "@workspace/contracts"
+import { type ErrorEnvelope, InformationAnswer } from "@workspace/contracts"
 import {
   assignments,
   eq,
   events,
+  facts,
   resolveOrgBySlug,
   siteRevisions,
   sql,
   staff,
+  supersedeFact,
   type Tenancy,
   tenancy,
   toAssignment,
   toEventEnvelope,
   toSiteRevision,
 } from "@workspace/db"
+import { init } from "@workspace/facade"
 import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
+import { Developer } from "./agents/developer.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
 import { probe } from "./sandbox.ts"
@@ -174,11 +178,18 @@ console_.post("/", async (c) => {
     kind?: unknown
     goal?: unknown
     model?: unknown
+    withhold?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Which of the two coding defaults this assignment runs on (the plan's
   // `--model A|B`). Recorded on the log for the spec resolver to read (N2).
   const model = body.model === "B" ? "B" : "A"
+  // FIXME: a test knob, like console.html. Fact keys left out of the
+  // snapshot so a run has to ask for them; the Developer story's withheld
+  // phone run is the one user. Delete with the console.
+  const withhold = Array.isArray(body.withhold)
+    ? body.withhold.filter((k): k is string => typeof k === "string")
+    : []
   const goal =
     typeof body.goal === "string" && body.goal.trim()
       ? body.goal.trim()
@@ -232,7 +243,7 @@ console_.post("/", async (c) => {
       assignmentId: row.id,
       staffId: chief.id,
       type: "assignment.created",
-      payload: { kind, model, goal },
+      payload: { kind, model, goal, withhold },
     })
     return { row, replayed: false }
   })
@@ -373,8 +384,149 @@ const notYet = (story: string, what: string) => (c: Context) =>
     }),
     501
   )
-console_.post("/:id/answer", notYet("N3", "Answering an information request"))
-console_.post("/:id/steer", notYet("N3", "Steering the running conversation"))
+/**
+ * §7.2, as the CoS would do it: the answer becomes a canonical fact with
+ * `owner_stated` provenance, then an `information.answered` row, then the
+ * Workflow is woken with the ids (architect ruling 8: fact, then event, then
+ * signal). The Developer sees the fact record, never "the owner said".
+ */
+console_.post("/:id/answer", async (c) => {
+  const id = c.req.param("id")
+  const orgId = c.get("orgId")
+  const body = (await c.req.json().catch(() => ({}))) as {
+    request_id?: unknown
+    value?: unknown
+  }
+  if (typeof body.request_id !== "string" || body.value === undefined) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "answer.malformed",
+      message: "An answer names a request_id and carries a value.",
+      detail: {},
+    })
+  }
+  const requestId = body.request_id
+  const value = parseValue(body.value)
+  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
+    const [row] = await db
+      .select()
+      .from(assignments)
+      .where(eq(assignments.id, id))
+    if (!row) return { missing: true as const }
+    if (row.state !== "blocked_on_information") {
+      return { state: row.state }
+    }
+    const [request] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${id} and ${events.type} = 'information.requested' and ${events.payload}->>'request_id' = ${requestId}`
+      )
+      .limit(1)
+    const field = request?.payload.field
+    if (typeof field !== "string") return { no_request: true as const }
+    const [existing] = await db
+      .select({ factType: facts.factType })
+      .from(facts)
+      .where(sql`${facts.key} = ${field} and ${facts.validTo} is null`)
+    const written = await supersedeFact(db, {
+      orgId,
+      key: field,
+      factType: existing?.factType ?? field.split(".")[0] ?? "answer",
+      value,
+      provenance: {
+        source: "owner_stated",
+        confidence: 1,
+        verifiedByStaffId: row.createdByStaffId,
+      },
+    })
+    const answer = InformationAnswer.parse({
+      answer_id: crypto.randomUUID(),
+      org_id: orgId,
+      assignment_id: id,
+      request_id: requestId,
+      fact_id: written.factId,
+      answered_at: new Date().toISOString(),
+    })
+    await appendEvent(db, {
+      orgId,
+      assignmentId: id,
+      staffId: row.createdByStaffId,
+      type: "information.answered",
+      payload: answer,
+    })
+    return { answer }
+  })
+  if ("missing" in result) return notFound(c, id)
+  if ("no_request" in result) {
+    return failure(c, 404, {
+      class: "resource",
+      code: "request.not_found",
+      message: "No open information request with that id on this assignment.",
+      detail: { request_id: requestId },
+    })
+  }
+  if ("state" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "assignment.not_waiting",
+      message: "This assignment is not waiting for information.",
+      detail: { state: result.state },
+    })
+  }
+  const instance = await c.env.ASSIGNMENTS.get(id)
+  await instance.sendEvent({
+    type: "answer",
+    payload: { request_id: requestId, fact_id: result.answer.fact_id },
+  })
+  return c.json(result.answer, 202)
+})
+
+/** A message into the running conversation; flue joins it at the next turn boundary. */
+console_.post("/:id/steer", async (c) => {
+  const id = c.req.param("id")
+  const orgId = c.get("orgId")
+  const body = (await c.req.json().catch(() => ({}))) as { message?: unknown }
+  const message = typeof body.message === "string" ? body.message.trim() : ""
+  if (!message) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "steer.empty",
+      message: "A steer carries a message.",
+      detail: {},
+    })
+  }
+  const row = await c.get("kit").withOrg({ orgId }, async (db) => {
+    const [found] = await db
+      .select()
+      .from(assignments)
+      .where(eq(assignments.id, id))
+    if (!found) return null
+    await appendEvent(db, {
+      orgId,
+      assignmentId: id,
+      staffId: found.createdByStaffId,
+      type: "assignment.steered",
+      payload: { message },
+    })
+    return found
+  })
+  if (!row) return notFound(c, id)
+  const receipt = await init(Developer, { id }).dispatch({
+    message: { kind: "user", body: message },
+  })
+  return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
+})
+
+/** A console value: JSON when it parses, the text itself otherwise. */
+function parseValue(value: unknown): unknown {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
 console_.post("/:id/approve", notYet("P3", "Approving a revision"))
 console_.post("/rollback", notYet("P3", "Rolling a site back"))
 

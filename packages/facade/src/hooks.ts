@@ -1,6 +1,5 @@
 import {
   createBashTool,
-  createEditTool,
   createGlobTool,
   createGrepTool,
   createReadTool,
@@ -179,7 +178,8 @@ export function guardedTools(policy: ToolPolicy): SandboxToolFactory {
     return [
       createReadTool(sandbox),
       guarded(createWriteTool(sandbox), path),
-      guarded(createEditTool(sandbox), path),
+      // No `edit`: the Developer mounts its own batch edit under that name
+      // (§8.2), and flue refuses two tools with one name.
       guarded(createBashTool(sandbox), (params) =>
         bashRefusal(String(params.command ?? ""), policy)
       ),

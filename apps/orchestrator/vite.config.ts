@@ -10,5 +10,6 @@ import { defineConfig } from "vite"
  * Order matters and flue's docs say so: `flue()` first.
  */
 export default defineConfig({
+  tsconfig: "./tsconfig.json",
   plugins: [flue(), cloudflare({ config: flueWorkerConfig() })],
 })

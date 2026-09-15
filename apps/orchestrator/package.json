@@ -16,6 +16,7 @@
     "@cloudflare/sandbox": "0.12.9",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/facade": "workspace:*",
     "hono": "4.13.7",
     "ulid": "3.0.2"
   },

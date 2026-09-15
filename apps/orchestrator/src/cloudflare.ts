@@ -5,15 +5,36 @@ import {
 } from "cloudflare:workers"
 import { NonRetryableError } from "cloudflare:workflows"
 import { Sandbox } from "@cloudflare/sandbox"
-import { type Tenancy, tenancy } from "@workspace/db"
+import {
+  assignments,
+  eq,
+  facts,
+  type Tenancy,
+  tenancy,
+  toFactRecord,
+} from "@workspace/db"
+import { AgentInstanceExistsError, init } from "@workspace/facade"
+import { Developer } from "./agents/developer.ts"
+import {
+  type Brief,
+  creationChoices,
+  issueSpec,
+  takeSnapshot,
+} from "./brief.ts"
 import {
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
   SLEEP_AFTER,
 } from "./sandbox.ts"
-import { advance, appendEvent, claim, TransitionError } from "./state.ts"
-import { stubDeveloper, stubGates } from "./stub.ts"
+import {
+  advance,
+  appendEvent,
+  claim,
+  parkForBudget,
+  TransitionError,
+} from "./state.ts"
+import { stubGates } from "./stub.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -49,8 +70,20 @@ RemeSandbox.outbound = (request: Request) => fetch(request)
 /** R8: ids only. Everything else is read from the row inside a step. */
 export type AssignmentParams = { assignment_id: string; org_id: string }
 
+/** What the Developer's tools send the Workflow: a kind and ids, never a body (R8). */
+type DeveloperEvent =
+  | { kind: "information"; request_id: string }
+  | { kind: "completion"; report_id: string; revision_id: string }
+  | { kind: "budget"; cap_usd: number; spent_usd: number }
+
+/** What the console's `/answer` sends: the request it answers and the fact it wrote. */
+type AnswerEvent = { request_id: string; fact_id: string }
+
 /** How long a queued assignment waits for the site lock: 20 × 30 s. */
 const CLAIM_ATTEMPTS = 20
+
+/** Information round trips per assignment before the Workflow stops waiting. */
+const ROUNDS = 20
 
 /**
  * One instance per assignment, one `step.do` per §8.4 state. A step that
@@ -125,9 +158,128 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
-    await step.do("developer", () => run((kit) => stubDeveloper(kit, ids)))
-    await step.do("validating", () => run((kit) => stubGates(kit, ids)))
-    return { outcome: "preview_ready" }
+
+    // The brief and the admission in one step, create-only, so a retried
+    // step cannot admit the Developer twice: the second attempt finds the
+    // instance and returns. The spec and the snapshot are bodies, so they
+    // travel inside the step and never cross its boundary (R8).
+    await step.do("developer", async () => {
+      const brief = await run((kit) =>
+        kit.withOrg({ orgId: ids.orgId }, async (db) => {
+          const [row] = await db
+            .select()
+            .from(assignments)
+            .where(eq(assignments.id, ids.assignmentId))
+          if (!row) throw new NonRetryableError("assignment.not_found")
+          const { withhold, model } = await creationChoices(db, ids)
+          const snapshot = await takeSnapshot(db, ids, withhold)
+          const spec = await issueSpec(db, this.env, row, model)
+          const built: Brief = {
+            spec,
+            snapshot,
+            goal: row.goal,
+            acceptance_criteria: row.acceptanceCriteria,
+            restore_key: null,
+          }
+          return built
+        })
+      )
+      try {
+        const receipt = await init(Developer, {
+          id: ids.assignmentId,
+          uid: null,
+        }).dispatch({
+          message: `Build the site from the canonical facts. ${brief.goal}`,
+          initialData: brief,
+        })
+        return { submission_id: receipt.submissionId }
+      } catch (error) {
+        if (error instanceof AgentInstanceExistsError) {
+          return { submission_id: null }
+        }
+        throw error
+      }
+    })
+
+    // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
+    // Workflow answers the Developer with a new submission.
+    for (let round = 1; round <= ROUNDS; round++) {
+      const woke = await step.waitForEvent<DeveloperEvent>(
+        `developer ${round}`,
+        { type: "developer", timeout: "2 hours" }
+      )
+      const payload = woke.payload
+      if (payload.kind === "completion") {
+        await step.do(`validating ${round}`, () =>
+          run((kit) =>
+            advance(kit, ids, "validating", {
+              payload: {
+                report_id: payload.report_id,
+                revision_id: payload.revision_id,
+              },
+            })
+          )
+        )
+        await step.do("preview", () => run((kit) => stubGates(kit, ids)))
+        return { outcome: "preview_ready" }
+      }
+      if (payload.kind === "budget") {
+        await step.do(`park ${round}`, () =>
+          run((kit) =>
+            parkForBudget(kit, ids, {
+              cap_usd: payload.cap_usd,
+              spent_usd: payload.spent_usd,
+            })
+          )
+        )
+        return { outcome: "blocked_on_approval" }
+      }
+      await step.do(`blocked ${round}`, () =>
+        run((kit) =>
+          advance(kit, ids, "blocked_on_information", {
+            payload: { request_id: payload.request_id },
+          })
+        )
+      )
+      const answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
+        type: "answer",
+        timeout: "7 days",
+      })
+      await step.do(`resume ${round}`, async () => {
+        const fact = await run((kit) =>
+          kit.withOrg({ orgId: ids.orgId }, async (db) => {
+            const [row] = await db
+              .select()
+              .from(facts)
+              .where(eq(facts.id, answer.payload.fact_id))
+            if (!row) throw new NonRetryableError("fact.not_found")
+            return toFactRecord(row)
+          })
+        )
+        await run((kit) =>
+          advance(kit, ids, "implementing", {
+            payload: {
+              request_id: answer.payload.request_id,
+              fact_id: answer.payload.fact_id,
+            },
+          })
+        )
+        // The Developer never sees "the owner said"; it sees a fact record.
+        await init(Developer, { id: ids.assignmentId }).dispatch({
+          message: {
+            kind: "signal",
+            type: "information.answered",
+            body: JSON.stringify({
+              request_id: answer.payload.request_id,
+              fact,
+            }),
+            attributes: { field: fact.key },
+          },
+        })
+        return { fact_id: fact.fact_id }
+      })
+    }
+    return { outcome: "rounds_exhausted" }
   }
 }
 
