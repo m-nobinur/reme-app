@@ -275,6 +275,21 @@ export const brightclean: GoldenOrg = {
   // about this business has to trace back to one of these (R8).
   facts: [
     {
+      // The name the site shows. Without it every build has to ask for it,
+      // which is right for a business that never gave one and wrong for a
+      // fixture meant to build.
+      id: bc(46),
+      orgId: bc(0),
+      key: "business.name",
+      factType: "identity",
+      value: { name: "BrightClean" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
       id: bc(40),
       orgId: bc(0),
       key: "business.phone",
@@ -451,6 +466,18 @@ export const mopandbucket: GoldenOrg = {
   // A cross-org leak that shows the wrong number is then visible as a wrong
   // number rather than as a plausible one.
   facts: [
+    {
+      id: mb(42),
+      orgId: mb(0),
+      key: "business.name",
+      factType: "identity",
+      value: { name: "Mop and Bucket" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: MB_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
     {
       id: mb(40),
       orgId: mb(0),
