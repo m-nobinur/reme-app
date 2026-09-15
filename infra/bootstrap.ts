@@ -72,8 +72,18 @@ const environments = {
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
       ],
-      // The console bearer and nothing else: this Worker holds no session.
-      "reme-orchestrator": ["ORCHESTRATOR_TOKEN"],
+      // The console bearer, the spec signing key and the model plane: this
+      // Worker holds no session. The REME_MODEL_* values are configuration
+      // rather than secrets, and travel the same way so one list says what
+      // the Worker reads.
+      "reme-orchestrator": [
+        "ORCHESTRATOR_TOKEN",
+        "RUNTIME_SPEC_KEY",
+        "OPENROUTER_API_KEY",
+        "REME_MODEL_PRIMARY",
+        "REME_MODEL_DEFAULT",
+        "REME_MODEL_FALLBACK",
+      ],
     },
   },
   /**
@@ -105,7 +115,14 @@ const environments = {
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
       ],
-      "reme-orchestrator-production": ["ORCHESTRATOR_TOKEN"],
+      "reme-orchestrator-production": [
+        "ORCHESTRATOR_TOKEN",
+        "RUNTIME_SPEC_KEY",
+        "OPENROUTER_API_KEY",
+        "REME_MODEL_PRIMARY",
+        "REME_MODEL_DEFAULT",
+        "REME_MODEL_FALLBACK",
+      ],
     },
   },
 } as const
@@ -392,9 +409,12 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
         `${secret} is empty in .env.local, so ${worker} cannot have it`,
         secret === "WORKOS_COOKIE_PASSWORD"
           ? "openssl rand -base64 32   (the same value on both Workers)"
-          : secret === "ORCHESTRATOR_TOKEN"
-            ? "openssl rand -hex 32   (the console's bearer, see .env.example)"
-            : "Take it from the WorkOS dashboard for this environment."
+          : secret === "ORCHESTRATOR_TOKEN" || secret === "RUNTIME_SPEC_KEY"
+            ? "openssl rand -hex 32   (see .env.example)"
+            : secret.startsWith("REME_MODEL_") ||
+                secret === "OPENROUTER_API_KEY"
+              ? "The model plane block in .env.example says what goes here."
+              : "Take it from the WorkOS dashboard for this environment."
       )
     }
     cli("npx", ["wrangler", "secret", "put", secret, "--name", worker], {

@@ -23,6 +23,33 @@ export const envSchema = z.object({
     .enum(["0", "1"])
     .default("0")
     .transform((value) => value === "1"),
+  /**
+   * The model plane (builder track). All optional here: the facade decides
+   * at startup which transport has a key, and fails naming the variable when
+   * REME_MODEL_PRIMARY names one that does not.
+   */
+  REME_MODEL_PRIMARY: z
+    .enum([
+      "gateway:anthropic",
+      "gateway:openrouter",
+      "direct:anthropic",
+      "direct:openrouter",
+    ])
+    .optional(),
+  REME_MODEL_DEFAULT: z
+    .string()
+    .regex(/^[a-z-]+\//)
+    .optional(),
+  REME_MODEL_FALLBACK: z
+    .string()
+    .regex(/^[a-z-]+\//)
+    .optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  CF_ACCOUNT_ID: z.string().optional(),
+  CF_AI_GATEWAY_ID: z.string().optional(),
+  CF_AI_GATEWAY_TOKEN: z.string().optional(),
+  RUNTIME_SPEC_KEY: z.string().min(32).optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

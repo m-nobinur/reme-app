@@ -119,11 +119,19 @@ for (const [path, lines] of [
     ],
   ],
   [API_DEV_VARS, shared],
-  // The console bearer only. This Worker holds no WorkOS configuration: the
-  // owner screens reach it over a service binding later, never with a session.
+  // The console bearer, the spec signing key and the model plane. This Worker
+  // holds no WorkOS configuration: the owner screens reach it over a service
+  // binding later, never with a session.
   [
     ORCHESTRATOR_DEV_VARS,
-    [`ORCHESTRATOR_TOKEN=${fromLocalEnv("ORCHESTRATOR_TOKEN")}`],
+    [
+      "ORCHESTRATOR_TOKEN",
+      "RUNTIME_SPEC_KEY",
+      "OPENROUTER_API_KEY",
+      "REME_MODEL_PRIMARY",
+      "REME_MODEL_DEFAULT",
+      "REME_MODEL_FALLBACK",
+    ].map((name) => `${name}=${fromLocalEnv(name)}`),
   ],
 ]) {
   if (existsSync(path)) {

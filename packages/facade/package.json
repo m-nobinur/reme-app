@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/facade",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node ../../scripts/floor.mjs facade-unit -- vitest run",
+    "models": "node ../../scripts/openrouter-models.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.83.0",
+    "@flue/runtime": "2.0.6",
+    "@workspace/contracts": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^6",
+    "vitest": "^4.1.11"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
