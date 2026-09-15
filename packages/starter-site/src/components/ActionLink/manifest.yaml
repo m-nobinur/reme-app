@@ -1,0 +1,26 @@
+component: ActionLink
+path: src/components/ActionLink/ActionLink.astro
+summary: A link styled as a button, for a call or the next step.
+props:
+  - name: href
+    type: string
+    required: true
+    description: "A site path, or tel: or mailto: built from site.phone or site.email."
+  - name: label
+    type: string
+    required: true
+    description: The visible text, read from a site field.
+  - name: variant
+    type: '"primary" | "secondary"'
+    required: false
+    description: primary for the one main action, secondary for the rest.
+constraints:
+  - Renders nothing when href or label is empty.
+  - At most one primary per group of actions.
+examples:
+  - '<ActionLink href={`tel:${site.phone}`} label={site.phone} />'
+  - '<ActionLink href="/quote/" label={site.navQuote} variant="secondary" />'
+forbidden:
+  - a literal label, phone number or email address
+  - a link to a page not in src/pages
+source: generated

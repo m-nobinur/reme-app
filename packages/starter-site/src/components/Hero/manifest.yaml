@@ -1,0 +1,21 @@
+component: Hero
+path: src/components/Hero/Hero.astro
+summary: The page's h1 with an optional lede and action links as children.
+props:
+  - name: heading
+    type: string
+    required: true
+    description: The page's h1, read from a site field.
+  - name: lede
+    type: string
+    required: false
+    description: One sentence under the heading, read from a site field.
+constraints:
+  - One per page, first inside the layout.
+  - Children are ActionLink elements only.
+examples:
+  - "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+forbidden:
+  - a second Hero on a page
+  - literal text in heading or lede
+source: generated

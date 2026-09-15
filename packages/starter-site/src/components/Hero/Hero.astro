@@ -1,0 +1,23 @@
+---
+interface Props {
+  /** The page's h1, read from a site field. */
+  heading: string
+  /** One sentence under the heading, read from a site field. */
+  lede?: string
+}
+
+const { heading, lede = "" } = Astro.props
+const hasActions = Astro.slots.has("default")
+---
+
+<section class="hero">
+  {heading && <h1>{heading}</h1>}
+  {lede && <p class="lede">{lede}</p>}
+  {
+    hasActions && (
+      <div class="actions">
+        <slot />
+      </div>
+    )
+  }
+</section>

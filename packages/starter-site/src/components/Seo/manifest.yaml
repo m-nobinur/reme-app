@@ -1,0 +1,32 @@
+component: Seo
+path: src/components/Seo/Seo.astro
+summary: The page head, with title, description, canonical URL, Open Graph and JSON-LD.
+props:
+  - name: title
+    type: string
+    required: true
+    description: The page's own title; the business name is appended.
+  - name: description
+    type: string
+    required: false
+    description: The meta and Open Graph description, read from a site field.
+  - name: jsonLd
+    type: Record<string, unknown>[]
+    required: false
+    description: Items from src/structured-data.ts; the schema.org context is added here.
+  - name: noindex
+    type: boolean
+    required: false
+    description: Keeps the page out of search results, as the 404 page does.
+constraints:
+  - The Base layout renders it; a page passes these props to Base.
+  - JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service or
+    WebSite only.
+examples:
+  - "<Base title={site.contactHeading} description={site.contactIntro}
+    jsonLd={localBusiness(Astro.site)}>"
+forbidden:
+  - using it outside the Base layout
+  - JSON-LD built outside src/structured-data.ts
+  - ratings, reviews or aggregateRating
+source: generated

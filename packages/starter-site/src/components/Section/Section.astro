@@ -1,0 +1,13 @@
+---
+interface Props {
+  /** The section's h2, read from a site field. */
+  heading: string
+}
+
+const { heading } = Astro.props
+---
+
+<section class="section">
+  {heading && <h2>{heading}</h2>}
+  <slot />
+</section>

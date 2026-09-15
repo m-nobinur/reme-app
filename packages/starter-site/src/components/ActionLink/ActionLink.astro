@@ -1,0 +1,20 @@
+---
+interface Props {
+  /** A site path, or tel: or mailto: built from site.phone or site.email. */
+  href: string
+  /** The visible text, read from a site field. */
+  label: string
+  /** primary for the one main action, secondary for the rest. */
+  variant?: "primary" | "secondary"
+}
+
+const { href, label, variant = "primary" } = Astro.props
+---
+
+{
+  href && label && (
+    <a class:list={["action", `action-${variant}`]} href={href}>
+      {label}
+    </a>
+  )
+}

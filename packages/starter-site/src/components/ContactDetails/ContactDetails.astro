@@ -1,0 +1,34 @@
+---
+import { site } from "../../site-config"
+
+const hasAny = Boolean(site.phone || site.email || site.weekdayHours)
+---
+
+{
+  hasAny && (
+    <dl class="contact-details">
+      {site.phone && (
+        <div>
+          <dt>{site.phoneLabel}</dt>
+          <dd>
+            <a href={`tel:${site.phone}`}>{site.phone}</a>
+          </dd>
+        </div>
+      )}
+      {site.email && (
+        <div>
+          <dt>{site.emailLabel}</dt>
+          <dd>
+            <a href={`mailto:${site.email}`}>{site.email}</a>
+          </dd>
+        </div>
+      )}
+      {site.weekdayHours && (
+        <div>
+          <dt>{site.weekdayHoursLabel}</dt>
+          <dd>{site.weekdayHours}</dd>
+        </div>
+      )}
+    </dl>
+  )
+}

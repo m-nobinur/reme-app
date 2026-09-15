@@ -84,6 +84,149 @@ main {
   padding-block: 3rem 4rem;
 }
 
+.site-header nav {
+  margin-inline-start: auto;
+}
+
+.site-header ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-header nav a {
+  display: inline-block;
+  padding-block: 0.625rem;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.site-header nav a:hover,
+.site-header nav a[aria-current="page"] {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.hero {
+  padding-block-end: 2rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 1.5rem;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 1.125rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.action-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.action-primary:hover {
+  background: color-mix(in oklch, var(--primary) 88%, var(--foreground));
+}
+
+.action-secondary {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.action-secondary:hover {
+  background: var(--secondary);
+}
+
+.intro {
+  max-width: 40rem;
+  margin: 0 0 2rem;
+}
+
+.section {
+  padding-block: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.section h2 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.section p {
+  margin: 0;
+}
+
+.price-card {
+  display: inline-grid;
+  gap: 0.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.price-card .price-name {
+  color: var(--muted-foreground);
+}
+
+.price-card .price-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.contact-details {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.contact-details div {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 1rem;
+}
+
+.contact-details dt {
+  color: var(--muted-foreground);
+}
+
+.contact-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding-block: 2rem;
+  color: var(--muted-foreground);
+}
+
+.site-footer p {
+  margin: 0 0 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    transition: none;
+  }
+}
+
 .skip-link {
   position: absolute;
   left: 1rem;
