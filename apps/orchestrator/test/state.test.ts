@@ -135,7 +135,7 @@ const NEXT: Record<AssignmentState, AssignmentState[]> = {
   queued: ["briefing"],
   briefing: ["planning"],
   planning: ["implementing"],
-  implementing: ["validating", "blocked_on_information", "repairing"],
+  implementing: ["validating", "blocked_on_information", "repairing", "failed"],
   validating: ["preview_ready", "repairing", "failed"],
   preview_ready: ["awaiting_review"],
   awaiting_review: ["revising", "release_candidate", "blocked_on_approval"],
