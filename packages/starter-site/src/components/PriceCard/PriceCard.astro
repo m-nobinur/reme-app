@@ -1,0 +1,17 @@
+---
+interface Props {
+  name: string
+  price: string
+}
+
+const { name, price } = Astro.props
+---
+
+{
+  name && price && (
+    <div class="price-card">
+      <p class="price-name">{name}</p>
+      <p class="price-value">{price}</p>
+    </div>
+  )
+}

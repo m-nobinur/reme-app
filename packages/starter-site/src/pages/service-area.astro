@@ -1,0 +1,15 @@
+---
+import Hero from "../components/Hero/Hero.astro"
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+import { localBusiness } from "../structured-data"
+---
+
+<Base
+  title={site.serviceAreaHeading}
+  description={site.serviceAreaIntro}
+  jsonLd={localBusiness(Astro.site)}
+>
+  <Hero heading={site.serviceAreaHeading} lede={site.serviceAreaIntro} />
+  {site.serviceArea && <p class="lede">{site.serviceArea}</p>}
+</Base>

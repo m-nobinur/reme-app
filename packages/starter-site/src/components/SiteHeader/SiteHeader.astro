@@ -1,0 +1,39 @@
+---
+import { hasRoute } from "../../routes"
+import { site } from "../../site-config"
+
+const links: [string, string][] = [
+  ["/", site.navHome],
+  ["/services/", site.navServices],
+  ["/service-area/", site.navServiceArea],
+  ["/contact/", site.navContact],
+  ["/quote/", site.navQuote],
+  ["/booking/", site.navBooking],
+]
+const shown = links.filter(([href, label]) => label && hasRoute(href))
+const current = Astro.url.pathname
+---
+
+<header class="site-header">
+  <div class="wrap">
+    {site.businessName && <a class="site-name" href="/">{site.businessName}</a>}
+    {
+      shown.length > 0 && (
+        <nav aria-label={site.primaryNavLabel}>
+          <ul>
+            {shown.map(([href, label]) => (
+              <li>
+                <a
+                  href={href}
+                  aria-current={current === href ? "page" : undefined}
+                >
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+  </div>
+</header>

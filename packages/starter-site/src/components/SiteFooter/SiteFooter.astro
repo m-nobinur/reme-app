@@ -1,0 +1,12 @@
+---
+import { site } from "../../site-config"
+import ContactDetails from "../ContactDetails/ContactDetails.astro"
+---
+
+<footer class="site-footer">
+  <div class="wrap">
+    {site.businessName && <p class="site-name">{site.businessName}</p>}
+    {site.serviceArea && <p>{site.serviceArea}</p>}
+    <ContactDetails />
+  </div>
+</footer>

@@ -1,0 +1,42 @@
+---
+import { site } from "../../site-config"
+
+interface Props {
+  title: string
+  description?: string
+  jsonLd?: Record<string, unknown>[]
+  noindex?: boolean
+}
+
+const { title, description = "", jsonLd = [], noindex = false } = Astro.props
+const pageTitle = [...new Set([title, site.businessName].filter(Boolean))].join(
+  " | "
+)
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : ""
+// `<` escaped so a field value can never close the script element.
+const blocks = jsonLd.map((item) =>
+  JSON.stringify({ "@context": "https://schema.org", ...item }).replace(
+    /</g,
+    "\\u003c"
+  )
+)
+---
+
+<title>{pageTitle}</title>
+{description && <meta name="description" content={description} />}
+{noindex && <meta name="robots" content="noindex" />}
+{canonical && <link rel="canonical" href={canonical} />}
+<meta property="og:type" content="website" />
+{pageTitle && <meta property="og:title" content={pageTitle} />}
+{description && <meta property="og:description" content={description} />}
+{canonical && <meta property="og:url" content={canonical} />}
+{
+  site.businessName && (
+    <meta property="og:site_name" content={site.businessName} />
+  )
+}
+{
+  blocks.map((block) => (
+    <script is:inline type="application/ld+json" set:html={block} />
+  ))
+}
