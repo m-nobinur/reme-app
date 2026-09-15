@@ -13,8 +13,12 @@ Two passes.
 2. The tier's scenarios run. Each is a `tier-<n>/*.eval.mjs` whose default
    export throws on failure.
 
-Tier 1 has one scenario, `tier-1/developer-contract.eval.mjs`, over the two
-recorded Developer sessions below. Tiers 2 and 3 have none yet; an absent tier
+Tier 1 has two scenarios over the recorded Developer sessions below.
+`tier-1/developer-contract.eval.mjs` checks the completion report and the
+information request are contract-shaped. `tier-1/developer-edits.eval.mjs` reads
+every `developer-*` session: no starter file rewritten with `write`, and every
+failed edit answered with an anchor message and recovered by one retry, the
+next edit of that file succeeding within two turns. Tiers 2 and 3 have none yet; an absent tier
 reads as zero rather than as an error.
 
 | Tier | What it covers |
@@ -52,6 +56,10 @@ The runner hashes a session fixture with the facade's `contextHash`, so the
 `developer-build` is a build on the golden org with every fact present, run on
 staging on 2026-09-15; `developer-asks` is the same build with `business.phone`
 withheld from the snapshot, recorded while it waited on the answer.
+`developer-edit-recovery` is a build whose goal made its first call an edit,
+before any read, with an anchor quoted in single quotes where the file has
+double quotes; it was refused with Pi's message, read the files, retried and
+built, run on staging on 2026-09-15.
 
 ## The hash
 
