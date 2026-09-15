@@ -19,6 +19,10 @@
 //   steer    <org> <id> <message>            join the running conversation at the next turn
 //   approve  <org> <id> <revision_id>        approve as the owner would
 //   rollback <org>                           activate the previous revision
+//   follow-up <org> <id> <text>              a new build on a finished one: its goal plus the text
+//   facts    <org> [<key> <value>]           the business's facts, or restate one (JSON or text)
+//   console                                  open /console with the token on the clipboard
+import { spawnSync } from "node:child_process"
 import { bad, loadLocalEnv, note, repoRoot } from "./lib.mjs"
 
 process.chdir(repoRoot)
@@ -251,10 +255,64 @@ switch (command) {
     print(await call("POST", "/assignments/rollback", {}))
     break
   }
+  case "follow-up": {
+    need(org, "<org>")
+    need(id, "<id>")
+    print(
+      await call("POST", `/assignments/${id}/follow-up`, {
+        text: need(more.join(" "), "<text>"),
+      })
+    )
+    break
+  }
+  case "facts": {
+    need(org, "<org>")
+    if (id) {
+      const raw = need(more.join(" "), "<value>")
+      const value = (() => {
+        try {
+          return JSON.parse(raw)
+        } catch {
+          return raw
+        }
+      })()
+      print(
+        await call("POST", "/assignments/facts", {
+          facts: [{ key: id, value }],
+        })
+      )
+      break
+    }
+    const { facts } = await call("GET", "/assignments/facts")
+    for (const f of facts) {
+      console.log(
+        `${f.key.padEnd(32)} v${f.version}  ${JSON.stringify(f.value)}`
+      )
+    }
+    break
+  }
+  case "console": {
+    // The token goes on the clipboard, never into a URL or the terminal.
+    const url = `${base}/console`
+    console.log(url)
+    if (!token) {
+      bad("ORCHESTRATOR_TOKEN is not set in .env.local")
+      process.exit(1)
+    }
+    const mac = process.platform === "darwin"
+    const copied = mac && spawnSync("pbcopy", { input: token }).status === 0
+    if (mac) spawnSync("open", [url])
+    note(
+      copied
+        ? "The console token is on your clipboard: paste it into the page once."
+        : "Paste ORCHESTRATOR_TOKEN from .env.local into the page once."
+    )
+    break
+  }
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | list | show | events | watch | open | start | cancel | answer | steer | approve | rollback"
+      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | approve | rollback | console"
     )
     process.exit(2)
   }

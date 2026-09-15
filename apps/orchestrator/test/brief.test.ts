@@ -12,7 +12,13 @@ import {
 import { verifySpec } from "@workspace/facade"
 import { ulid } from "ulid"
 import { afterAll, describe, expect, it, vi } from "vitest"
-import { issueSpec, takeSnapshot } from "../src/brief.ts"
+import {
+  followUpGoal,
+  GOAL_MAX,
+  issueSpec,
+  takeSnapshot,
+  updateFacts,
+} from "../src/brief.ts"
 import { eventSink, SeqGapError } from "../src/sink.ts"
 import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
@@ -205,5 +211,117 @@ live("eventSink", () => {
     )
     const sink = eventSink(kit, orgId)
     expect(await sink.lastSeq(crypto.randomUUID())).toBeNull()
+  })
+})
+
+describe("followUpGoal", () => {
+  it("adds the follow-up under the goal it continues", () => {
+    expect(followUpGoal("Build the site.", "Make the hero calmer")).toBe(
+      "Build the site.\n\nFollow-up: Make the hero calmer"
+    )
+  })
+
+  it("refuses a result past the cap instead of cutting it", () => {
+    expect(followUpGoal("x".repeat(GOAL_MAX - 12), "y")).toBeNull()
+  })
+})
+
+live("updateFacts", () => {
+  const edit = (
+    orgId: string,
+    idempotencyKey: string,
+    changes: { key: string; value: unknown }[]
+  ) =>
+    kit.withOrg({ orgId }, (db) =>
+      updateFacts(db, { orgId, idempotencyKey, changes })
+    )
+
+  const updates = (orgId: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db.select().from(events).where(sql`${events.type} = 'facts.updated'`)
+    )
+
+  it("opens an owner-stated version with the current row's type, logged once", async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    const result = await edit(orgId, "edit-1", [
+      { key: "business.phone", value: "020 7946 0009" },
+    ])
+    expect(result).toMatchObject({ outcome: "written", replayed: false })
+
+    const [row] = await currentFacts(orgId)
+    expect(row).toMatchObject({
+      value: "020 7946 0009",
+      version: 2,
+      factType: "business",
+      provenanceSource: "owner_stated",
+    })
+    expect(row?.verifiedByStaffId).not.toBeNull()
+    const logged = await updates(orgId)
+    expect(logged).toHaveLength(1)
+    expect(logged[0]?.payload).toMatchObject({
+      idempotency_key: "edit-1",
+      facts: [{ key: "business.phone", fact_id: row?.id, version: 2 }],
+    })
+  })
+
+  it("replays the same idempotency key without writing again", async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    const change = [{ key: "business.phone", value: "020 7946 0009" }]
+    await edit(orgId, "edit-2", change)
+    const again = await edit(orgId, "edit-2", change)
+    expect(again).toMatchObject({ outcome: "written", replayed: true })
+    expect((await currentFacts(orgId))[0]?.version).toBe(2)
+    expect(await updates(orgId)).toHaveLength(1)
+  })
+
+  it("refuses a key with no current fact and writes nothing from the batch", async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    const result = await edit(orgId, "edit-3", [
+      { key: "business.phone", value: "020 7946 0009" },
+      { key: "pricing.invented", value: "$1" },
+    ])
+    expect(result).toEqual({ outcome: "unknown_key", key: "pricing.invented" })
+    expect((await currentFacts(orgId))[0]?.version).toBe(1)
+    expect(await updates(orgId)).toHaveLength(0)
+  })
+
+  it("refuses a value whose shape differs from the current one", async () => {
+    const orgId = await freshOrg(kit)
+    await kit.withOrg({ orgId }, (db) =>
+      supersedeFact(db, {
+        orgId,
+        key: "hours.weekday",
+        factType: "hours",
+        value: { open: "08:00", close: "17:00" },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    for (const value of ["08:00 to 18:00", { open: "08:00", shut: "18:00" }]) {
+      expect(
+        await edit(orgId, `edit-4-${typeof value}`, [
+          { key: "hours.weekday", value },
+        ])
+      ).toEqual({ outcome: "shape_changed", key: "hours.weekday" })
+    }
+    expect(
+      await edit(orgId, "edit-4-ok", [
+        { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
+      ])
+    ).toMatchObject({ outcome: "written" })
+  })
+
+  it("cannot reach another org's facts", async () => {
+    const holder = await freshOrg(kit)
+    await phone(holder, "020 7946 0000")
+    const other = await freshOrg(kit)
+    expect(
+      await edit(other, "edit-5", [
+        { key: "business.phone", value: "020 7946 0009" },
+      ])
+    ).toEqual({ outcome: "unknown_key", key: "business.phone" })
+    expect((await currentFacts(holder))[0]?.version).toBe(1)
   })
 })
