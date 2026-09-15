@@ -15,6 +15,14 @@ const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
  * double as the worked example of each shape. All content is fictional (R8).
  */
 export const samples: Record<ContractName, unknown> = {
+  ApprovalDecision: {
+    approval_id: "20000001-0000-4000-8000-000000000001",
+    org_id: ORG,
+    decision: "approved",
+    target: { kind: "revision", revision_id: REVISION },
+    decided_by: { kind: "console" },
+    decided_at: NOW,
+  },
   ApprovalRequest: {
     approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
     org_id: ORG,
@@ -242,6 +250,12 @@ export const samples: Record<ContractName, unknown> = {
     name: "Brightclean Cleaning Co. (fixture)",
     created_at: NOW,
   },
+  PreviewClaim: {
+    org_id: ORG,
+    revision_id: REVISION,
+    host: "preview-v3-brightclean.remeai.co.uk",
+    exp: 1789567110,
+  },
   ProgressEvent: {
     state: "implementing",
     phase: "build",
@@ -287,6 +301,12 @@ export const samples: Record<ContractName, unknown> = {
     name: { kind: "fact", fact_key: "business.name", required: true },
     phone: { kind: "fact", fact_key: "business.phone", required: true },
     tagline: { kind: "composed" },
+  },
+  SitePointer: {
+    org_id: ORG,
+    site_id: ORG,
+    revision_id: REVISION,
+    config_version: 4,
   },
   SiteRevision: {
     revision_id: REVISION,
