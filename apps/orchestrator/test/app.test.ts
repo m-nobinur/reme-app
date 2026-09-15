@@ -15,6 +15,14 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     slug === "brightclean" ? "10000001-0000-4000-8000-000000000000" : null,
 }))
 
+// The probe reaches a container; nothing in this suite may. The route is
+// proven to sit behind the bearer here and driven for real by the probe suite.
+vi.mock("../src/sandbox.ts", () => ({
+  probe: async () => {
+    throw new Error("no container in this suite")
+  },
+}))
+
 const { default: app } = await import("../src/app.ts")
 
 /**
@@ -53,6 +61,16 @@ describe("the bearer", () => {
     const res = await app.request(
       "/assignments?org=brightclean",
       { headers: { authorization: "Bearer wrong" } },
+      env
+    )
+    expect(res.status).toBe(401)
+    expect((await envelope(res)).code).toBe("console.unauthenticated")
+  })
+
+  it("guards the sandbox probe the same way", async () => {
+    const res = await app.request(
+      "/assignments/sandbox/probe?org=brightclean",
+      {},
       env
     )
     expect(res.status).toBe(401)

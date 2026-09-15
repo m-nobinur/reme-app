@@ -117,7 +117,8 @@ async function pausedFrom(
 
 export type AppendEvent = {
   orgId: string
-  assignmentId: string
+  /** Null for an org-level row that belongs to no assignment (a probe). */
+  assignmentId: string | null
   staffId: string | null
   type: string
   payload: Record<string, unknown>

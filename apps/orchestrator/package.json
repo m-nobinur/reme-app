@@ -9,9 +9,11 @@
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs orchestrator-unit -- vitest run --dir test",
-    "size": "node scripts/size.mjs"
+    "size": "node scripts/size.mjs",
+    "test:probe": "node ../../scripts/floor.mjs orchestrator-probe -- vitest run --dir probe"
   },
   "dependencies": {
+    "@cloudflare/sandbox": "0.12.9",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "hono": "4.13.7",
