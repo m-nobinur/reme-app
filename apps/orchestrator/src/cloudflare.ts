@@ -76,12 +76,16 @@ type DeveloperEvent =
   | { kind: "information"; request_id: string }
   | { kind: "completion"; report_id: string; revision_id: string }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
+  | { kind: "interrupted"; reason: string }
 
 /** What the console's `/answer` sends: the request it answers and the fact it wrote. */
 type AnswerEvent = { request_id: string; fact_id: string }
 
 /** How long a queued assignment waits for the site lock: 20 × 30 s. */
 const CLAIM_ATTEMPTS = 20
+
+/** How many times an interrupted Developer run is resumed before the build fails and releases the site lock. */
+const RESUMES = 2
 
 /** Information round trips per assignment before the Workflow stops waiting. */
 const ROUNDS = 20
@@ -213,12 +217,50 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
 
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
-    for (let round = 1; round <= ROUNDS; round++) {
-      const woke = await step.waitForEvent<DeveloperEvent>(
-        `developer ${round}`,
-        { type: "developer", timeout: "2 hours" }
+    // A build that cannot continue ends in `failed` and destroys its sandbox,
+    // which releases the site lock (§13): a provider that keeps failing or a
+    // Developer that never reports must not hold the site for good.
+    const fail = async (name: string, reason: string) => {
+      await step.do(`fail ${name}`, () =>
+        run((kit) => advance(kit, ids, "failed", { reason }))
       )
+      await step.do("destroy sandbox", async () => {
+        await sandboxFor(this.env, ids.assignmentId).destroy()
+        return { destroyed: ids.assignmentId }
+      })
+      return { outcome: "failed" as const }
+    }
+    let resumes = 0
+    for (let round = 1; round <= ROUNDS; round++) {
+      let woke: { payload: DeveloperEvent }
+      try {
+        woke = await step.waitForEvent<DeveloperEvent>(`developer ${round}`, {
+          type: "developer",
+          timeout: "2 hours",
+        })
+      } catch {
+        return fail(`timed out ${round}`, "developer.timed_out")
+      }
       const payload = woke.payload
+      if (payload.kind === "interrupted") {
+        if (resumes >= RESUMES) {
+          return fail(`interrupted ${round}`, "provider.unavailable")
+        }
+        resumes++
+        await step.sleep(`resume wait ${round}`, "30 seconds")
+        await step.do(`resume run ${round}`, async () => {
+          await init(Developer, { id: ids.assignmentId }).dispatch({
+            message: {
+              kind: "signal",
+              type: "run.interrupted",
+              body: JSON.stringify({ reason: payload.reason }),
+              attributes: { attempt: String(resumes) },
+            },
+          })
+          return { resumed: resumes }
+        })
+        continue
+      }
       if (payload.kind === "completion") {
         await step.do(`validating ${round}`, () =>
           run((kit) =>

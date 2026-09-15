@@ -96,6 +96,9 @@ type Session = {
   kit: Tenancy
   brief: Brief
   gate: TurnGate
+  /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
+  interruptions: Set<string>
+  budgetExhausted: boolean
 }
 const sessions = new Map<string, Session>()
 
@@ -106,7 +109,41 @@ observe((observation, ctx) => {
   if (!found) return
   found.tee.subscriber(observation)
   found.budget.instrumentation.observe(observation, ctx)
+  interrupted(found, observation)
 })
+
+/**
+ * A run that ends in an error (a provider stream that breaks, measured on
+ * staging 2026-09-15) never calls a tool that wakes the Workflow, so without
+ * this the assignment waits on an event that never comes and holds the site
+ * lock. The log is flushed first, then the Workflow is told once per failed
+ * operation; it retries and, failing that, releases the lock (§13). A budget
+ * refusal is left to the budget path, which already wakes it.
+ */
+function interrupted(found: Session, observation: unknown) {
+  const o = observation as {
+    type?: string
+    operationId?: string
+    error?: { meta?: { reason?: unknown }; name?: unknown }
+  }
+  if (o.type !== "operation" || !o.error || found.budgetExhausted) return
+  const key = o.operationId ?? "unknown"
+  if (found.interruptions.has(key)) return
+  found.interruptions.add(key)
+  const reason = String(
+    o.error.meta?.reason ?? o.error.name ?? "operation failed"
+  ).slice(0, 300)
+  found.tee
+    .flush()
+    .then(() => workflow(found.brief.snapshot.assignment_id))
+    .then((instance) =>
+      instance.sendEvent({
+        type: "developer",
+        payload: { kind: "interrupted", reason },
+      })
+    )
+    .catch(() => undefined)
+}
 instrument({
   key: Symbol.for("reme.developer"),
   observe: () => undefined,
@@ -144,12 +181,23 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
       promise.catch(() => undefined)
     },
   })
+  const created: Session = {
+    tee,
+    budget: undefined as unknown as BudgetGuard,
+    runtime,
+    kit,
+    brief,
+    gate: createTurnGate(),
+    interruptions: new Set(),
+    budgetExhausted: false,
+  }
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
     spentUsd: runtime.budget.model_usd_spent,
     onEvent: (event) => {
       tee.emit(event.type, event.payload)
       if (event.type === "budget.exhausted") {
+        created.budgetExhausted = true
         // §13: the Workflow parks the assignment; the refusal that follows
         // ends this response.
         tee
@@ -169,7 +217,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
       }
     },
   })
-  const created = { tee, budget, runtime, kit, brief, gate: createTurnGate() }
+  created.budget = budget
   sessions.set(id, created)
   return created
 }
@@ -190,6 +238,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
     "- Call checkpoint after a coherent set of edits.",
+    "- A run.interrupted message means your last model call failed before your turn finished; the files you wrote are still there. Continue from where you left off.",
     "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
     "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
     "",
