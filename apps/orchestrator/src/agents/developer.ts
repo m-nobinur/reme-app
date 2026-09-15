@@ -184,9 +184,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "",
     "Rules:",
     '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
-    brief.edit_arm === "flue"
-      ? "- Edit files with the edit tool: one exact oldText/newText replacement per call, and several edit calls may go in one turn. Use write only for a new file. Never rewrite a file to change one line."
-      : "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
+    "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
     "- src/site-config.ts is where every string on the site comes from; fill its fields from the facts. An empty field renders nothing. Only tagline may stay empty; every other field needs a fact.",
     "- Read every file you need in one turn; reads run together.",
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
@@ -227,7 +225,7 @@ export function Developer({ id }: AgentProps) {
   useSandbox(
     {
       createSandbox: base.createSandbox,
-      tools: guardedTools(POLICY, { edit: brief.edit_arm, git: GIT }),
+      tools: guardedTools(POLICY, { git: GIT }),
     },
     { cwd: SITE_ROOT }
   )

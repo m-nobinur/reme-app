@@ -117,14 +117,14 @@ describe("the guarded tool set", () => {
     mkdir: async () => undefined,
     rm: async () => undefined,
   }
-  const build = (edit: "batch" | "flue") =>
+  const build = () =>
     // The adapter is structural; the tools only touch the verbs above.
-    guardedTools(policy, { edit, git: "git" })(sandbox as never, {
+    guardedTools(policy, { git: "git" })(sandbox as never, {
       subagents: {},
     })
-  const tools = build("batch")
-  const tool = (name: string, set = tools) => {
-    const found = set.find((t) => t.name === name)
+  const tools = build()
+  const tool = (name: string) => {
+    const found = tools.find((t) => t.name === name)
     if (!found) throw new Error(`no ${name}`)
     return found
   }
@@ -143,17 +143,6 @@ describe("the guarded tool set", () => {
     for (const name of ["glob", "grep", "read"]) {
       expect(tool(name).executionMode).toBeUndefined()
     }
-  })
-
-  it("mounts flue's single edit under the same name for the other arm", () => {
-    const flue = build("flue")
-    expect(flue.filter((t) => t.name === "edit")).toHaveLength(1)
-    const params = tool("edit", flue).parameters as {
-      properties: Record<string, unknown>
-    }
-    expect(params.properties.oldText).toBeDefined()
-    expect(params.properties.edits).toBeUndefined()
-    expect(tool("edit", flue).executionMode).toBe("sequential")
   })
 
   it("refuses a bash call that leaves the site before it runs", async () => {

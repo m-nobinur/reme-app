@@ -171,7 +171,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             .from(assignments)
             .where(eq(assignments.id, ids.assignmentId))
           if (!row) throw new NonRetryableError("assignment.not_found")
-          const { withhold, model, edit } = await creationChoices(db, ids)
+          const { withhold, model } = await creationChoices(db, ids)
           const snapshot = await takeSnapshot(db, ids, withhold)
           const spec = await issueSpec(db, this.env, row, model)
           const built: Brief = {
@@ -180,7 +180,6 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             goal: row.goal,
             acceptance_criteria: row.acceptanceCriteria,
             restore_key: null,
-            edit_arm: edit,
           }
           return built
         })

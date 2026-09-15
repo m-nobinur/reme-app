@@ -179,7 +179,6 @@ console_.post("/", async (c) => {
     goal?: unknown
     model?: unknown
     withhold?: unknown
-    edit?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Which of the two coding defaults this assignment runs on (the plan's
@@ -191,9 +190,6 @@ console_.post("/", async (c) => {
   const withhold = Array.isArray(body.withhold)
     ? body.withhold.filter((k): k is string => typeof k === "string")
     : []
-  // FIXME: a test knob for the edit tool measurement, read back from the
-  // `assignment.created` row like `withhold`. Deleted with the losing arm.
-  const edit = body.edit === "flue" ? "flue" : "batch"
   const goal =
     typeof body.goal === "string" && body.goal.trim()
       ? body.goal.trim()
@@ -247,7 +243,7 @@ console_.post("/", async (c) => {
       assignmentId: row.id,
       staffId: chief.id,
       type: "assignment.created",
-      payload: { kind, model, goal, withhold, edit },
+      payload: { kind, model, goal, withhold },
     })
     return { row, replayed: false }
   })

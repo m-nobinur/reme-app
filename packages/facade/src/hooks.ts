@@ -1,7 +1,6 @@
 import { Type } from "@earendil-works/pi-ai"
 import {
   createBashTool,
-  createEditTool,
   createGlobTool,
   createGrepTool,
   createReadTool,
@@ -341,7 +340,12 @@ function prepareEditArguments(input: unknown): EditInput {
   return args as EditInput
 }
 
-/** The batch point edit on Pi's rules and in Pi's words (§8.2); `applyEdits` holds the matching. */
+/**
+ * The batch point edit on Pi's rules and in Pi's words (§8.2); `applyEdits`
+ * holds the matching. Chosen over flue's single edit on 2026-09-15: three
+ * interleaved golden builds a side, no failed edit in either, median
+ * uncached input 5,819 against 10,761, tool calls 9 against 17.
+ */
 function createBatchEditTool(sandbox: Sandbox) {
   return {
     name: "edit",
@@ -411,9 +415,6 @@ function createCheckpointTool(sandbox: Sandbox, root: string, git: string) {
   }
 }
 
-/** Which edit tool the Developer gets. Two until the measurement picks one; then one. */
-export type EditArm = "batch" | "flue"
-
 /**
  * The Developer's sandbox tools: flue's read, grep and glob; write and bash
  * behind the `pre_tool_call` guard; one `edit` behind the same path guard;
@@ -423,21 +424,17 @@ export type EditArm = "batch" | "flue"
  */
 export function guardedTools(
   policy: ToolPolicy,
-  options: { edit: EditArm; git: string }
+  options: { git: string }
 ): SandboxToolFactory {
   return (sandbox: Sandbox) => {
     const path = (params: Record<string, unknown>) =>
       pathRefusal(String(params.path ?? ""), policy, (p) =>
         sandbox.resolvePath(p)
       )
-    const edit =
-      options.edit === "flue"
-        ? createEditTool(sandbox)
-        : createBatchEditTool(sandbox)
     return [
       wrap(createReadTool(sandbox)),
       wrap(createWriteTool(sandbox), { check: path, sequential: true }),
-      wrap(edit as ToolLike, { check: path, sequential: true }),
+      wrap(createBatchEditTool(sandbox), { check: path, sequential: true }),
       wrap(createBashTool(sandbox), {
         check: (params) => bashRefusal(String(params.command ?? ""), policy),
         sequential: true,

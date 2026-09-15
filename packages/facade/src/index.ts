@@ -14,7 +14,7 @@ export type { Edit } from "./edits.ts"
 export { applyEdits } from "./edits.ts"
 export { FacadeError } from "./errors.ts"
 export * from "./flue.ts"
-export type { EditArm, ToolPolicy, TurnGate } from "./hooks.ts"
+export type { ToolPolicy, TurnGate } from "./hooks.ts"
 export {
   bashRefusal,
   boundResult,
