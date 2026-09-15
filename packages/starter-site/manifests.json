@@ -1,0 +1,196 @@
+[
+  {
+    "component": "ActionLink",
+    "path": "src/components/ActionLink/ActionLink.astro",
+    "summary": "A link styled as a button, for a call or the next step.",
+    "props": [
+      {
+        "name": "href",
+        "type": "string",
+        "required": true,
+        "description": "A site path, or tel: or mailto: built from site.phone or site.email."
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": true,
+        "description": "The visible text, read from a site field."
+      },
+      {
+        "name": "variant",
+        "type": "\"primary\" | \"secondary\"",
+        "required": false,
+        "description": "primary for the one main action, secondary for the rest."
+      }
+    ],
+    "constraints": [
+      "Renders nothing when href or label is empty.",
+      "At most one primary per group of actions."
+    ],
+    "examples": [
+      "<ActionLink href={`tel:${site.phone}`} label={site.phone} />",
+      "<ActionLink href=\"/quote/\" label={site.navQuote} variant=\"secondary\" />"
+    ],
+    "forbidden": [
+      "a literal label, phone number or email address",
+      "a link to a page not in src/pages"
+    ],
+    "source": "generated"
+  },
+  {
+    "component": "ContactDetails",
+    "path": "src/components/ContactDetails/ContactDetails.astro",
+    "summary": "The business's phone, email and weekday hours as a list.",
+    "props": [],
+    "constraints": [
+      "Reads site.phone, site.email and site.weekdayHours itself; each row renders only when its field is set."
+    ],
+    "examples": ["<ContactDetails />"],
+    "forbidden": ["passing contact details as props or children"],
+    "source": "generated"
+  },
+  {
+    "component": "Hero",
+    "path": "src/components/Hero/Hero.astro",
+    "summary": "The page's h1 with an optional lede and action links as children.",
+    "props": [
+      {
+        "name": "heading",
+        "type": "string",
+        "required": true,
+        "description": "The page's h1, read from a site field."
+      },
+      {
+        "name": "lede",
+        "type": "string",
+        "required": false,
+        "description": "One sentence under the heading, read from a site field."
+      }
+    ],
+    "constraints": [
+      "One per page, first inside the layout.",
+      "Children are ActionLink elements only."
+    ],
+    "examples": [
+      "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+    ],
+    "forbidden": ["a second Hero on a page", "literal text in heading or lede"],
+    "source": "generated"
+  },
+  {
+    "component": "PriceCard",
+    "path": "src/components/PriceCard/PriceCard.astro",
+    "summary": "One priced service, its name and its price as the fact states it.",
+    "props": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "description": "The service's name, read from a site field."
+      },
+      {
+        "name": "price",
+        "type": "string",
+        "required": true,
+        "description": "A pricing fact's field as the site config renders it."
+      }
+    ],
+    "constraints": ["Renders nothing unless both name and price are set."],
+    "examples": [
+      "<PriceCard name={site.standardCleanName} price={site.standardCleanHourly} />"
+    ],
+    "forbidden": [
+      "a price no pricing fact states",
+      "discounts, from-prices or ranges"
+    ],
+    "source": "generated"
+  },
+  {
+    "component": "Section",
+    "path": "src/components/Section/Section.astro",
+    "summary": "A titled block of page content below the hero.",
+    "props": [
+      {
+        "name": "heading",
+        "type": "string",
+        "required": true,
+        "description": "The section's h2, read from a site field."
+      }
+    ],
+    "constraints": [
+      "Wrap it in the condition its content needs, so an empty section never renders."
+    ],
+    "examples": [
+      "{site.serviceArea && (<Section heading={site.serviceAreaHeading}><p>{site.serviceArea}</p></Section>)}"
+    ],
+    "forbidden": ["a Section with no content", "literal text in heading"],
+    "source": "generated"
+  },
+  {
+    "component": "Seo",
+    "path": "src/components/Seo/Seo.astro",
+    "summary": "The page head, with title, description, canonical URL, Open Graph and JSON-LD.",
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true,
+        "description": "The page's own title; the business name is appended."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "description": "The meta and Open Graph description, read from a site field."
+      },
+      {
+        "name": "jsonLd",
+        "type": "Record<string, unknown>[]",
+        "required": false,
+        "description": "Items from src/structured-data.ts; the schema.org context is added here."
+      },
+      {
+        "name": "noindex",
+        "type": "boolean",
+        "required": false,
+        "description": "Keeps the page out of search results, as the 404 page does."
+      }
+    ],
+    "constraints": [
+      "The Base layout renders it; a page passes these props to Base.",
+      "JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service or WebSite only."
+    ],
+    "examples": [
+      "<Base title={site.contactHeading} description={site.contactIntro} jsonLd={localBusiness(Astro.site)}>"
+    ],
+    "forbidden": [
+      "using it outside the Base layout",
+      "JSON-LD built outside src/structured-data.ts",
+      "ratings, reviews or aggregateRating"
+    ],
+    "source": "generated"
+  },
+  {
+    "component": "SiteFooter",
+    "path": "src/components/SiteFooter/SiteFooter.astro",
+    "summary": "The footer with business name, service area and contact details.",
+    "props": [],
+    "constraints": ["The Base layout renders it on every page."],
+    "examples": ["<SiteFooter />"],
+    "forbidden": ["using it in a page"],
+    "source": "generated"
+  },
+  {
+    "component": "SiteHeader",
+    "path": "src/components/SiteHeader/SiteHeader.astro",
+    "summary": "The header with business name and navigation built from the page files.",
+    "props": [],
+    "constraints": [
+      "The Base layout renders it on every page.",
+      "A link shows only when its page exists and its label field is set."
+    ],
+    "examples": ["<SiteHeader />"],
+    "forbidden": ["using it in a page", "a hard-coded navigation link"],
+    "source": "generated"
+  }
+]
