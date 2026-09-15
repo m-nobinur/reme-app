@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
 the service Workers got hostnames, see the decision and the last two consequences. Amended
-2026-09-15: staging gained `staging-preview`, see the decision. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+2026-09-15: staging gained `staging-preview`, see the decision; and staging's tenant and preview
+hosts move to a zone of their own, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -133,3 +134,16 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   sites Worker will see requests for these hostnames first and must pass them through with
   `fetch(request)`, which Cloudflare routes to the custom domain's Worker; and a custom domain
   refuses a hostname that already has a CNAME, which the wildcard record is not.
+
+- **Staging's tenant and preview hostnames live on a second zone** (amended 2026-09-15, with ADR-032),
+  in the same shapes as production: `{slug}.<staging zone>` and `preview-v{n}-{slug}.<staging zone>`.
+  A Worker route accepts a wildcard only as its first character, so no flat label on
+  `remeai.co.uk` can tell staging from production, and a staging router on `*.remeai.co.uk/*` would
+  run in front of the production app's custom domain, because routes run before custom domains. A
+  second zone keeps staging out of production's request path, keeps the 48 character slug cap, and
+  costs one registration. The staging router owns `*.<staging zone>/*` and one proxied wildcard
+  record there. The service hostnames (`staging`, `staging-api`, `staging-orchestrator`,
+  `staging-preview`) stay on `remeai.co.uk`. The zone is the owner's purchase and its name is
+  written here when it exists; the fallback, if the owner declines, is Advanced Certificate Manager
+  on `*.staging.remeai.co.uk` at $10 a month, with that pattern's precedence over `*.remeai.co.uk/*`
+  proven in the router's first commit. Change if: Cloudflare accepts wildcards inside a label.
