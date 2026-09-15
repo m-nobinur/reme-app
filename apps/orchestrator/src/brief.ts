@@ -9,6 +9,7 @@ import {
   toFactRecord,
 } from "@workspace/db"
 import {
+  type EditArm,
   loggableSpec,
   type ModelChoice,
   modelRouting,
@@ -31,6 +32,8 @@ export type Brief = {
   acceptance_criteria: string[]
   /** R2 key of the source snapshot to restore, or null for the starter. */
   restore_key: string | null
+  /** FIXME: which edit tool this run measures; deleted with the losing arm. */
+  edit_arm: EditArm
 }
 
 /**
@@ -76,7 +79,7 @@ export async function takeSnapshot(
 export async function creationChoices(
   db: OrgScopedDb,
   ids: Ids
-): Promise<{ withhold: string[]; model: ModelChoice }> {
+): Promise<{ withhold: string[]; model: ModelChoice; edit: EditArm }> {
   const [row] = await db
     .select({ payload: events.payload })
     .from(events)
@@ -88,7 +91,11 @@ export async function creationChoices(
   const withhold = Array.isArray(payload.withhold)
     ? payload.withhold.filter((k): k is string => typeof k === "string")
     : []
-  return { withhold, model: payload.model === "B" ? "B" : "A" }
+  return {
+    withhold,
+    model: payload.model === "B" ? "B" : "A",
+    edit: payload.edit === "flue" ? "flue" : "batch",
+  }
 }
 
 /**

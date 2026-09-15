@@ -1,17 +1,6 @@
-import { z } from "zod"
 import { FacadeError } from "./errors.ts"
 
 export type Edit = { oldText: string; newText: string }
-
-/**
- * The batch edit tool's input, in zod so `toolInput` derives the model-facing
- * schema. Nothing here refuses an empty value: `applyEdits` does, with Pi's
- * message, so the model reads one wording whatever it got wrong.
- */
-export const BatchEditInput = z.strictObject({
-  path: z.string().min(1),
-  edits: z.array(z.strictObject({ oldText: z.string(), newText: z.string() })),
-})
 
 /*
  * Ported from Pi's coding agent, `packages/coding-agent/src/core/tools/edit-diff.ts`

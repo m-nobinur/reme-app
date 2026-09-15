@@ -11,17 +11,20 @@ export { canonical, canonicalHash, canonicalHmac } from "./canonical.ts"
 export type { DerivedContext } from "./derive.ts"
 export { contextHash, deriveContext } from "./derive.ts"
 export type { Edit } from "./edits.ts"
-export { applyEdits, BatchEditInput } from "./edits.ts"
+export { applyEdits } from "./edits.ts"
 export { FacadeError } from "./errors.ts"
 export * from "./flue.ts"
-export type { ToolPolicy } from "./hooks.ts"
+export type { EditArm, ToolPolicy, TurnGate } from "./hooks.ts"
 export {
   bashRefusal,
+  boundResult,
+  createTurnGate,
   guard,
   guardedTools,
   HOOK_TIMEOUT_MS,
   observer,
   pathRefusal,
+  TOOL_RESULT_MAX_CHARS,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"
 export type { ToolInput } from "./schema.ts"

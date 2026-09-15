@@ -6,7 +6,7 @@
 // and read the same stream the model will see. Commands whose routes have not
 // landed yet print the orchestrator's 501, which names the story.
 //
-//   create   <org> [--kind site.build|site.revise] [--model A|B] [--goal "..."] [--withhold <fact key>]
+//   create   <org> [--kind site.build|site.revise] [--model A|B] [--goal "..."] [--withhold <fact key>] [--edit batch|flue]
 //   revise   <org> <change request>          a site.revise with that goal
 //   list     <org>
 //   show     <org> <id>
@@ -97,6 +97,7 @@ switch (command) {
         // A test knob: fact keys left out of the snapshot so the run has to
         // ask for them, e.g. `--withhold business.phone`.
         withhold: flags.withhold ? [flags.withhold] : [],
+        edit: flags.edit,
       })
     )
     break
