@@ -10,6 +10,8 @@
  * references (Aider's repomap) is the upgrade.
  */
 
+import type { ComponentManifest, SiteFields } from "@workspace/contracts"
+
 /** 4,000 characters is about 1,000 tokens at the ratio measured on the starter. */
 export const REPO_MAP_MAX_CHARS = 4_000
 
@@ -88,4 +90,50 @@ export function repoMap(files: Record<string, string>): string {
   }
   notice += named < left.length ? `, and ${left.length - named} more]` : "]"
   return [...kept, notice].join("\n")
+}
+
+/** 3,000 characters is about 880 tokens at the measured 3.4 characters a token. */
+export const DIGEST_MAX_CHARS = 3_000
+
+/**
+ * The starter's components as the Developer is shown them (architect ruling
+ * on N5, §11.2): one line each, name, path, props with type and whether
+ * required, and what the component must never be used for. The full
+ * `manifest.yaml` stays readable with `read`. Past the cap it throws: a cut
+ * digest would hide a forbidden use, which is worse than a failed build of
+ * the bundle. A pure function, so a restored site can feed it its own
+ * manifests.
+ */
+export function manifestDigest(
+  manifests: readonly ComponentManifest[]
+): string {
+  const lines = [...manifests]
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((m) => {
+      const props = m.props
+        .map((p) => `${p.name}${p.required ? "" : "?"}: ${p.type}`)
+        .join(", ")
+      const bits = [props ? `props ${props}` : "no props"]
+      if (m.forbidden.length > 0) bits.push(`never: ${m.forbidden.join("; ")}`)
+      return `${m.component} (${m.path}): ${bits.join("; ")}`
+    })
+  const digest = lines.join("\n")
+  if (digest.length > DIGEST_MAX_CHARS) {
+    throw new Error(
+      `the manifest digest is ${digest.length} characters, past the ${DIGEST_MAX_CHARS} characters it may take; trim the manifests or revisit the digest ruling`
+    )
+  }
+  return digest
+}
+
+/**
+ * The facts a site cannot be built without, in the order the Developer asks
+ * for them: the site config's required fact fields, in declaration order. Read
+ * from the bundled config and never from the sandbox, so an edit to the
+ * sandbox copy cannot change what the Developer must ask for.
+ */
+export function requiredFacts(fields: SiteFields): string[] {
+  return Object.values(fields).flatMap((field) =>
+    field.kind === "fact" && field.required ? [field.fact_key] : []
+  )
 }
