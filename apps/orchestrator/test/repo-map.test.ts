@@ -1,12 +1,16 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import type { ComponentManifest } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { REPO_MAP_MAX_CHARS, repoMap } from "../src/repo-map.ts"
+import {
+  manifestDigest,
+  REPO_MAP_MAX_CHARS,
+  repoMap,
+  requiredFacts,
+} from "../src/repo-map.ts"
 
-const root = fileURLToPath(
-  new URL("../../../fixtures/sites/starter/", import.meta.url)
-)
+const root = fileURLToPath(new URL("./fixtures/starter/", import.meta.url))
 const starter: Record<string, string> = Object.fromEntries(
   execSync("git ls-files .", { cwd: root, encoding: "utf8" })
     .trim()
@@ -59,5 +63,56 @@ describe("the repository map", () => {
     expect(notice).toContain(
       `src/components/Component${String(listed).padStart(3, "0")}.astro`
     )
+  })
+})
+
+describe("the manifest digest", () => {
+  const manifest = (
+    component: string,
+    extra: Partial<ComponentManifest> = {}
+  ): ComponentManifest => ({
+    component,
+    path: `src/components/${component}.astro`,
+    summary: `${component} summary`,
+    props: [
+      { name: "phone", type: "string", required: false, description: "d" },
+      { name: "size", type: '"sm" | "lg"', required: true, description: "d" },
+    ],
+    constraints: [],
+    examples: [`<${component} />`],
+    forbidden: ["a placeholder when the phone is empty"],
+    source: "generated",
+    ...extra,
+  })
+
+  it("gives one line per component with its props and forbidden uses", () => {
+    expect(manifestDigest([manifest("ContactDetails")])).toBe(
+      'ContactDetails (src/components/ContactDetails.astro): props phone?: string, size: "sm" | "lg"; never: a placeholder when the phone is empty'
+    )
+  })
+
+  it("lists components in path order whatever order they arrive in", () => {
+    const lines = manifestDigest([manifest("Zeta"), manifest("Alpha")]).split(
+      "\n"
+    )
+    expect(lines.map((l) => l.split(" ")[0])).toEqual(["Alpha", "Zeta"])
+  })
+
+  it("throws past the cap rather than hiding a forbidden use", () => {
+    const many = Array.from({ length: 60 }, (_, i) => manifest(`Component${i}`))
+    expect(() => manifestDigest(many)).toThrow(/3000 characters/)
+  })
+})
+
+describe("the required facts", () => {
+  it("keeps declaration order and leaves out optional and composed fields", () => {
+    expect(
+      requiredFacts({
+        name: { kind: "fact", fact_key: "business.name", required: true },
+        tagline: { kind: "composed" },
+        phone: { kind: "fact", fact_key: "business.phone", required: true },
+        fax: { kind: "fact", fact_key: "business.fax", required: false },
+      })
+    ).toEqual(["business.name", "business.phone"])
   })
 })

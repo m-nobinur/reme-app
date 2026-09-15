@@ -81,6 +81,9 @@ importers:
       '@workspace/gates':
         specifier: workspace:*
         version: link:../../packages/gates
+      '@workspace/starter-site':
+        specifier: workspace:*
+        version: link:../../packages/starter-site
       hono:
         specifier: 4.13.7
         version: 4.13.7

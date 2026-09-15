@@ -42,6 +42,15 @@
       // information.
       "env": ["DATABASE_URL"]
     },
+    // The starter site test builds into dist and then reads it. A package that
+    // depends on the starter (the orchestrator bundles its source) makes turbo
+    // run starter-site#build at the same time, and two astro builds in one dist
+    // fail with ENOTEMPTY. Waiting for the build serialises them.
+    "@workspace/starter-site#test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["DATABASE_URL"]
+    },
     // Not cached, unlike every other test task. This one compares screenshots
     // against per-platform baselines, so its result depends on the machine it
     // ran on, and nothing in the hash says which machine that was: a macOS run
