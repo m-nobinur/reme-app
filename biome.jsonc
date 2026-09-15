@@ -216,9 +216,48 @@
                       "**/config/src/**",
                       "**/ui/src/**",
                       "**/db/src/**",
-                      "**/facade/src/**"
+                      "**/facade/src/**",
+                      "**/starter-site/src/**"
                     ],
                     "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  },
+                  {
+                    "group": ["@flue/*", "@earendil-works/*"],
+                    "message": "packages/facade is the only importer of flue and Pi (R2). Take hooks from @workspace/facade."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The tenant site's source. The Developer builds it in a sandbox holding
+      // only the Astro toolchain, so `src/` imports nothing from the workspace,
+      // contracts included. Its tests and scripts may; they never reach the
+      // sandbox. Narrower than the packages block and so replacing it.
+      "includes": ["packages/starter-site/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@workspace/*", "@workspace/*/**"],
+                    "message": "packages/starter-site/src builds in a sandbox with no workspace packages. Copy what it needs (tokens.css is a byte-identical copy, checked by the starter's tests)."
+                  },
+                  {
+                    "group": [
+                      "**/contracts/src/**",
+                      "**/config/src/**",
+                      "**/ui/src/**",
+                      "**/db/src/**",
+                      "**/facade/src/**"
+                    ],
+                    "message": "packages/starter-site/src builds in a sandbox with no workspace packages, so it cannot reach into one by path either."
                   },
                   {
                     "group": ["@flue/*", "@earendil-works/*"],
