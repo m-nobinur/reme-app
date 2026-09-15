@@ -23,7 +23,8 @@
   // the SDK reads this from the Worker's bindings, never from the container.
   "vars": {
     "SANDBOX_TRANSPORT": "rpc",
-    "PREVIEW_HOST": "staging-preview.remeai.co.uk"
+    "PREVIEW_HOST": "staging-preview.remeai.co.uk",
+    "SITE_HOST_SUFFIX": "-stg.remeai.co.uk"
   },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
@@ -74,7 +75,10 @@
       "routes": [
         { "pattern": "orchestrator.remeai.co.uk", "custom_domain": true }
       ],
-      "vars": { "SANDBOX_TRANSPORT": "rpc" },
+      "vars": {
+        "SANDBOX_TRANSPORT": "rpc",
+        "SITE_HOST_SUFFIX": ".remeai.co.uk"
+      },
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],

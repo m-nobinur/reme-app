@@ -8,7 +8,7 @@ import {
   InformationRequest,
   RuntimeSpec,
 } from "@workspace/contracts"
-import { siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
+import { orgs, siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
 import {
   type AgentProps,
   type BudgetGuard,
@@ -36,7 +36,12 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { repoMap } from "../repo-map.ts"
-import { STARTER_FILES } from "../seed.ts"
+import {
+  SEED_DIGEST,
+  SEED_REQUIRED_FACTS,
+  STARTER_FILES,
+  siteHost,
+} from "../seed.ts"
 import { eventSink } from "../sink.ts"
 
 /**
@@ -206,9 +211,10 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
     "",
     "Rules:",
-    '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
+    `- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${SEED_REQUIRED_FACTS.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
     "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
-    "- src/site-config.ts is where every string on the site comes from; fill its fields from the facts. An empty field renders nothing. Only tagline may stay empty; every other field needs a fact.",
+    "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill every fact field from its fact, in the form its comment gives; a required fact field may not stay empty, an optional one stays empty when its fact is missing. A composed field is text you may write or keep, and every claim in it must trace to a fact. An empty field renders nothing. Never change the fields export.",
+    "- Build pages from the components below, as their manifests say, and never in a way a manifest forbids.",
     "- Read every file you need in one turn; reads run together.",
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
@@ -226,6 +232,9 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "",
     "Site map (every file, in path order):",
     STARTER_MAP,
+    "",
+    "Components (name, file, props, never):",
+    SEED_DIGEST,
     "",
     `Budget: ${runtime.budget.model_usd_cap} USD of model spend for this assignment. Be brief.`,
   ].join("\n")
@@ -414,8 +423,22 @@ const reportComplete = (current: Session) =>
         const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
         return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
       })
+      // Canonical URLs, the sitemap and robots name the tenant host; without
+      // --site the starter leaves them out rather than invent one.
+      const host = await step.do("site host", async () =>
+        current.kit.withOrg({ orgId }, async (db) => {
+          const [org] = await db
+            .select({ slug: orgs.slug })
+            .from(orgs)
+            .where(sql`${orgs.id} = ${orgId}`)
+          if (!org) throw new Error(`no org row for ${orgId}`)
+          return siteHost(org.slug, env.SITE_HOST_SUFFIX)
+        })
+      )
       const build = await step.do("astro build", async () => {
-        const r = await run("./node_modules/.bin/astro build 2>&1 | tail -20")
+        const r = await run(
+          `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
+        )
         return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
       })
       if (build.exit_code !== 0) {
