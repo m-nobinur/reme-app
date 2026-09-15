@@ -1,9 +1,9 @@
 // The orchestrator (C3): the assignment state machine as a Workflow, the
-// console routes, and from N3 the Developer agent's Durable Object. The shape
-// is `apps/api`'s: Hyperdrive to the same database, placed beside it, the
-// default environment is staging. Flue adds `main` and the per-agent Durable
-// Object bindings at build time into `.flue-vite.wrangler.jsonc`; never author
-// a `FLUE_*` binding here.
+// console routes, the builder sandbox, and from N3 the Developer agent's
+// Durable Object. The shape is `apps/api`'s: Hyperdrive to the same database,
+// placed beside it, the default environment is staging. Flue adds `main` and
+// the per-agent Durable Object bindings at build time into
+// `.flue-vite.wrangler.jsonc`; never author a `FLUE_*` binding here.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "reme-orchestrator",
@@ -16,6 +16,9 @@
   "routes": [
     { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true }
   ],
+  // One connection per assignment rather than one subrequest per command:
+  // the SDK reads this from the Worker's bindings, never from the container.
+  "vars": { "SANDBOX_TRANSPORT": "rpc" },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
   ],
@@ -26,6 +29,24 @@
       "class_name": "AssignmentWorkflow"
     }
   ],
+  // The builder sandbox (ADR-031). The image is a registry reference pinned
+  // by digest, so a deploy needs no Docker and a PR that touches no image
+  // never builds one; .github/workflows/sandbox-image.yml builds and pushes
+  // on infra/sandbox/** and weekly, and a PR moves this pin. `standard-2` is
+  // the §6.3 builder class. `max_instances` is the pool the Workflow waits on
+  // with a `pool.exhausted` event when it is full.
+  "containers": [
+    {
+      "class_name": "RemeSandbox",
+      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:28b005be9af32ecac4994b2b9e22f67ba2a4540356afbc44f4833f35191d44cf",
+      "instance_type": "standard-2",
+      "max_instances": 5
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RemeSandbox"] }],
   "env": {
     "production": {
       "name": "reme-orchestrator-production",
@@ -34,6 +55,7 @@
       "routes": [
         { "pattern": "orchestrator.remeai.co.uk", "custom_domain": true }
       ],
+      "vars": { "SANDBOX_TRANSPORT": "rpc" },
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],
@@ -43,7 +65,18 @@
           "binding": "ASSIGNMENTS",
           "class_name": "AssignmentWorkflow"
         }
-      ]
+      ],
+      "containers": [
+        {
+          "class_name": "RemeSandbox",
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:28b005be9af32ecac4994b2b9e22f67ba2a4540356afbc44f4833f35191d44cf",
+          "instance_type": "standard-2",
+          "max_instances": 5
+        }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
+      }
     }
   }
 }

@@ -18,6 +18,7 @@ import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
+import { probe } from "./sandbox.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
 
 /**
@@ -118,6 +119,27 @@ console_.use("*", async (c, next) => {
   }
   c.set("orgId", orgId)
   await next()
+})
+
+/**
+ * FIXME: a test surface, see sandbox.ts. Behind the bearer and the org, and
+ * it takes nothing else from the request: the commands are a constant. The
+ * result is appended like any other execution, so a probe leaves a trace.
+ * Q4 moves the probes into CI and deletes this route.
+ */
+console_.get("/sandbox/probe", async (c) => {
+  const orgId = c.get("orgId")
+  const result = await probe(c.env, orgId)
+  await c.get("kit").withOrg({ orgId }, (db) =>
+    appendEvent(db, {
+      orgId,
+      assignmentId: null,
+      staffId: null,
+      type: "sandbox.probed",
+      payload: result,
+    })
+  )
+  return c.json(result)
 })
 
 console_.get("/", async (c) => {

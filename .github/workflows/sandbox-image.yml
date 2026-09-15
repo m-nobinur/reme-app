@@ -1,0 +1,103 @@
+name: sandbox image
+
+# The builder sandbox image, on its own paths and weekly, so a PR that touches
+# no image never waits for Docker (eng guide §7 and §8). A push to main or the
+# weekly run builds, scans and pushes to the Cloudflare registry under the
+# commit sha; a pull request builds and scans only. The image a deploy runs is
+# the digest pinned in apps/orchestrator/wrangler.jsonc, so a push here changes
+# nothing until a PR moves that pin, which is what makes the weekly rebuild
+# safe to run unattended.
+
+on:
+  push:
+    branches: [main]
+    paths: ["infra/sandbox/**", ".github/workflows/sandbox-image.yml"]
+  pull_request:
+    paths: ["infra/sandbox/**", ".github/workflows/sandbox-image.yml"]
+  schedule:
+    # Mondays 03:00 UTC.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE: reme-sandbox
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Containers run linux/amd64. The base image is single-arch and pinned
+      # by digest in the Dockerfile, so the platform is stated here once.
+      - name: Build
+        run: >
+          docker buildx build --platform linux/amd64 --load
+          -t "$IMAGE:$TAG" infra/sandbox
+
+      - name: Size
+        run: |
+          size=$(docker image inspect "$IMAGE:$TAG" --format '{{.Size}}')
+          echo "image size: $((size / 1024 / 1024)) MiB" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Advisory: the report lands in the job summary and does not fail the
+      # build. A finding is read by a person; the image is rebuilt weekly so
+      # the base and the toolchain pick up fixes on their own cadence.
+      - name: Scan
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          output: trivy.txt
+
+      - name: Scan summary
+        if: always()
+        run: |
+          {
+            echo "## Advisory scan"
+            echo '```'
+            cat trivy.txt 2>/dev/null || echo "no report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: pnpm/action-setup@v6
+        if: github.event_name != 'pull_request'
+
+      - uses: actions/setup-node@v7
+        if: github.event_name != 'pull_request'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: github.event_name != 'pull_request'
+
+      - name: Push
+        if: github.event_name != 'pull_request'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter orchestrator exec wrangler containers push "$IMAGE:$TAG"
+          digest=$(docker image inspect "$IMAGE:$TAG" --format '{{index .RepoDigests 0}}' || true)
+          {
+            echo "## Pushed"
+            echo
+            echo "Pin it in apps/orchestrator/wrangler.jsonc:"
+            echo
+            echo '```'
+            echo "${digest:-see the push output above}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
