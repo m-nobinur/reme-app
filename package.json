@@ -37,7 +37,8 @@
     "@biomejs/biome": "2.5.10",
     "postgres": "3.4.9",
     "turbo": "^2.9.18",
-    "typescript": "^6"
+    "typescript": "^6",
+    "zod": "4.4.3"
   },
   "packageManager": "pnpm@10.33.4",
   "engines": {
