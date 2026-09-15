@@ -1,0 +1,4 @@
+dist/
+.astro/
+.vite/
+node_modules/
