@@ -11,6 +11,7 @@
 //   list     <org>
 //   show     <org> <id>
 //   events   <org> <id>                      the stream, with seq
+//   watch    <org> <id> [--every 5] [--timeout 900]  poll until the run waits on someone, then print its numbers
 //   start    <org> <id>                      run a queued assignment that has no instance
 //   cancel   <org> <id>
 //   answer   <org> <id> <request_id> <value> answer an information request as the CoS would
@@ -142,6 +143,56 @@ switch (command) {
     }
     break
   }
+  case "watch": {
+    need(org, "<org>")
+    need(id, "<id>")
+    // A run has settled when it waits on someone other than the Developer.
+    const settled = new Set([
+      "preview_ready",
+      "awaiting_review",
+      "blocked_on_information",
+      "blocked_on_approval",
+      "published",
+      "paused",
+      "failed",
+      "cancelled",
+    ])
+    // Streaming chunks are most of the log and say nothing a person reads.
+    const noise =
+      /^runtime\.(\w+_delta|turn_request|turn_start|message_(start|end)|thinking_(start|end)|tool_start|log)$/
+    const every = Number(flags.every ?? 5) * 1000
+    const deadline = Date.now() + Number(flags.timeout ?? 900) * 1000
+    const seen = new Set()
+    for (;;) {
+      const { events } = await call("GET", `/assignments/${id}/events`)
+      for (const e of events) {
+        if (seen.has(e.event_id)) continue
+        seen.add(e.event_id)
+        if (noise.test(e.type)) continue
+        const p = e.payload
+        const detail =
+          e.type === "assignment.state_changed"
+            ? `${p.from} -> ${p.to}`
+            : e.type === "runtime.tool"
+              ? `${p.toolName}${p.isError ? " FAILED" : ""}`
+              : e.type === "runtime.turn"
+                ? `in ${p.response?.usage?.input} cached ${p.response?.usage?.cacheRead} out ${p.response?.usage?.output}`
+                : ""
+        console.log(`${e.occurred_at.slice(11, 19)}  ${e.type}  ${detail}`)
+      }
+      const { assignment } = await call("GET", `/assignments/${id}`)
+      if (settled.has(assignment.state)) {
+        print({ state: assignment.state, ...runNumbers(events) })
+        break
+      }
+      if (Date.now() > deadline) {
+        bad(`still ${assignment.state} after ${flags.timeout ?? 900} s`)
+        process.exit(1)
+      }
+      await new Promise((resolve) => setTimeout(resolve, every))
+    }
+    break
+  }
   case "start":
   case "cancel": {
     need(org, "<org>")
@@ -190,8 +241,69 @@ switch (command) {
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | list | show | events | start | cancel | answer | steer | approve | rollback"
+      "create | revise | list | show | events | watch | start | cancel | answer | steer | approve | rollback"
     )
     process.exit(2)
+  }
+}
+
+/**
+ * The numbers a live run is judged on, from its own log: turns and tokens
+ * from `runtime.turn`, tool calls and failures from `runtime.tool`, time in
+ * the agent from its start and end, and created to the first settled state.
+ * Cache hit is cached input over all input, as the PRs quote it.
+ */
+function runNumbers(events) {
+  const at = (e) => Date.parse(e.occurred_at)
+  const turns = events.filter((e) => e.type === "runtime.turn")
+  const tools = events.filter((e) => e.type === "runtime.tool")
+  const sum = (key) =>
+    turns.reduce((n, e) => n + (e.payload.response?.usage?.[key] ?? 0), 0)
+  const input = sum("input")
+  const cached = sum("cacheRead")
+  const cost = turns.reduce(
+    (n, e) => n + (e.payload.response?.usage?.cost?.total ?? 0),
+    0
+  )
+  const starts = events.filter((e) => e.type === "runtime.agent_start")
+  const ends = events.filter((e) => e.type === "runtime.agent_end")
+  const agentMs = ends.reduce(
+    (n, end, i) => n + (starts[i] ? at(end) - at(starts[i]) : 0),
+    0
+  )
+  const created = events.find((e) => e.type === "assignment.created")
+  const settledAt = events.find(
+    (e) =>
+      e.type === "assignment.state_changed" &&
+      [
+        "preview_ready",
+        "blocked_on_information",
+        "blocked_on_approval",
+        "failed",
+      ].includes(e.payload.to)
+  )
+  const byTool = {}
+  for (const t of tools) {
+    const name = t.payload.toolName
+    byTool[name] ??= { calls: 0, failed: 0 }
+    byTool[name].calls++
+    if (t.payload.isError) byTool[name].failed++
+  }
+  return {
+    turns: turns.length,
+    tool_calls: tools.length,
+    failed_tool_calls: tools.filter((t) => t.payload.isError).length,
+    tools: byTool,
+    input_tokens: input,
+    cached_tokens: cached,
+    output_tokens: sum("output"),
+    cache_hit:
+      input + cached > 0 ? Number((cached / (input + cached)).toFixed(2)) : 0,
+    cost_usd: Number(cost.toFixed(4)),
+    agent_s: Math.round(agentMs / 1000),
+    created_to_settled_s:
+      created && settledAt
+        ? Math.round((at(settledAt) - at(created)) / 1000)
+        : null,
   }
 }
