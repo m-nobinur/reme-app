@@ -10,7 +10,12 @@ import { FactRecord, FactSnapshot } from "./fact.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import { CompletionReport, ProgressEvent, ValidationReport } from "./report.ts"
 import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
-import { DeploymentManifest, SiteRevision } from "./site.ts"
+import {
+  ComponentManifest,
+  DeploymentManifest,
+  SiteFields,
+  SiteRevision,
+} from "./site.ts"
 
 /**
  * The contract surface, v0. Generation and the round-trip suite both read this
@@ -22,6 +27,7 @@ export const contracts = {
   Assignment,
   CapabilityCall,
   CompletionReport,
+  ComponentManifest,
   CreateOrgRequest,
   DeploymentManifest,
   ErrorEnvelope,
@@ -34,6 +40,7 @@ export const contracts = {
   Org,
   ProgressEvent,
   RuntimeSpec,
+  SiteFields,
   SiteRevision,
   StaffDirectory,
   StaffMember,

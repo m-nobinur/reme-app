@@ -60,3 +60,67 @@ export const DeploymentManifest = z.strictObject({
 
 export type SiteRevision = z.infer<typeof SiteRevision>
 export type DeploymentManifest = z.infer<typeof DeploymentManifest>
+
+/**
+ * One prop of a starter component, as the component's own types declare it.
+ * No fact key: a component is reusable, and which fact fills a string is the
+ * site config's to say (`SiteField`), not the component's.
+ */
+export const ComponentProp = z.strictObject({
+  name: z.string().min(1),
+  /** The prop's TypeScript type as written, e.g. `string` or `"sm" | "lg"`. */
+  type: z.string().min(1),
+  required: z.boolean(),
+  description: z.string().min(1),
+})
+
+/**
+ * `ComponentManifest` (§11.2): what the Developer may know about one
+ * starter component without reading it. Written as `manifest.yaml` beside
+ * the component, validated by the starter's tooling into a committed
+ * `manifests.json`, read by the orchestrator's context assembler. No
+ * version field: the manifests and their one consumer ship in the same commit.
+ * `source` says whether the prop list was generated from the component's
+ * types or written by hand, because a hand-written list is the one that drifts.
+ */
+export const ComponentManifest = z.strictObject({
+  component: z.string().min(1),
+  /** Relative to the site root, e.g. `src/components/ServiceCard.astro`. */
+  path: z.string().regex(/^(?!\/)(?!.*\.\.)[^\0]+$/),
+  summary: z
+    .string()
+    .min(1)
+    .regex(/^[^\n]+$/),
+  props: z.array(ComponentProp),
+  constraints: z.array(z.string().min(1)),
+  examples: z.array(z.string().min(1)).min(1),
+  forbidden: z.array(z.string().min(1)),
+  source: z.enum(["generated", "hand-written"]),
+})
+
+/** A canonical fact key: dotted, lower case, e.g. `business.phone`. */
+const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
+
+/**
+ * `SiteField`: what one string in the starter's `site` config needs. A
+ * `fact` field renders a canonical fact and may be required; a `composed`
+ * field is text the Developer writes whose claims must trace to listed facts,
+ * and is always optional. A union, so "required with no fact" cannot be
+ * written down. The declaration order of a site's fields is the order the
+ * Developer asks for missing facts.
+ */
+export const SiteField = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("fact"),
+    fact_key: FactKey,
+    required: z.boolean(),
+  }),
+  z.strictObject({ kind: z.literal("composed") }),
+])
+
+/** The starter's `fields` export: one `SiteField` per key of `site`. */
+export const SiteFields = z.record(z.string().min(1), SiteField)
+
+export type ComponentManifest = z.infer<typeof ComponentManifest>
+export type SiteField = z.infer<typeof SiteField>
+export type SiteFields = z.infer<typeof SiteFields>

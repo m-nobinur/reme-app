@@ -520,6 +520,87 @@
         ],
         "additionalProperties": false
       },
+      "ComponentManifest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*\\.\\.)[^\\0]+$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\n]+$"
+          },
+          "props": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["name", "type", "required", "description"],
+              "additionalProperties": false
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "examples": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "forbidden": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": ["generated", "hand-written"]
+          }
+        },
+        "required": [
+          "component",
+          "path",
+          "summary",
+          "props",
+          "constraints",
+          "examples",
+          "forbidden",
+          "source"
+        ],
+        "additionalProperties": false
+      },
       "CreateOrgRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -1607,6 +1688,47 @@
           "signature"
         ],
         "additionalProperties": false
+      },
+      "SiteFields": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "minLength": 1
+        },
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "fact"
+                },
+                "fact_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["kind", "fact_key", "required"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "composed"
+                }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            }
+          ]
+        }
       },
       "SiteRevision": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
