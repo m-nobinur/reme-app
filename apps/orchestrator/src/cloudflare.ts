@@ -28,8 +28,23 @@ export { ContainerProxy } from "@cloudflare/sandbox"
 export class RemeSandbox extends Sandbox<Env> {
   override enableInternet = false
   override allowedHosts = [NPM_REGISTRY_HOST]
+  // Without this, port 443 is closed outright and the allowlist never sees
+  // an HTTPS request: the platform intercepts only what it is told to. With
+  // it, HTTPS is terminated at the outbound proxy, the container trusts the
+  // proxy's ephemeral CA, and the allowlist decides. Measured on staging
+  // 2026-09-15: the registry timed out at the TCP level until this was set.
+  override interceptHttps = true
   override sleepAfter = SLEEP_AFTER
 }
+
+// The platform injects the proxy's CA into the container only when an
+// outbound handler exists, and the control server refuses to start under
+// HTTPS interception without that CA (measured 2026-09-15: "Certificate not
+// found, refusing to start"). This handler is the allowlist's pass-through:
+// the proxy has already refused every host not in `allowedHosts` by the time
+// it runs. Assigned rather than declared as a static field, because a field
+// would shadow the base class's setter instead of registering the handler.
+RemeSandbox.outbound = (request: Request) => fetch(request)
 
 /** R8: ids only. Everything else is read from the row inside a step. */
 export type AssignmentParams = { assignment_id: string; org_id: string }

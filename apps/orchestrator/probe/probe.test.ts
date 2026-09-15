@@ -46,7 +46,9 @@ const check = async (name: string) => {
   return found
 }
 
-live("the sandbox", () => {
+// One probe call serves every case; the first to ask pays the cold start and
+// the build, so each case gets the whole budget.
+live("the sandbox", { timeout: 300_000 }, () => {
   it("cannot reach the public internet", async () => {
     const egress = await check("egress.denied")
     expect(egress.exit_code).not.toBe(0)
@@ -70,7 +72,7 @@ live("the sandbox", () => {
     expect(
       names.filter((n) => /(_KEY|_TOKEN|_SECRET|DATABASE_URL)$/.test(n))
     ).toEqual([])
-  }, 30_000)
+  })
 
   it("builds the Astro toolchain check", async () => {
     const build = await check("astro.build")

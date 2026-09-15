@@ -35,10 +35,15 @@ RUN cd /opt/astro \
 
 # Non-root. /workspace, /tmp and the home directory are the writable places;
 # everything else is root-owned, so the Developer's user cannot change the
-# toolchain, the control server or the image it runs in.
+# toolchain, the control server or the image it runs in. One exception: the
+# system CA bundle. HTTPS egress goes through the platform's outbound proxy,
+# which terminates TLS with an ephemeral CA, and the control server appends
+# that CA to the bundle at start and exits if it cannot (measured
+# 2026-09-15). Trust for outbound TLS is the only thing the file decides;
+# what a command may reach is decided at the proxy, outside the container.
 RUN groupadd --gid 1000 reme \
   && useradd --uid 1000 --gid reme --create-home --shell /bin/bash reme \
-  && chown reme:reme /workspace \
+  && chown reme:reme /workspace /etc/ssl/certs/ca-certificates.crt \
   && chmod -R go-w /opt /container-server /usr/local/lib/node_modules
 USER reme
 WORKDIR /workspace

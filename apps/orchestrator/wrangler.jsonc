@@ -38,7 +38,7 @@
   "containers": [
     {
       "class_name": "RemeSandbox",
-      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:28b005be9af32ecac4994b2b9e22f67ba2a4540356afbc44f4833f35191d44cf",
+      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:3f4b63d0e56ca6bb891bd99eb7e7a794c145aad21b56e3ad7a7096c4acd79940",
       "instance_type": "standard-2",
       "max_instances": 5
     }
@@ -69,7 +69,7 @@
       "containers": [
         {
           "class_name": "RemeSandbox",
-          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:28b005be9af32ecac4994b2b9e22f67ba2a4540356afbc44f4833f35191d44cf",
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:3f4b63d0e56ca6bb891bd99eb7e7a794c145aad21b56e3ad7a7096c4acd79940",
           "instance_type": "standard-2",
           "max_instances": 5
         }

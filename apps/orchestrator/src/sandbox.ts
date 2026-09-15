@@ -83,13 +83,15 @@ export async function provision(
  * container. The build is the number the sandbox story quotes.
  */
 export const PROBE_COMMANDS = [
+  // `-f`, so a refusal at the proxy (a 520) is a non-zero exit and not a
+  // 200-shaped success.
   {
     name: "egress.denied",
-    command: `curl -sS -m 10 -o /dev/null -w '%{http_code}' https://example.com/`,
+    command: `curl -fsS -m 10 -o /dev/null -w '%{http_code}' https://example.com/`,
   },
   {
     name: "egress.registry",
-    command: `curl -sS -m 20 -o /dev/null -w '%{http_code}' https://${NPM_REGISTRY_HOST}/astro/latest`,
+    command: `curl -fsS -m 20 -o /dev/null -w '%{http_code}' https://${NPM_REGISTRY_HOST}/astro/latest`,
   },
   { name: "credentials", command: "env" },
   {
@@ -113,10 +115,13 @@ export type ProbeResult = {
 /**
  * Run the probe list in a container that can never be an assignment's: the
  * id carries the org and a prefix no assignment id has, and the container is
- * destroyed before this returns.
+ * destroyed before this returns. The suffix gives every probe its own
+ * Durable Object, because a probe whose container crashed leaves its object
+ * retrying the control connection for three minutes, and the next probe on
+ * the same id would be interrupted by that (measured 2026-09-15).
  */
 export async function probe(env: Env, orgId: string): Promise<ProbeResult> {
-  const id = `probe-${orgId}`
+  const id = `probe-${orgId}-${Date.now()}`
   const sandbox = sandboxFor(env, id)
   const started = Date.now()
   try {
