@@ -795,3 +795,121 @@ export const siteRevisions = pgTable(
     orgIsolation("site_revisions"),
   ]
 )
+
+export const approvalDecision = pgEnum("approval_decision", [
+  "approved",
+  "rejected",
+])
+
+/**
+ * An `ApprovalRequest` and, once, its `ApprovalDecision` (§7.3, §19, ADR-032).
+ * `target` is the contract's union as jsonb; a revision target also fills
+ * `revision_id`, which a check keeps equal to the target, so the foreign key
+ * and the one-open-request index can reach it. The decision columns are all
+ * null or all set, and a trigger (migration 0008) refuses to change a decided
+ * row or a request's target. `decided_by` is the contract's union: an owner
+ * session, or the staff console.
+ */
+export const approvals = pgTable(
+  "approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    assignmentId: uuid("assignment_id"),
+    requestedByStaffId: uuid("requested_by_staff_id").notNull(),
+    approverStaffId: uuid("approver_staff_id").notNull(),
+    actionKind: text("action_kind").notNull(),
+    target: jsonb("target").notNull(),
+    revisionId: uuid("revision_id"),
+    rationale: text("rationale").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    decision: approvalDecision("decision"),
+    decidedBy: jsonb("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => [
+    unique("approvals_id_org_key").on(t.id, t.orgId),
+    foreignKey({
+      name: "approvals_assignment_fk",
+      columns: [t.assignmentId, t.orgId],
+      foreignColumns: [assignments.id, assignments.orgId],
+    }),
+    foreignKey({
+      name: "approvals_revision_fk",
+      columns: [t.revisionId, t.orgId],
+      foreignColumns: [siteRevisions.id, siteRevisions.orgId],
+    }),
+    check(
+      "approvals_revision_matches_target",
+      sql`coalesce(target->>'kind' = 'revision', false) = (revision_id is not null) and (revision_id is null or revision_id::text = target->>'revision_id')`
+    ),
+    check(
+      "approvals_decision_complete",
+      sql`(decision is null) = (decided_by is null) and (decision is null) = (decided_at is null)`
+    ),
+    check("approvals_expires_after_request", sql`expires_at > requested_at`),
+    uniqueIndex("approvals_one_open_per_revision")
+      .on(t.revisionId)
+      .where(sql`decision is null and revision_id is not null`),
+    orgIsolation("approvals"),
+  ]
+)
+
+export const deploymentKind = pgEnum("deployment_kind", ["publish", "rollback"])
+
+/**
+ * Which revision a site serves (§11.1.3, ADR-032). Append-only: the active
+ * revision is the row with the highest `config_version` for the site, and the
+ * previous one is that row's `previous_revision_id`. There is no mutable
+ * pointer column, so activation is one insert under a unique constraint, the
+ * idempotent step §13 asks for. A publish carries the approval it acted on and
+ * a rollback carries none. `reme_app` holds SELECT and INSERT only (migration
+ * 0008).
+ */
+export const deployments = pgTable(
+  "deployments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    siteId: uuid("site_id").notNull(),
+    revisionId: uuid("revision_id").notNull(),
+    previousRevisionId: uuid("previous_revision_id"),
+    configVersion: integer("config_version").notNull(),
+    kind: deploymentKind("kind").notNull(),
+    approvalId: uuid("approval_id"),
+    reason: text("reason"),
+    createdAt,
+  },
+  (t) => [
+    unique("deployments_site_config_version_key").on(t.siteId, t.configVersion),
+    foreignKey({
+      name: "deployments_revision_fk",
+      columns: [t.revisionId, t.orgId],
+      foreignColumns: [siteRevisions.id, siteRevisions.orgId],
+    }),
+    foreignKey({
+      name: "deployments_previous_revision_fk",
+      columns: [t.previousRevisionId, t.orgId],
+      foreignColumns: [siteRevisions.id, siteRevisions.orgId],
+    }),
+    foreignKey({
+      name: "deployments_approval_fk",
+      columns: [t.approvalId, t.orgId],
+      foreignColumns: [approvals.id, approvals.orgId],
+    }),
+    check(
+      "deployments_publish_has_approval",
+      sql`(kind = 'publish') = (approval_id is not null)`
+    ),
+    check("deployments_config_version_positive", sql`config_version > 0`),
+    orgIsolation("deployments"),
+  ]
+)

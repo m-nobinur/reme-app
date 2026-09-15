@@ -2,9 +2,11 @@ import { eq } from "drizzle-orm"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
 import {
+  approvals,
   assignments,
   assignmentTransitions,
   departments,
+  deployments,
   events,
   facts,
   memberships,
@@ -238,6 +240,32 @@ export async function seedTwoOrgs() {
       sourceKey: `sites/${org}/${per(tag, 12)}/source.tar.zst`,
       artifactPrefix: `sites/${org}/${per(tag, 12)}/dist/`,
       manifestKey: `sites/${org}/${per(tag, 12)}/manifest.json`,
+    })
+    // The approval that published that revision, and the deployment it made.
+    await db.insert(approvals).values({
+      id: per(tag, 13),
+      orgId: org,
+      assignmentId: per(tag, 10),
+      requestedByStaffId: per(tag, 4),
+      approverStaffId: per(tag, 4),
+      actionKind: "site.publish",
+      target: { kind: "revision", revision_id: per(tag, 12) },
+      revisionId: per(tag, 12),
+      rationale: "Tenancy probe",
+      requestedAt: new Date(Date.now() - 60_000),
+      expiresAt: new Date(Date.now() + 3_600_000),
+      decision: "approved",
+      decidedBy: { kind: "console" },
+      decidedAt: new Date(),
+    })
+    await db.insert(deployments).values({
+      id: per(tag, 14),
+      orgId: org,
+      siteId: org,
+      revisionId: per(tag, 12),
+      configVersion: 1,
+      kind: "publish",
+      approvalId: per(tag, 13),
     })
   }
   await sql.end()

@@ -1,9 +1,11 @@
 import { inArray, sql } from "drizzle-orm"
 import { connect } from "../src/client.ts"
 import {
+  approvals,
   assignments,
   assignmentTransitions,
   departments,
+  deployments,
   events,
   facts,
   memberships,
@@ -103,6 +105,9 @@ export async function clearOrgs(
   await tx
     .delete(assignmentTransitions)
     .where(inArray(assignmentTransitions.orgId, ids))
+  // A deployment cites an approval and revisions; an approval cites both.
+  await tx.delete(deployments).where(inArray(deployments.orgId, ids))
+  await tx.delete(approvals).where(inArray(approvals.orgId, ids))
   await tx.delete(siteRevisions).where(inArray(siteRevisions.orgId, ids))
   await tx.delete(assignments).where(inArray(assignments.orgId, ids))
   await tx.delete(events).where(inArray(events.orgId, ids))
