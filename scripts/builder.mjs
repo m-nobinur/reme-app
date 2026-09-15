@@ -183,7 +183,10 @@ switch (command) {
       }
       const { assignment } = await call("GET", `/assignments/${id}`)
       if (settled.has(assignment.state)) {
-        print({ state: assignment.state, ...runNumbers(events) })
+        // Read the log again: the state can settle between the two reads
+        // above, and the numbers must include the events that settled it.
+        const final = await call("GET", `/assignments/${id}/events`)
+        print({ state: assignment.state, ...runNumbers(final.events) })
         break
       }
       if (Date.now() > deadline) {
