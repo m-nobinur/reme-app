@@ -1,4 +1,5 @@
 import {
+  ApprovalDecision,
   ApprovalRequest,
   Assignment,
   InformationAnswer,
@@ -13,7 +14,9 @@ import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
 import {
   ComponentManifest,
   DeploymentManifest,
+  PreviewClaim,
   SiteFields,
+  SitePointer,
   SiteRevision,
 } from "./site.ts"
 
@@ -23,6 +26,7 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  ApprovalDecision,
   ApprovalRequest,
   Assignment,
   CapabilityCall,
@@ -38,9 +42,11 @@ export const contracts = {
   InformationAnswer,
   InformationRequest,
   Org,
+  PreviewClaim,
   ProgressEvent,
   RuntimeSpec,
   SiteFields,
+  SitePointer,
   SiteRevision,
   StaffDirectory,
   StaffMember,

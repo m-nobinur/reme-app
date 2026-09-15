@@ -1,0 +1,32 @@
+---
+import { site } from "../site-config"
+import "../styles/tokens.css"
+import "../styles/site.css"
+
+interface Props {
+  title: string
+}
+
+const { title } = Astro.props
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{site.skipLink}</a>
+    <header class="site-header">
+      <div class="wrap">
+        {site.businessName && (
+          <a class="site-name" href="/">{site.businessName}</a>
+        )}
+      </div>
+    </header>
+    <main id="main" class="wrap">
+      <slot />
+    </main>
+  </body>
+</html>

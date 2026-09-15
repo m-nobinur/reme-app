@@ -1,5 +1,6 @@
 import { DeploymentManifest } from "@workspace/contracts"
 import { eq, siteRevisions, tenancy } from "@workspace/db"
+import { resolveSitePath } from "@workspace/gates"
 import { type Context, Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 
@@ -112,23 +113,10 @@ export function resolvePreviewPath(
   pathname: string,
   files: Record<string, string>
 ): { key: string; file: string } | null {
-  let path: string
-  try {
-    path = decodeURIComponent(pathname)
-  } catch {
-    return null
-  }
-  if (path.includes("\0") || path.split("/").includes("..")) return null
-  const trimmed = path.replace(/^\/+/, "")
+  const trimmed = pathname.replace(/^\/+/, "")
   if (SCREENSHOTS.has(trimmed)) return { key: trimmed, file: trimmed }
-  const candidates =
-    trimmed === "" || trimmed.endsWith("/")
-      ? [`${trimmed}index.html`]
-      : [trimmed, `${trimmed}/index.html`]
-  for (const file of candidates) {
-    if (Object.hasOwn(files, file)) return { key: `dist/${file}`, file }
-  }
-  return null
+  const file = resolveSitePath(pathname, files)
+  return file ? { key: `dist/${file}`, file } : null
 }
 
 const TYPES: Record<string, string> = {

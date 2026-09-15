@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
 the service Workers got hostnames, see the decision and the last two consequences. Amended
-2026-09-15: staging gained `staging-preview`, see the decision. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+2026-09-15: staging gained `staging-preview`, see the decision; and staging's tenant and preview
+hosts take a `-stg` suffix on `remeai.co.uk`, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -133,3 +134,14 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   sites Worker will see requests for these hostnames first and must pass them through with
   `fetch(request)`, which Cloudflare routes to the custom domain's Worker; and a custom domain
   refuses a hostname that already has a CNAME, which the wildcard record is not.
+
+- **Staging's tenant and preview hostnames carry a `-stg` suffix** (amended 2026-09-15, with ADR-032):
+  `{slug}-stg.remeai.co.uk` and `preview-v{n}-{slug}-stg.remeai.co.uk`. A route's leading `*` matches
+  any characters, so the staging router owns `*-stg.remeai.co.uk/*`. That route matches no service
+  hostname and no production host, and every host stays one level deep, inside Universal SSL. It
+  needs one proxied wildcard DNS record, `*` AAAA `100::`. The reserved list gains the `-stg` suffix.
+  Staging refuses any slug longer than 44 characters, so the longest preview host still fits a
+  63-character label; production keeps its cap of 48. Rejected: a second zone and Advanced
+  Certificate Manager, because the owner declined both; per-slug routes, because `n` changes on
+  every build. Change if: the production router's first commit shows `*.remeai.co.uk/*` beating
+  `*-stg.remeai.co.uk/*`. In that case, staging previews go back to the `staging-preview` host.

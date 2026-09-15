@@ -1,5 +1,6 @@
 import { type SQL, sql } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
+import type { TransactionSql } from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connect } from "../src/client.ts"
 import {
@@ -43,7 +44,7 @@ const TENANT_ROOT = "orgs"
  * `updated_at` and nothing is meant to rewrite or erase a row in either, so the
  * app role holds SELECT and INSERT on them and nothing else.
  */
-const APPEND_ONLY = new Set(["events", "staff_events"])
+const APPEND_ONLY = new Set(["deployments", "events", "staff_events"])
 
 /**
  * Objects this file creates to prove the gate fails when it should. Dropped
@@ -1015,5 +1016,166 @@ describe("a handle does not outlive its transaction", () => {
       })
     ).rejects.toThrow("boom")
     await expect(use(escaped as OrgScopedDb)).rejects.toThrow(/withOrg/)
+  })
+})
+
+describe("deployments and approvals hold their shape", () => {
+  /**
+   * ADR-032's rules for the two publish tables, driven as the migrator so the
+   * constraint, not the role, is what refuses. Each case runs in a transaction
+   * that never commits, so nothing here outlives its case.
+   */
+  const CHECK = "23514"
+  const UNIQUE = "23505"
+  const ROLLED_BACK = "rolled back"
+
+  async function inTransaction(run: (tx: TransactionSql) => Promise<unknown>) {
+    const { sql: raw } = connect()
+    try {
+      await raw.begin(async (tx) => {
+        await run(tx)
+        throw new Error(ROLLED_BACK)
+      })
+    } catch (error) {
+      return error instanceof Error && error.message === ROLLED_BACK
+        ? undefined
+        : errorCode(error)
+    } finally {
+      await raw.end()
+    }
+    return undefined
+  }
+
+  async function ids() {
+    const { sql: raw } = connect()
+    try {
+      const [row] =
+        await raw`select id, assignment_id from site_revisions where org_id = ${ORG_A} limit 1`
+      return {
+        revision: String(row?.id),
+        assignment: String(row?.assignment_id),
+      }
+    } finally {
+      await raw.end()
+    }
+  }
+
+  /** An open request for a revision, or a decided one when `decision` is given. */
+  function request(
+    tx: TransactionSql,
+    revision: string,
+    assignment: string,
+    options: { decision?: "approved" | "rejected"; column?: string } = {}
+  ) {
+    const target = JSON.stringify({ kind: "revision", revision_id: revision })
+    const decided = options.decision !== undefined
+    return tx`
+      insert into approvals (org_id, assignment_id, requested_by_staff_id,
+        approver_staff_id, action_kind, target, revision_id, rationale,
+        expires_at, decision, decided_by, decided_at)
+      values (${ORG_A}, ${assignment}, ${assignment}, ${assignment},
+        'site.publish', ${target}::jsonb, ${options.column ?? revision}, 'probe',
+        now() + interval '1 hour', ${options.decision ?? null},
+        ${decided ? '{"kind":"console"}' : null}::jsonb,
+        ${decided ? new Date().toISOString() : null}::timestamptz)
+      returning id`
+  }
+
+  const decide = (tx: TransactionSql, id: unknown) =>
+    tx`update approvals set decision = 'rejected',
+      decided_by = '{"kind":"console"}'::jsonb, decided_at = now()
+      where id = ${String(id)}`
+
+  it("refuses a publish without its approval and a rollback with one", async () => {
+    const { revision, assignment } = await ids()
+    expect(
+      await inTransaction(
+        (tx) => tx`insert into deployments (org_id, site_id, revision_id,
+          config_version, kind) values (${ORG_A}, ${ORG_A}, ${revision}, 99,
+          'publish')`
+      )
+    ).toBe(CHECK)
+    expect(
+      await inTransaction(async (tx) => {
+        const [approval] = await request(tx, revision, assignment, {
+          decision: "approved",
+        })
+        await tx`insert into deployments (org_id, site_id, revision_id,
+          config_version, kind, approval_id) values (${ORG_A}, ${ORG_A},
+          ${revision}, 99, 'rollback', ${String(approval?.id)})`
+      })
+    ).toBe(CHECK)
+  })
+
+  it("refuses a second deployment at the same config version of a site", async () => {
+    const { revision } = await ids()
+    expect(
+      await inTransaction(
+        (tx) => tx`insert into deployments (org_id, site_id, revision_id,
+          config_version, kind) values (${ORG_A}, ${ORG_A}, ${revision}, 1,
+          'rollback')`
+      )
+    ).toBe(UNIQUE)
+  })
+
+  it("keeps a revision target and its column equal, and a decision whole", async () => {
+    const { revision, assignment } = await ids()
+    // The column names another revision than the target does.
+    expect(
+      await inTransaction((tx) =>
+        request(tx, revision, assignment, { column: assignment })
+      )
+    ).toBe(CHECK)
+    // A decision with no one who decided it.
+    expect(
+      await inTransaction(
+        (tx) => tx`insert into approvals (org_id, assignment_id,
+          requested_by_staff_id, approver_staff_id, action_kind, target,
+          revision_id, rationale, expires_at, decision)
+          values (${ORG_A}, ${assignment}, ${assignment}, ${assignment},
+          'site.publish', ${JSON.stringify({ kind: "revision", revision_id: revision })}::jsonb,
+          ${revision}, 'probe', now() + interval '1 hour', 'approved')`
+      )
+    ).toBe(CHECK)
+  })
+
+  it("lets an open request be decided once and never changed after", async () => {
+    const { revision, assignment } = await ids()
+    expect(
+      await inTransaction(async (tx) => {
+        const [open] = await request(tx, revision, assignment)
+        await decide(tx, open?.id)
+      })
+    ).toBeUndefined()
+    expect(
+      await inTransaction(async (tx) => {
+        const [open] = await request(tx, revision, assignment)
+        await tx`update approvals set rationale = 'changed' where id = ${String(open?.id)}`
+      })
+    ).toBe(CHECK)
+    expect(
+      await inTransaction(async (tx) => {
+        const [open] = await request(tx, revision, assignment)
+        await decide(tx, open?.id)
+        await tx`update approvals set decision = 'approved' where id = ${String(open?.id)}`
+      })
+    ).toBe(CHECK)
+  })
+
+  it("holds one open request per revision until it is decided", async () => {
+    const { revision, assignment } = await ids()
+    expect(
+      await inTransaction(async (tx) => {
+        await request(tx, revision, assignment)
+        await request(tx, revision, assignment)
+      })
+    ).toBe(UNIQUE)
+    expect(
+      await inTransaction(async (tx) => {
+        const [first] = await request(tx, revision, assignment)
+        await decide(tx, first?.id)
+        await request(tx, revision, assignment)
+      })
+    ).toBeUndefined()
   })
 })

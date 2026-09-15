@@ -17,6 +17,7 @@
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",
+    "@workspace/gates": "workspace:*",
     "hono": "4.13.7",
     "ulid": "3.0.2"
   },

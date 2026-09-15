@@ -1,0 +1,22 @@
+{
+  "name": "@workspace/starter-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "typecheck": "astro check",
+    "test": "astro build && node ../../scripts/floor.mjs starter-site -- vitest run --dir test",
+    "size": "node scripts/size.mjs"
+  },
+  "dependencies": {
+    "astro": "7.3.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@types/node": "^22",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

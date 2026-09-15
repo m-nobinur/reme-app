@@ -1,0 +1,10 @@
+---
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+---
+
+<Base title={site.notFoundHeading}>
+  <h1>{site.notFoundHeading}</h1>
+  <p class="lede">{site.notFoundBody}</p>
+  <p><a href="/">{site.homeLink}</a></p>
+</Base>

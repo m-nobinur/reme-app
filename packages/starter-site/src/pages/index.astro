@@ -1,0 +1,9 @@
+---
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+---
+
+<Base title={site.businessName}>
+  {site.businessName && <h1>{site.businessName}</h1>}
+  {site.tagline && <p class="lede">{site.tagline}</p>}
+</Base>

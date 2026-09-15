@@ -121,6 +121,45 @@ export const SiteField = z.discriminatedUnion("kind", [
 /** The starter's `fields` export: one `SiteField` per key of `site`. */
 export const SiteFields = z.record(z.string().min(1), SiteField)
 
+/** A hostname: lower-case DNS labels, each 1 to 63 characters. */
+const Hostname = z
+  .string()
+  .max(253)
+  .regex(
+    /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/
+  )
+
+/**
+ * `PreviewClaim` (ADR-032): what a preview link and its cookie carry, signed
+ * by the orchestrator after it resolved the org, verified by whoever serves
+ * the preview. `host` binds the claim to the one preview hostname it was
+ * minted for, so a cookie cannot be replayed on another. `exp` is seconds
+ * since the epoch.
+ */
+export const PreviewClaim = z.strictObject({
+  org_id: Uuid,
+  revision_id: Uuid,
+  host: Hostname,
+  exp: z.int().positive(),
+})
+
+/**
+ * `SitePointer` (ADR-032, §11.1.3): the routing cache's value under
+ * `host:{hostname}`, written by the publisher and read by the router for a
+ * published host. Postgres is the truth; `config_version` is the
+ * `deployments` row it was written from, so a stale pointer is detectable.
+ * The org travels in the value so a same-origin API call can take its tenant
+ * from the mapping, never from the request.
+ */
+export const SitePointer = z.strictObject({
+  org_id: Uuid,
+  site_id: Uuid,
+  revision_id: Uuid,
+  config_version: z.int().positive(),
+})
+
 export type ComponentManifest = z.infer<typeof ComponentManifest>
+export type PreviewClaim = z.infer<typeof PreviewClaim>
+export type SitePointer = z.infer<typeof SitePointer>
 export type SiteField = z.infer<typeof SiteField>
 export type SiteFields = z.infer<typeof SiteFields>

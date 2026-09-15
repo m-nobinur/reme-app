@@ -50,6 +50,20 @@
       "when": 1789398355167,
       "tag": "0006_builder_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789486719896,
+      "tag": "0007_deployments_and_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789486788775,
+      "tag": "0008_approvals_write_once_and_deployments_append_only",
+      "breakpoints": true
     }
   ]
 }

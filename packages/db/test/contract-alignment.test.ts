@@ -1,4 +1,5 @@
 import {
+  ApprovalDecision,
   Assignment,
   AssignmentState,
   EventEnvelope,
@@ -27,6 +28,7 @@ import type {
   staff,
 } from "../src/schema.ts"
 import {
+  approvalDecision,
   assignmentPriority,
   assignmentState,
   factSource,
@@ -45,6 +47,12 @@ import {
 const now = new Date("2026-08-27T09:30:00.000Z")
 
 describe("enums match the contract", () => {
+  it("approval decisions", () => {
+    expect(approvalDecision.enumValues).toEqual(
+      ApprovalDecision.shape.decision.options
+    )
+  })
+
   it("fact provenance sources", () => {
     expect(factSource.enumValues).toEqual(FactProvenance.shape.source.options)
   })
