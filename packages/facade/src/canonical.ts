@@ -1,3 +1,5 @@
+import { createHash, createHmac } from "node:crypto"
+
 /**
  * JSON with every object key sorted and every `undefined` dropped, so the
  * order a value's keys were assigned in can never move a hash or a
@@ -17,41 +19,18 @@ export function canonical(value: unknown): string {
   return `{${body.join(",")}}`
 }
 
-const encoder = new TextEncoder()
-
-const hex = (bytes: ArrayBuffer) =>
-  Array.from(new Uint8Array(bytes), (b) =>
-    b.toString(16).padStart(2, "0")
-  ).join("")
-
-/** sha256 of the canonical form, as `sha256:<hex>`. Web Crypto, so it runs in a Worker and in Node alike. */
-export async function canonicalHash(value: unknown): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    encoder.encode(canonical(value))
-  )
-  return `sha256:${hex(digest)}`
+/**
+ * sha256 of the canonical form, as `sha256:<hex>`. Synchronous on purpose:
+ * the spec is verified inside an agent render, which cannot await, and
+ * `node:crypto` is available to a Worker under `nodejs_compat`.
+ */
+export function canonicalHash(value: unknown): string {
+  return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`
 }
 
 /** HMAC-SHA256 over the canonical form, hex. */
-export async function canonicalHmac(
-  value: unknown,
-  key: string
-): Promise<string> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  )
-  return hex(
-    await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      encoder.encode(canonical(value))
-    )
-  )
+export function canonicalHmac(value: unknown, key: string): string {
+  return createHmac("sha256", key).update(canonical(value)).digest("hex")
 }
 
 /** Constant-time string equality, for a MAC compare. */

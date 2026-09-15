@@ -56,6 +56,19 @@
   // first group of every block.
   "overrides": [
     {
+      // Biome reads only the frontmatter of an .astro file, so an import the
+      // template uses looks unused to it. Astro itself reports a real one.
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
       // apps/* -> packages/* is permissive, so nothing is banned by name here.
       // The relative reach still is: it skips the package's exports the same way
       // it does between packages. An app needs a different pattern from the one

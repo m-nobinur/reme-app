@@ -4,9 +4,7 @@ import {
   assignmentTransitions,
   eq,
   events,
-  orgs,
   sql,
-  staff,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -22,6 +20,10 @@ import {
   TransitionError,
   transition,
 } from "../src/state.ts"
+import {
+  freshOrg as freshOrgIn,
+  newAssignment as newAssignmentIn,
+} from "./fixture.ts"
 
 /**
  * The §8.4 properties M2 promises, driven against a real database because the
@@ -35,6 +37,9 @@ const live = describe.skipIf(!url)
 
 const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
+const freshOrg = () => freshOrgIn(kit)
+const newAssignment = (orgId: string, kind?: string) =>
+  newAssignmentIn(kit, orgId, kind)
 
 const NON_TERMINAL = (
   [
@@ -143,68 +148,6 @@ const NEXT: Record<AssignmentState, AssignmentState[]> = {
   paused: [],
   failed: [],
   cancelled: [],
-}
-
-/**
- * A fresh fictional org per case with the two staff rows an assignment needs,
- * written through `withOrg` so the suite holds nothing the app role cannot.
- * Rows stay behind: `events` is append-only, so nothing here can delete them.
- */
-async function freshOrg(): Promise<string> {
-  const orgId = crypto.randomUUID()
-  await kit.withOrg({ orgId }, async (db) => {
-    await db.insert(orgs).values({
-      id: orgId,
-      slug: `state-test-${orgId.slice(0, 8)}`,
-      name: "State machine probe (fixture)",
-    })
-    // One root per org: the Chief is the root and the Developer reports to it.
-    const [chief] = await db
-      .insert(staff)
-      .values({
-        orgId,
-        staffCode: "COS-001",
-        displayName: "Chief",
-        kind: "agent",
-        status: "active",
-      })
-      .returning({ id: staff.id })
-    await db.insert(staff).values({
-      orgId,
-      staffCode: "DEV-001",
-      displayName: "Dev",
-      kind: "agent",
-      status: "active",
-      managerId: chief?.id,
-    })
-  })
-  return orgId
-}
-
-async function newAssignment(orgId: string, kind = "site.build") {
-  return kit.withOrg({ orgId }, async (db) => {
-    const [dev] = await db
-      .select({ id: staff.id })
-      .from(staff)
-      .where(eq(staff.staffCode, "DEV-001"))
-    if (!dev) throw new Error("no developer")
-    const [row] = await db
-      .insert(assignments)
-      .values({
-        orgId,
-        staffId: dev.id,
-        createdByStaffId: dev.id,
-        kind,
-        goal: "probe",
-        acceptanceCriteria: ["probe"],
-        factSnapshotId: crypto.randomUUID(),
-        budgetUsd: 1,
-        idempotencyKey: crypto.randomUUID(),
-      })
-      .returning()
-    if (!row) throw new Error("no row")
-    return { orgId, assignmentId: row.id }
-  })
 }
 
 async function walk(

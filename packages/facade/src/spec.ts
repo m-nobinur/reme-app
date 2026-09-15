@@ -51,11 +51,8 @@ export function modelRouting(
 }
 
 /** Sign a spec with the control plane's key (HMAC-SHA256 over the canonical form of every other field). */
-export async function signSpec(
-  unsigned: UnsignedSpec,
-  key: string
-): Promise<RuntimeSpec> {
-  const signature = await canonicalHmac(unsigned, key)
+export function signSpec(unsigned: UnsignedSpec, key: string): RuntimeSpec {
+  const signature = canonicalHmac(unsigned, key)
   return RuntimeSpec.parse({ ...unsigned, signature })
 }
 
@@ -64,11 +61,11 @@ export async function signSpec(
  * that is not the contract's shape, one whose signature does not match, and
  * one past `expires_at`. Nothing renders a hook before this returns.
  */
-export async function verifySpec(
+export function verifySpec(
   input: unknown,
   key: string,
   now: Date = new Date()
-): Promise<RuntimeSpec> {
+): RuntimeSpec {
   if (!key) {
     throw new FacadeError(
       "spec.key_missing",
@@ -87,7 +84,7 @@ export async function verifySpec(
   }
   const spec = parsed.data
   const { signature, ...unsigned } = spec
-  const expected = await canonicalHmac(unsigned, key)
+  const expected = canonicalHmac(unsigned, key)
   if (!timingSafeEqual(signature, expected)) {
     throw new FacadeError(
       "spec.signature_invalid",
@@ -129,12 +126,12 @@ export type ResolvedRuntime = Readonly<{
  * always; the result is frozen because §6.1 says a runtime cannot widen its
  * own tools, memory or budget, and a frozen object is how that reads in code.
  */
-export async function resolveRuntime(
+export function resolveRuntime(
   input: unknown,
   key: string,
   now: Date = new Date()
-): Promise<ResolvedRuntime> {
-  const spec = await verifySpec(input, key, now)
+): ResolvedRuntime {
+  const spec = verifySpec(input, key, now)
   const implement = spec.model_routing.implement
   if (!implement) {
     throw new FacadeError(

@@ -3,6 +3,7 @@
 // set, and the two disagree about `SQL` in a way that only surfaces as a
 // typecheck error about a private property. Callers take the tag from here.
 export { asc, eq, sql } from "drizzle-orm"
+export { supersedeFact } from "./facts.ts"
 export * from "./map.ts"
 export * from "./schema.ts"
 export type {

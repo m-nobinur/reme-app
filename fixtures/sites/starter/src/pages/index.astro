@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+---
+
+<Base title={site.name || "Home"}>
+  {site.name && <h1>{site.name}</h1>}
+  {site.tagline && <p>{site.tagline}</p>}
+  {site.standardCleanHourly && (
+    <section>
+      <h2>Standard clean</h2>
+      <p>{site.standardCleanHourly}</p>
+    </section>
+  )}
+  {site.weekdayHours && (
+    <section>
+      <h2>Hours</h2>
+      <p>Weekdays {site.weekdayHours}</p>
+    </section>
+  )}
+</Base>

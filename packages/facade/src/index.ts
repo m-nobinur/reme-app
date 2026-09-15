@@ -10,7 +10,10 @@ export { createBudgetGuard } from "./budget.ts"
 export { canonical, canonicalHash, canonicalHmac } from "./canonical.ts"
 export type { DerivedContext } from "./derive.ts"
 export { contextHash, deriveContext } from "./derive.ts"
+export type { Edit } from "./edits.ts"
+export { applyEdits, BatchEditInput } from "./edits.ts"
 export { FacadeError } from "./errors.ts"
+export * from "./flue.ts"
 export type { ToolPolicy } from "./hooks.ts"
 export {
   bashRefusal,
@@ -21,6 +24,8 @@ export {
   pathRefusal,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"
+export type { ToolInput } from "./schema.ts"
+export { toolInput } from "./schema.ts"
 export type { ModelChoice, ResolvedRuntime, UnsignedSpec } from "./spec.ts"
 export {
   loggableSpec,

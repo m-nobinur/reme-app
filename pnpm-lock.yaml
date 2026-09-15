@@ -66,6 +66,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@workspace/facade':
+        specifier: workspace:*
+        version: link:../../packages/facade
       hono:
         specifier: 4.13.7
         version: 4.13.7
@@ -272,6 +275,9 @@ importers:
       ulid:
         specifier: 3.0.2
         version: 3.0.2
+      valibot:
+        specifier: 1.4.2
+        version: 1.4.2(typescript@6.0.3)
       zod:
         specifier: 4.4.3
         version: 4.4.3
