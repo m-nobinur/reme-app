@@ -157,6 +157,12 @@ function cli(
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       input: options.input ?? "",
+      // Plain text, whatever the calling shell forces. Measured 2026-09-15:
+      // under FORCE_COLOR=3 wrangler's table carried colour codes, the
+      // Hyperdrive row was not found, and the script rotated the role's
+      // password for a config it then could not create, which took staging
+      // off its database until the config was updated by hand.
+      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     })
   } catch (error) {
     const detail = error as { stderr?: string; stdout?: string }
@@ -191,6 +197,8 @@ const wrangler = (...args: string[]) => cli("npx", ["wrangler", ...args])
  */
 function hyperdriveId(wanted: string): string | null {
   const row = wrangler("hyperdrive", "list")
+    // Belt over the braces above: no escape sequence survives to the match.
+    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "")
     .split("\n")
     .find((line) => line.includes(`│ ${wanted} `))
   return row?.match(/\b[0-9a-f]{32}\b/)?.[0] ?? null
