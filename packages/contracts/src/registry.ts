@@ -6,7 +6,7 @@ import {
 } from "./assignment.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
-import { FactRecord } from "./fact.ts"
+import { FactRecord, FactSnapshot } from "./fact.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import { CompletionReport, ProgressEvent, ValidationReport } from "./report.ts"
 import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
@@ -27,6 +27,7 @@ export const contracts = {
   ErrorEnvelope,
   EventEnvelope,
   FactRecord,
+  FactSnapshot,
   FailureReport,
   InformationAnswer,
   InformationRequest,

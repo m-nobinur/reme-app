@@ -239,6 +239,37 @@ export interface components {
       valid_to: string | null
       superseded_by_fact_id: string | null
     }
+    FactSnapshot: {
+      /** Format: uuid */
+      snapshot_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      assignment_id: string
+      /** Format: date-time */
+      taken_at: string
+      facts: {
+        /** Format: uuid */
+        fact_id: string
+        /** Format: uuid */
+        org_id: string
+        key: string
+        fact_type: string
+        value: unknown
+        version: number
+        provenance: {
+          /** @enum {string} */
+          source: "owner_stated" | "document" | "integration" | "inferred"
+          confidence: number
+          verified_by_staff_id: string | null
+          verified_at: string | null
+        }
+        /** Format: date-time */
+        valid_from: string
+        valid_to: string | null
+        superseded_by_fact_id: string | null
+      }[]
+    }
     FailureReport: {
       failure_id: string
       /** Format: uuid */

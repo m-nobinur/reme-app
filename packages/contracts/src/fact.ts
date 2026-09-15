@@ -33,5 +33,25 @@ export const FactRecord = z.strictObject({
   superseded_by_fact_id: Uuid.nullable(),
 })
 
+/**
+ * `FactSnapshot` (§8.5, §19): the facts an assignment was briefed with,
+ * frozen at Briefing so the Developer, the facade's prompt and the content
+ * gate all read one thing. `Assignment.fact_snapshot_id` names it; the
+ * orchestrator writes it as a `facts.snapshot_taken` event, the facade
+ * renders it into the stable prompt segment, P1's gate diffs the built HTML
+ * against it. Only current versions belong here: `valid_to` is null on every
+ * record. Ceiling to write down rather than build for: when an org's
+ * snapshot no longer fits `ContextPolicy.max_input_tokens`, it becomes a set
+ * of refs and this shape is revisited.
+ */
+export const FactSnapshot = z.strictObject({
+  snapshot_id: Uuid,
+  org_id: Uuid,
+  assignment_id: Uuid,
+  taken_at: Timestamp,
+  facts: z.array(FactRecord),
+})
+
 export type FactProvenance = z.infer<typeof FactProvenance>
 export type FactRecord = z.infer<typeof FactRecord>
+export type FactSnapshot = z.infer<typeof FactSnapshot>
