@@ -57,7 +57,8 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   blocked_on_approval: ["awaiting_review", "implementing"],
   repairing: ["implementing", "validating"],
   paused: [],
-  failed: ["repairing"],
+  // A fourth gate failure cannot enter `repairing`, so it ends here directly.
+  failed: ["repairing", "validating"],
   cancelled: [],
 }
 
