@@ -351,20 +351,59 @@ export function cancel(kit: Tenancy, ids: Ids): Promise<AssignmentState> {
   })
 }
 
+export type Claim = {
+  claimed: boolean
+  /** The `preview_ready` assignment this claim cancelled, whose sandbox the caller destroys. */
+  superseded: string | null
+}
+
 /**
- * Take the site lock by entering `briefing`. `false` when another assignment
- * holds it, in which case the row stays `queued` and one `site.locked` event
- * is appended on the first refusal only, so a long wait is one line in the
- * log rather than one per poll.
+ * Take the site lock by entering `briefing`. Not claimed when another
+ * assignment holds it, in which case the row stays `queued` and one
+ * `site.locked` event is appended on the first refusal only, so a long wait
+ * is one line in the log rather than one per poll.
+ *
+ * A site assignment supersedes one that is exactly `preview_ready`: built,
+ * and not yet in front of an owner (§13, architect ruling on the preview).
+ * The cancel and the claim share one transaction, so a claim that still
+ * loses the lock supersedes nothing, and the unique index decides a race.
+ * `awaiting_review` and everything after it are never superseded.
  */
 export async function claim(
   kit: Tenancy,
   ids: Ids,
   firstAttempt: boolean
-): Promise<boolean> {
+): Promise<Claim> {
   try {
-    await advance(kit, ids, "briefing")
-    return true
+    const superseded = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
+      const row = await lockRow(db, ids.assignmentId)
+      const [stale] = row.kind.startsWith("site.")
+        ? await db
+            .select()
+            .from(assignments)
+            .where(
+              sql`${assignments.kind} like 'site.%' and ${assignments.state} = 'preview_ready' and ${assignments.id} <> ${row.id}`
+            )
+            .for("update")
+        : []
+      if (stale) {
+        await transition(db, {
+          orgId: ids.orgId,
+          assignmentId: stale.id,
+          to: "cancelled",
+          expectedVersion: stale.version,
+          reason: "superseded",
+          payload: { superseded_by: row.id },
+        })
+      }
+      await transition(db, {
+        ...ids,
+        to: "briefing",
+        expectedVersion: row.version,
+      })
+      return stale?.id ?? null
+    })
+    return { claimed: true, superseded }
   } catch (error) {
     if (!(error instanceof TransitionError) || error.code !== "site.locked") {
       throw error
@@ -382,5 +421,5 @@ export async function claim(
       })
     })
   }
-  return false
+  return { claimed: false, superseded: null }
 }

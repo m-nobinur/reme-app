@@ -109,6 +109,9 @@ revisions plus a week covers every recovery case the failure model in §13 names
   with the tarball snapshot at revision boundaries.
 - `site_revisions` gains `status` with a `retired` value and a `retire_after` column, both
   landing with the table in story M2 and used from story P4.
+- A revision whose assignment was cancelled because a newer build superseded its preview is a
+  rejected candidate for retention, and a `site.revise` restores from the published revision,
+  never from a superseded preview. Amended 2026-09-15 with the console preview.
 - The Developer's DO is subject to the Durable Object CPU limit, 30 s per invocation by default.
   The response is I/O bound, so this is expected to hold; the builder track's open item 43 says
   what happens the first time it does not.

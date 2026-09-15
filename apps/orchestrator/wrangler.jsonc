@@ -13,12 +13,18 @@
   "placement": { "region": "aws:eu-central-1" },
   "preview_urls": true,
   "workers_dev": false,
+  // The second host serves previews only (architect ruling on P1, ADR-030
+  // amendment); production has no preview host until the router lands.
   "routes": [
-    { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true }
+    { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true },
+    { "pattern": "staging-preview.remeai.co.uk", "custom_domain": true }
   ],
   // One connection per assignment rather than one subrequest per command:
   // the SDK reads this from the Worker's bindings, never from the container.
-  "vars": { "SANDBOX_TRANSPORT": "rpc" },
+  "vars": {
+    "SANDBOX_TRANSPORT": "rpc",
+    "PREVIEW_HOST": "staging-preview.remeai.co.uk"
+  },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
   ],

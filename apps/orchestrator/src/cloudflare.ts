@@ -26,6 +26,7 @@ import {
   PoolExhaustedError,
   provision,
   SLEEP_AFTER,
+  sandboxFor,
 } from "./sandbox.ts"
 import {
   advance,
@@ -119,9 +120,18 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
 
     let claimed = false
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !claimed; attempt++) {
-      claimed = await step.do(`claim ${attempt}`, () =>
+      const result = await step.do(`claim ${attempt}`, () =>
         run((kit) => claim(kit, ids, attempt === 1))
       )
+      claimed = result.claimed
+      const superseded = result.superseded
+      if (superseded) {
+        // §13 rule 3: a cancelled assignment's container does not outlive it.
+        await step.do(`destroy ${superseded}`, async () => {
+          await sandboxFor(this.env, superseded).destroy()
+          return { destroyed: superseded }
+        })
+      }
       if (!claimed) await step.sleep(`site busy ${attempt}`, "30 seconds")
     }
     if (!claimed) return { outcome: "queued" }
