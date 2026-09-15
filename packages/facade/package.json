@@ -5,8 +5,9 @@
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node ../../scripts/floor.mjs facade-unit -- vitest run",
-    "models": "node ../../scripts/openrouter-models.mjs"
+    "test": "node ../../scripts/floor.mjs facade-unit -- vitest run --dir test",
+    "models": "node ../../scripts/openrouter-models.mjs",
+    "test:live": "vitest run --dir live"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.83.0",
