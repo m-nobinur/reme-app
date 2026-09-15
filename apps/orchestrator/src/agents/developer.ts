@@ -190,6 +190,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
     "- Call checkpoint after a coherent set of edits.",
+    "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
     "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
     "",
     `Assignment goal: ${brief.goal}`,

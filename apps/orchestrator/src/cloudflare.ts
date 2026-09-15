@@ -35,7 +35,7 @@ import {
   parkForBudget,
   TransitionError,
 } from "./state.ts"
-import { stubGates } from "./stub.ts"
+import { validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -230,8 +230,39 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         )
-        await step.do("preview", () => run((kit) => stubGates(kit, ids)))
-        return { outcome: "preview_ready" }
+        const verdict = await step.do(`gates ${round}`, () =>
+          run((kit) =>
+            validateRevision(kit, this.env.SITES, ids, {
+              report_id: payload.report_id,
+              revision_id: payload.revision_id,
+            })
+          )
+        )
+        if (verdict.outcome === "repairing") {
+          // The failed rows go back to the same conversation, the way an
+          // answer does; the Developer fixes them and reports again.
+          await step.do(`repair ${round}`, async () => {
+            await init(Developer, { id: ids.assignmentId }).dispatch({
+              message: {
+                kind: "signal",
+                type: "validation.failed",
+                body: JSON.stringify({
+                  report_id: verdict.report_id,
+                  failed: verdict.failed,
+                }),
+                attributes: { report_id: verdict.report_id },
+              },
+            })
+            return { report_id: verdict.report_id }
+          })
+          continue
+        }
+        // ADR-032: the sandbox ends with the build, not at publish.
+        await step.do("destroy sandbox", async () => {
+          await sandboxFor(this.env, ids.assignmentId).destroy()
+          return { destroyed: ids.assignmentId }
+        })
+        return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {
         await step.do(`park ${round}`, () =>
