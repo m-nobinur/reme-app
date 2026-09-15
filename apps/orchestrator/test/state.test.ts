@@ -16,6 +16,7 @@ import {
   advance,
   cancel,
   claim,
+  parkForBudget,
   REPAIR_LIMIT,
   TERMINAL,
   TransitionError,
@@ -365,6 +366,57 @@ live("the optimistic lock", () => {
     await advance(kit, ids, "validating")
     expect((await current(ids)).state).toBe("validating")
   })
+
+  it("parks on a spent budget from implementing and leaves only back to implementing", async () => {
+    const ids = await newAssignment(sharedOrg, "probe.lock")
+    await walk(ids, ["briefing", "planning", "implementing"])
+    // The facade's guard refused the second model call on a $0.01 cap.
+    await parkForBudget(kit, ids, { cap_usd: 0.01, spent_usd: 0.012 })
+    expect((await current(ids)).state).toBe("blocked_on_approval")
+    const events_ = await kit.withOrg({ orgId: ids.orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'budget.exhausted'`
+        )
+    )
+    expect(events_).toHaveLength(1)
+    expect(events_[0]?.payload).toMatchObject({ cap_usd: 0.01 })
+    // The unreviewed publish path stays closed.
+    await expect(advance(kit, ids, "release_candidate")).rejects.toMatchObject({
+      code: "assignment.illegal_transition",
+    })
+    await advance(kit, ids, "implementing")
+    expect((await current(ids)).state).toBe("implementing")
+  })
+
+  it("never reaches release_candidate from a budget park, whatever the walk", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(fc.nat({ max: 3 }), { minLength: 1, maxLength: 6 }),
+        async (choices) => {
+          const ids = await newAssignment(await freshOrg())
+          await walk(ids, ["briefing", "planning", "implementing"])
+          await parkForBudget(kit, ids, { cap_usd: 1, spent_usd: 1 })
+          const attempts: AssignmentState[] = [
+            "release_candidate",
+            "published",
+            "awaiting_review",
+            "validating",
+          ]
+          for (const choice of choices) {
+            const to = attempts[choice % attempts.length] as AssignmentState
+            await expect(advance(kit, ids, to)).rejects.toMatchObject({
+              code: "assignment.illegal_transition",
+            })
+          }
+          expect((await current(ids)).state).toBe("blocked_on_approval")
+        }
+      ),
+      { numRuns: 6, seed: 20260915 }
+    )
+  }, 60_000)
 
   it(`enters repairing at most ${REPAIR_LIMIT} times`, async () => {
     const ids = await newAssignment(sharedOrg, "probe.lock")
