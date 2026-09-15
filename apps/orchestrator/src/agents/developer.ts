@@ -11,20 +11,19 @@ import {
 import { siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
 import {
   type AgentProps,
-  applyEdits,
-  BatchEditInput,
   type BudgetGuard,
   createBudgetGuard,
   createTee,
+  createTurnGate,
   defineTool,
   guardedTools,
   instrument,
   observe,
-  pathRefusal,
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
   type Tee,
+  type TurnGate,
   toolInput,
   useAgentStart,
   useInitialData,
@@ -36,6 +35,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
+import { repoMap } from "../repo-map.ts"
 import { eventSink } from "../sink.ts"
 
 /**
@@ -69,6 +69,22 @@ const STARTER = import.meta.glob(
   }
 ) as Record<string, string>
 
+/** The starter's files by their path in the site. */
+const STARTER_FILES = Object.fromEntries(
+  Object.entries(STARTER).map(([file, content]) => [
+    file.slice(file.indexOf("/starter/") + "/starter/".length),
+    content,
+  ])
+)
+
+/**
+ * The map in the stable segment, built once from the bundled starter so it
+ * cannot drift from the files the sandbox is seeded with. A restored site
+ * (`site.revise`) needs its map built from the container at agent start and
+ * logged before the model sees it; that lands with the revise story.
+ */
+const STARTER_MAP = repoMap(STARTER_FILES)
+
 // The transport, once per isolate; a missing key fails here, before a model.
 registerProviders(env)
 
@@ -79,6 +95,7 @@ type Session = {
   runtime: ResolvedRuntime
   kit: Tenancy
   brief: Brief
+  gate: TurnGate
 }
 const sessions = new Map<string, Session>()
 
@@ -95,9 +112,11 @@ instrument({
   observe: () => undefined,
   interceptor: (operation, ctx, next) => {
     const found = ctx.instanceId ? sessions.get(ctx.instanceId) : undefined
-    return found
-      ? found.budget.instrumentation.interceptor(operation, ctx, next)
-      : next()
+    if (!found) return next()
+    // The turn gate first: a refused tool call never reaches the budget.
+    return found.gate.interceptor(operation, ctx, () =>
+      found.budget.instrumentation.interceptor(operation, ctx, next)
+    )
   },
   dispose() {
     sessions.clear()
@@ -150,7 +169,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
       }
     },
   })
-  const created = { tee, budget, runtime, kit, brief }
+  const created = { tee, budget, runtime, kit, brief, gate: createTurnGate() }
   sessions.set(id, created)
   return created
 }
@@ -164,9 +183,10 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
     "",
     "Rules:",
-    '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
-    "- Edit files with the edit tool (many small oldText/newText replacements in one call). Use write only for a new file. Never rewrite a file to change one line.",
-    "- src/site-config.ts is where every string on the site comes from; fill its fields from the facts. Only tagline may stay empty; every other field needs a fact.",
+    '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
+    "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
+    "- src/site-config.ts is where every string on the site comes from; fill its fields from the facts. An empty field renders nothing. Only tagline may stay empty; every other field needs a fact.",
+    "- Read every file you need in one turn; reads run together.",
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
     "- Call checkpoint after a coherent set of edits.",
@@ -179,7 +199,8 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
     facts || "- (none)",
     "",
-    "Site layout: src/site-config.ts (all strings), src/layouts/Base.astro, src/pages/index.astro, src/pages/contact.astro. Fields in site-config.ts: name, tagline, phone, email, weekdayHours, serviceArea, standardCleanHourly; an empty field renders nothing.",
+    "Site map (every file, in path order):",
+    STARTER_MAP,
     "",
     `Budget: ${runtime.budget.model_usd_cap} USD of model spend for this assignment. Be brief.`,
   ].join("\n")
@@ -202,7 +223,10 @@ export function Developer({ id }: AgentProps) {
   const stub = getSandbox(env.SANDBOX as never, id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(
-    { createSandbox: base.createSandbox, tools: guardedTools(POLICY) },
+    {
+      createSandbox: base.createSandbox,
+      tools: guardedTools(POLICY, { git: GIT }),
+    },
     { cwd: SITE_ROOT }
   )
 
@@ -213,6 +237,8 @@ export function Developer({ id }: AgentProps) {
   )
 
   useAgentStart(async ({ harness }) => {
+    // Every delivery is a new turn, so a turn a terminal tool ended reopens here.
+    current.gate.open()
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     if (!segmentLogged) {
       // §10.6: what the model was shown is in the log before it is shown.
@@ -239,10 +265,7 @@ export function Developer({ id }: AgentProps) {
       if (restore.exitCode !== 0)
         throw new Error(`restore failed: ${restore.stderr}`)
     } else {
-      for (const [file, content] of Object.entries(STARTER)) {
-        const relative = file.slice(
-          file.indexOf("/starter/") + "/starter/".length
-        )
+      for (const [relative, content] of Object.entries(STARTER_FILES)) {
         await sandbox.writeFile(`${SITE_ROOT}/${relative}`, content)
       }
       const seeded = await sandbox.exec(
@@ -254,8 +277,6 @@ export function Developer({ id }: AgentProps) {
     setRestored(true)
   })
 
-  useTool(edit)
-  useTool(checkpoint)
   useTool(askChief(current))
   useTool(reportComplete(current))
 
@@ -268,43 +289,6 @@ export function Developer({ id }: AgentProps) {
 
 Developer.agentName = "developer"
 Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
-
-/** The batch point edit (§8.2): many replacements against the original in one call. */
-const edit = defineTool({
-  name: "edit",
-  description:
-    "Edit one file with a batch of exact-text replacements. Each oldText must appear exactly once in the file as it is now; edits may not overlap. Prefer this over write for any existing file.",
-  input: toolInput(BatchEditInput),
-  harness: true,
-  async run({ data, harness }) {
-    const refusal = pathRefusal(data.path, POLICY, (p) =>
-      harness.sandbox.resolvePath(p)
-    )
-    if (refusal) throw new Error(`edit refused: ${refusal}`)
-    const original = await harness.sandbox.readFile(data.path)
-    const next = applyEdits(original, data.edits)
-    await harness.sandbox.writeFile(data.path, next)
-    return { output: { path: data.path, edits: data.edits.length } }
-  },
-})
-
-/** A git commit in the container, so a later attempt or revision starts from here. */
-const checkpoint = defineTool({
-  name: "checkpoint",
-  description:
-    "Commit the current state of the site with a one-line message. Call it after a coherent set of edits.",
-  input: toolInput(CompletionReport.pick({ summary: true })),
-  harness: true,
-  async run({ data, harness }) {
-    const message = data.summary.replace(/["`$\\]/g, "").slice(0, 120)
-    const result = await harness.sandbox.exec(
-      `cd ${SITE_ROOT} && ${GIT} add -A && (${GIT} commit -qm "${message}" || true) && ${GIT} rev-parse --short HEAD`
-    )
-    return {
-      output: { commit: result.stdout.trim(), exit_code: result.exitCode },
-    }
-  },
-})
 
 /**
  * The only escalation (§7.2): name the fact, why, and the shape an answer

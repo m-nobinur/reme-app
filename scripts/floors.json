@@ -6,7 +6,7 @@
   "api-unit": 15,
   "api-unit+db": 23,
   "orchestrator-unit": 10,
-  "orchestrator-unit+db": 40,
+  "orchestrator-unit+db": 44,
   "orchestrator-probe": 5,
-  "facade-unit": 43
+  "facade-unit": 61
 }

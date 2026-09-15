@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { canonical, canonicalHash } from "../src/canonical.ts"
 import { FacadeError } from "../src/errors.ts"
+import { TOOL_RESULT_MAX_CHARS } from "../src/hooks.ts"
 import {
   loggableSpec,
   modelRouting,
@@ -138,5 +139,13 @@ describe("the routing table", () => {
     expect(routing.plan?.model).toBe("openrouter/some/thing")
     expect(routing.compaction?.model).toBe("openrouter/some/thing")
     expect(routing.fallback?.model).toBe("openrouter/other/thing")
+  })
+})
+
+describe("the tool result bound", () => {
+  it("stays under a tenth of the context policy, at a pessimistic 3 characters a token", () => {
+    expect(TOOL_RESULT_MAX_CHARS / 3).toBeLessThanOrEqual(
+      unsigned().context_policy.max_input_tokens / 10
+    )
   })
 })
