@@ -3,7 +3,7 @@
 Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
 the service Workers got hostnames, see the decision and the last two consequences. Amended
 2026-09-15: staging gained `staging-preview`, see the decision; and staging's tenant and preview
-hosts move to a zone of their own, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+hosts take a `-stg` suffix on `remeai.co.uk`, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -135,15 +135,13 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   `fetch(request)`, which Cloudflare routes to the custom domain's Worker; and a custom domain
   refuses a hostname that already has a CNAME, which the wildcard record is not.
 
-- **Staging's tenant and preview hostnames live on a second zone** (amended 2026-09-15, with ADR-032),
-  in the same shapes as production: `{slug}.<staging zone>` and `preview-v{n}-{slug}.<staging zone>`.
-  A Worker route accepts a wildcard only as its first character, so no flat label on
-  `remeai.co.uk` can tell staging from production, and a staging router on `*.remeai.co.uk/*` would
-  run in front of the production app's custom domain, because routes run before custom domains. A
-  second zone keeps staging out of production's request path, keeps the 48 character slug cap, and
-  costs one registration. The staging router owns `*.<staging zone>/*` and one proxied wildcard
-  record there. The service hostnames (`staging`, `staging-api`, `staging-orchestrator`,
-  `staging-preview`) stay on `remeai.co.uk`. The zone is the owner's purchase and its name is
-  written here when it exists; the fallback, if the owner declines, is Advanced Certificate Manager
-  on `*.staging.remeai.co.uk` at $10 a month, with that pattern's precedence over `*.remeai.co.uk/*`
-  proven in the router's first commit. Change if: Cloudflare accepts wildcards inside a label.
+- **Staging's tenant and preview hostnames carry a `-stg` suffix** (amended 2026-09-15, with ADR-032):
+  `{slug}-stg.remeai.co.uk` and `preview-v{n}-{slug}-stg.remeai.co.uk`. A route's leading `*` matches
+  any characters, so the staging router owns `*-stg.remeai.co.uk/*`. That route matches no service
+  hostname and no production host, and every host stays one level deep, inside Universal SSL. It
+  needs one proxied wildcard DNS record, `*` AAAA `100::`. The reserved list gains the `-stg` suffix.
+  Staging refuses any slug longer than 44 characters, so the longest preview host still fits a
+  63-character label; production keeps its cap of 48. Rejected: a second zone and Advanced
+  Certificate Manager, because the owner declined both; per-slug routes, because `n` changes on
+  every build. Change if: the production router's first commit shows `*.remeai.co.uk/*` beating
+  `*-stg.remeai.co.uk/*`. In that case, staging previews go back to the `staging-preview` host.
