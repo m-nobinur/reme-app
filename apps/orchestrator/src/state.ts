@@ -32,12 +32,21 @@ export const REPAIR_LIMIT = 3
  * `repairing`, so the bound on repairs counts gate failures too. `paused` and
  * `cancelled` are legal from every non-terminal state and are handled below,
  * as is resuming from `paused`, which returns to the state the pause left.
+ * `blocked_on_approval` is entered from two places (§13 "Budget exhaustion"
+ * as well as review) and leaves only to the state that entered it, gated
+ * below the same way a pause is, so a budget park can never open a path to
+ * ReleaseCandidate that skips review (architect ruling, N2).
  */
 const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   queued: [],
   briefing: ["queued"],
   planning: ["briefing"],
-  implementing: ["planning", "blocked_on_information", "repairing"],
+  implementing: [
+    "planning",
+    "blocked_on_information",
+    "blocked_on_approval",
+    "repairing",
+  ],
   validating: ["implementing", "revising"],
   preview_ready: ["validating"],
   awaiting_review: ["preview_ready"],
@@ -45,7 +54,7 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   release_candidate: ["awaiting_review", "blocked_on_approval"],
   published: ["release_candidate"],
   blocked_on_information: ["implementing"],
-  blocked_on_approval: ["awaiting_review"],
+  blocked_on_approval: ["awaiting_review", "implementing"],
   repairing: ["implementing", "validating"],
   paused: [],
   failed: ["repairing"],
@@ -99,20 +108,27 @@ async function repairsSoFar(
   return Number(row?.n ?? 0)
 }
 
-/** The state a pause left, read from the transition that entered `paused`. */
-async function pausedFrom(
+/** The state a stop left, read from the latest transition that entered `state`. */
+async function enteredFrom(
   db: OrgScopedDb,
-  assignmentId: string
+  assignmentId: string,
+  state: AssignmentState
 ): Promise<AssignmentState | null> {
   const [row] = await db
     .select({ from: assignmentTransitions.fromState })
     .from(assignmentTransitions)
     .where(
-      sql`${assignmentTransitions.assignmentId} = ${assignmentId} and ${assignmentTransitions.toState} = 'paused'`
+      sql`${assignmentTransitions.assignmentId} = ${assignmentId} and ${assignmentTransitions.toState} = ${state}`
     )
     .orderBy(sql`${assignmentTransitions.version} desc`)
     .limit(1)
   return row?.from ?? null
+}
+
+/** Where a `blocked_on_approval` entered from a given state may leave to. */
+const APPROVAL_EXIT: Partial<Record<AssignmentState, AssignmentState>> = {
+  awaiting_review: "release_candidate",
+  implementing: "implementing",
 }
 
 export type AppendEvent = {
@@ -197,8 +213,16 @@ export async function transition(
   if (to === "paused" || to === "cancelled") {
     if (from === to) throw illegal("already there")
   } else if (from === "paused") {
-    const origin = await pausedFrom(db, row.id)
+    const origin = await enteredFrom(db, row.id, "paused")
     if (to !== origin) throw illegal(`a pause resumes to ${origin}`)
+  } else if (from === "blocked_on_approval") {
+    const origin = await enteredFrom(db, row.id, "blocked_on_approval")
+    const exit = origin ? APPROVAL_EXIT[origin] : undefined
+    if (to !== exit) {
+      throw illegal(
+        `an approval block entered from ${origin} leaves to ${exit}`
+      )
+    }
   } else if (!ENTERED_FROM[to].includes(from)) {
     throw illegal("not an edge of the state machine")
   }
@@ -278,6 +302,33 @@ export function advance(
       reason: options.reason,
       payload: { ...options.payload, ...extra },
     })
+  })
+}
+
+/**
+ * §13 "Budget exhaustion": the facade's pre-call guard refused the next
+ * model call, so the assignment parks where an owner can top it up. The
+ * `budget.exhausted` audit row lands in the same transaction as the
+ * transition. Resuming is `advance(kit, ids, "implementing")` after
+ * `budget_usd` has been raised; the exit gate above allows nothing else.
+ */
+export function parkForBudget(
+  kit: Tenancy,
+  ids: Ids,
+  budget: { cap_usd: number; spent_usd: number }
+): Promise<Transition> {
+  return advance(kit, ids, "blocked_on_approval", {
+    reason: "budget.exhausted",
+    apply: async (db, row) => {
+      await appendEvent(db, {
+        orgId: row.orgId,
+        assignmentId: row.id,
+        staffId: row.staffId,
+        type: "budget.exhausted",
+        payload: budget,
+      })
+      return budget
+    },
   })
 }
 
