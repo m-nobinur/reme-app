@@ -21,6 +21,7 @@ vi.mock("../src/sandbox.ts", () => ({
   probe: async () => {
     throw new Error("no container in this suite")
   },
+  sandboxFor: () => ({ destroy: async () => undefined }),
 }))
 
 // The agent module binds to a Durable Object at import time; the routes that

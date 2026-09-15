@@ -1,7 +1,8 @@
 # ADR-030: One hostname for the app, one per tenant for the site
 
 Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
-the service Workers got hostnames, see the decision and the last two consequences. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+the service Workers got hostnames, see the decision and the last two consequences. Amended
+2026-09-15: staging gained `staging-preview`, see the decision. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -33,7 +34,9 @@ site's own version counter and `slug` is the business's. The first draft of this
 `preview-{rev}` with a revision id; amended 2026-09-14.
 
 **The service Workers are one hostname each, per environment.** Staging is `staging`,
-`staging-api` and `staging-orchestrator` under `remeai.co.uk`; production is `preview` (`app`
+`staging-api` and `staging-orchestrator` under `remeai.co.uk`, and `staging-preview`, the orchestrator's
+second host, which serves the console's previews and nothing else so that no page a model built shares
+an origin with `/console`, until the router's per-revision preview hostnames replace it; production is `preview` (`app`
 after launch), `api` and `orchestrator`. Each is a wrangler custom domain, so wrangler owns the
 DNS record and the certificate and nothing is written by hand. The deployed Workers answer on
 these hostnames and not on the account's `workers.dev` subdomain. Pull request previews stay on

@@ -127,6 +127,7 @@ for (const [path, lines] of [
     [
       "ORCHESTRATOR_TOKEN",
       "RUNTIME_SPEC_KEY",
+      "PREVIEW_KEY",
       "OPENROUTER_API_KEY",
       "REME_MODEL_PRIMARY",
       "REME_MODEL_DEFAULT",

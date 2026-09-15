@@ -11,6 +11,7 @@
 //   list     <org>
 //   show     <org> <id>
 //   events   <org> <id>                      the stream, with seq
+//   open     <org> <id>                      a preview link for the latest revision, and its screenshots
 //   watch    <org> <id> [--every 5] [--timeout 900]  poll until the run waits on someone, then print its numbers
 //   start    <org> <id>                      run a queued assignment that has no instance
 //   cancel   <org> <id>
@@ -196,6 +197,15 @@ switch (command) {
     }
     break
   }
+  case "open": {
+    need(org, "<org>")
+    need(id, "<id>")
+    const link = await call("GET", `/assignments/${id}/preview`)
+    console.log(link.url)
+    for (const shot of link.screenshots) console.log(shot)
+    note(`revision ${link.revision_id}, link good until ${link.expires_at}`)
+    break
+  }
   case "start":
   case "cancel": {
     need(org, "<org>")
@@ -244,7 +254,7 @@ switch (command) {
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | list | show | events | watch | start | cancel | answer | steer | approve | rollback"
+      "create | revise | list | show | events | watch | open | start | cancel | answer | steer | approve | rollback"
     )
     process.exit(2)
   }

@@ -379,9 +379,9 @@ live("two assignments on one site serialise", () => {
     const org = await freshOrg()
     const first = await newAssignment(org)
     const second = await newAssignment(org)
-    expect(await claim(kit, first, true)).toBe(true)
-    expect(await claim(kit, second, true)).toBe(false)
-    expect(await claim(kit, second, false)).toBe(false)
+    expect(await claim(kit, first, true)).toMatchObject({ claimed: true })
+    expect(await claim(kit, second, true)).toMatchObject({ claimed: false })
+    expect(await claim(kit, second, false)).toMatchObject({ claimed: false })
     expect((await current(second)).state).toBe("queued")
     const locked = await kit.withOrg({ orgId: org }, (db) =>
       db
@@ -393,7 +393,7 @@ live("two assignments on one site serialise", () => {
     )
     expect(locked.length).toBe(1)
     await cancel(kit, first)
-    expect(await claim(kit, second, false)).toBe(true)
+    expect(await claim(kit, second, false)).toMatchObject({ claimed: true })
     expect((await current(second)).state).toBe("briefing")
   })
 
@@ -402,6 +402,61 @@ live("two assignments on one site serialise", () => {
     const first = await newAssignment(org)
     const second = await newAssignment(org)
     await walk(first, ["briefing", "planning", "implementing", "paused"])
-    expect(await claim(kit, second, true)).toBe(true)
+    expect(await claim(kit, second, true)).toMatchObject({ claimed: true })
+  })
+})
+
+live("a new build supersedes a preview nobody reviewed", () => {
+  const toPreview = [
+    "briefing",
+    "planning",
+    "implementing",
+    "validating",
+    "preview_ready",
+  ] as const
+
+  it("cancels the preview_ready assignment in the claim's transaction and says who superseded it", async () => {
+    const org = await freshOrg()
+    const first = await newAssignment(org)
+    await walk(first, [...toPreview])
+    const second = await newAssignment(org)
+    expect(await claim(kit, second, true)).toEqual({
+      claimed: true,
+      superseded: first.assignmentId,
+    })
+    expect((await current(first)).state).toBe("cancelled")
+    expect((await current(second)).state).toBe("briefing")
+    const [move] = await kit.withOrg({ orgId: org }, (db) =>
+      db
+        .select()
+        .from(assignmentTransitions)
+        .where(
+          sql`${assignmentTransitions.assignmentId} = ${first.assignmentId} and ${assignmentTransitions.toState} = 'cancelled'`
+        )
+    )
+    expect(move?.reason).toBe("superseded")
+    const [event] = await kit.withOrg({ orgId: org }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(eq(events.eventId, move?.eventId ?? ""))
+    )
+    expect(event?.payload).toMatchObject({
+      to: "cancelled",
+      superseded_by: second.assignmentId,
+    })
+  })
+
+  it("never supersedes an assignment an owner is looking at", async () => {
+    const org = await freshOrg()
+    const first = await newAssignment(org)
+    await walk(first, [...toPreview, "awaiting_review"])
+    const second = await newAssignment(org)
+    expect(await claim(kit, second, true)).toEqual({
+      claimed: false,
+      superseded: null,
+    })
+    expect((await current(first)).state).toBe("awaiting_review")
+    expect((await current(second)).state).toBe("queued")
   })
 })

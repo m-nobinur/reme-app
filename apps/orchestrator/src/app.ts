@@ -22,7 +22,13 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
-import { probe } from "./sandbox.ts"
+import {
+  PREVIEW_TTL_S,
+  previewApp,
+  SCREENSHOTS,
+  signPreview,
+} from "./preview.ts"
+import { probe, sandboxFor } from "./sandbox.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
 
 /**
@@ -58,6 +64,17 @@ type Variables = { kit: Tenancy; orgId: string }
 type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
 
 const app = new Hono<ConsoleEnv>()
+
+// Two origins, one Worker (architect ruling on P1): the preview host serves
+// previews and nothing else, and the console host never serves a page the
+// model built, so no tenant HTML shares an origin with `/console`.
+app.use("*", async (c, next) => {
+  const host = c.env.PREVIEW_HOST
+  if (host && new URL(c.req.url).hostname === host) {
+    return previewApp.fetch(c.req.raw, c.env)
+  }
+  return next()
+})
 
 app.get("/health", (c) => c.json({ status: "ok" }))
 
@@ -365,6 +382,12 @@ console_.post("/:id/cancel", async (c) => {
   } catch {
     // No instance, or one that already settled. The row is what counts.
   }
+  try {
+    // §13 rule 3: a cancelled assignment's container does not outlive it.
+    await sandboxFor(c.env, id).destroy()
+  } catch {
+    // Never started, or already gone.
+  }
   return c.json({ assignment_id: id, state })
 })
 
@@ -527,6 +550,48 @@ function parseValue(value: unknown): unknown {
     return value
   }
 }
+/**
+ * A preview link for the assignment's latest revision (architect ruling on
+ * P1): signed over the org this route resolved and the revision it found,
+ * good for a day, opened on the preview host. The console's stand-in for
+ * the router's signed-cookie previews, deleted when those land.
+ */
+console_.get("/:id/preview", async (c) => {
+  const id = c.req.param("id")
+  if (!c.env.PREVIEW_KEY || !c.env.PREVIEW_HOST) {
+    return failure(c, 503, {
+      class: "resource",
+      code: "preview.unconfigured",
+      message: "PREVIEW_KEY or PREVIEW_HOST is not set on this Worker.",
+      detail: {},
+    })
+  }
+  const orgId = c.get("orgId")
+  const [revision] = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) =>
+      db
+        .select({ id: siteRevisions.id })
+        .from(siteRevisions)
+        .where(eq(siteRevisions.assignmentId, id))
+        .orderBy(sql`${siteRevisions.version} desc`)
+        .limit(1)
+    )
+  if (!revision) return notFound(c, id)
+  const exp = Math.floor(Date.now() / 1000) + PREVIEW_TTL_S
+  const token = await signPreview(
+    { org_id: orgId, revision_id: revision.id, exp },
+    c.env.PREVIEW_KEY
+  )
+  const base = `https://${c.env.PREVIEW_HOST}`
+  return c.json({
+    revision_id: revision.id,
+    url: `${base}/open?t=${token}`,
+    screenshots: [...SCREENSHOTS].map((s) => `${base}/${s}`),
+    expires_at: new Date(exp * 1000).toISOString(),
+  })
+})
+
 console_.post("/:id/approve", notYet("P3", "Approving a revision"))
 console_.post("/rollback", notYet("P3", "Rolling a site back"))
 
