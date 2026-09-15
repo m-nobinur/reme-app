@@ -183,7 +183,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
     "",
     "Rules:",
-    '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
+    '- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius and pricing.standard_clean_hourly. If any of those is not listed below, call ask_chief for the first missing one before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.',
     brief.edit_arm === "flue"
       ? "- Edit files with the edit tool: one exact oldText/newText replacement per call, and several edit calls may go in one turn. Use write only for a new file. Never rewrite a file to change one line."
       : "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
