@@ -7,6 +7,53 @@ export type paths = Record<string, never>
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    ApprovalDecision: {
+      /** Format: uuid */
+      approval_id: string
+      /** Format: uuid */
+      org_id: string
+      /** @enum {string} */
+      decision: "approved" | "rejected"
+      target:
+        | {
+            /** @constant */
+            kind: "revision"
+            /** Format: uuid */
+            revision_id: string
+          }
+        | {
+            /** @constant */
+            kind: "domain"
+            hostname: string
+          }
+        | {
+            /** @constant */
+            kind: "spend"
+            amount_usd: number
+            /** @constant */
+            currency: "USD"
+          }
+        | {
+            /** @constant */
+            kind: "sensitive_claim"
+            /** Format: uuid */
+            fact_id: string
+            claim: string
+          }
+      decided_by:
+        | {
+            /** @constant */
+            kind: "owner_session"
+            user_id: string
+            session_id: string
+          }
+        | {
+            /** @constant */
+            kind: "console"
+          }
+      /** Format: date-time */
+      decided_at: string
+    }
     ApprovalRequest: {
       /** Format: uuid */
       approval_id: string
@@ -359,6 +406,14 @@ export interface components {
       /** Format: date-time */
       created_at: string
     }
+    PreviewClaim: {
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      revision_id: string
+      host: string
+      exp: number
+    }
     ProgressEvent: {
       /** @enum {string} */
       state:
@@ -453,6 +508,15 @@ export interface components {
             /** @constant */
             kind: "composed"
           }
+    }
+    SitePointer: {
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      site_id: string
+      /** Format: uuid */
+      revision_id: string
+      config_version: number
     }
     SiteRevision: {
       /** Format: uuid */

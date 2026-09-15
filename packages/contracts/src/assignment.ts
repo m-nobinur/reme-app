@@ -125,9 +125,33 @@ export const ApprovalRequest = z.strictObject({
   expires_at: Timestamp,
 })
 
+/**
+ * `ApprovalDecision` (§19, ADR-032): the answer to an `ApprovalRequest`,
+ * written once. `decided_by` says honestly who decided: an owner's session,
+ * or the staff console, which only staging accepts until the owner approval
+ * route exists. The target is repeated so the publisher can refuse a decision
+ * whose target is not the revision the reviewer was shown.
+ */
+export const ApprovalDecision = z.strictObject({
+  approval_id: Uuid,
+  org_id: Uuid,
+  decision: z.enum(["approved", "rejected"]),
+  target: ApprovalTarget,
+  decided_by: z.discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("owner_session"),
+      user_id: z.string().min(1),
+      session_id: z.string().min(1),
+    }),
+    z.strictObject({ kind: z.literal("console") }),
+  ]),
+  decided_at: Timestamp,
+})
+
 export type AssignmentState = z.infer<typeof AssignmentState>
 export type Assignment = z.infer<typeof Assignment>
 export type InformationRequest = z.infer<typeof InformationRequest>
 export type InformationAnswer = z.infer<typeof InformationAnswer>
 export type ApprovalTarget = z.infer<typeof ApprovalTarget>
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>
+export type ApprovalDecision = z.infer<typeof ApprovalDecision>
