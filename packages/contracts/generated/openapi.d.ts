@@ -145,6 +145,22 @@ export interface components {
       /** Format: date-time */
       reported_at: string
     }
+    ComponentManifest: {
+      component: string
+      path: string
+      summary: string
+      props: {
+        name: string
+        type: string
+        required: boolean
+        description: string
+      }[]
+      constraints: string[]
+      examples: string[]
+      forbidden: string[]
+      /** @enum {string} */
+      source: "generated" | "hand-written"
+    }
     CreateOrgRequest: {
       name: string
     }
@@ -424,6 +440,19 @@ export interface components {
       /** Format: date-time */
       expires_at: string
       signature: string
+    }
+    SiteFields: {
+      [key: string]:
+        | {
+            /** @constant */
+            kind: "fact"
+            fact_key: string
+            required: boolean
+          }
+        | {
+            /** @constant */
+            kind: "composed"
+          }
     }
     SiteRevision: {
       /** Format: uuid */

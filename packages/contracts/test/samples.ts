@@ -92,6 +92,24 @@ export const samples: Record<ContractName, unknown> = {
     decisions_needed: [],
     reported_at: NOW,
   },
+  ComponentManifest: {
+    component: "ContactDetails",
+    path: "src/components/ContactDetails.astro",
+    summary: "The phone, email and weekday hours block for the contact page",
+    props: [
+      {
+        name: "phone",
+        type: "string",
+        required: false,
+        description:
+          "Rendered as a tel: link; the block leaves it out when empty",
+      },
+    ],
+    constraints: ["Every value comes from site-config, never a literal"],
+    examples: ["<ContactDetails phone={site.phone} />"],
+    forbidden: ["A placeholder number when the phone is empty"],
+    source: "generated",
+  },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
   },
@@ -264,6 +282,11 @@ export const samples: Record<ContractName, unknown> = {
     issued_at: NOW,
     expires_at: LATER,
     signature: "ed25519:AbC123",
+  },
+  SiteFields: {
+    name: { kind: "fact", fact_key: "business.name", required: true },
+    phone: { kind: "fact", fact_key: "business.phone", required: true },
+    tagline: { kind: "composed" },
   },
   SiteRevision: {
     revision_id: REVISION,
