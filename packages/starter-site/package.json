@@ -16,7 +16,13 @@
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@types/node": "^22",
+    "@workspace/contracts": "workspace:*",
+    "parse5": "8.0.1",
+    "schema-dts": "2.0.0",
     "typescript": "5.9.3",
     "vitest": "^4.1.11"
+  },
+  "exports": {
+    "./site-config": "./src/site-config.ts"
   }
 }

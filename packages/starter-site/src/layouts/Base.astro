@@ -1,32 +1,33 @@
 ---
-import { site } from "../site-config"
 import "../styles/tokens.css"
 import "../styles/site.css"
+import Seo from "../components/Seo/Seo.astro"
+import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
+import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
+import { site } from "../site-config"
 
 interface Props {
   title: string
+  description?: string
+  jsonLd?: Record<string, unknown>[]
+  noindex?: boolean
 }
 
-const { title } = Astro.props
+const props = Astro.props
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
+    <Seo {...props} />
   </head>
   <body>
     <a class="skip-link" href="#main">{site.skipLink}</a>
-    <header class="site-header">
-      <div class="wrap">
-        {site.businessName && (
-          <a class="site-name" href="/">{site.businessName}</a>
-        )}
-      </div>
-    </header>
+    <SiteHeader />
     <main id="main" class="wrap">
       <slot />
     </main>
+    <SiteFooter />
   </body>
 </html>

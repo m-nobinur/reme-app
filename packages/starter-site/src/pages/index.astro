@@ -1,9 +1,53 @@
 ---
+import ActionLink from "../components/ActionLink/ActionLink.astro"
+import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
+import Hero from "../components/Hero/Hero.astro"
+import PriceCard from "../components/PriceCard/PriceCard.astro"
+import Section from "../components/Section/Section.astro"
 import Base from "../layouts/Base.astro"
+import { hasRoute } from "../routes"
 import { site } from "../site-config"
+import { localBusiness, webSite } from "../structured-data"
+
+const hasContact = Boolean(site.phone || site.email || site.weekdayHours)
 ---
 
-<Base title={site.businessName}>
-  {site.businessName && <h1>{site.businessName}</h1>}
-  {site.tagline && <p class="lede">{site.tagline}</p>}
+<Base
+  title={site.businessName}
+  description={site.tagline}
+  jsonLd={[...webSite(Astro.site), ...localBusiness(Astro.site)]}
+>
+  <Hero heading={site.businessName} lede={site.tagline}>
+    {site.phone && <ActionLink href={`tel:${site.phone}`} label={site.phone} />}
+    {
+      hasRoute("/quote/") && (
+        <ActionLink href="/quote/" label={site.navQuote} variant="secondary" />
+      )
+    }
+  </Hero>
+  {site.homeIntro && <p class="intro">{site.homeIntro}</p>}
+  {
+    site.standardCleanHourly && (
+      <Section heading={site.priceHeading}>
+        <PriceCard
+          name={site.standardCleanName}
+          price={site.standardCleanHourly}
+        />
+      </Section>
+    )
+  }
+  {
+    site.serviceArea && (
+      <Section heading={site.serviceAreaHeading}>
+        <p>{site.serviceArea}</p>
+      </Section>
+    )
+  }
+  {
+    hasContact && (
+      <Section heading={site.contactHeading}>
+        <ContactDetails />
+      </Section>
+    )
+  }
 </Base>

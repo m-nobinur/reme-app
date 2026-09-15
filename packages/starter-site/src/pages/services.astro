@@ -1,0 +1,33 @@
+---
+import Hero from "../components/Hero/Hero.astro"
+import PriceCard from "../components/PriceCard/PriceCard.astro"
+import Section from "../components/Section/Section.astro"
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+import { service } from "../structured-data"
+---
+
+<Base
+  title={site.servicesHeading}
+  description={site.servicesIntro}
+  jsonLd={service(Astro.site)}
+>
+  <Hero heading={site.servicesHeading} lede={site.servicesIntro} />
+  {
+    site.standardCleanHourly && (
+      <Section heading={site.priceHeading}>
+        <PriceCard
+          name={site.standardCleanName}
+          price={site.standardCleanHourly}
+        />
+      </Section>
+    )
+  }
+  {
+    site.serviceArea && (
+      <Section heading={site.serviceAreaHeading}>
+        <p>{site.serviceArea}</p>
+      </Section>
+    )
+  }
+</Base>

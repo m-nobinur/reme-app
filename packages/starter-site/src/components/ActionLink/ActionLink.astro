@@ -1,0 +1,17 @@
+---
+interface Props {
+  href: string
+  label: string
+  variant?: "primary" | "secondary"
+}
+
+const { href, label, variant = "primary" } = Astro.props
+---
+
+{
+  href && label && (
+    <a class:list={["action", `action-${variant}`]} href={href}>
+      {label}
+    </a>
+  )
+}

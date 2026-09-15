@@ -1,0 +1,16 @@
+---
+import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
+import Hero from "../components/Hero/Hero.astro"
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+import { localBusiness } from "../structured-data"
+---
+
+<Base
+  title={site.contactHeading}
+  description={site.contactIntro}
+  jsonLd={localBusiness(Astro.site)}
+>
+  <Hero heading={site.contactHeading} lede={site.contactIntro} />
+  <ContactDetails />
+</Base>
