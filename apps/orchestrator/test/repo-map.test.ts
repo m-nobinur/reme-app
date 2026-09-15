@@ -10,9 +10,7 @@ import {
   requiredFacts,
 } from "../src/repo-map.ts"
 
-const root = fileURLToPath(
-  new URL("../../../fixtures/sites/starter/", import.meta.url)
-)
+const root = fileURLToPath(new URL("./fixtures/starter/", import.meta.url))
 const starter: Record<string, string> = Object.fromEntries(
   execSync("git ls-files .", { cwd: root, encoding: "utf8" })
     .trim()

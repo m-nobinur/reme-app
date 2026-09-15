@@ -36,6 +36,7 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { repoMap } from "../repo-map.ts"
+import { STARTER_FILES } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 
 /**
@@ -50,32 +51,6 @@ import { eventSink } from "../sink.ts"
 export const SITE_ROOT = "/workspace/site"
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
 const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
-
-/**
- * The starter site, bundled into the Worker as text so the fixture in the
- * repo is the one source (N5 swaps this for `packages/starter-site`). The
- * model never sees this path; it sees the files in the sandbox.
- */
-// The glob skips dotfiles unless named, and the starter has one.
-const STARTER = import.meta.glob(
-  [
-    "../../../../fixtures/sites/starter/**/*",
-    "../../../../fixtures/sites/starter/.gitignore",
-  ],
-  {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }
-) as Record<string, string>
-
-/** The starter's files by their path in the site. */
-const STARTER_FILES = Object.fromEntries(
-  Object.entries(STARTER).map(([file, content]) => [
-    file.slice(file.indexOf("/starter/") + "/starter/".length),
-    content,
-  ])
-)
 
 /**
  * The map in the stable segment, built once from the bundled starter so it
