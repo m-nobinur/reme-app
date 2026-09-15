@@ -151,6 +151,31 @@ export const samples: Record<ContractName, unknown> = {
     valid_to: null,
     superseded_by_fact_id: null,
   },
+  FactSnapshot: {
+    snapshot_id: "b4c5d6e7-f809-4c5d-8687-122334455667",
+    org_id: ORG,
+    assignment_id: ASSIGNMENT,
+    taken_at: NOW,
+    facts: [
+      {
+        fact_id: "a3b4c5d6-e7f8-43b4-9576-011223344556",
+        org_id: ORG,
+        key: "business.phone",
+        fact_type: "contact",
+        value: { e164: "+15550142" },
+        version: 1,
+        provenance: {
+          source: "owner_stated",
+          confidence: 1,
+          verified_by_staff_id: STAFF,
+          verified_at: NOW,
+        },
+        valid_from: NOW,
+        valid_to: null,
+        superseded_by_fact_id: null,
+      },
+    ],
+  },
   FailureReport: {
     failure_id: ULID,
     org_id: ORG,
