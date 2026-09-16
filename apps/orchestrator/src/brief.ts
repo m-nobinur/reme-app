@@ -33,6 +33,8 @@ export type Brief = {
   acceptance_criteria: string[]
   /** R2 key of the source snapshot to restore, or null for the starter. */
   restore_key: string | null
+  /** The restored site's map for the stable segment, or null for the starter's. */
+  map: string | null
 }
 
 /**
@@ -95,12 +97,6 @@ export async function creationChoices(
 
 /** The longest goal an assignment takes, in characters: it is in every turn's instructions. */
 export const GOAL_MAX = 4000
-
-/** A follow-up's goal: the goal it continues, then the change. Null past the cap, never cut. */
-export function followUpGoal(goal: string, text: string): string | null {
-  const next = `${goal}\n\nFollow-up: ${text}`
-  return next.length > GOAL_MAX ? null : next
-}
 
 /** What a fact value keeps across versions: its JSON type, and an object's keys. */
 const shape = (value: unknown): string => {

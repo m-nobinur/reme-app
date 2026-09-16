@@ -285,7 +285,7 @@
 
   const RUNNING = new Set(["queued", "briefing", "planning", "implementing", "validating", "repairing", "release_candidate"])
   const WAITING = new Set(["blocked_on_information", "blocked_on_approval", "awaiting_review", "paused"])
-  const FOLLOW_UP_FROM = new Set(["preview_ready", "awaiting_review", "failed", "cancelled"])
+  const REVISE_FROM = new Set(["published", "preview_ready", "awaiting_review", "failed", "cancelled"])
   const TERMINAL = new Set(["published", "failed", "cancelled"])
   const tone = (s) => RUNNING.has(s) ? "run" : WAITING.has(s) ? "wait" : s === "preview_ready" || s === "published" ? "ok" : s === "failed" ? "bad" : ""
   const words = (s) => String(s || "").replaceAll("_", " ")
@@ -550,7 +550,7 @@
   function describe(e) {
     const p = e.payload || {}
     switch (e.type) {
-      case "assignment.created": return ["start", p.follow_up_of ? `Follow-up on #${String(p.follow_up_of).slice(0, 8)} requested` : "Build requested"]
+      case "assignment.created": return ["start", p.kind === "site.revise" ? `Revise of revision ${String(p.revises_revision_id).slice(0, 8)} requested` : "Build requested"]
       case "facts.snapshot_taken": return ["facts", `Read ${(p.facts || []).length} business facts${p.withheld?.length ? `, leaving out ${p.withheld.join(", ")}` : ""}`]
       case "assignment.state_changed": return ["state", `${words(p.from)} → ${words(p.to)}`]
       case "information.requested": return ["ask", `Asked for ${p.field}`]
@@ -602,7 +602,7 @@
   function composer(a) {
     if (RUNNING.has(a.state)) return { mode: "steer", button: "Steer", placeholder: "Tell the Developer something mid-build, e.g. keep the tagline under eight words", hint: "Joins the running conversation at its next turn." }
     if (a.state === "blocked_on_information") return { mode: "answer", button: "Answer", placeholder: state.openRequest ? `Your answer for ${state.openRequest.field}` : "Your answer", hint: "Saved as a business fact, then the build carries on." }
-    if (FOLLOW_UP_FROM.has(a.state)) return { mode: "follow-up", button: "Send follow-up", placeholder: "Ask for a change, e.g. make the home page intro warmer and shorter", hint: "Starts a new build with this added to the brief and replaces this preview. Until revise lands it rebuilds from the starter, in about two minutes." }
+    if (REVISE_FROM.has(a.state)) return { mode: "revise", button: "Revise the live site", placeholder: "Ask for a change, e.g. change the weekday closing time to 6pm", hint: "Starts a revise of the published site: restored as it is live, changed only where the request says, then the full gate set runs. Needs a published site." }
     return { mode: null, button: "Send", placeholder: `Nothing to send while the build is ${words(a.state)}.`, hint: "" }
   }
 
@@ -731,8 +731,8 @@
         if (!state.openRequest) throw new Error("There is no open question to answer.")
         await call("POST", `/assignments/${id}/answer`, { request_id: state.openRequest.request_id, value: text })
         toast("Answer saved.")
-      } else if (state.mode === "follow-up") {
-        const next = await call("POST", `/assignments/${id}/follow-up`, { text })
+      } else if (state.mode === "revise") {
+        const next = await call("POST", "/assignments", { kind: "site.revise", goal: text })
         $("follow-text").value = ""
         await refreshList()
         return select(next.assignment_id)

@@ -249,17 +249,6 @@ describe("the publish routes' edge", () => {
     }
   )
 
-  it("follow-up refuses an empty text as follow_up.empty, behind the bearer", async () => {
-    const body = { text: "  " }
-    expect((await post("/assignments/x/follow-up", body, {})).status).toBe(401)
-    const res = await post("/assignments/x/follow-up", body)
-    expect(res.status).toBe(400)
-    expect(await envelope(res)).toMatchObject({
-      class: "validation",
-      code: "follow_up.empty",
-    })
-  })
-
   it("a slug nothing holds is 404 before any of them", async () => {
     const res = await app.request(
       "/assignments/x/answer?org=nobody",
