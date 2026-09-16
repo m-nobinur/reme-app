@@ -10,5 +10,6 @@
   "orchestrator-probe": 5,
   "facade-unit": 61,
   "gates-unit": 13,
+  "router-unit": 1,
   "starter-site": 24
 }

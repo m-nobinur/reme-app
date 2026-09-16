@@ -1,0 +1,23 @@
+{
+  "name": "router",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "node ../../scripts/floor.mjs router-unit -- vitest run --dir test",
+    "size": "node scripts/size.mjs"
+  },
+  "dependencies": {
+    "@workspace/contracts": "workspace:*",
+    "@workspace/gates": "workspace:*",
+    "hono": "4.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^6",
+    "vitest": "^4.1.11",
+    "wrangler": "4.131.2"
+  }
+}

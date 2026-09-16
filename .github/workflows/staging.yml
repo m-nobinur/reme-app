@@ -43,6 +43,8 @@ env:
   WEB: https://staging.remeai.co.uk
   API: https://staging-api.remeai.co.uk
   ORCHESTRATOR: https://staging-orchestrator.remeai.co.uk
+  # Any `-stg` host the router owns and no site claims; its 404 is the router's.
+  ROUTER_PROBE: https://nosuch-stg.remeai.co.uk
 
 jobs:
   staging:
@@ -140,6 +142,24 @@ jobs:
         run: |
           curl -sSf --max-time 30 "$ORCHESTRATOR/health" | jq -e '.status == "ok"' >/dev/null || {
             echo "::error::$ORCHESTRATOR/health did not answer ok"; exit 1; }
+
+      # The site router owns `*-stg.remeai.co.uk/*` (ADR-030); nothing else
+      # answers on a tenant or preview host, so a wrong deploy here is a
+      # tenant site down rather than a console down.
+      - name: Deploy the router
+        run: >
+          pnpm --filter router exec wrangler deploy
+          --message "${{ github.sha }}"
+
+      # A host no site claims must answer the router's own 404, which proves
+      # the route reached this Worker rather than a stale one or the zone's
+      # default. An answer of anything else is the route missing.
+      - name: The router answers on a tenant host
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$ROUTER_PROBE/")
+          [ "$code" = 404 ] || {
+            echo "::error::$ROUTER_PROBE/ answered $code, expected the router's 404"; exit 1; }
+          echo "$ROUTER_PROBE/ answered $code"
 
       - run: pnpm --filter web build
 
