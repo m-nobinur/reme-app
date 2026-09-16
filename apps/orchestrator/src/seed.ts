@@ -58,3 +58,14 @@ export function siteHost(slug: string, suffix: string): string {
     throw new Error(`not a host suffix: ${JSON.stringify(suffix)}`)
   return `${slug}${suffix}`
 }
+
+/**
+ * The host a revision's preview answers on, `preview-v{n}-{slug}` under the
+ * same suffix (ADR-030). One level deep, under the reserved `preview-`
+ * prefix, and inside a 63-character label while the slug is at most 44.
+ */
+export function previewHost(slug: string, version: number, suffix: string) {
+  if (!Number.isInteger(version) || version < 1)
+    throw new Error(`not a version: ${JSON.stringify(version)}`)
+  return `preview-v${version}-${siteHost(slug, suffix)}`
+}

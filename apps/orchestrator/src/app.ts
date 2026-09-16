@@ -1,6 +1,7 @@
 import {
   type ErrorEnvelope,
   InformationAnswer,
+  PreviewClaim,
   type TaintLabel,
 } from "@workspace/contracts"
 import {
@@ -8,6 +9,7 @@ import {
   eq,
   events,
   facts,
+  orgs,
   resolveOrgBySlug,
   siteRevisions,
   sql,
@@ -21,6 +23,11 @@ import {
   toSiteRevision,
 } from "@workspace/db"
 import { init } from "@workspace/facade"
+import {
+  PREVIEW_TTL_S,
+  SCREENSHOTS,
+  signPreview,
+} from "@workspace/gates/preview"
 import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
@@ -33,13 +40,8 @@ import {
 } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
-import {
-  PREVIEW_TTL_S,
-  previewApp,
-  SCREENSHOTS,
-  signPreview,
-} from "./preview.ts"
 import { probe, sandboxFor } from "./sandbox.ts"
+import { previewHost } from "./seed.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
 
 /**
@@ -89,17 +91,6 @@ type Variables = { kit: Tenancy; orgId: string }
 type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
 
 const app = new Hono<ConsoleEnv>()
-
-// Two origins, one Worker (architect ruling on P1): the preview host serves
-// previews and nothing else, and the console host never serves a page the
-// model built, so no tenant HTML shares an origin with `/console`.
-app.use("*", async (c, next) => {
-  const host = c.env.PREVIEW_HOST
-  if (host && new URL(c.req.url).hostname === host) {
-    return previewApp.fetch(c.req.raw, c.env)
-  }
-  return next()
-})
 
 app.get("/health", (c) => c.json({ status: "ok" }))
 
@@ -757,41 +748,71 @@ function parseValue(value: unknown): unknown {
   }
 }
 /**
- * A preview link for the assignment's latest revision (architect ruling on
- * P1): signed over the org this route resolved and the revision it found,
- * good for a day, opened on the preview host. The console's stand-in for
- * the router's signed-cookie previews, deleted when those land.
+ * A preview link for the assignment's latest revision (ADR-032): a
+ * `PreviewClaim` signed over the org this route resolved, the site and
+ * revision it found and the one host the router will honour it on,
+ * `preview-v{n}-{slug}` under this environment's suffix (ADR-030), good for
+ * a day. A revision still `building` has no artifact to show and is refused.
  */
 console_.get("/:id/preview", async (c) => {
   const id = c.req.param("id")
-  if (!c.env.PREVIEW_KEY || !c.env.PREVIEW_HOST) {
+  if (!c.env.PREVIEW_KEY) {
     return failure(c, 503, {
       class: "resource",
       code: "preview.unconfigured",
-      message: "PREVIEW_KEY or PREVIEW_HOST is not set on this Worker.",
+      message: "PREVIEW_KEY is not set on this Worker.",
       detail: {},
     })
   }
   const orgId = c.get("orgId")
-  const [revision] = await c
-    .get("kit")
-    .withOrg({ orgId }, (db) =>
-      db
-        .select({ id: siteRevisions.id })
-        .from(siteRevisions)
-        .where(eq(siteRevisions.assignmentId, id))
-        .orderBy(sql`${siteRevisions.version} desc`)
-        .limit(1)
-    )
-  if (!revision) return notFound(c, id)
+  const found = await c.get("kit").withOrg({ orgId }, async (db) => {
+    const [revision] = await db
+      .select({
+        id: siteRevisions.id,
+        siteId: siteRevisions.siteId,
+        version: siteRevisions.version,
+        status: siteRevisions.status,
+      })
+      .from(siteRevisions)
+      .where(eq(siteRevisions.assignmentId, id))
+      .orderBy(sql`${siteRevisions.version} desc`)
+      .limit(1)
+    if (!revision) return null
+    const [org] = await db
+      .select({ slug: orgs.slug })
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+    if (!org) return null
+    return { revision, slug: org.slug }
+  })
+  if (!found) return notFound(c, id)
+  if (found.revision.status === "building") {
+    return failure(c, 409, {
+      class: "validation",
+      code: "revision.building",
+      message: "This revision has no artifact to preview yet.",
+      detail: { revision_id: found.revision.id },
+    })
+  }
+  const host = previewHost(
+    found.slug,
+    found.revision.version,
+    c.env.SITE_HOST_SUFFIX
+  )
   const exp = Math.floor(Date.now() / 1000) + PREVIEW_TTL_S
   const token = await signPreview(
-    { org_id: orgId, revision_id: revision.id, exp },
+    PreviewClaim.parse({
+      org_id: orgId,
+      site_id: found.revision.siteId,
+      revision_id: found.revision.id,
+      host,
+      exp,
+    }),
     c.env.PREVIEW_KEY
   )
-  const base = `https://${c.env.PREVIEW_HOST}`
+  const base = `https://${host}`
   return c.json({
-    revision_id: revision.id,
+    revision_id: found.revision.id,
     url: `${base}/open?t=${token}`,
     screenshots: [...SCREENSHOTS].map((s) => `${base}/${s}`),
     expires_at: new Date(exp * 1000).toISOString(),

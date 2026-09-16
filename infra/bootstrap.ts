@@ -55,6 +55,8 @@ const environments = {
     neonOwner: "neondb_owner",
     hyperdrive: "reme-staging-postgres",
     kv: "reme-staging-web-cache",
+    /** The router's routing cache (ADR-032, §11.1.3); production's lands with its router. */
+    routesKv: "reme-staging-routes",
     /**
      * The three the session rests on (ADR-024, ADR-026, open item 24).
      * `WORKOS_COOKIE_PASSWORD` is the same value on both Workers on purpose: it
@@ -86,6 +88,8 @@ const environments = {
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
       ],
+      // Verifies the claims the orchestrator signs; the same value on both.
+      "reme-router": ["PREVIEW_KEY"],
     },
   },
   /**
@@ -106,6 +110,7 @@ const environments = {
     neonOwner: "neondb_owner",
     hyperdrive: "reme-prod-postgres",
     kv: "reme-prod-web-cache",
+    routesKv: null,
     secrets: {
       "reme-web-production": [
         "WORKOS_API_KEY",
@@ -332,20 +337,26 @@ if (!hyperdrive) {
 
 // ---------------------------------------------------------------------- KV
 
-const listKv = () =>
+const listKv = (title: string) =>
   json<{ id: string; title: string }[]>(
     wrangler("kv", "namespace", "list")
-  ).find((entry) => entry.title === config.kv)
+  ).find((entry) => entry.title === title)
 
-let kv = listKv()
-if (!kv) {
-  wrangler("kv", "namespace", "create", config.kv)
-  kv = listKv()
-  if (!kv) stop("the KV namespace was created and cannot be read")
-  ok(`${state("created")}kv ${config.kv}`)
-} else {
-  ok(`${state("unchanged")}kv ${config.kv}`)
+function ensureKv(title: string) {
+  let found = listKv(title)
+  if (!found) {
+    wrangler("kv", "namespace", "create", title)
+    found = listKv(title)
+    if (!found) stop(`the KV namespace ${title} was created and cannot be read`)
+    ok(`${state("created")}kv ${title}`)
+  } else {
+    ok(`${state("unchanged")}kv ${title}`)
+  }
+  return found
 }
+
+const kv = ensureKv(config.kv)
+const routesKv = config.routesKv ? ensureKv(config.routesKv) : null
 
 // --------------------------------------------------------- the committed ids
 
@@ -370,6 +381,8 @@ function bindingId(file: string, id: string, label: string) {
 
 bindingId("apps/api/wrangler.jsonc", hyperdrive, "hyperdrive")
 bindingId("apps/web/wrangler.jsonc", kv.id, "kv namespace")
+if (routesKv)
+  bindingId("apps/router/wrangler.jsonc", routesKv.id, "kv namespace")
 
 // ------------------------------------------------------------------ secrets
 
