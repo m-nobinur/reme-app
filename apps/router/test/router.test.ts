@@ -70,7 +70,11 @@ const env = {
   },
   ROUTES: {
     get: async (key: string) => pointers.get(key) ?? null,
+    put: async (key: string, value: string) => {
+      pointers.set(key, JSON.parse(value))
+    },
   },
+  HYPERDRIVE: { connectionString: "postgres://stub" },
 } as unknown as Env
 
 const soon = () => Math.floor(Date.now() / 1000) + 3600
@@ -249,8 +253,7 @@ describe("a published host", () => {
     config_version: 2,
   }
 
-  it("answers 404 on a KV miss and on a pointer that does not parse", async () => {
-    expect((await get(SITE_HOST, "/")).status).toBe(404)
+  it("answers 404 on a pointer that does not parse", async () => {
     pointers.set(`host:${SITE_HOST}`, { revision_id: REV })
     expect((await get(SITE_HOST, "/")).status).toBe(404)
     pointers.delete(`host:${SITE_HOST}`)
@@ -308,5 +311,95 @@ describe("a published host", () => {
     const res = await get(SITE_HOST, "/")
     expect(res.headers.get("cache-control")).toBe("no-cache")
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8")
+  })
+})
+
+// A KV miss reads Postgres and writes the pointer back (§11.1.3). The rows
+// are written under `withOrg`, the way the publisher writes them.
+const { deployments, orgs, siteRevisions, staff, assignments, tenancy } =
+  await import("@workspace/db")
+const url = process.env.DATABASE_URL
+const live = describe.skipIf(!url)
+
+live("a published host, against a real database", () => {
+  it("serves the newest deployment on a KV miss and caches the pointer", async () => {
+    const kit = tenancy(url ?? "postgres://unused")
+    const orgId = crypto.randomUUID()
+    const slug = `router-test-${orgId.slice(0, 8)}`
+    const revisionId = crypto.randomUUID()
+    await kit.withOrg({ orgId }, async (db) => {
+      await db
+        .insert(orgs)
+        .values({ id: orgId, slug, name: "Router probe (fixture)" })
+      const [dev] = await db
+        .insert(staff)
+        .values({
+          orgId,
+          staffCode: "DEV-001",
+          displayName: "Dev",
+          kind: "agent",
+          status: "active",
+        })
+        .returning({ id: staff.id })
+      const [assignment] = await db
+        .insert(assignments)
+        .values({
+          orgId,
+          staffId: dev?.id ?? orgId,
+          createdByStaffId: dev?.id ?? orgId,
+          kind: "site.build",
+          goal: "probe",
+          acceptanceCriteria: ["probe"],
+          factSnapshotId: crypto.randomUUID(),
+          budgetUsd: 1,
+          idempotencyKey: crypto.randomUUID(),
+        })
+        .returning({ id: assignments.id })
+      const prefix = `sites/${orgId}/${revisionId}/`
+      await db.insert(siteRevisions).values({
+        id: revisionId,
+        orgId,
+        siteId: orgId,
+        assignmentId: assignment?.id ?? orgId,
+        version: 1,
+        sourceKey: `${prefix}source.tar.zst`,
+        artifactPrefix: `${prefix}dist/`,
+        manifestKey: `${prefix}manifest.json`,
+        status: "published",
+      })
+      await db.insert(deployments).values({
+        orgId,
+        siteId: orgId,
+        revisionId,
+        configVersion: 1,
+        kind: "rollback",
+        reason: "probe",
+      })
+    })
+    await kit.close()
+    revision(orgId, revisionId)
+    const host = `${slug}${SUFFIX}`
+    const liveEnv = {
+      ...env,
+      HYPERDRIVE: { connectionString: url },
+    } as unknown as Env
+    expect(pointers.has(`host:${host}`)).toBe(false)
+    const res = await app.request(`https://${host}/`, {}, liveEnv)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain(revisionId.slice(-4))
+    expect(pointers.get(`host:${host}`)).toMatchObject({
+      org_id: orgId,
+      site_id: orgId,
+      revision_id: revisionId,
+      config_version: 1,
+    })
+    // A slug no business holds is a miss that writes nothing.
+    const nobody = await app.request(
+      `https://nobody-here${SUFFIX}/`,
+      {},
+      liveEnv
+    )
+    expect(nobody.status).toBe(404)
+    expect(pointers.has(`host:nobody-here${SUFFIX}`)).toBe(false)
   })
 })

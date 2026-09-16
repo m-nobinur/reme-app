@@ -187,10 +187,10 @@
       // relative-reach pattern is repeated here rather than inherited.
       //
       // apps/router serves tenant sites at the edge from a KV pointer and an R2
-      // read, or from a signed claim and an R2 read (ADR-032). It holds no
-      // Hyperdrive binding and reads no org from a request, so it may not
-      // import the database package: the router's tenant is whatever the
-      // orchestrator wrote into the pointer or the claim.
+      // read, or from a signed claim and an R2 read (ADR-032). The database is
+      // the truth behind the pointer and is read on a miss only, through the
+      // slug the hostname names and never an id from the request (§11.1.8);
+      // the facade and Pi stay out, as everywhere outside packages/facade.
       "includes": ["apps/router/**"],
       "linter": {
         "rules": {
@@ -202,14 +202,6 @@
                   {
                     "group": ["**/packages/*/**"],
                     "message": "Import a package by name. A relative path into another package skips its exports and this check."
-                  },
-                  {
-                    "group": [
-                      "@workspace/db",
-                      "@workspace/db/**",
-                      "**/db/src/**"
-                    ],
-                    "message": "apps/router has no database binding and must not import @workspace/db. A host resolves through the routing pointer or the signed claim, both written by the orchestrator (ADR-032)."
                   },
                   {
                     "group": ["@flue/*", "@earendil-works/*"],

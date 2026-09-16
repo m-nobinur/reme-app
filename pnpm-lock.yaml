@@ -127,6 +127,9 @@ importers:
       '@workspace/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@workspace/gates':
         specifier: workspace:*
         version: link:../../packages/gates

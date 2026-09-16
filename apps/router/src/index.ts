@@ -3,6 +3,7 @@ import {
   type ErrorEnvelope,
   SitePointer,
 } from "@workspace/contracts"
+import { deployments, resolveOrgBySlug, sql, tenancy } from "@workspace/db"
 import { resolveSitePath } from "@workspace/gates"
 import {
   PREVIEW_COOKIE,
@@ -91,6 +92,49 @@ async function serve(
   })
 }
 
+/**
+ * The pointer Postgres would give for a host: the org the slug names, read
+ * the way the console resolves one, then its newest deployment under that
+ * org's own row security. Null for a slug no business holds or a site that
+ * was never published. Read on a KV miss only, so the hot path never opens
+ * a connection.
+ */
+async function pointerFromTruth(
+  c: Context<App>,
+  host: string
+): Promise<SitePointer | null> {
+  const slug = host.slice(0, -c.env.SITE_HOST_SUFFIX.length)
+  const kit = tenancy(c.env.HYPERDRIVE.connectionString)
+  try {
+    const orgId = await resolveOrgBySlug(kit, slug)
+    if (!orgId) return null
+    const [row] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select()
+        .from(deployments)
+        .orderBy(sql`${deployments.configVersion} desc`)
+        .limit(1)
+    )
+    if (!row) return null
+    return SitePointer.parse({
+      org_id: orgId,
+      site_id: row.siteId,
+      revision_id: row.revisionId,
+      config_version: row.configVersion,
+    })
+  } finally {
+    // Outside a Worker (the route test) there is no execution context.
+    let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
+    try {
+      ctx = c.executionCtx
+    } catch {
+      ctx = null
+    }
+    if (ctx) ctx.waitUntil(kit.close())
+    else await kit.close()
+  }
+}
+
 const app = new Hono<App>()
 
 // A host outside this environment's suffix is nobody's: the route pattern
@@ -153,17 +197,27 @@ app.on(["GET", "HEAD"], "*", async (c) => {
       previewHeaders(found.manifest.headers, resolved.file)
     )
   }
-  // KV is the cache and Postgres the truth (§11.1.3); a miss is a 404 until
-  // the publisher's fallback lands. A pointer that does not parse is our bug
-  // and is logged as one, and the visitor still sees the same 404.
+  // KV is the cache and Postgres the truth (§11.1.3): a miss reads the
+  // newest deployment for the org the slug names and writes the pointer
+  // back. A pointer that does not parse is our bug and is logged as one, and
+  // the visitor still sees the same 404.
   const raw = await c.env.ROUTES.get(`host:${host}`, "json")
-  if (raw === null) return notHere(c)
-  const pointer = SitePointer.safeParse(raw)
-  if (!pointer.success) {
-    console.error(JSON.stringify({ host, code: "pointer.malformed" }))
-    return notHere(c)
+  let pointer: SitePointer | null = null
+  if (raw !== null) {
+    const parsed = SitePointer.safeParse(raw)
+    if (!parsed.success) {
+      console.error(JSON.stringify({ host, code: "pointer.malformed" }))
+      return notHere(c)
+    }
+    pointer = parsed.data
+  } else {
+    pointer = await pointerFromTruth(c, host)
+    if (pointer) {
+      await c.env.ROUTES.put(`host:${host}`, JSON.stringify(pointer))
+    }
   }
-  const found = await manifestFor(c.env.SITES, pointer.data)
+  if (!pointer) return notHere(c)
+  const found = await manifestFor(c.env.SITES, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
