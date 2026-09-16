@@ -138,6 +138,8 @@ const Hostname = z
  */
 export const PreviewClaim = z.strictObject({
   org_id: Uuid,
+  /** The R2 prefix is `sites/{site_id}/...`; the claim carries it rather than a key. */
+  site_id: Uuid,
   revision_id: Uuid,
   host: Hostname,
   exp: z.int().positive(),

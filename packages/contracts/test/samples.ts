@@ -252,6 +252,7 @@ export const samples: Record<ContractName, unknown> = {
   },
   PreviewClaim: {
     org_id: ORG,
+    site_id: ORG,
     revision_id: REVISION,
     host: "preview-v3-brightclean.remeai.co.uk",
     exp: 1789567110,
