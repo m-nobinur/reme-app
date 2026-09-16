@@ -13,18 +13,33 @@ Two passes.
 2. The tier's scenarios run. Each is a `tier-<n>/*.eval.mjs` whose default
    export throws on failure.
 
-Tier 1 has two scenarios over the recorded Developer sessions below.
+Tier 1 has three scenarios over the recorded Developer sessions below.
+`tier-1/developer-facts.eval.mjs` reads the text every `edit` and `write`
+put into the site and traces each price, phone, email, time and postcode in
+it to the facts the logged context segment shows the model was briefed with;
+the fabrication count must be zero, and a planted "$49" in a copy of
+`developer-build.jsonl` turns it red.
 `tier-1/developer-contract.eval.mjs` checks the completion report and the
 information request are contract-shaped. `tier-1/developer-edits.eval.mjs` reads
 every `developer-*` session: no starter file rewritten with `write`, and every
 failed edit answered with an anchor message and recovered by one retry, the
-next edit of that file succeeding within two turns. Tiers 2 and 3 have none yet; an absent tier
-reads as zero rather than as an error.
+next edit of that file succeeding within two turns.
+
+Tier 2 is live: `tier-2/golden-builds.eval.mjs` runs one build per golden org
+that has a Developer seeded, topped up to three on the first that does (today
+only `brightclean` carries the staff tree, so the other two are rows that say
+so), against the orchestrator `ORCHESTRATOR_URL` and `ORCHESTRATOR_TOKEN`
+name, watches each to the first state that waits on someone, cancels it, and writes
+the settled state, gate pass rate, fabrication count (content gate failures),
+turns, tokens, cache hit and cost per org to stdout and to the job summary.
+`.github/workflows/nightly.yml` runs it at 03:00 UTC against staging; without
+an orchestrator it skips. Tier 3 has none yet; an absent tier reads as zero
+rather than as an error.
 
 | Tier | What it covers |
 | --- | --- |
 | 1 | Contract: schema-valid role output, InformationRequest rather than fabrication |
-| 2 | Pack: cleaning quote math, schedule constraints, service-area edges |
+| 2 | Live-cheap: one golden build per fixture org on staging, fabrication count, gate pass rate, tokens and cost |
 | 3 | End-to-end: golden assignment on a fixture org, fabrication count 0 |
 
 ## Fixtures
