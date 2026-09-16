@@ -100,6 +100,9 @@ const CLAIM_ATTEMPTS = 20
 /** How many times an interrupted Developer run is resumed before the build fails and releases the site lock. */
 const RESUMES = 2
 
+/** Reasons the turn gate names itself; any other interruption is the provider's. */
+const GATE_REASONS = new Set(["tool.repeating_failure", "sandbox.updating"])
+
 /** Information round trips per assignment before the Workflow stops waiting. */
 const ROUNDS = 20
 
@@ -283,10 +286,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       }
       const payload = woke.payload
       if (payload.kind === "interrupted") {
-        if (resumes >= RESUMES) {
-          return fail(`interrupted ${round}`, "provider.unavailable")
-        }
+        const reason = GATE_REASONS.has(payload.reason)
+          ? payload.reason
+          : "provider.unavailable"
+        if (resumes >= RESUMES) return fail(`interrupted ${round}`, reason)
         resumes++
+        // The last resume before failing runs on the fallback model, and only
+        // for a provider failure: a replaced sandbox or a repeating tool
+        // failure is not the model's fault (open item 50, architect ruling).
+        const fallback =
+          resumes === RESUMES && reason === "provider.unavailable"
         await step.sleep(`resume wait ${round}`, "30 seconds")
         await step.do(`resume run ${round}`, async () => {
           await init(Developer, { id: ids.assignmentId }).dispatch({
@@ -294,10 +303,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               kind: "signal",
               type: "run.interrupted",
               body: JSON.stringify({ reason: payload.reason }),
-              attributes: { attempt: String(resumes) },
+              attributes: {
+                attempt: String(resumes),
+                ...(fallback
+                  ? { model: "fallback", reason: payload.reason }
+                  : {}),
+              },
             },
           })
-          return { resumed: resumes }
+          return { resumed: resumes, fallback }
         })
         continue
       }
