@@ -137,7 +137,7 @@ jobs:
         run: |
           deployed=$(pnpm --filter orchestrator exec wrangler deployments list \
             --name reme-orchestrator --json \
-            | jq -r '[.[] | .annotations["workers/message"] // empty | select(test("^[0-9a-f]{40}$"))][0] // empty')
+            | jq -r '[.[] | select((.annotations["workers/message"] // "") | test("^[0-9a-f]{40}$"))] | sort_by(.created_on) | last | .annotations["workers/message"] // empty')
           if [ -z "$deployed" ]; then
             echo "no deployed commit to compare with, so nothing to refuse"
             exit 0
@@ -152,7 +152,10 @@ jobs:
           for name in reme-assignment reme-publish; do
             for status in running queued paused; do
               out=$(pnpm --filter orchestrator exec wrangler workflows instances list "$name" --status "$status" 2>&1 || true)
-              if ! printf '%s' "$out" | grep -q "There are no instances"; then
+              # wrangler says "No instances ... matched the provided filters" for
+              # an empty filtered list and "There are no instances" for an empty
+              # workflow; a table means at least one instance is live.
+              if ! printf '%s' "$out" | grep -qE "No instances in workflow|There are no instances"; then
                 echo "$name has $status instances:"; printf '%s\n' "$out"; live=1
               fi
             done
