@@ -37,6 +37,24 @@ never a hand-edit.
 It also does not roll back bound resources: KV, R2, Hyperdrive configs and secrets stay as they
 are.
 
+## Rolling a site back
+
+A tenant site is a pointer, not a deploy: the router serves whichever revision the newest
+`deployments` row for the site names, through a KV entry `host:{hostname}` (ADR-032). Rolling back
+activates the previous revision through the same publisher Workflow that published it.
+
+```sh
+ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder rollback <slug> "why"
+ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder site <slug>
+```
+
+The first prints the instance id and the revision being restored; the second shows what the host
+serves and what the next rollback would restore. The instance appends a `deployments` row of kind
+`rollback`, writes the pointer, and probes the host at 0, 2, 5 and 10 minutes. A second rollback
+rolls forward again, because "previous" is whatever the newest row points at; the request is keyed
+by its idempotency key so a retried command is one rollback. Production runs the same commands
+against `orchestrator.remeai.co.uk` once the production router exists (issue #90).
+
 ## Checking production is actually healthy
 
 `/health` is not a `select 1`. It asserts the four things `withOrg` promises on a live connection,

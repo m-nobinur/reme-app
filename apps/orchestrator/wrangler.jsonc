@@ -20,9 +20,12 @@
   // the SDK reads this from the Worker's bindings, never from the container.
   // `SITE_HOST_SUFFIX` is what the router serves on: `{slug}` and
   // `preview-v{n}-{slug}` under it (ADR-030).
+  // `CONSOLE_APPROVALS` lets the staff console approve a publish, which
+  // staging allows and production never does (ADR-032).
   "vars": {
     "SANDBOX_TRANSPORT": "rpc",
-    "SITE_HOST_SUFFIX": "-stg.remeai.co.uk"
+    "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
+    "CONSOLE_APPROVALS": "allow"
   },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
@@ -32,7 +35,17 @@
       "name": "reme-assignment",
       "binding": "ASSIGNMENTS",
       "class_name": "AssignmentWorkflow"
+    },
+    {
+      "name": "reme-publish",
+      "binding": "PUBLISHES",
+      "class_name": "PublishWorkflow"
     }
+  ],
+  // The routing cache the router reads (§11.1.3), written by publish.ts and
+  // by nothing else in this Worker; a test holds that.
+  "kv_namespaces": [
+    { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" }
   ],
   // The builder sandbox (ADR-031). The image is a registry reference pinned
   // by digest, so a deploy needs no Docker and a PR that touches no image
@@ -85,8 +98,15 @@
           "name": "reme-assignment-production",
           "binding": "ASSIGNMENTS",
           "class_name": "AssignmentWorkflow"
+        },
+        {
+          "name": "reme-publish-production",
+          "binding": "PUBLISHES",
+          "class_name": "PublishWorkflow"
         }
       ],
+      // Created with the production router; the id lands here then.
+      "kv_namespaces": [],
       "containers": [
         {
           "class_name": "RemeSandbox",

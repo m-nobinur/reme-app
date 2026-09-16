@@ -17,8 +17,10 @@
 //   cancel   <org> <id>
 //   answer   <org> <id> <request_id> <value> answer an information request as the CoS would
 //   steer    <org> <id> <message>            join the running conversation at the next turn
-//   approve  <org> <id> <revision_id>        approve as the owner would
-//   rollback <org>                           activate the previous revision
+//   review   <org> <id>                      put the build in front of the owner: an approval request
+//   approve  <org> <id> <revision_id>        approve as the owner would; asks for the review first if none is open
+//   rollback <org> [reason]                  activate the previous revision through the publisher
+//   site     <org>                           what the site serves now, and what a rollback would restore
 //   follow-up <org> <id> <text>              a new build on a finished one: its goal plus the text
 //   facts    <org> [<key> <value>]           the business's facts, or restate one (JSON or text)
 //   console                                  open /console with the token on the clipboard
@@ -240,19 +242,42 @@ switch (command) {
     )
     break
   }
+  case "review": {
+    need(org, "<org>")
+    need(id, "<id>")
+    print(await call("POST", `/assignments/${id}/review`, {}))
+    break
+  }
   case "approve": {
     need(org, "<org>")
     need(id, "<id>")
+    const revisionId = need(more[0], "<revision_id>")
+    // The owner's two acts in one command: the review is requested first
+    // when the build is still `preview_ready`, then the decision is written.
+    const { assignment } = await call("GET", `/assignments/${id}`)
+    if (assignment.state === "preview_ready") {
+      const request = await call("POST", `/assignments/${id}/review`, {})
+      note(`review requested for revision ${request.target.revision_id}`)
+    }
     print(
       await call("POST", `/assignments/${id}/approve`, {
-        revision_id: need(more[0], "<revision_id>"),
+        revision_id: revisionId,
       })
     )
     break
   }
   case "rollback": {
     need(org, "<org>")
-    print(await call("POST", "/assignments/rollback", {}))
+    print(
+      await call("POST", "/assignments/rollback", {
+        reason: [id, ...more].filter(Boolean).join(" ") || undefined,
+      })
+    )
+    break
+  }
+  case "site": {
+    need(org, "<org>")
+    print(await call("GET", "/assignments/site"))
     break
   }
   case "follow-up": {
@@ -312,7 +337,7 @@ switch (command) {
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | approve | rollback | console"
+      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | rollback | site | console"
     )
     process.exit(2)
   }

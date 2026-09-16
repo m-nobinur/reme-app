@@ -40,8 +40,9 @@ import {
 } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
+import { activeDeployment, decideApproval, requestReview } from "./publish.ts"
 import { probe, sandboxFor } from "./sandbox.ts"
-import { previewHost } from "./seed.ts"
+import { previewHost, siteHost } from "./seed.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
 
 /**
@@ -60,7 +61,7 @@ const envelope = (body: Omit<ErrorEnvelope, "occurred_at">): ErrorEnvelope => ({
 
 const failure = (
   c: Context,
-  status: 400 | 401 | 404 | 409 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 503,
   body: Omit<ErrorEnvelope, "occurred_at">
 ) => c.json(envelope(body), status)
 
@@ -448,6 +449,43 @@ console_.post("/facts", async (c) => {
   return c.json({ facts: result.facts }, result.replayed ? 200 : 201)
 })
 
+/** What the site serves now, and what a rollback would restore (ADR-032). Before `/:id`, which would take the path. */
+console_.get("/site", async (c) => {
+  const orgId = c.get("orgId")
+  const found = await c.get("kit").withOrg({ orgId }, async (db) => {
+    const [org] = await db
+      .select({ slug: orgs.slug })
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+    const active = await activeDeployment(db, orgId)
+    const revisionIds = [active?.revisionId, active?.previousRevisionId].filter(
+      (id): id is string => typeof id === "string"
+    )
+    const revisions =
+      revisionIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(siteRevisions)
+            .where(
+              sql`${siteRevisions.id} in (${sql.join(
+                revisionIds.map((id) => sql`${id}`),
+                sql`, `
+              )})`
+            )
+    return { slug: org?.slug ?? null, active, revisions }
+  })
+  const byId = new Map(found.revisions.map((r) => [r.id, toSiteRevision(r)]))
+  return c.json({
+    host: found.slug ? siteHost(found.slug, c.env.SITE_HOST_SUFFIX) : null,
+    config_version: found.active?.configVersion ?? null,
+    active: found.active ? (byId.get(found.active.revisionId) ?? null) : null,
+    previous: found.active?.previousRevisionId
+      ? (byId.get(found.active.previousRevisionId) ?? null)
+      : null,
+  })
+})
+
 /** A build no one is still working on, which a follow-up may continue. */
 const FOLLOW_UP_FROM = new Set([
   "preview_ready",
@@ -588,22 +626,6 @@ console_.post("/:id/cancel", async (c) => {
   return c.json({ assignment_id: id, state })
 })
 
-/**
- * The routes whose stories have not landed answer 501 with the story that
- * lands them, the way the router's `/api/*` does until ingest exists. The
- * console script and page already post to them, so every later done-when is
- * exercised through the same commands.
- */
-const notYet = (story: string, what: string) => (c: Context) =>
-  c.json(
-    envelope({
-      class: "resource",
-      code: "route.not_implemented",
-      message: `${what} lands with story ${story}.`,
-      detail: { story },
-    }),
-    501
-  )
 /**
  * §7.2, as the CoS would do it: the answer becomes a canonical fact with
  * `owner_stated` provenance, then an `information.answered` row, then the
@@ -819,8 +841,146 @@ console_.get("/:id/preview", async (c) => {
   })
 })
 
-console_.post("/:id/approve", notYet("P3", "Approving a revision"))
-console_.post("/rollback", notYet("P3", "Rolling a site back"))
+/** A refusal from the publisher's rules, as the envelope, or null when it was something else. */
+function refused(c: Context, error: unknown) {
+  if (!(error instanceof TransitionError)) return null
+  if (error.code === "assignment.not_found") {
+    return failure(c, 404, {
+      class: "resource",
+      code: error.code,
+      message: "No assignment with that id in this business.",
+      detail: {},
+    })
+  }
+  if (error.errorClass === "validation") {
+    return failure(c, 409, {
+      class: "validation",
+      code: error.code,
+      message: error.message,
+      detail: {},
+    })
+  }
+  return null
+}
+
+/**
+ * `POST /:id/review` (ADR-032): the build goes in front of an owner. The
+ * request is recorded for the latest preview revision and expires in 72
+ * hours; nothing publishes until someone decides.
+ */
+console_.post("/:id/review", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const ids = { orgId: c.get("orgId"), assignmentId: c.req.param("id") }
+  try {
+    const { request, replayed } = await requestReview(c.get("kit"), ids)
+    return c.json(request, replayed ? 200 : 201)
+  } catch (error) {
+    return refused(c, error) ?? Promise.reject(error)
+  }
+})
+
+/**
+ * `POST /:id/approve` (ADR-032): the console deciding as the owner would,
+ * which only a Worker with `CONSOLE_APPROVALS=allow` accepts. The revision
+ * named must be the one the review was requested for; the decision and the
+ * move to `release_candidate` share a transaction, and the publish is its
+ * own Workflow keyed by the approval id, so a second create is refused.
+ */
+console_.post("/:id/approve", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  if (c.env.CONSOLE_APPROVALS !== "allow") {
+    return failure(c, 403, {
+      class: "permission",
+      code: "approval.console_forbidden",
+      message: "This Worker does not accept approvals from the console.",
+      detail: {},
+    })
+  }
+  const body = (await c.req.json().catch(() => ({}))) as {
+    revision_id?: unknown
+  }
+  if (typeof body.revision_id !== "string" || !body.revision_id) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "approval.malformed",
+      message: "An approval names the revision_id the reviewer saw.",
+      detail: {},
+    })
+  }
+  const orgId = c.get("orgId")
+  const ids = { orgId, assignmentId: c.req.param("id") }
+  let decision: Awaited<ReturnType<typeof decideApproval>>
+  try {
+    decision = await decideApproval(c.get("kit"), ids, {
+      revisionId: body.revision_id,
+      decidedBy: { kind: "console" },
+    })
+  } catch (error) {
+    const answer = refused(c, error)
+    if (answer) return answer
+    throw error
+  }
+  const approvalId = decision.decision.approval_id
+  try {
+    await c.env.PUBLISHES.create({
+      id: approvalId,
+      params: { org_id: orgId, approval_id: approvalId },
+    })
+  } catch {
+    // Already created: the approval id is the instance id (ADR-032).
+  }
+  return c.json(
+    { ...decision.decision, workflow_instance_id: approvalId },
+    decision.replayed ? 200 : 202
+  )
+})
+
+/**
+ * `POST /rollback` (ADR-032): activate the previous revision through the
+ * publisher, keyed by the idempotency key so a repeated request is one
+ * rollback and not two, which would be a roll forward.
+ */
+console_.post("/rollback", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const orgId = c.get("orgId")
+  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown }
+  const reason =
+    typeof body.reason === "string" && body.reason.trim()
+      ? body.reason.trim().slice(0, 300)
+      : "rolled back from the console"
+  const active = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) => activeDeployment(db, orgId))
+  if (!active?.previousRevisionId) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "rollback.nothing_previous",
+      message: "This site has no previous revision to roll back to.",
+      detail: {},
+    })
+  }
+  const id = `rollback-${key.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}`
+  let created = true
+  try {
+    await c.env.PUBLISHES.create({
+      id,
+      params: { org_id: orgId, site_id: orgId, rollback: { key, reason } },
+    })
+  } catch {
+    created = false
+  }
+  return c.json(
+    {
+      workflow_instance_id: id,
+      target_revision_id: active.previousRevisionId,
+      from_revision_id: active.revisionId,
+    },
+    created ? 202 : 200
+  )
+})
 
 function notFound(c: Context, id: string) {
   return failure(c, 404, {

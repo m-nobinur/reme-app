@@ -13,6 +13,8 @@
   "name": "reme-router",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
+  // The Postgres driver behind the KV-miss fallback needs the Node layer.
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   // Neither host can answer a request correctly: a claim's host never equals a
   // workers.dev name and a pointer lookup on one always misses, so a preview
@@ -31,5 +33,10 @@
     { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" }
   ],
   // The same bucket the orchestrator writes: `sites/{site}/{rev}/...`.
-  "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }]
+  "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // The truth behind the cache (§11.1.3): read on a pointer miss only, and
+  // the answer is written back to KV. The same staging config as the api.
+  "hyperdrive": [
+    { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
+  ]
 }

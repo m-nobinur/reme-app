@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@workspace/contracts": "workspace:*",
+    "@workspace/db": "workspace:*",
     "@workspace/gates": "workspace:*",
     "hono": "4.13.7"
   },
