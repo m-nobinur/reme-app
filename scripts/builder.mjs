@@ -19,6 +19,7 @@
 //   steer    <org> <id> <message>            join the running conversation at the next turn
 //   review   <org> <id>                      put the build in front of the owner: an approval request
 //   approve  <org> <id> <revision_id>        approve as the owner would; asks for the review first if none is open
+//   reject   <org> <id> <revision_id>        reject as the owner would: the build ends cancelled
 //   rollback <org> [reason]                  activate the previous revision through the publisher
 //   site     <org>                           what the site serves now, and what a rollback would restore
 //   follow-up <org> <id> <text>              a new build on a finished one: its goal plus the text
@@ -266,6 +267,16 @@ switch (command) {
     )
     break
   }
+  case "reject": {
+    need(org, "<org>")
+    need(id, "<id>")
+    print(
+      await call("POST", `/assignments/${id}/reject`, {
+        revision_id: need(more[0], "<revision_id>"),
+      })
+    )
+    break
+  }
   case "rollback": {
     need(org, "<org>")
     print(
@@ -337,7 +348,7 @@ switch (command) {
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | rollback | site | console"
+      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site | console"
     )
     process.exit(2)
   }

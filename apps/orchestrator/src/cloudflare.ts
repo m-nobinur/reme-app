@@ -9,6 +9,7 @@ import {
   assignments,
   eq,
   facts,
+  listOrgIds,
   type Tenancy,
   tenancy,
   toFactRecord,
@@ -31,6 +32,7 @@ import {
   verifyArtifact,
   writePointer,
 } from "./publish.ts"
+import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
@@ -564,6 +566,18 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       )
     }
 
+    // Retention (ADR-031), after the probes and any rollback so the active
+    // and previous revisions are read as they stand now, never from the
+    // target this instance opened with. A failed mark is corrected by the
+    // next publish and never fails a release.
+    await step.do("retire others", () =>
+      run((kit) =>
+        kit.withOrg({ orgId }, async (db) => ({
+          retired: await retireOthers(db, target.site_id),
+        }))
+      )
+    )
+
     // A publish ends a site lock holder (§13): whoever queued behind it runs.
     const redriven = await step.do("redrive queued", () =>
       run((kit) => redriveQueued(this.env, kit, orgId))
@@ -574,4 +588,102 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       redriven,
     }
   }
+}
+
+/** Orgs per sweep step: idempotent work, so a retried step redoing a finished org changes nothing. */
+const SWEEP_CHUNK = 50
+
+/** The hour the sweep runs for, `YYYYMMDDHH`, which is also its instance id's suffix. */
+export const sweepHour = (at: number) =>
+  new Date(at).toISOString().slice(0, 13).replace(/[-T]/g, "")
+
+/**
+ * The hourly sweep (ADR-032): one instance per hour, keyed by the hour so a
+ * duplicate is refused, over every org in chunks. Each org parks its expired
+ * reviews, re-drives what queued behind a site lock, and deletes the files
+ * of every revision past its window through the one guarded delete. An org
+ * that throws is logged and counted, and the rest of its chunk and the
+ * chunks after it still run.
+ *
+ * Fan-out is one org at a time, every hour. When orgs pass roughly 500, or
+ * a run's wall clock passes an hour, the selection moves to orgs with work
+ * due or to one instance per chunk (architect ruling, recorded in ADR-032).
+ */
+export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
+  async run(event: WorkflowEvent<{ hour: string }>, step: WorkflowStep) {
+    const kitFor = () => tenancy(this.env.HYPERDRIVE.connectionString)
+    const orgIds = await step.do("list orgs", async () => {
+      const kit = kitFor()
+      try {
+        return await listOrgIds(kit)
+      } finally {
+        await kit.close()
+      }
+    })
+    const totals = {
+      orgs: orgIds.length,
+      parked: 0,
+      redriven: 0,
+      deleted: 0,
+      failed: 0,
+    }
+    for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+      const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+      const counts = await step.do(`sweep ${i / SWEEP_CHUNK + 1}`, async () => {
+        const kit = kitFor()
+        const sum: SweepCounts & { failed: number } = {
+          parked: 0,
+          redriven: 0,
+          deleted: 0,
+          failed: 0,
+        }
+        try {
+          for (const orgId of chunk) {
+            try {
+              const c = await sweepOrg(this.env, kit, orgId)
+              sum.parked += c.parked
+              sum.redriven += c.redriven
+              sum.deleted += c.deleted
+            } catch (error) {
+              sum.failed++
+              console.error(
+                JSON.stringify({
+                  sweep: event.payload.hour,
+                  org_id: orgId,
+                  code:
+                    (error as { code?: string }).code ?? (error as Error).name,
+                })
+              )
+            }
+          }
+        } finally {
+          await kit.close()
+        }
+        return sum
+      })
+      totals.parked += counts.parked
+      totals.redriven += counts.redriven
+      totals.deleted += counts.deleted
+      totals.failed += counts.failed
+    }
+    // The run's one line, for the alert on a sweep that deletes nothing for a week.
+    console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))
+    return totals
+  }
+}
+
+/**
+ * flue forwards every non-HTTP handler exported here into the Worker's
+ * default export. The cron creates the hour's sweep; a second firing for the
+ * same hour is refused by the instance id and swallowed.
+ */
+export default {
+  async scheduled(controller: ScheduledController, env: Env) {
+    const hour = sweepHour(controller.scheduledTime)
+    try {
+      await env.SWEEPS.create({ id: `sweep-${hour}`, params: { hour } })
+    } catch {
+      // Already created for this hour.
+    }
+  },
 }

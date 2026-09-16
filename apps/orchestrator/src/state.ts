@@ -5,6 +5,7 @@ import {
   eq,
   events,
   type OrgScopedDb,
+  siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -25,6 +26,12 @@ export const TERMINAL: readonly AssignmentState[] = [
 
 /** Repairing is entered at most this many times per assignment (§8.4). */
 export const REPAIR_LIMIT = 3
+
+/** How long a retired revision's files stay before the sweep deletes them (ADR-031). */
+export const RETENTION_DAYS = 7
+
+export const retireAfter = (now: Date) =>
+  new Date(now.getTime() + RETENTION_DAYS * 24 * 60 * 60 * 1000)
 
 /**
  * Where each state may be entered from. §8.4's direct `Validating →
@@ -113,7 +120,7 @@ async function repairsSoFar(
 }
 
 /** The state a stop left, read from the latest transition that entered `state`. */
-async function enteredFrom(
+export async function enteredFrom(
   db: OrgScopedDb,
   assignmentId: string,
   state: AssignmentState
@@ -261,12 +268,39 @@ export async function transition(
     }
     throw error
   }
+  // A build that ends without publishing takes its unpublished revisions
+  // into the seven-day window (ADR-032). Named by status, so a `published`
+  // revision is unreachable from here by construction; every caller that
+  // cancels or fails passes through this one function (architect ruling).
+  let retired: string[] = []
+  if ((to === "cancelled" || to === "failed") && row.kind.startsWith("site.")) {
+    const now = new Date()
+    retired = (
+      await db
+        .update(siteRevisions)
+        .set({
+          status: "retired",
+          retireAfter: retireAfter(now),
+          updatedAt: now,
+        })
+        .where(
+          sql`${siteRevisions.assignmentId} = ${row.id} and ${siteRevisions.status} in ('building', 'preview') and ${siteRevisions.retireAfter} is null`
+        )
+        .returning({ id: siteRevisions.id })
+    ).map((r) => r.id)
+  }
   const eventId = await appendEvent(db, {
     orgId: row.orgId,
     assignmentId: row.id,
     staffId: row.staffId,
     type: "assignment.state_changed",
-    payload: { from, to, version, ...input.payload },
+    payload: {
+      from,
+      to,
+      version,
+      ...input.payload,
+      ...(retired.length > 0 ? { retired_revisions: retired } : {}),
+    },
   })
   await db.insert(assignmentTransitions).values({
     orgId: row.orgId,

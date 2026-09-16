@@ -154,6 +154,7 @@
       "probe 5",
       "until minute 10",
       "probe 10",
+      "retire others",
       "redrive queued"
     ],
     "refused": ["read target", "verify artifact", "refuse"],
@@ -167,6 +168,7 @@
       "probe 2",
       "roll back",
       "pointer after rollback",
+      "retire others",
       "redrive queued"
     ],
     "rollback": [
@@ -181,7 +183,12 @@
       "probe 5",
       "until minute 10",
       "probe 10",
+      "retire others",
       "redrive queued"
     ]
+  },
+  "SweepWorkflow": {
+    "one chunk": ["list orgs", "sweep 1"],
+    "two chunks": ["list orgs", "sweep 1", "sweep 2"]
   }
 }

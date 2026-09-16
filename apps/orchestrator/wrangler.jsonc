@@ -40,8 +40,16 @@
       "name": "reme-publish",
       "binding": "PUBLISHES",
       "class_name": "PublishWorkflow"
+    },
+    {
+      "name": "reme-sweep",
+      "binding": "SWEEPS",
+      "class_name": "SweepWorkflow"
     }
   ],
+  // The hourly retention sweep (ADR-032), created by the `scheduled` handler
+  // in src/cloudflare.ts. Staging only; production's cron lands with it.
+  "triggers": { "crons": ["0 * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
   // by nothing else in this Worker; a test holds that.
   "kv_namespaces": [
@@ -103,6 +111,11 @@
           "name": "reme-publish-production",
           "binding": "PUBLISHES",
           "class_name": "PublishWorkflow"
+        },
+        {
+          "name": "reme-sweep-production",
+          "binding": "SWEEPS",
+          "class_name": "SweepWorkflow"
         }
       ],
       // Created with the production router; the id lands here then.

@@ -209,11 +209,18 @@ export async function validateRevision(
       report_id: validation.report_id,
       revision_id: input.revision_id,
     }
+    // Every revision carries the Developer's own summary from here on, the
+    // ones that never publish included (ADR-031); a pass also makes it the
+    // preview.
+    await db
+      .update(siteRevisions)
+      .set({
+        summary: summaryOf(report),
+        ...(failed.length === 0 ? { status: "preview" as const } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(siteRevisions.id, input.revision_id))
     if (failed.length === 0) {
-      await db
-        .update(siteRevisions)
-        .set({ status: "preview", updatedAt: new Date() })
-        .where(eq(siteRevisions.id, input.revision_id))
       await transition(db, {
         ...ids,
         to: "preview_ready",
@@ -266,6 +273,14 @@ export async function validateRevision(
     }
   })
 }
+
+/** The change summary a kept revision carries: the reasons, or the report's one line. */
+export const summaryOf = (
+  report: Pick<CompletionReport, "changes" | "summary">
+) =>
+  report.changes.length > 0
+    ? report.changes.map((c) => c.reason).join("; ")
+    : report.summary
 
 function recordedVerdict(
   state: string,

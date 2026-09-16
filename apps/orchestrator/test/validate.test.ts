@@ -183,6 +183,24 @@ live("the gates step", () => {
     )
   })
 
+  it("writes the Developer's summary on the revision whether the gates pass or fail", async () => {
+    const summary = async (b: Awaited<ReturnType<typeof built>>) => {
+      const [revision] = await kit.withOrg({ orgId: b.orgId }, (db) =>
+        db
+          .select({ summary: siteRevisions.summary })
+          .from(siteRevisions)
+          .where(eq(siteRevisions.id, b.input.revision_id))
+      )
+      return revision?.summary
+    }
+    const passed = await built(GOOD)
+    await validateRevision(kit, passed.sites, passed.ids, passed.input)
+    expect(await summary(passed)).toBe("Filled from facts")
+    const failed = await built(page("<p>$49 an hour</p>"))
+    await validateRevision(kit, failed.sites, failed.ids, failed.input)
+    expect(await summary(failed)).toBe("Filled from facts")
+  })
+
   it("sends a fabricated price back through repairing, naming the node", async () => {
     const b = await built(page("<p>$49 an hour</p>"))
     const verdict = await validateRevision(kit, b.sites, b.ids, b.input)

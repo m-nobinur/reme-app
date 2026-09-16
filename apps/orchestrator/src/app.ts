@@ -40,7 +40,12 @@ import {
 } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
-import { activeDeployment, decideApproval, requestReview } from "./publish.ts"
+import {
+  activeDeployment,
+  decideApproval,
+  rejectApproval,
+  requestReview,
+} from "./publish.ts"
 import { probe, sandboxFor } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
@@ -935,6 +940,40 @@ console_.post("/:id/approve", async (c) => {
     { ...decision.decision, workflow_instance_id: approvalId },
     decision.replayed ? 200 : 202
   )
+})
+
+/**
+ * `POST /:id/reject`: the other answer to a review. The build ends
+ * `cancelled`, which frees the site for a fresh build, and its candidate
+ * enters the seven-day window. Same target check as approve; no console
+ * gate, since nothing publishes.
+ */
+console_.post("/:id/reject", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const body = (await c.req.json().catch(() => ({}))) as {
+    revision_id?: unknown
+  }
+  if (typeof body.revision_id !== "string" || !body.revision_id) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "approval.malformed",
+      message: "A rejection names the revision_id the reviewer saw.",
+      detail: {},
+    })
+  }
+  const ids = { orgId: c.get("orgId"), assignmentId: c.req.param("id") }
+  try {
+    const { decision, replayed } = await rejectApproval(c.get("kit"), ids, {
+      revisionId: body.revision_id,
+      decidedBy: { kind: "console" },
+    })
+    return c.json(decision, replayed ? 200 : 201)
+  } catch (error) {
+    const answer = refused(c, error)
+    if (answer) return answer
+    throw error
+  }
 })
 
 /**
