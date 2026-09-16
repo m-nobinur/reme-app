@@ -145,3 +145,15 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   Certificate Manager, because the owner declined both; per-slug routes, because `n` changes on
   every build. Change if: the production router's first commit shows `*.remeai.co.uk/*` beating
   `*-stg.remeai.co.uk/*`. In that case, staging previews go back to the `staging-preview` host.
+- **Measured 2026-09-16, with the staging router.** Two throwaway Workers on the zone for one
+  minute: `*-stg.remeai.co.uk/*` and `*g.remeai.co.uk/*`, the wider pattern chosen so that only
+  `staging.remeai.co.uk` and no production hostname was intercepted. `anything-stg.remeai.co.uk`
+  answered from the `*-stg` Worker, so the pattern with the longer literal suffix wins the host;
+  `staging.remeai.co.uk` answered its own Worker's page through the wider Worker's
+  `fetch(request)`, so a route runs before a custom domain and the passthrough reaches it.
+  `staging-orchestrator` and `staging-preview` matched neither pattern and were untouched. The
+  exact pair with `*.remeai.co.uk/*` runs with the production router's first commit, on the
+  owner's yes, since that pattern would intercept every production hostname for the window
+  (issue #90). The staging router deploys with `*-stg.remeai.co.uk/*` on this measurement. With
+  the router serving previews, `staging-preview.remeai.co.uk` is no longer a hostname of the
+  orchestrator; its custom domain is removed with the stand-in (issue #71).

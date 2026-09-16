@@ -5,11 +5,11 @@
   "api-tenancy": 21,
   "api-unit": 15,
   "api-unit+db": 23,
-  "orchestrator-unit": 43,
-  "orchestrator-unit+db": 87,
+  "orchestrator-unit": 36,
+  "orchestrator-unit+db": 79,
   "orchestrator-probe": 5,
   "facade-unit": 61,
-  "gates-unit": 13,
-  "router-unit": 1,
+  "gates-unit": 19,
+  "router-unit": 14,
   "starter-site": 24
 }

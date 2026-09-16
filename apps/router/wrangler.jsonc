@@ -14,9 +14,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
   "observability": { "enabled": true },
-  // Explicit, like the other Workers: preview aliases are per-PR versions on
-  // workers.dev and the deployed Worker answers on the zone alone.
-  "preview_urls": true,
+  // Neither host can answer a request correctly: a claim's host never equals a
+  // workers.dev name and a pointer lookup on one always misses, so a preview
+  // URL for this Worker is a URL that only ever 404s. The per-PR preview
+  // workflow does not upload it; `pnpm size` bundles it on every PR.
+  "preview_urls": false,
   "workers_dev": false,
   "routes": [
     { "pattern": "*-stg.remeai.co.uk/*", "zone_name": "remeai.co.uk" }

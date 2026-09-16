@@ -171,15 +171,6 @@ jobs:
           --preview-alias "$PREVIEW_ALIAS"
           --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
 
-      # Uploaded like the others, so a PR that breaks the router's bundle is
-      # red here. No URL is commented: the alias answers on workers.dev, where
-      # no tenant or preview host resolves, so it serves only its own 404.
-      - name: Upload the router version
-        run: >
-          pnpm --filter router exec wrangler versions upload
-          --preview-alias "$PREVIEW_ALIAS"
-          --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
-
       - run: pnpm --filter web build
 
       # `--var` overrides the committed `WORKOS_REDIRECT_URI`, which names the
