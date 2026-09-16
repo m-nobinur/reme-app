@@ -14,7 +14,7 @@ export type { Edit } from "./edits.ts"
 export { applyEdits } from "./edits.ts"
 export { FacadeError } from "./errors.ts"
 export * from "./flue.ts"
-export type { ToolPolicy, TurnGate } from "./hooks.ts"
+export type { ToolPolicy, TurnGate, TurnGateOptions } from "./hooks.ts"
 export {
   bashRefusal,
   boundResult,
@@ -24,6 +24,8 @@ export {
   HOOK_TIMEOUT_MS,
   observer,
   pathRefusal,
+  REPEATED_FAILURES,
+  REPEATING_FAILURE,
   TOOL_RESULT_MAX_CHARS,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"

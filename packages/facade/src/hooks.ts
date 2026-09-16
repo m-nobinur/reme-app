@@ -210,6 +210,30 @@ export type TurnGate = {
   open: () => void
 }
 
+export type TurnGateOptions = {
+  /** Runs once when the gate ends a turn on the model's behalf, with the reason the Workflow will see. */
+  onInterrupt?: (reason: string) => void
+  /**
+   * A thrown tool error that is the platform's rather than the model's: the
+   * reason to end the turn with at once, or null. The caller knows its
+   * sandbox; the gate does not.
+   */
+  interruptNow?: (error: unknown) => string | null
+}
+
+/** Consecutive thrown tool errors with the same text before the gate ends the turn. */
+export const REPEATED_FAILURES = 3
+
+/** The reason a turn ends when the same failure keeps coming back. */
+export const REPEATING_FAILURE = "tool.repeating_failure"
+
+/** A thrown error's identity: its message, whitespace collapsed, cut short. */
+const failureText = (error: unknown) =>
+  (error instanceof Error ? error.message : String(error))
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 200)
+
 /**
  * One terminal call per turn and nothing that writes after it (architect
  * ruling, parallelism). The first `ask_chief` or `report_complete` closes the
@@ -217,10 +241,32 @@ export type TurnGate = {
  * is refused even when the batch runs in parallel; a terminal call that throws
  * (a build that fails) reopens it so the model can fix what it reported.
  */
-export function createTurnGate(): TurnGate {
+export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
   // ponytail: in memory, so an isolate restart mid-response forgets a closed
   // turn; move it to persistent state the first time a recording shows that.
   let closedBy: string | null = null
+  // The repeated-failure counter (architect ruling, open item 55): keyed on
+  // the error's text and not the tool's name, because the incident that
+  // asked for it alternated bash and report_complete. Only a thrown error
+  // counts: a command that ran and exited non-zero is the model doing its
+  // job. Any result that returns resets it, and so does every delivery.
+  let lastFailure: string | null = null
+  let repeats = 0
+  const ended = (reason: string, text: string) => {
+    closedBy = reason
+    repeats = 0
+    lastFailure = null
+    options.onInterrupt?.(reason)
+    // A terminating result, the way ask_chief and report_complete end a
+    // turn; a throw would go back to the model as one more tool error.
+    return {
+      content: [{ type: "text", text }],
+      details: { code: reason },
+      terminate: true,
+      // The interceptor is generic over the operation's own result; a tool
+      // result is what every tool operation resolves to.
+    } as never
+  }
   const interceptor: FlueExecutionInterceptor = async (
     operation,
     _ctx,
@@ -244,12 +290,33 @@ export function createTurnGate(): TurnGate {
         { tool: name, closed_by: closedBy }
       )
     }
-    if (!TERMINAL.has(name)) return next()
-    closedBy = name
+    if (TERMINAL.has(name)) closedBy = name
     try {
-      return await next()
+      const result = await next()
+      repeats = 0
+      lastFailure = null
+      return result
     } catch (error) {
-      closedBy = null
+      if (TERMINAL.has(name)) closedBy = null
+      const now = options.interruptNow?.(error)
+      if (now) {
+        return ended(
+          now,
+          `The platform interrupted your environment (${now}). This turn is over; the work resumes shortly. Stop here.`
+        )
+      }
+      const text = failureText(error)
+      if (text === lastFailure) repeats += 1
+      else {
+        lastFailure = text
+        repeats = 1
+      }
+      if (repeats >= REPEATED_FAILURES) {
+        return ended(
+          REPEATING_FAILURE,
+          `The same failure has come back ${repeats} times: "${text}". This turn is over; the work resumes with a fresh look. Stop here.`
+        )
+      }
       throw error
     }
   }
@@ -257,6 +324,8 @@ export function createTurnGate(): TurnGate {
     interceptor,
     open: () => {
       closedBy = null
+      repeats = 0
+      lastFailure = null
     },
   }
 }
