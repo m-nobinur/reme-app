@@ -410,6 +410,8 @@ export interface components {
       /** Format: uuid */
       org_id: string
       /** Format: uuid */
+      site_id: string
+      /** Format: uuid */
       revision_id: string
       host: string
       exp: number

@@ -22,6 +22,11 @@ describe("PreviewClaim", () => {
     const { host: _host, ...hostless } = claim
     expect(PreviewClaim.safeParse(hostless).success).toBe(false)
   })
+
+  it("names the site whose prefix holds the revision", () => {
+    const { site_id: _site, ...siteless } = claim
+    expect(PreviewClaim.safeParse(siteless).success).toBe(false)
+  })
 })
 
 describe("SitePointer", () => {
