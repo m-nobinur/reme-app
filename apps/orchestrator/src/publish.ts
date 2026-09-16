@@ -21,6 +21,7 @@ import { checkBuild, checkContent, parsePage } from "@workspace/gates"
 import { siteHost } from "./seed.ts"
 import {
   appendEvent,
+  enteredFrom,
   type Ids,
   lockRow,
   TransitionError,
@@ -154,10 +155,77 @@ export function requestReview(
 export type DecidedBy = ApprovalDecision["decided_by"]
 
 /**
+ * The open request a decision answers, with the assignment locked: from
+ * `awaiting_review`, or from the park the sweep moves an unanswered review
+ * into after 72 hours (§13), which is told apart from a budget park by the
+ * state it was entered from. A request answered from the park may be past
+ * its expiry: ADR-032 says a late approval still publishes and is still a
+ * human act. From `awaiting_review` an expired request is still refused.
+ */
+async function openForDecision(
+  db: OrgScopedDb,
+  row: Awaited<ReturnType<typeof lockRow>>,
+  revisionId: string
+) {
+  const parked =
+    row.state === "blocked_on_approval" &&
+    (await enteredFrom(db, row.id, "blocked_on_approval")) === "awaiting_review"
+  if (row.state !== "awaiting_review" && !parked) {
+    throw new TransitionError(
+      "approval.not_requested",
+      "validation",
+      `a decision answers a review; the assignment is ${row.state}`
+    )
+  }
+  const open = await openRequest(db, row.id)
+  if (!open) {
+    throw new TransitionError(
+      "approval.not_requested",
+      "validation",
+      "no open approval request on this assignment"
+    )
+  }
+  const target = ApprovalTarget.parse(open.target)
+  if (target.kind !== "revision" || target.revision_id !== revisionId) {
+    throw new TransitionError(
+      "approval.target_mismatch",
+      "validation",
+      "the revision named is not the one the review was requested for"
+    )
+  }
+  const expired = open.expiresAt.getTime() <= Date.now()
+  if (expired && !parked) {
+    throw new TransitionError(
+      "approval.expired",
+      "validation",
+      "the review request has expired"
+    )
+  }
+  return { open, expired }
+}
+
+/** A decision already written for this revision, so a repeated call replays it (R5). */
+async function priorDecision(
+  db: OrgScopedDb,
+  assignmentId: string,
+  revisionId: string,
+  decision: "approved" | "rejected"
+) {
+  const [row] = await db
+    .select()
+    .from(approvals)
+    .where(
+      sql`${approvals.assignmentId} = ${assignmentId} and ${approvals.decision} = ${decision} and ${approvals.revisionId} = ${revisionId}`
+    )
+    .limit(1)
+  return row ?? null
+}
+
+/**
  * `POST /:id/approve`: the decision, written once against the open request,
- * only when the revision the reviewer names is the request's target and the
- * request has not expired, with `awaiting_review` to `release_candidate` in
- * the same transaction. A second identical call replays the decision.
+ * only when the revision the reviewer names is the request's target, with
+ * `awaiting_review` (or the park) to `release_candidate` in the same
+ * transaction. A second identical call replays the decision.
  */
 export function decideApproval(
   kit: Tenancy,
@@ -167,45 +235,15 @@ export function decideApproval(
   return kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const row = await lockRow(db, ids.assignmentId)
     if (row.state === "release_candidate" || row.state === "published") {
-      const [decided] = await db
-        .select()
-        .from(approvals)
-        .where(
-          sql`${approvals.assignmentId} = ${row.id} and ${approvals.decision} = 'approved' and ${approvals.revisionId} = ${input.revisionId}`
-        )
-        .limit(1)
+      const decided = await priorDecision(
+        db,
+        row.id,
+        input.revisionId,
+        "approved"
+      )
       if (decided) return { decision: toDecision(decided), replayed: true }
     }
-    if (row.state !== "awaiting_review") {
-      throw new TransitionError(
-        "approval.not_requested",
-        "validation",
-        `an approval answers a review; the assignment is ${row.state}`
-      )
-    }
-    const open = await openRequest(db, row.id)
-    if (!open) {
-      throw new TransitionError(
-        "approval.not_requested",
-        "validation",
-        "no open approval request on this assignment"
-      )
-    }
-    const target = ApprovalTarget.parse(open.target)
-    if (target.kind !== "revision" || target.revision_id !== input.revisionId) {
-      throw new TransitionError(
-        "approval.target_mismatch",
-        "validation",
-        "the revision named is not the one the review was requested for"
-      )
-    }
-    if (open.expiresAt.getTime() <= Date.now()) {
-      throw new TransitionError(
-        "approval.expired",
-        "validation",
-        "the review request has expired"
-      )
-    }
+    const { open, expired } = await openForDecision(db, row, input.revisionId)
     const decidedAt = new Date()
     const [decided] = await db
       .update(approvals)
@@ -222,6 +260,59 @@ export function decideApproval(
       ...ids,
       to: "release_candidate",
       expectedVersion: row.version,
+      payload: { approval_id: decision.approval_id },
+    })
+    await appendEvent(db, {
+      orgId: row.orgId,
+      assignmentId: row.id,
+      staffId: row.createdByStaffId,
+      type: "approval.decided",
+      payload: { ...decision, ...(expired ? { expired: true } : {}) },
+    })
+    return { decision, replayed: false }
+  })
+}
+
+/**
+ * `POST /:id/reject`: the other decision, written once against the same
+ * open request under the same target check, and the build ends `cancelled`
+ * with reason `review.rejected`, which releases the site lock and takes the
+ * candidate into the seven-day window (ADR-031). No console gate: a
+ * rejection publishes nothing.
+ */
+export function rejectApproval(
+  kit: Tenancy,
+  ids: Ids,
+  input: { revisionId: string; decidedBy: DecidedBy }
+): Promise<{ decision: ApprovalDecision; replayed: boolean }> {
+  return kit.withOrg({ orgId: ids.orgId }, async (db) => {
+    const row = await lockRow(db, ids.assignmentId)
+    if (row.state === "cancelled") {
+      const decided = await priorDecision(
+        db,
+        row.id,
+        input.revisionId,
+        "rejected"
+      )
+      if (decided) return { decision: toDecision(decided), replayed: true }
+    }
+    const { open } = await openForDecision(db, row, input.revisionId)
+    const [decided] = await db
+      .update(approvals)
+      .set({
+        decision: "rejected",
+        decidedBy: input.decidedBy,
+        decidedAt: new Date(),
+      })
+      .where(eq(approvals.id, open.id))
+      .returning()
+    if (!decided) throw new Error("the approval vanished under the lock")
+    const decision = toDecision(decided)
+    await transition(db, {
+      ...ids,
+      to: "cancelled",
+      expectedVersion: row.version,
+      reason: "review.rejected",
       payload: { approval_id: decision.approval_id },
     })
     await appendEvent(db, {

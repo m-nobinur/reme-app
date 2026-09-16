@@ -55,6 +55,38 @@ rolls forward again, because "previous" is whatever the newest row points at; th
 by its idempotency key so a retried command is one rollback. Production runs the same commands
 against `orchestrator.remeai.co.uk` once the production router exists (issue #90).
 
+## Cancelling a stuck assignment
+
+Cancel is legal from every non-terminal state (§13 rule 3) and idempotent: the row moves first,
+then the Workflow instance is terminated and the container destroyed, so a cancel on a build that
+already settled changes nothing.
+
+```sh
+ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder cancel <slug> <assignment id>
+```
+
+A cancelled build's unpublished revisions enter the seven-day retention window in the same
+transaction, which the `assignment.state_changed` event names as `retired_revisions`. A build
+holding the site lock releases it on cancel, and the next hourly sweep re-drives whatever queued
+behind it; `pnpm builder start <slug> <id>` does the same for one queued assignment at once.
+
+## Forcing a retention sweep
+
+The sweep runs on the hour from the orchestrator's cron and is idempotent, so running it again is
+safe. It parks reviews unanswered for 72 hours, re-drives queued builds, and deletes the files of
+revisions retired more than seven days ago through the one guarded delete, which refuses the
+revision a site serves and the one a rollback would restore.
+
+```sh
+pnpm --filter orchestrator exec wrangler workflows trigger reme-sweep '{"hour":"manual-<why>"}'
+pnpm --filter orchestrator exec wrangler workflows instances list reme-sweep
+```
+
+The instance's output carries the counts (orgs, parked, redriven, deleted, failed) and each org
+with work appends a `retention.swept` event; a `revision.files_deleted` event names every key
+deleted. A sweep that deletes nothing for a week while retired revisions exist is the alert to
+raise.
+
 ## Checking production is actually healthy
 
 `/health` is not a `select 1`. It asserts the four things `withOrg` promises on a live connection,

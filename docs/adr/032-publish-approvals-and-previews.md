@@ -110,3 +110,27 @@ An approval needs to change a build in flight rather than a revision at rest; th
 credential rather than a binding (a Cloudflare for SaaS token, a purge token), at which point it
 moves to its own Worker behind a service binding; or Cloudflare documents that a resumed instance
 runs its original code, which would retire the step-name check.
+
+## Amendment, 2026-09-16: the sweep enumerates orgs through a platform read
+
+The hourly sweep runs across tenants, and the tenancy kit had no read that does. Migration 0009
+adds `public.list_org_ids()`, a SECURITY DEFINER function on the shape of `resolve_org_by_slug`,
+returning every org id and nothing else; `listOrgIds(kit)` calls it as `reme_app` with no org
+context and hands out no handle, and every read that follows opens that org's own `withOrg`. This
+is a platform read under §9.2 in the same class as `resolve_org`, and narrower: it takes no
+argument an attacker could enumerate against. The tenancy suite declares it with a probe and
+drives the refusal that matters, that an id from the list reads nothing without a context.
+
+Rejected: a Workflow per org created at publish time, which never sweeps an org that stops
+publishing, and a work-filtered definer function, which couples a security boundary to three
+tenant tables and needs a migration whenever the sweep's definition of work changes.
+
+The sweep is one instance per hour, `sweep-YYYYMMDDHH`, over every org in chunks of 50, created
+by the orchestrator's `scheduled` handler from a cron; each org parks its expired reviews, re-drives
+what queued behind a site lock, and deletes the files of revisions past their window through the
+one guarded delete. A parked review stays approvable, and an approval from the park accepts the
+expired request, so a late approval still publishes as this ADR says. Reversal trigger, for both
+the plain id list and the per-org fan-out: orgs past roughly 500, or a run's wall clock past an
+hour, at which point the selection moves to orgs with work due or to one instance per chunk.
+ADR-031 wrote "a daily sweep"; this ADR's hourly sweep is the one built, and ADR-031 reads as
+amended by it.

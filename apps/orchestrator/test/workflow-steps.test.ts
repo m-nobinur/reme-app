@@ -55,10 +55,12 @@ const ROW = {
   state: "implementing",
   version: 3,
 }
+const orgList: string[] = []
 vi.mock("@workspace/db", () => ({
   assignments: {},
   facts: {},
   eq: () => ({}),
+  listOrgIds: async () => [...orgList],
   toFactRecord: (row: unknown) => ({
     ...(row as object),
     key: "business.phone",
@@ -111,6 +113,14 @@ vi.mock("../src/state.ts", () => ({
   claim: async () =>
     script.claims.shift() ?? { claimed: true, superseded: null },
 }))
+const sweepFailures = new Set<string>()
+vi.mock("../src/retention.ts", () => ({
+  retireOthers: async () => [],
+  sweepOrg: async (_env: unknown, _kit: unknown, orgId: string) => {
+    if (sweepFailures.has(orgId)) throw new Error("org away")
+    return { parked: 1, redriven: 0, deleted: 2 }
+  },
+}))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
   validateRevision: async () => {
@@ -121,7 +131,9 @@ vi.mock("../src/validate.ts", () => ({
   },
 }))
 
-const { AssignmentWorkflow } = await import("../src/cloudflare.ts")
+const { AssignmentWorkflow, SweepWorkflow, sweepHour } = await import(
+  "../src/cloudflare.ts"
+)
 
 type Wake = { payload: Record<string, unknown> } | "timeout"
 
@@ -256,5 +268,63 @@ describe("the assignment Workflow's step names", () => {
         "pool full then provisioned",
       ].sort()
     )
+  })
+})
+
+describe("the sweep Workflow's step names", () => {
+  const sweep = async (orgs: number, failing: string[] = []) => {
+    orgList.length = 0
+    for (let i = 1; i <= orgs; i++) orgList.push(`org-${i}`)
+    sweepFailures.clear()
+    for (const id of failing) sweepFailures.add(id)
+    const names: string[] = []
+    const step = {
+      do: async (name: string, a: unknown, b?: unknown) => {
+        names.push(name)
+        const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>
+        return fn()
+      },
+      sleep: async (name: string) => {
+        names.push(name)
+      },
+    }
+    const env = {
+      HYPERDRIVE: { connectionString: "postgres://stub" },
+    } as unknown as Env
+    const totals = await new SweepWorkflow({} as never, env).run(
+      { payload: { hour: "2026091612" } } as never,
+      step as never
+    )
+    return { names, totals }
+  }
+
+  it("sweeps every org in chunks and counts what each did", async () => {
+    const one = await sweep(2)
+    expect(one.names).toEqual(steps.SweepWorkflow["one chunk"])
+    expect(one.totals).toEqual({
+      orgs: 2,
+      parked: 2,
+      redriven: 0,
+      deleted: 4,
+      failed: 0,
+    })
+    const two = await sweep(51)
+    expect(two.names).toEqual(steps.SweepWorkflow["two chunks"])
+    expect(two.totals.orgs).toBe(51)
+  })
+
+  it("counts an org that throws and keeps sweeping the rest", async () => {
+    const { totals } = await sweep(51, ["org-1", "org-51"])
+    expect(totals).toEqual({
+      orgs: 51,
+      parked: 49,
+      redriven: 0,
+      deleted: 98,
+      failed: 2,
+    })
+  })
+
+  it("names the hour the way the cron does", () => {
+    expect(sweepHour(Date.UTC(2026, 8, 16, 12, 0, 5))).toBe("2026091612")
   })
 })
