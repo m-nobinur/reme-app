@@ -283,6 +283,104 @@ describe("the turn gate", () => {
     async () =>
       value
 
+  it("ends the turn after three identical thrown failures, once, and only reads after it", async () => {
+    const reasons: string[] = []
+    const gate = createTurnGate({ onInterrupt: (r) => reasons.push(r) })
+    const failing = async () => {
+      throw new Error(
+        "Sandbox operation sandbox.exec failed:  transport   away"
+      )
+    }
+    await expect(gate.interceptor(op("bash"), ctx, failing)).rejects.toThrow()
+    await expect(
+      gate.interceptor(op("report_complete"), ctx, failing)
+    ).rejects.toThrow()
+    const third = (await gate.interceptor(op("bash"), ctx, failing)) as {
+      terminate: boolean
+      details: { code: string }
+    }
+    expect(third.terminate).toBe(true)
+    expect(third.details.code).toBe("tool.repeating_failure")
+    expect(reasons).toEqual(["tool.repeating_failure"])
+    await expect(
+      gate.interceptor(op("edit"), ctx, done())
+    ).rejects.toMatchObject({ code: "turn.over" })
+    await expect(gate.interceptor(op("read"), ctx, done())).resolves.toBe("ran")
+    gate.open()
+    await expect(gate.interceptor(op("edit"), ctx, done())).resolves.toBe("ran")
+  })
+
+  it("does not count a result that returned, a different failure, or failures a success separates", async () => {
+    const reasons: string[] = []
+    const gate = createTurnGate({ onInterrupt: (r) => reasons.push(r) })
+    const exitOne = async () => ({
+      content: [{ type: "text", text: "x" }],
+      details: { exitCode: 1 },
+    })
+    for (let i = 0; i < 4; i++) {
+      await expect(
+        gate.interceptor(op("bash"), ctx, exitOne)
+      ).resolves.toMatchObject({ details: { exitCode: 1 } })
+    }
+    const fail = (text: string) => async () => {
+      throw new Error(text)
+    }
+    await expect(gate.interceptor(op("bash"), ctx, fail("a"))).rejects.toThrow(
+      "a"
+    )
+    await expect(gate.interceptor(op("bash"), ctx, fail("b"))).rejects.toThrow(
+      "b"
+    )
+    await expect(gate.interceptor(op("bash"), ctx, fail("a"))).rejects.toThrow(
+      "a"
+    )
+    await expect(gate.interceptor(op("bash"), ctx, fail("a"))).rejects.toThrow(
+      "a"
+    )
+    await expect(gate.interceptor(op("bash"), ctx, done())).resolves.toBe("ran")
+    await expect(gate.interceptor(op("bash"), ctx, fail("a"))).rejects.toThrow(
+      "a"
+    )
+    await expect(gate.interceptor(op("bash"), ctx, fail("a"))).rejects.toThrow(
+      "a"
+    )
+    expect(reasons).toEqual([])
+  })
+
+  it("ends the turn at once on a failure the caller names as the platform's", async () => {
+    class Interrupted extends Error {
+      code = "OPERATION_INTERRUPTED"
+    }
+    const reasons: string[] = []
+    const gate = createTurnGate({
+      onInterrupt: (r) => reasons.push(r),
+      interruptNow: (error) =>
+        (error as { code?: string }).code === "OPERATION_INTERRUPTED"
+          ? "sandbox.updating"
+          : null,
+    })
+    const first = (await gate.interceptor(op("bash"), ctx, async () => {
+      throw new Interrupted(
+        "interrupted while the platform was updating the sandbox runtime"
+      )
+    })) as { terminate: boolean; details: { code: string } }
+    expect(first).toMatchObject({
+      terminate: true,
+      details: { code: "sandbox.updating" },
+    })
+    expect(reasons).toEqual(["sandbox.updating"])
+    await expect(
+      gate.interceptor(op("write"), ctx, done())
+    ).rejects.toMatchObject({ code: "turn.over" })
+    // A thrown error the caller does not name still goes back to the model.
+    gate.open()
+    await expect(
+      gate.interceptor(op("bash"), ctx, async () => {
+        throw new Error("plain")
+      })
+    ).rejects.toThrow("plain")
+  })
+
   it("refuses flue's task tool, so no subagent runs", async () => {
     const gate = createTurnGate()
     await expect(

@@ -42,9 +42,15 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   class InstanceExists extends Error {}
   return { AgentInstanceExistsError: InstanceExists }
 })
+const dispatched: { message: unknown }[] = []
 vi.mock("@workspace/facade", () => ({
   AgentInstanceExistsError,
-  init: () => ({ dispatch: async () => ({ submissionId: "s" }) }),
+  init: () => ({
+    dispatch: async (request: { message: unknown }) => {
+      dispatched.push(request)
+      return { submissionId: "s" }
+    },
+  }),
 }))
 
 const ROW = {
@@ -103,11 +109,20 @@ vi.mock("../src/sandbox.ts", () => ({
   },
   sandboxFor: () => ({ destroy: async () => undefined }),
 }))
+const advanced: [string, string | undefined][] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
     errorClass = "validation"
   },
-  advance: async () => ({}),
+  advance: async (
+    _kit: unknown,
+    _ids: unknown,
+    to: string,
+    options?: { reason?: string }
+  ) => {
+    advanced.push([to, options?.reason])
+    return {}
+  },
   appendEvent: async () => "e",
   parkForBudget: async () => ({}),
   claim: async () =>
@@ -273,6 +288,47 @@ describe("the assignment Workflow's step names", () => {
       ].sort()
     )
   })
+})
+
+describe("an interrupted Developer run", () => {
+  const stopped = (reason: string) =>
+    ({ payload: { kind: "interrupted", reason } }) as Wake
+  const resumes = () =>
+    dispatched
+      .map(
+        (d) =>
+          d.message as { type?: string; attributes?: Record<string, string> }
+      )
+      .filter((m) => m.type === "run.interrupted")
+      .map((m) => m.attributes ?? {})
+
+  it("fails as provider.unavailable after two resumes, the second on the fallback model", async () => {
+    dispatched.length = 0
+    advanced.length = 0
+    const { run } = drive([
+      stopped("stream broke"),
+      stopped("stream broke"),
+      stopped("stream broke"),
+    ])
+    expect(await run()).toMatchObject({ outcome: "failed" })
+    expect(resumes()).toEqual([
+      { attempt: "1" },
+      { attempt: "2", model: "fallback", reason: "stream broke" },
+    ])
+    expect(advanced.at(-1)).toEqual(["failed", "provider.unavailable"])
+  })
+
+  it.each(["sandbox.updating", "tool.repeating_failure"])(
+    "fails as %s and never asks for the fallback model",
+    async (reason) => {
+      dispatched.length = 0
+      advanced.length = 0
+      const { run } = drive([stopped(reason), stopped(reason), stopped(reason)])
+      expect(await run()).toMatchObject({ outcome: "failed" })
+      expect(resumes()).toEqual([{ attempt: "1" }, { attempt: "2" }])
+      expect(advanced.at(-1)).toEqual(["failed", reason])
+    }
+  )
 })
 
 describe("the sweep Workflow's step names", () => {

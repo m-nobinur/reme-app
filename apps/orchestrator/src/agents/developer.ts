@@ -1,6 +1,6 @@
 "use agent"
 import { env } from "cloudflare:workers"
-import { getSandbox } from "@cloudflare/sandbox"
+import { getSandbox, OperationInterruptedError } from "@cloudflare/sandbox"
 import {
   CompletionReport,
   DeploymentManifest,
@@ -26,6 +26,7 @@ import {
   type TurnGate,
   toolInput,
   useAgentStart,
+  useDelivery,
   useInitialData,
   useModel,
   usePersistentState,
@@ -107,12 +108,21 @@ function interrupted(found: Session, observation: unknown) {
     error?: { meta?: { reason?: unknown }; name?: unknown }
   }
   if (o.type !== "operation" || !o.error || found.budgetExhausted) return
-  const key = o.operationId ?? "unknown"
-  if (found.interruptions.has(key)) return
-  found.interruptions.add(key)
   const reason = String(
     o.error.meta?.reason ?? o.error.name ?? "operation failed"
   ).slice(0, 300)
+  wake(found, o.operationId ?? "unknown", reason)
+}
+
+/**
+ * Wake the Workflow once per key with an `interrupted` reason: an operation
+ * that failed, or the turn gate ending the turn on the model's behalf
+ * (open item 55). The log gets the reason first, then the wake.
+ */
+function wake(found: Session, key: string, reason: string) {
+  if (found.interruptions.has(key)) return
+  found.interruptions.add(key)
+  found.tee.emit("developer.interrupted", { reason })
   found.tee
     .flush()
     .then(() => workflow(found.brief.snapshot.assignment_id))
@@ -124,6 +134,19 @@ function interrupted(found: Session, observation: unknown) {
     )
     .catch(() => undefined)
 }
+
+/**
+ * The sandbox SDK's own class for a container the platform replaced under a
+ * running command: the model cannot fix it, so the gate ends the turn at once
+ * and the Workflow resumes when the runtime is back (architect ruling, open
+ * item 55). The code check covers an error that lost its prototype crossing
+ * a boundary; the message is never matched.
+ */
+const platformInterrupted = (error: unknown) =>
+  error instanceof OperationInterruptedError ||
+  (error as { code?: string }).code === "OPERATION_INTERRUPTED"
+    ? "sandbox.updating"
+    : null
 instrument({
   key: Symbol.for("reme.developer"),
   observe: () => undefined,
@@ -167,10 +190,14 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     runtime,
     kit,
     brief,
-    gate: createTurnGate(),
+    gate: undefined as unknown as TurnGate,
     interruptions: new Set(),
     budgetExhausted: false,
   }
+  created.gate = createTurnGate({
+    onInterrupt: (reason) => wake(created, `gate:${reason}`, reason),
+    interruptNow: platformInterrupted,
+  })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
     spentUsd: runtime.budget.model_usd_spent,
@@ -264,7 +291,23 @@ export function Developer({ id }: AgentProps) {
   }
   const current = session(id, brief, runtime)
 
-  useModel(runtime.model, { thinkingLevel: "low" })
+  // The fallback model (open item 50): the Workflow's last resume after a
+  // provider failure asks for it on the signal, and once on it the
+  // conversation stays on it. Read at render, so the switch lands on the
+  // very submission that asked.
+  const delivery = useDelivery()
+  const [onFallback, setOnFallback] = usePersistentState<boolean>(
+    "use_fallback",
+    false
+  )
+  const askedForFallback =
+    delivery.kind === "signal" && delivery.attributes?.model === "fallback"
+  const model =
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
+    (onFallback || askedForFallback) && runtime.fallback
+      ? runtime.fallback
+      : runtime.model
+  useModel(model, { thinkingLevel: "low" })
   const stub = getSandbox(env.SANDBOX as never, id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(
@@ -282,8 +325,20 @@ export function Developer({ id }: AgentProps) {
   )
 
   useAgentStart(async ({ harness }) => {
-    // Every delivery is a new turn, so a turn a terminal tool ended reopens here.
+    // Every delivery is a new turn, so a turn a terminal tool ended reopens
+    // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
+    current.interruptions.clear()
+    if (model !== runtime.model && !onFallback) {
+      setOnFallback(true)
+      current.tee.emit("model.switched", {
+        from: runtime.model,
+        to: model,
+        reason:
+          (delivery.kind === "signal" ? delivery.attributes?.reason : null) ??
+          "provider.unavailable",
+      })
+    }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     if (!segmentLogged) {
       // §10.6: what the model was shown is in the log before it is shown.
