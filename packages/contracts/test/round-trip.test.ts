@@ -207,10 +207,11 @@ describe("__proto__ as a wire key", () => {
     expect(validate(JSON.parse(wire))).toBe(false)
   })
 
-  it("is still accepted and stripped by Zod, which is the open gap", () => {
+  it("is rejected by Zod as well, which closed the gap in 4.6.5", () => {
+    // Up to 4.4.3 a strict object accepted the key and stripped it; 4.6.5
+    // refuses it outright, so the schema and the parser agree again.
     const result = ErrorEnvelope.safeParse(JSON.parse(wire))
-    expect(result.success).toBe(true)
-    expect(Object.keys(result.data ?? {})).not.toContain("__proto__")
+    expect(result.success).toBe(false)
   })
 
   it("agrees with the JSON Schema on every other inherited key name", () => {
