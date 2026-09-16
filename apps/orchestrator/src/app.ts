@@ -32,12 +32,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
-import {
-  creationChoices,
-  followUpGoal,
-  GOAL_MAX,
-  updateFacts,
-} from "./brief.ts"
+import { GOAL_MAX, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import consoleHtml from "./console.html?raw"
 import {
@@ -46,6 +41,7 @@ import {
   rejectApproval,
   requestReview,
 } from "./publish.ts"
+import { publishedSource } from "./revise.ts"
 import { probe, sandboxFor } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
 import { appendEvent, cancel, TransitionError } from "./state.ts"
@@ -229,10 +225,6 @@ console_.post("/", async (c) => {
   const withhold = Array.isArray(body.withhold)
     ? body.withhold.filter((k): k is string => typeof k === "string")
     : []
-  const goal =
-    typeof body.goal === "string" && body.goal.trim()
-      ? body.goal.trim()
-      : "Build the site from the canonical facts."
   if (!/^site\.(build|revise)$/.test(kind)) {
     return failure(c, 400, {
       class: "validation",
@@ -241,6 +233,17 @@ console_.post("/", async (c) => {
       detail: { kind },
     })
   }
+  const text = typeof body.goal === "string" ? body.goal.trim() : ""
+  // A revise is its change request; a build has a default brief.
+  if (kind === "site.revise" && !text) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "change_request.empty",
+      message: "A revise carries the change request as its goal.",
+      detail: {},
+    })
+  }
+  const goal = text || "Build the site from the canonical facts."
   // The goal is rendered into the Developer's instructions on every turn.
   if (goal.length > GOAL_MAX) {
     return failure(c, 400, {
@@ -254,8 +257,10 @@ console_.post("/", async (c) => {
 })
 
 /**
- * Both console calls that make an assignment end here: the row, its
- * `assignment.created` event and the instance, replayed by idempotency key.
+ * The row, its `assignment.created` event and the instance, replayed by
+ * idempotency key. A `site.revise` names the build whose revision the site
+ * serves as `revision_of_assignment_id`, derived here and never sent, and
+ * its goal is the owner's change request, tainted as untrusted input (§28.3).
  */
 async function createAssignment(
   c: Context<ConsoleEnv>,
@@ -265,12 +270,10 @@ async function createAssignment(
     goal: string
     model: "A" | "B"
     withhold: string[]
-    followUpOf?: string
   }
 ) {
-  const { kind, goal, model, withhold, followUpOf } = input
-  // A follow-up's text is a change request, tainted as P5's will be.
-  const taint: TaintLabel[] = followUpOf ? ["untrusted_input"] : []
+  const { kind, goal, model, withhold } = input
+  const taint: TaintLabel[] = kind === "site.revise" ? ["untrusted_input"] : []
   const orgId = c.get("orgId")
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [existing] = await db
@@ -278,6 +281,9 @@ async function createAssignment(
       .from(assignments)
       .where(eq(assignments.idempotencyKey, key))
     if (existing) return { row: existing, replayed: true }
+    const source =
+      kind === "site.revise" ? await publishedSource(db, orgId) : null
+    if (kind === "site.revise" && !source) return { unpublished: true as const }
     const codes = await db
       .select({ id: staff.id, code: staff.staffCode })
       .from(staff)
@@ -293,6 +299,7 @@ async function createAssignment(
         createdByStaffId: chief.id,
         kind,
         goal,
+        revisionOfAssignmentId: source?.assignment_id ?? null,
         acceptanceCriteria: [
           "Every price, hour and service area on the site matches a canonical fact",
           "The site builds and every gate passes",
@@ -316,12 +323,20 @@ async function createAssignment(
         model,
         goal,
         withhold,
-        ...(followUpOf ? { follow_up_of: followUpOf } : {}),
+        ...(source ? { revises_revision_id: source.revision_id } : {}),
       },
       taint,
     })
     return { row, replayed: false }
   })
+  if ("unpublished" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "site.not_published",
+      message: "This site has no published revision to revise.",
+      detail: {},
+    })
+  }
   if ("missing" in result) {
     return failure(c, 409, {
       class: "validation",
@@ -488,73 +503,6 @@ console_.get("/site", async (c) => {
     previous: found.active?.previousRevisionId
       ? (byId.get(found.active.previousRevisionId) ?? null)
       : null,
-  })
-})
-
-/** A build no one is still working on, which a follow-up may continue. */
-const FOLLOW_UP_FROM = new Set([
-  "preview_ready",
-  "awaiting_review",
-  "failed",
-  "cancelled",
-])
-
-/**
- * A follow-up on a finished build (architect ruling on the console): a new
- * `site.build` whose goal is the previous one plus the change, joined here
- * from the row so no client sends it. It rebuilds from the starter and
- * supersedes the preview; revise (P5) replaces this route. A running build
- * takes a steer instead.
- */
-console_.post("/:id/follow-up", async (c) => {
-  const key = idempotencyKey(c)
-  if (!key) return keyMissing(c)
-  const body = (await c.req.json().catch(() => ({}))) as { text?: unknown }
-  const text = typeof body.text === "string" ? body.text.trim() : ""
-  if (!text) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "follow_up.empty",
-      message: "A follow-up carries text.",
-      detail: {},
-    })
-  }
-  const id = c.req.param("id")
-  const orgId = c.get("orgId")
-  const previous = await c.get("kit").withOrg({ orgId }, async (db) => {
-    const [row] = await db
-      .select()
-      .from(assignments)
-      .where(eq(assignments.id, id))
-    if (!row) return null
-    const choices = await creationChoices(db, { orgId, assignmentId: id })
-    return { row, choices }
-  })
-  if (!previous) return notFound(c, id)
-  if (!FOLLOW_UP_FROM.has(previous.row.state)) {
-    return failure(c, 409, {
-      class: "validation",
-      code: "assignment.not_finished",
-      message:
-        "This build is still in progress: steer it, or answer its question.",
-      detail: { state: previous.row.state },
-    })
-  }
-  const goal = followUpGoal(previous.row.goal, text)
-  if (!goal) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "goal.too_long",
-      message: `A goal is at most ${GOAL_MAX} characters, its follow-ups included.`,
-      detail: { max: GOAL_MAX },
-    })
-  }
-  return createAssignment(c, key, {
-    kind: "site.build",
-    goal,
-    model: previous.choices.model,
-    withhold: [],
-    followUpOf: id,
   })
 })
 

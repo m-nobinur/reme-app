@@ -12,13 +12,7 @@ import {
 import { verifySpec } from "@workspace/facade"
 import { ulid } from "ulid"
 import { afterAll, describe, expect, it, vi } from "vitest"
-import {
-  followUpGoal,
-  GOAL_MAX,
-  issueSpec,
-  takeSnapshot,
-  updateFacts,
-} from "../src/brief.ts"
+import { issueSpec, takeSnapshot, updateFacts } from "../src/brief.ts"
 import { eventSink, SeqGapError } from "../src/sink.ts"
 import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
@@ -211,18 +205,6 @@ live("eventSink", () => {
     )
     const sink = eventSink(kit, orgId)
     expect(await sink.lastSeq(crypto.randomUUID())).toBeNull()
-  })
-})
-
-describe("followUpGoal", () => {
-  it("adds the follow-up under the goal it continues", () => {
-    expect(followUpGoal("Build the site.", "Make the hero calmer")).toBe(
-      "Build the site.\n\nFollow-up: Make the hero calmer"
-    )
-  })
-
-  it("refuses a result past the cap instead of cutting it", () => {
-    expect(followUpGoal("x".repeat(GOAL_MAX - 12), "y")).toBeNull()
   })
 })
 

@@ -113,6 +113,10 @@ vi.mock("../src/state.ts", () => ({
   claim: async () =>
     script.claims.shift() ?? { claimed: true, superseded: null },
 }))
+vi.mock("../src/revise.ts", () => ({
+  publishedSource: async () => null,
+  restoreAndMap: async () => "",
+}))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
   retireOthers: async () => [],

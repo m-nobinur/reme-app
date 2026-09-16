@@ -7,7 +7,7 @@
 // landed yet print the orchestrator's 501, which names the story.
 //
 //   create   <org> [--kind site.build|site.revise] [--model A|B] [--goal "..."] [--withhold <fact key>]
-//   revise   <org> <change request>          a site.revise with that goal
+//   revise   <org> <change request>          revise the published site: restored as it is live, one change request
 //   list     <org>
 //   show     <org> <id>
 //   events   <org> <id>                      the stream, with seq
@@ -22,7 +22,6 @@
 //   reject   <org> <id> <revision_id>        reject as the owner would: the build ends cancelled
 //   rollback <org> [reason]                  activate the previous revision through the publisher
 //   site     <org>                           what the site serves now, and what a rollback would restore
-//   follow-up <org> <id> <text>              a new build on a finished one: its goal plus the text
 //   facts    <org> [<key> <value>]           the business's facts, or restate one (JSON or text)
 //   console                                  open /console with the token on the clipboard
 import { spawnSync } from "node:child_process"
@@ -291,16 +290,6 @@ switch (command) {
     print(await call("GET", "/assignments/site"))
     break
   }
-  case "follow-up": {
-    need(org, "<org>")
-    need(id, "<id>")
-    print(
-      await call("POST", `/assignments/${id}/follow-up`, {
-        text: need(more.join(" "), "<text>"),
-      })
-    )
-    break
-  }
   case "facts": {
     need(org, "<org>")
     if (id) {
@@ -348,7 +337,7 @@ switch (command) {
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | follow-up | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site | console"
+      "create | revise | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site | console"
     )
     process.exit(2)
   }

@@ -33,6 +33,7 @@ import {
   writePointer,
 } from "./publish.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
+import { publishedSource, restoreAndMap } from "./revise.ts"
 import {
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
@@ -190,7 +191,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // instance and returns. The spec and the snapshot are bodies, so they
     // travel inside the step and never cross its boundary (R8).
     await step.do("developer", async () => {
-      const brief = await run((kit) =>
+      const { brief, revise } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -200,22 +201,49 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const { withhold, model } = await creationChoices(db, ids)
           const snapshot = await takeSnapshot(db, ids, withhold)
           const spec = await issueSpec(db, this.env, row, model)
+          // A revise starts from what the site serves (ADR-032), never a preview.
+          const source =
+            row.kind === "site.revise"
+              ? await publishedSource(db, ids.orgId)
+              : null
+          if (row.kind === "site.revise" && !source) {
+            throw new NonRetryableError("site.not_published")
+          }
           const built: Brief = {
             spec,
             snapshot,
             goal: row.goal,
             acceptance_criteria: row.acceptanceCriteria,
-            restore_key: null,
+            restore_key: source?.source_key ?? null,
+            map: null,
           }
-          return built
+          return { brief: built, revise: row.kind === "site.revise" }
         })
       )
+      if (brief.restore_key) {
+        // The container is provisioned; the restored site's map goes into the
+        // stable segment before the Developer's first turn.
+        brief.map = await restoreAndMap(
+          sandboxFor(this.env, ids.assignmentId),
+          this.env.SITES,
+          brief.restore_key
+        )
+      }
       try {
         const receipt = await init(Developer, {
           id: ids.assignmentId,
           uid: null,
         }).dispatch({
-          message: `Build the site from the canonical facts. ${brief.goal}`,
+          // The change request is data the owner typed, not an instruction:
+          // it travels as a signal, tainted on the log (§28.3).
+          message: revise
+            ? {
+                kind: "signal",
+                type: "site.change_requested",
+                body: brief.goal,
+                attributes: { taint: "untrusted_input" },
+              }
+            : `Build the site from the canonical facts. ${brief.goal}`,
           initialData: brief,
         })
         return { submission_id: receipt.submissionId }
