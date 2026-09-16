@@ -254,6 +254,24 @@ export async function resolveOrgBySlug(
   })
 }
 
+/**
+ * Every org id, for a platform job that then opens each org's own `withOrg`:
+ * the hourly retention sweep is the caller today, and nothing enforces that
+ * it stays the only one. The function is SECURITY DEFINER (migration 0009)
+ * and returns opaque ids and nothing else, so no tenant row is read here and
+ * no handle leaves; an id buys nothing without a context, which
+ * `tenancy/rls.test.ts` drives.
+ */
+export async function listOrgIds(kit: Tenancy): Promise<string[]> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{ id: string }>(
+      sql`select public.list_org_ids() as id`
+    )
+    return rows.map((row) => row.id)
+  })
+}
+
 export async function resolveOrg(
   kit: Tenancy,
   identity: Identity
