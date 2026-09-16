@@ -402,6 +402,7 @@ const mb = (n: number) => id(2, n)
 const MB_OWNER_USER = mb(1)
 const MB_ROOT = mb(30)
 const MB_COS = mb(31)
+const MB_DEV = mb(32)
 
 export const mopandbucket: GoldenOrg = {
   slug: "mopandbucket",
@@ -436,6 +437,7 @@ export const mopandbucket: GoldenOrg = {
       key: "chief_of_staff",
       title: "Chief of Staff",
     },
+    { id: mb(21), orgId: mb(0), key: "developer", title: "Developer" },
   ],
   departments: [{ id: mb(10), orgId: mb(0), name: "Operations" }],
   staff: [
@@ -459,6 +461,20 @@ export const mopandbucket: GoldenOrg = {
       departmentId: mb(10),
       managerId: MB_ROOT,
       positionTitle: "Chief of Staff",
+      status: "active",
+    },
+    // A Developer, so a build can run on the thinner org: with a partial fact
+    // set it asks before it edits, which is what the nightly wants to see.
+    {
+      id: MB_DEV,
+      orgId: mb(0),
+      staffCode: "DEV-001",
+      displayName: "Sam",
+      kind: "agent",
+      roleId: mb(21),
+      departmentId: mb(10),
+      managerId: MB_COS,
+      positionTitle: "Developer",
       status: "active",
     },
   ],
