@@ -6,9 +6,11 @@ import { connect } from "../src/client.ts"
 import {
   APP_ROLE,
   ENTER_APP_ROLE,
+  listOrgIds,
   ORG_SETTING,
   type OrgScopedDb,
   setContext,
+  tenancy,
   USER_SETTING,
   withOrg,
 } from "../src/tenancy.ts"
@@ -145,6 +147,21 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       return {
         granted: [await call("tenancy-probe-a"), await call("tenancy-probe-b")],
         refused: [await call("tenancy-probe-c"), await call("")],
+      }
+    },
+  },
+  // The retention sweep's way in (ADR-032, amended): every org id, and
+  // nothing else. It takes no argument, so there is no other way in to
+  // refuse here; the refusal that matters, that an id from it reads nothing
+  // without a context, is driven as its own case below.
+  list_org_ids: {
+    probe: async (raw) => {
+      const rows = await raw<{ id: string }[]>`
+        select public.list_org_ids() as id`
+      const ids = new Set(rows.map((row) => row.id))
+      return {
+        granted: [ids.has(ORG_A) ? ORG_A : null, ids.has(ORG_B) ? ORG_B : null],
+        refused: [],
       }
     },
   },
@@ -643,6 +660,29 @@ describe("a function that runs as its owner cannot hide either", () => {
     },
     60_000
   )
+})
+
+describe("an org id from the platform list buys nothing without a context", () => {
+  it("lists both probe orgs, and inside one org's context the other's row is unreadable", async () => {
+    const kit = tenancy(process.env.DATABASE_URL ?? "")
+    try {
+      const ids = await listOrgIds(kit)
+      expect(ids).toContain(ORG_A)
+      expect(ids).toContain(ORG_B)
+      const seen = await kit.withOrg({ orgId: ORG_A }, async (db) => {
+        const rows = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from orgs where id = ${ORG_B}`
+        )
+        return rows[0]?.n
+      })
+      expect(
+        seen,
+        "the listed id opened nothing: org B's row stays hidden"
+      ).toBe(0)
+    } finally {
+      await kit.close()
+    }
+  })
 })
 
 describe("the reading transaction runs as a role that cannot bypass", () => {
