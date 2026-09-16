@@ -126,10 +126,45 @@ jobs:
             echo "::error::/health answered, and not with the guarantees it promises"
             exit 1; }
 
+      # Open item 46 (ADR-032): a Workflow instance created by the deployed
+      # code resumes under the new code. Step bodies carry ids only, so the
+      # one thing that can break a resumed instance is a changed step list.
+      # `apps/orchestrator/test/workflow-steps.json` is that list, committed
+      # by a test that drives every path; when it differs from the commit
+      # staging runs, this refuses while any instance is running, queued or
+      # paused, and an unchanged list deploys freely.
+      - name: Refuse to change the Workflow steps under a live instance
+        run: |
+          deployed=$(pnpm --filter orchestrator exec wrangler deployments list \
+            --name reme-orchestrator --json \
+            | jq -r '[.[] | .annotations["workers/message"] // empty | select(test("^[0-9a-f]{40}$"))][0] // empty')
+          if [ -z "$deployed" ]; then
+            echo "no deployed commit to compare with, so nothing to refuse"
+            exit 0
+          fi
+          git fetch --depth=1 origin "$deployed" 2>/dev/null || {
+            echo "deployed commit $deployed is not reachable, so nothing to refuse"; exit 0; }
+          if git diff --quiet "$deployed" HEAD -- apps/orchestrator/test/workflow-steps.json; then
+            echo "workflow steps unchanged since $deployed"
+            exit 0
+          fi
+          live=0
+          for name in reme-assignment reme-publish; do
+            for status in running queued paused; do
+              out=$(pnpm --filter orchestrator exec wrangler workflows instances list "$name" --status "$status" 2>&1 || true)
+              if ! printf '%s' "$out" | grep -q "There are no instances"; then
+                echo "$name has $status instances:"; printf '%s\n' "$out"; live=1
+              fi
+            done
+          done
+          if [ "$live" = 1 ]; then
+            echo "::error::apps/orchestrator/test/workflow-steps.json changed since $deployed and instances are live. Wait for them to settle, then re-run this workflow."
+            exit 1
+          fi
+          echo "workflow steps changed and no instance is live"
+
       # Built by Vite first: flue generates the entry and merges the Durable
-      # Object bindings into the config wrangler deploys. Open item 46: deploy
-      # while no assignment is between Implementing and Validating; the check
-      # is a human one until the deploy job reads the table.
+      # Object bindings into the config wrangler deploys.
       - run: pnpm --filter orchestrator build
 
       - name: Deploy the orchestrator

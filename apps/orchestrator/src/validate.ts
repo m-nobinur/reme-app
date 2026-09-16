@@ -27,6 +27,73 @@ export type Artifacts = {
   put: (key: string, value: string) => Promise<unknown>
 }
 
+/**
+ * The facts an assignment's claims are judged against: the snapshot it was
+ * briefed with plus the facts its answers produced, both read from the log,
+ * so the validating step and the publisher's probes agree.
+ */
+export async function assignmentFacts(
+  kit: Tenancy,
+  ids: Ids
+): Promise<FactRecord[]> {
+  const { row, logged } = await kit.withOrg(
+    { orgId: ids.orgId },
+    async (db) => {
+      const [found] = await db
+        .select()
+        .from(assignments)
+        .where(eq(assignments.id, ids.assignmentId))
+      const events_ = await db
+        .select({ type: events.type, payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('facts.snapshot_taken', 'information.answered')`
+        )
+        .orderBy(events.eventId)
+      return { row: found ?? null, logged: events_ }
+    }
+  )
+  if (!row)
+    throw new TransitionError(
+      "assignment.not_found",
+      "resource",
+      "no assignment to read facts for"
+    )
+  const snapshotEvent = logged.find(
+    (e) =>
+      e.type === "facts.snapshot_taken" &&
+      e.payload.snapshot_id === row.factSnapshotId
+  )
+  if (!snapshotEvent)
+    throw new TransitionError(
+      "snapshot.not_found",
+      "validation",
+      "the briefed snapshot is not in the log"
+    )
+  const { withheld: _withheld, ...snapshotBody } = snapshotEvent.payload
+  const snapshot = FactSnapshot.parse(snapshotBody)
+  const answeredIds = logged
+    .filter((e) => e.type === "information.answered")
+    .map((e) => InformationAnswer.parse(e.payload).fact_id)
+  const answered: FactRecord[] =
+    answeredIds.length === 0
+      ? []
+      : await kit.withOrg({ orgId: ids.orgId }, async (db) =>
+          (
+            await db
+              .select()
+              .from(facts)
+              .where(
+                sql`${facts.id} in (${sql.join(
+                  answeredIds.map((id) => sql`${id}`),
+                  sql`, `
+                )})`
+              )
+          ).map(toFactRecord)
+        )
+  return [...snapshot.facts, ...answered]
+}
+
 export type Verdict =
   | { outcome: "preview_ready"; report_id: string }
   | { outcome: "repairing"; report_id: string; failed: GateResult[] }
@@ -78,38 +145,7 @@ export async function validateRevision(
   if (row.state !== "validating")
     return recordedVerdict(row.state, logged, input.revision_id)
 
-  const snapshotEvent = logged.find(
-    (e) =>
-      e.type === "facts.snapshot_taken" &&
-      e.payload.snapshot_id === row.factSnapshotId
-  )
-  if (!snapshotEvent)
-    throw new TransitionError(
-      "snapshot.not_found",
-      "validation",
-      "the briefed snapshot is not in the log"
-    )
-  const { withheld: _withheld, ...snapshotBody } = snapshotEvent.payload
-  const snapshot = FactSnapshot.parse(snapshotBody)
-  const answeredIds = logged
-    .filter((e) => e.type === "information.answered")
-    .map((e) => InformationAnswer.parse(e.payload).fact_id)
-  const answered: FactRecord[] =
-    answeredIds.length === 0
-      ? []
-      : await kit.withOrg({ orgId: ids.orgId }, async (db) =>
-          (
-            await db
-              .select()
-              .from(facts)
-              .where(
-                sql`${facts.id} in (${sql.join(
-                  answeredIds.map((id) => sql`${id}`),
-                  sql`, `
-                )})`
-              )
-          ).map(toFactRecord)
-        )
+  const factsUsed = await assignmentFacts(kit, ids)
   const reportEvent = logged.find(
     (e) =>
       e.type === "assignment.completion_reported" &&
@@ -135,7 +171,7 @@ export async function validateRevision(
       return object ? new Uint8Array(await object.arrayBuffer()) : null
     },
     report,
-    facts: [...snapshot.facts, ...answered],
+    facts: factsUsed,
   })
 
   const gates: GateResult[] = []

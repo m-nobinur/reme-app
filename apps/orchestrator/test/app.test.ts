@@ -133,31 +133,48 @@ describe("creating an assignment", () => {
   })
 })
 
-describe("routes whose story has not landed", () => {
+describe("the publish routes' edge", () => {
   const authed = { authorization: "Bearer test-token" }
 
-  it.each([
-    ["/assignments/x/approve", "P3"],
-    ["/assignments/rollback", "P3"],
-  ])("%s answers 501 naming %s, behind the bearer", async (path, story) => {
+  it("refuses a console approval where the Worker does not allow one", async () => {
     const unauthenticated = await app.request(
-      `${path}?org=brightclean`,
+      "/assignments/x/approve?org=brightclean",
       { method: "POST" },
       env
     )
     expect(unauthenticated.status).toBe(401)
-
     const res = await app.request(
-      `${path}?org=brightclean`,
-      { method: "POST", headers: authed },
+      "/assignments/x/approve?org=brightclean",
+      {
+        method: "POST",
+        headers: { ...authed, "idempotency-key": "k" },
+        body: JSON.stringify({ revision_id: "x" }),
+      },
       env
     )
-    expect(res.status).toBe(501)
+    expect(res.status).toBe(403)
     expect(await envelope(res)).toMatchObject({
-      class: "resource",
-      code: "route.not_implemented",
-      detail: { story },
+      class: "permission",
+      code: "approval.console_forbidden",
     })
+  })
+
+  it("wants an idempotency key on review, approve and rollback", async () => {
+    for (const path of [
+      "/assignments/x/review",
+      "/assignments/x/approve",
+      "/assignments/rollback",
+    ]) {
+      const res = await app.request(
+        `${path}?org=brightclean`,
+        { method: "POST", headers: authed },
+        { ...env, CONSOLE_APPROVALS: "allow" } as unknown as Env
+      )
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({
+        code: "idempotency_key.missing",
+      })
+    }
   })
 
   it.each([

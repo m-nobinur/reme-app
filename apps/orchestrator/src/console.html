@@ -556,6 +556,12 @@
       case "information.requested": return ["ask", `Asked for ${p.field}`]
       case "information.answered": return ["answer", "Answer saved as a fact"]
       case "assignment.steered": return ["you", `You: ${p.message}`]
+      case "approval.requested": return ["wait", "Review requested from the owner"]
+      case "approval.decided": return ["ok", `Approved from the ${p.decided_by?.kind === "console" ? "console" : "owner app"}`]
+      case "deployment.activated": return ["ok", `${p.kind === "rollback" ? "Rolled back to" : "Published"} revision ${String(p.revision_id).slice(0, 8)} as version ${p.config_version}`]
+      case "publish.probed": return [p.ok ? "ok" : "bad", `Live check at minute ${p.minute}: ${p.ok ? "fine" : p.reason}`]
+      case "publish.refused": return ["bad", `Publish refused: ${p.reason}`]
+      case "alert.raised": return ["bad", `Alert: ${p.kind} (${p.reason})`]
       case "assignment.validation_reported": {
         const gates = p.gates || []
         const failed = gates.filter((g) => !g.passed)
@@ -751,12 +757,18 @@
   $("d-approve").addEventListener("click", () => act($("d-approve"), async () => {
     const revision = state.current?.revisions[0]
     if (!revision) throw new Error("This build has no revision to approve yet.")
+    // The owner's two acts: the review is requested first when the build is
+    // still preview_ready, then the decision names the revision shown.
+    if (state.current?.assignment.state === "preview_ready") {
+      await call("POST", `/assignments/${state.selected}/review`, {})
+    }
     await call("POST", `/assignments/${state.selected}/approve`, { revision_id: revision.revision_id })
+    toast("Approved. The publisher probes the site for ten minutes and rolls back on a failure.")
     await refreshDetail()
   }))
   $("d-rollback").addEventListener("click", () => act($("d-rollback"), async () => {
-    await call("POST", "/assignments/rollback", {})
-    toast("Rolled back.")
+    const result = await call("POST", "/assignments/rollback", { reason: "rolled back from the console" })
+    toast(`Rolling back to revision ${String(result.target_revision_id).slice(0, 8)}.`)
   }))
   $("raw-toggle").addEventListener("click", () => {
     $("d-raw").hidden = !$("d-raw").hidden

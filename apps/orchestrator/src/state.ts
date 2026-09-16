@@ -80,7 +80,10 @@ export type Ids = { orgId: string; assignmentId: string }
 
 type Row = typeof assignments.$inferSelect
 
-async function lockRow(db: OrgScopedDb, assignmentId: string): Promise<Row> {
+export async function lockRow(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<Row> {
   const [row] = await db
     .select()
     .from(assignments)

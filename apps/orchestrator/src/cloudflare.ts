@@ -22,6 +22,16 @@ import {
   takeSnapshot,
 } from "./brief.ts"
 import {
+  activate,
+  PROBE_MINUTES,
+  type PublishParams,
+  probeHost,
+  readTarget,
+  redriveQueued,
+  verifyArtifact,
+  writePointer,
+} from "./publish.ts"
+import {
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
@@ -35,7 +45,7 @@ import {
   parkForBudget,
   TransitionError,
 } from "./state.ts"
-import { validateRevision } from "./validate.ts"
+import { assignmentFacts, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -369,7 +379,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
 /** One audit row for a step that moves no state. */
 function appendAudit(
   kit: Tenancy,
-  ids: { orgId: string; assignmentId: string },
+  ids: { orgId: string; assignmentId: string | null },
   type: string,
   payload: Record<string, unknown>
 ) {
@@ -382,4 +392,186 @@ function appendAudit(
       payload,
     })
   )
+}
+
+/**
+ * The publisher (ADR-032): one instance per approval, keyed by the approval
+ * id so a second create is refused, or per rollback request, keyed by its
+ * idempotency key. Every step body is in publish.ts; this is the order.
+ */
+export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
+  async run(event: WorkflowEvent<PublishParams>, step: WorkflowStep) {
+    const params = event.payload
+    const orgId = params.org_id
+    const run = async <T>(fn: (kit: Tenancy) => Promise<T>): Promise<T> => {
+      const kit = tenancy(this.env.HYPERDRIVE.connectionString)
+      try {
+        return await fn(kit)
+      } catch (error) {
+        if (
+          error instanceof TransitionError &&
+          error.errorClass !== "transient"
+        ) {
+          throw new NonRetryableError(error.code)
+        }
+        throw error
+      } finally {
+        await kit.close()
+      }
+    }
+    const rollback = "rollback" in params
+
+    const target = await step.do("read target", () =>
+      run((kit) =>
+        kit.withOrg({ orgId }, (db) => readTarget(db, this.env, params))
+      )
+    )
+
+    const artifact = await step.do("verify artifact", () =>
+      verifyArtifact(this.env.SITES, target.site_id, target.revision_id)
+    )
+    if (!artifact.ok) {
+      await step.do("refuse", () =>
+        run((kit) =>
+          appendAudit(
+            kit,
+            { orgId, assignmentId: target.assignment_id },
+            "publish.refused",
+            { revision_id: target.revision_id, reason: artifact.message }
+          )
+        )
+      )
+      return { outcome: "refused", reason: artifact.message }
+    }
+
+    const deployment = await step.do("activate", () =>
+      run((kit) =>
+        kit.withOrg({ orgId }, async (db) => {
+          const row = await activate(db, orgId, {
+            siteId: target.site_id,
+            revisionId: target.revision_id,
+            kind: rollback ? "rollback" : "publish",
+            approvalId:
+              "approval_id" in params ? params.approval_id : undefined,
+            assignmentId: target.assignment_id ?? undefined,
+            reason: "rollback" in params ? params.rollback.reason : undefined,
+          })
+          return { deployment_id: row.id, config_version: row.configVersion }
+        })
+      )
+    )
+
+    await step.do("pointer", () =>
+      run(() =>
+        writePointer(this.env, target.host, {
+          org_id: orgId,
+          site_id: target.site_id,
+          revision_id: target.revision_id,
+          config_version: deployment.config_version,
+        })
+      )
+    )
+
+    // The content gate runs on the live HTML with the facts the assignment
+    // was validated against; a rollback has no assignment and takes the
+    // 5xx and blank-page checks alone.
+    let failed: { minute: number; reason: string } | null = null
+    for (const [i, minute] of PROBE_MINUTES.entries()) {
+      if (i > 0) {
+        const previous = PROBE_MINUTES[i - 1] ?? 0
+        await step.sleep(
+          `until minute ${minute}`,
+          `${minute - previous} minutes`
+        )
+      }
+      const result = await step.do(`probe ${minute}`, async () => {
+        const assignmentId = target.assignment_id
+        const factRecords = assignmentId
+          ? await run((kit) => assignmentFacts(kit, { orgId, assignmentId }))
+          : null
+        const probe = await probeHost(target.host, factRecords)
+        await run((kit) =>
+          appendAudit(
+            kit,
+            { orgId, assignmentId: target.assignment_id },
+            "publish.probed",
+            { minute, revision_id: target.revision_id, ...probe }
+          )
+        )
+        return probe
+      })
+      if (!result.ok) {
+        failed = { minute, reason: result.reason }
+        break
+      }
+    }
+
+    if (failed && !rollback && target.previous_revision_id) {
+      const back = target.previous_revision_id
+      const why = failed
+      const undone = await step.do("roll back", () =>
+        run((kit) =>
+          kit.withOrg({ orgId }, async (db) => {
+            const row = await activate(db, orgId, {
+              siteId: target.site_id,
+              revisionId: back,
+              kind: "rollback",
+              reason: `probe ${why.minute}: ${why.reason}`,
+            })
+            await appendEvent(db, {
+              orgId,
+              assignmentId: target.assignment_id,
+              staffId: null,
+              type: "alert.raised",
+              payload: {
+                kind: "publish.rolled_back",
+                revision_id: target.revision_id,
+                restored_revision_id: back,
+                minute: why.minute,
+                reason: why.reason,
+              },
+            })
+            return { config_version: row.configVersion }
+          })
+        )
+      )
+      await step.do("pointer after rollback", () =>
+        run(() =>
+          writePointer(this.env, target.host, {
+            org_id: orgId,
+            site_id: target.site_id,
+            revision_id: back,
+            config_version: undone.config_version,
+          })
+        )
+      )
+    } else if (failed) {
+      const why = failed
+      await step.do("alert", () =>
+        run((kit) =>
+          appendAudit(
+            kit,
+            { orgId, assignmentId: target.assignment_id },
+            "alert.raised",
+            {
+              kind: "publish.probe_failed",
+              revision_id: target.revision_id,
+              minute: why.minute,
+              reason: why.reason,
+            }
+          )
+        )
+      )
+    }
+
+    // A publish ends a site lock holder (§13): whoever queued behind it runs.
+    const redriven = await step.do("redrive queued", () =>
+      run((kit) => redriveQueued(this.env, kit, orgId))
+    )
+    return {
+      outcome: failed ? "rolled_back" : "published",
+      revision_id: target.revision_id,
+      redriven,
+    }
+  }
 }
