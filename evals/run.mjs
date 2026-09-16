@@ -20,7 +20,7 @@ const dir = (name) => fileURLToPath(new URL(name, import.meta.url))
 /** §16.3. The description is what a scenario in that tier has to be about. */
 const TIERS = {
   1: "contract: schema-valid role output, InformationRequest over fabrication",
-  2: "pack: cleaning quote math, schedule constraints, service-area edges",
+  2: "live-cheap: one golden build per fixture org on staging, fabrication count, gate pass rate, tokens and cost",
   3: "end-to-end: golden assignment on a fixture org, fabrication count 0",
 }
 

@@ -30,11 +30,12 @@
     "format": "biome format --write"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.10",
     "@workspace/config": "workspace:*",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",
-    "@biomejs/biome": "2.5.10",
+    "@workspace/gates": "workspace:*",
     "postgres": "3.4.9",
     "turbo": "^2.9.18",
     "typescript": "^6",

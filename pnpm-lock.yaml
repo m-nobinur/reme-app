@@ -23,6 +23,9 @@ importers:
       '@workspace/facade':
         specifier: workspace:*
         version: link:packages/facade
+      '@workspace/gates':
+        specifier: workspace:*
+        version: link:packages/gates
       postgres:
         specifier: 3.4.9
         version: 3.4.9
