@@ -71,6 +71,13 @@
       "when": 1789560721675,
       "tag": "0009_list_org_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789661363526,
+      "tag": "0010_assignment_cost",
+      "breakpoints": true
     }
   ]
 }

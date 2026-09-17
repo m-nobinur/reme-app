@@ -572,6 +572,9 @@ export const events = pgTable(
     // and two of those do not collide: NULLs are distinct in a unique index.
     uniqueIndex("events_session_seq_key").on(t.sessionId, t.seq),
     index("events_org_occurred_idx").on(t.orgId, t.occurredAt),
+    // An assignment's stream and its spend: one build writes thousands of
+    // rows, most of them deltas, and the cost sum reads only `runtime.turn`.
+    index("events_assignment_type_idx").on(t.assignmentId, t.type),
     check("events_seq_nonnegative", sql`seq >= 0`),
     // The same pairing `EventEnvelope` carries, in the place a producer that
     // skips the contract still meets it.
@@ -665,6 +668,12 @@ export const assignments = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     budgetUsd: doublePrecision("budget_usd").notNull(),
+    /**
+     * Model spend in USD, summed from the assignment's `runtime.turn` events
+     * when it reaches a terminal state (§29.2). Null while it is open; the
+     * log is the truth and this is the figure frozen at close.
+     */
+    costUsd: doublePrecision("cost_usd"),
     deadline: timestamp("deadline", { withTimezone: true }),
     priority: assignmentPriority("priority").notNull().default("normal"),
     /** The Workflows instance driving this row, once one exists. */
@@ -713,6 +722,7 @@ export const assignments = pgTable(
       sql`kind ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$'`
     ),
     check("assignments_budget_positive", sql`budget_usd > 0`),
+    check("assignments_cost_nonnegative", sql`cost_usd >= 0`),
     check("assignments_version_nonnegative", sql`version >= 0`),
     orgIsolation("assignments"),
   ]
