@@ -162,6 +162,7 @@ describe("rows map onto contracts", () => {
     factSnapshotId: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e77",
     packRefs: [{ key: "cleaning", version: "0.1.0" }],
     budgetUsd: 12.5,
+    costUsd: null,
     deadline: null,
     priority: "normal",
     workflowInstanceId: null,

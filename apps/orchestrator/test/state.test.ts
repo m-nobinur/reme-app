@@ -9,9 +9,11 @@ import {
   tenancy,
 } from "@workspace/db"
 import fc from "fast-check"
+import { ulid } from "ulid"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   advance,
+  assignmentCost,
   cancel,
   claim,
   parkForBudget,
@@ -260,6 +262,67 @@ live("cancel", () => {
       expect(await cancel(kit, ids)).toBe(state)
     }
   )
+})
+
+live("cost from the log", () => {
+  /** A logged turn with a cost, or any other event carrying the same shape. */
+  const logged = (
+    ids: { orgId: string; assignmentId: string },
+    sessionId: string,
+    seq: number,
+    type: string,
+    total: number
+  ) =>
+    kit.withOrg({ orgId: ids.orgId }, (db) =>
+      db.insert(events).values({
+        eventId: ulid(),
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        sessionId,
+        seq,
+        type,
+        occurredAt: new Date(),
+        idempotencyKey: ulid(),
+        payload: { response: { usage: { cost: { total } } } },
+      })
+    )
+
+  it("sums runtime.turn and nothing else, and freezes the sum at close", async () => {
+    const ids = await newAssignment(await freshOrg())
+    await walk(ids, PATH.implementing)
+    const session = crypto.randomUUID()
+    await logged(ids, session, 0, "runtime.turn", 0.0012)
+    await logged(ids, session, 1, "runtime.turn", 0.0034)
+    await logged(ids, session, 2, "runtime.turn_request", 9)
+    // Another assignment's turn never lands on this one.
+    const other = await newAssignment(ids.orgId, "report.write")
+    await logged(other, crypto.randomUUID(), 0, "runtime.turn", 5)
+
+    expect(
+      await kit.withOrg({ orgId: ids.orgId }, (db) =>
+        assignmentCost(db, ids.assignmentId)
+      )
+    ).toBeCloseTo(0.0046, 6)
+    expect((await current(ids)).costUsd).toBeNull()
+
+    await cancel(kit, ids)
+    expect((await current(ids)).costUsd).toBeCloseTo(0.0046, 6)
+    const [closed] = await kit.withOrg({ orgId: ids.orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.state_changed' and ${events.payload}->>'to' = 'cancelled'`
+        )
+    )
+    expect(closed?.payload.cost_usd).toBeCloseTo(0.0046, 6)
+  })
+
+  it("is zero for an assignment that never called a model", async () => {
+    const ids = await newAssignment(await freshOrg())
+    await walk(ids, PATH.failed)
+    expect((await current(ids)).costUsd).toBe(0)
+  })
 })
 
 live("the optimistic lock", () => {

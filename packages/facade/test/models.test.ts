@@ -19,6 +19,26 @@ describe("the generated OpenRouter models", () => {
     }
   })
 
+  it("route only to providers at or under the rate the log charges", () => {
+    for (const id of OPENROUTER_IDS) {
+      const model = openrouterModels().find((m) => m.id === id)
+      // A model the catalog has no price for would ceil at zero, which no
+      // provider is under, so the model would simply stop answering. The
+      // generator returns 0 for a missing pricing block, so this is the
+      // assertion that a regenerated catalog has to get past.
+      expect(model?.cost.input, id).toBeGreaterThan(0)
+      expect(model?.cost.output, id).toBeGreaterThan(0)
+      expect(model?.compat, id).toMatchObject({
+        openRouterRouting: {
+          max_price: {
+            prompt: model?.cost.input,
+            completion: model?.cost.output,
+          },
+        },
+      })
+    }
+  })
+
   it("throw naming the declared ids when the generated entries are gone", () => {
     expect(() => openrouterModels([])).toThrow(
       /deepseek\/deepseek-v4.1-flash, x-ai\/grok-4.6, z-ai\/glm-5.3-flash/
