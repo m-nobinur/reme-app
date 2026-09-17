@@ -26,6 +26,7 @@ export {
   pathRefusal,
   REPEATED_FAILURES,
   REPEATING_FAILURE,
+  SANDBOX_UPDATING,
   TOOL_RESULT_MAX_CHARS,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"

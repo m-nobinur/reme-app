@@ -13,7 +13,7 @@ import { repoMap } from "./repo-map.ts"
  * a container that slept in between.
  */
 
-/** Where the site lives in the container; the agent's `SITE_ROOT`. */
+/** Where the site lives in the container. `/opt/astro` is the toolchain, read-only. */
 export const SITE_ROOT = "/workspace/site"
 
 /** The revision a revise starts from: what the site serves now, or null before the first publish. */

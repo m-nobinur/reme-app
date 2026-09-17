@@ -14,7 +14,12 @@ import {
   tenancy,
   toFactRecord,
 } from "@workspace/db"
-import { AgentInstanceExistsError, init } from "@workspace/facade"
+import {
+  AgentInstanceExistsError,
+  init,
+  REPEATING_FAILURE,
+  SANDBOX_UPDATING,
+} from "@workspace/facade"
 import { Developer } from "./agents/developer.ts"
 import {
   type Brief,
@@ -103,8 +108,30 @@ const CLAIM_ATTEMPTS = 20
 /** How many times an interrupted Developer run is resumed before the build fails and releases the site lock. */
 const RESUMES = 2
 
+/**
+ * A tenancy kit for one unit of work, closed when the work finishes. A
+ * `TransitionError` that is not transient means the row moved under us, so
+ * retrying cannot help: it leaves as `NonRetryableError` and the step is final.
+ */
+const withKit = async <T>(
+  env: Env,
+  fn: (kit: Tenancy) => Promise<T>
+): Promise<T> => {
+  const kit = tenancy(env.HYPERDRIVE.connectionString)
+  try {
+    return await fn(kit)
+  } catch (error) {
+    if (error instanceof TransitionError && error.errorClass !== "transient") {
+      throw new NonRetryableError(error.code)
+    }
+    throw error
+  } finally {
+    await kit.close()
+  }
+}
+
 /** Reasons the turn gate names itself; any other interruption is the provider's. */
-const GATE_REASONS = new Set(["tool.repeating_failure", "sandbox.updating"])
+const GATE_REASONS = new Set([REPEATING_FAILURE, SANDBOX_UPDATING])
 
 /** Information round trips per assignment before the Workflow stops waiting. */
 const ROUNDS = 20
@@ -124,22 +151,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       orgId: event.payload.org_id,
       assignmentId: event.payload.assignment_id,
     }
-    const run = async <T>(fn: (kit: Tenancy) => Promise<T>): Promise<T> => {
-      const kit = tenancy(this.env.HYPERDRIVE.connectionString)
-      try {
-        return await fn(kit)
-      } catch (error) {
-        if (
-          error instanceof TransitionError &&
-          error.errorClass !== "transient"
-        ) {
-          throw new NonRetryableError(error.code)
-        }
-        throw error
-      } finally {
-        await kit.close()
-      }
-    }
+    const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
 
     let claimed = false
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !claimed; attempt++) {
@@ -477,22 +489,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
   async run(event: WorkflowEvent<PublishParams>, step: WorkflowStep) {
     const params = event.payload
     const orgId = params.org_id
-    const run = async <T>(fn: (kit: Tenancy) => Promise<T>): Promise<T> => {
-      const kit = tenancy(this.env.HYPERDRIVE.connectionString)
-      try {
-        return await fn(kit)
-      } catch (error) {
-        if (
-          error instanceof TransitionError &&
-          error.errorClass !== "transient"
-        ) {
-          throw new NonRetryableError(error.code)
-        }
-        throw error
-      } finally {
-        await kit.close()
-      }
-    }
+    const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
     const rollback = "rollback" in params
 
     const target = await step.do("read target", () =>

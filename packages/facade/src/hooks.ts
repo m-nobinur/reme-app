@@ -227,6 +227,9 @@ export const REPEATED_FAILURES = 3
 /** The reason a turn ends when the same failure keeps coming back. */
 export const REPEATING_FAILURE = "tool.repeating_failure"
 
+/** The reason a turn ends when the platform replaced the container under it. */
+export const SANDBOX_UPDATING = "sandbox.updating"
+
 /** A thrown error's identity: its message, whitespace collapsed, cut short. */
 const failureText = (error: unknown) =>
   (error instanceof Error ? error.message : String(error))
