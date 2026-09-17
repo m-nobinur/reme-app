@@ -90,6 +90,7 @@ const script = {
   claims: [] as { claimed: boolean; superseded: string | null }[],
   provisions: [] as boolean[],
   verdicts: [] as string[],
+  checkpoints: [] as boolean[],
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -109,7 +110,12 @@ vi.mock("../src/sandbox.ts", () => ({
   },
   sandboxFor: () => ({ destroy: async () => undefined }),
   endSandbox: async () => undefined,
-  checkpoint: async () => ({ key: "k", bytes: 1, ms: 1 }),
+  checkpoint: async () => ({
+    taken: script.checkpoints.shift() ?? true,
+    key: "k",
+    bytes: 1,
+    ms: 1,
+  }),
   rehydrate: async () => ({ restored: true, ms: 1 }),
 }))
 const advanced: [string, string | undefined][] = []
@@ -158,9 +164,10 @@ const { AssignmentWorkflow, SweepWorkflow, sweepHour } = await import(
 )
 
 type Wake = { payload: Record<string, unknown> } | "timeout"
+type Answer = Record<string, unknown> | "timeout"
 
 /** A recording step: names in order, callbacks run, sleeps skipped, waits scripted. */
-function drive(wakes: Wake[], answers: Record<string, unknown>[] = []) {
+function drive(wakes: Wake[], answers: Answer[] = []) {
   const names: string[] = []
   const step = {
     do: async (name: string, a: unknown, b?: unknown) => {
@@ -174,7 +181,9 @@ function drive(wakes: Wake[], answers: Record<string, unknown>[] = []) {
     waitForEvent: async (name: string, opts: { type: string }) => {
       names.push(name)
       if (opts.type === "answer") {
-        return { payload: answers.shift() ?? { request_id: "q", fact_id: "f" } }
+        const answer = answers.shift() ?? { request_id: "q", fact_id: "f" }
+        if (answer === "timeout") throw new Error("timed out")
+        return { payload: answer }
       }
       const next = wakes.shift()
       if (!next || next === "timeout") throw new Error("timed out")
@@ -209,6 +218,8 @@ type Setup = {
   claims?: typeof script.claims
   provisions?: boolean[]
   verdicts?: string[]
+  checkpoints?: boolean[]
+  answers?: Answer[]
 }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
@@ -262,6 +273,23 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { provisions: [false] },
     { outcome: "preview_ready" },
   ],
+  // The container slept before the block reached the checkpoint, so the site
+  // is gone and no answer can bring it back. Failing here is what releases
+  // the site lock; before this path existed the instance errored holding it.
+  [
+    "checkpoint found the site gone",
+    [information],
+    { checkpoints: [false] },
+    { outcome: "failed" },
+  ],
+  [
+    "nobody answered",
+    [information],
+    { answers: ["timeout"] },
+    {
+      outcome: "failed",
+    },
+  ],
 ]
 
 describe("the assignment Workflow's step names", () => {
@@ -269,7 +297,8 @@ describe("the assignment Workflow's step names", () => {
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
-    const { names, run } = drive([...wakes])
+    script.checkpoints = [...(setup.checkpoints ?? [])]
+    const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
   })
@@ -288,6 +317,8 @@ describe("the assignment Workflow's step names", () => {
         "superseded a preview",
         "site busy then claimed",
         "pool full then provisioned",
+        "checkpoint found the site gone",
+        "nobody answered",
       ].sort()
     )
   })

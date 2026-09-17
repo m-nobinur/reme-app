@@ -86,6 +86,21 @@ describe("a blocked build's checkpoint", () => {
     expect(commands.at(-1)).toContain("tar --zstd -xf /tmp/source.tar.zst")
   })
 
+  // The container sleeps five minutes after the Developer goes quiet, and the
+  // block can reach this later than that. Throwing here would error the
+  // Workflow instance and hold the org's site lock until someone cancelled by
+  // hand, so a lost site is a report and the Workflow fails the build on it.
+  it("reports a site the container already lost, and packs nothing", async () => {
+    disk.clear()
+    commands.length = 0
+    const before = bucket.get(checkpointKey(ids))
+    const taken = await checkpoint(env, ids)
+    expect(taken).toMatchObject({ taken: false, bytes: 0 })
+    expect(commands).toEqual(["test -d /workspace/site/.git"])
+    // Nothing packed, and the earlier checkpoint left where it was.
+    expect(bucket.get(taken.key)).toBe(before)
+  })
+
   it("goes with the container when the build ends", async () => {
     await endSandbox(env, ids)
     expect(destroyed).toBe(1)

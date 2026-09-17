@@ -141,6 +141,31 @@
       "validating 1",
       "gates 1",
       "destroy sandbox"
+    ],
+    "checkpoint found the site gone": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "developer",
+      "developer 1",
+      "blocked 1",
+      "checkpoint 1",
+      "fail lost 1",
+      "destroy sandbox"
+    ],
+    "nobody answered": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "developer",
+      "developer 1",
+      "blocked 1",
+      "checkpoint 1",
+      "answer 1",
+      "fail unanswered 1",
+      "destroy sandbox"
     ]
   },
   "PublishWorkflow": {

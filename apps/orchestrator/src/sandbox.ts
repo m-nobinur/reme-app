@@ -89,9 +89,18 @@ export const checkpointKey = (ids: Ids) =>
 export async function checkpoint(
   env: Env,
   ids: Ids
-): Promise<{ key: string; bytes: number; ms: number }> {
+): Promise<{ taken: boolean; key: string; bytes: number; ms: number }> {
   const started = Date.now()
   const sandbox = sandboxFor(env, ids.assignmentId)
+  const key = checkpointKey(ids)
+  // The container can sleep before this runs, and `exec` then starts a fresh
+  // one from the image with no site on it. There is nothing left to save, so
+  // say so: the caller fails the assignment, which releases the site lock,
+  // where throwing here would error the instance and hold the lock for good.
+  const present = await sandbox.exec(`test -d ${SITE_ROOT}/.git`)
+  if (present.exitCode !== 0) {
+    return { taken: false, key, bytes: 0, ms: Date.now() - started }
+  }
   const packed = await sandbox.exec(
     `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`,
     { timeout: 120_000 }
@@ -103,9 +112,8 @@ export async function checkpoint(
     encoding: "base64",
   })
   const body = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
-  const key = checkpointKey(ids)
   await env.SITES.put(key, body)
-  return { key, bytes: body.length, ms: Date.now() - started }
+  return { taken: true, key, bytes: body.length, ms: Date.now() - started }
 }
 
 /**

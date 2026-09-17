@@ -387,15 +387,26 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       // Before the container can sleep: a stopped container keeps no disk,
       // and the answer may take days. The rehydrate puts the site back only
       // when the container lost it, so a quick answer costs one tarball.
-      await step.do(`checkpoint ${round}`, async () => {
+      const saved = await step.do(`checkpoint ${round}`, async () => {
         const taken = await checkpoint(this.env, ids)
         await run((kit) => appendAudit(kit, ids, "sandbox.checkpointed", taken))
         return taken
       })
-      const answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
-        type: "answer",
-        timeout: "7 days",
-      })
+      // Nothing to come back to: the container slept before the checkpoint
+      // ran. An answer could not resume this build, so end it here rather
+      // than leave the owner waiting on a question that leads nowhere.
+      if (!saved.taken) return fail(`lost ${round}`, "sandbox.site_lost")
+      let answer: { payload: AnswerEvent }
+      try {
+        answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
+          type: "answer",
+          timeout: "7 days",
+        })
+      } catch {
+        // Seven days with no answer. `fail` releases the site lock and takes
+        // the checkpoint out of R2 with the container.
+        return fail(`unanswered ${round}`, "information.unanswered")
+      }
       await step.do(`rehydrate ${round}`, async () => {
         const result = await rehydrate(this.env, ids)
         await run((kit) => appendAudit(kit, ids, "sandbox.rehydrated", result))
