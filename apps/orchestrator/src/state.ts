@@ -142,6 +142,26 @@ const APPROVAL_EXIT: Partial<Record<AssignmentState, AssignmentState>> = {
   implementing: "implementing",
 }
 
+/**
+ * Model spend in USD from the log (§29.2): the sum of every `runtime.turn`'s
+ * reported cost, which is the leaf level, so nothing counts twice. The
+ * provider's own records are reconciliation, never the figure.
+ */
+export async function assignmentCost(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({
+      usd: sql<string>`coalesce(sum((${events.payload} #>> '{response,usage,cost,total}')::float8), 0)`,
+    })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'runtime.turn'`
+    )
+  return Number(row?.usd ?? 0)
+}
+
 export type AppendEvent = {
   orgId: string
   /** Null for an org-level row that belongs to no assignment (a probe). */
@@ -246,10 +266,14 @@ export async function transition(
   }
 
   const version = row.version + 1
+  // Frozen at close, in the transaction that closes it.
+  const costUsd = TERMINAL.includes(to)
+    ? await assignmentCost(db, row.id)
+    : undefined
   try {
     await db
       .update(assignments)
-      .set({ state: to, version, updatedAt: new Date() })
+      .set({ state: to, version, costUsd, updatedAt: new Date() })
       .where(eq(assignments.id, row.id))
   } catch (error) {
     // The site lock (§13): another site assignment in this org is between
@@ -299,6 +323,7 @@ export async function transition(
       to,
       version,
       ...input.payload,
+      ...(costUsd === undefined ? {} : { cost_usd: costUsd }),
       ...(retired.length > 0 ? { retired_revisions: retired } : {}),
     },
   })

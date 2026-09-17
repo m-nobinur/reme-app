@@ -44,7 +44,12 @@ import {
 import { publishedSource } from "./revise.ts"
 import { probe, sandboxFor } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
-import { appendEvent, cancel, TransitionError } from "./state.ts"
+import {
+  appendEvent,
+  assignmentCost,
+  cancel,
+  TransitionError,
+} from "./state.ts"
 
 /**
  * The console routes (M3 drives them). A bearer secret is the whole of the
@@ -521,12 +526,16 @@ console_.get("/:id", async (c) => {
         .from(siteRevisions)
         .where(eq(siteRevisions.assignmentId, id))
         .orderBy(sql`${siteRevisions.version} desc`)
-      return { row, revisions }
+      return { row, revisions, cost: await assignmentCost(db, id) }
     })
   if (!found) return notFound(c, id)
+  // The log's sum, live, so an open run shows what it has spent so far; the
+  // row's `cost_usd` is the same sum frozen when the assignment closed.
   return c.json({
     assignment: toAssignment(found.row),
     revisions: found.revisions.map(toSiteRevision),
+    cost_usd: found.cost,
+    cost_usd_at_close: found.row.costUsd,
   })
 })
 

@@ -44,6 +44,7 @@ import {
   siteHost,
 } from "../seed.ts"
 import { eventSink } from "../sink.ts"
+import { assignmentCost } from "../state.ts"
 
 /**
  * The Developer (§8, ADR-031): one Durable Object conversation per
@@ -201,6 +202,12 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
     spentUsd: runtime.budget.model_usd_spent,
+    // The cap is per assignment, and this isolate is not the first to spend
+    // against it after an eviction, a resume or a rehydrate.
+    spentBefore: () =>
+      kit.withOrg({ orgId: runtime.spec.org_id }, (db) =>
+        assignmentCost(db, brief.snapshot.assignment_id)
+      ),
     onEvent: (event) => {
       tee.emit(event.type, event.payload)
       if (event.type === "budget.exhausted") {
