@@ -73,10 +73,12 @@ export async function provision(
 }
 
 /**
- * FIXME: a test surface, like console.html. The commands are a constant and
- * the request contributes nothing to them: the route runs exactly this list,
- * in this order, in a container of its own. Q4 moves the two probes into CI
- * and deletes this with the route.
+ * The live probe list, run by `pnpm --filter orchestrator test:probe` after
+ * every staging deploy. The commands are a constant and the request
+ * contributes nothing to them: the route runs exactly this list, in this
+ * order, in a container of its own. It stays a route because a Durable
+ * Object runs the deployed class only, so nothing but the deployed Worker
+ * can show what its containers can reach.
  *
  * The egress pair proves §8.3: the public internet fails and the registry
  * answers. `env` proves no key, token or connection string reached the

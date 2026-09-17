@@ -7,7 +7,8 @@ import { contextHash } from "@workspace/facade"
  * Developer session from the orchestrator's event log into
  * `fixtures/<name>.jsonl`, pinned to the hash `deriveContext` (§10.6) gives it.
  *
- * Only what a scenario reads is kept: the events the fold consumes, each tool
+ * Only what a scenario reads is kept: the events the fold consumes, each
+ * redacted model request (the credential scenario reads them), each tool
  * call with its result, and the two audit rows a scenario asserts on. Deltas
  * are dropped because the fold skips them and they are most of the bytes.
  * Reads ORCHESTRATOR_URL and ORCHESTRATOR_TOKEN like scripts/builder.mjs.
@@ -16,6 +17,7 @@ import { contextHash } from "@workspace/facade"
 const KEEP = new Set([
   "runtime.agent_start",
   "runtime.context_segment",
+  "runtime.turn_request",
   "runtime.turn_messages",
   "runtime.compaction",
   "runtime.tool",

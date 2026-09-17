@@ -55,6 +55,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+      ORCHESTRATOR_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
     steps:
       # First, and it fails rather than skips, for the reason preview.yml gives:
       # a deploy that quietly does not run leaves staging stale with nothing
@@ -62,7 +63,7 @@ jobs:
       - name: Credentials
         run: |
           missing=
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY ORCHESTRATOR_TOKEN; do
             [ -n "${!name:-}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -180,6 +181,17 @@ jobs:
         run: |
           curl -sSf --max-time 30 "$ORCHESTRATOR/health" | jq -e '.status == "ok"' >/dev/null || {
             echo "::error::$ORCHESTRATOR/health did not answer ok"; exit 1; }
+
+      # The container rules, on the class this deploy just put live: the public
+      # internet refused, the registry reached, no key or connection string in
+      # the container's environment. A PR cannot prove these, because a Durable
+      # Object runs the deployed class and never a preview version's, so the
+      # PR pipeline checks the source (test/sandbox-config.test.ts) and this
+      # checks the container. Its floor fails a run where the cases skip.
+      - name: The sandbox holds its egress and credential rules
+        run: >
+          ORCHESTRATOR_URL="$ORCHESTRATOR"
+          pnpm --filter orchestrator test:probe
 
       # The site router owns `*-stg.remeai.co.uk/*` (ADR-030); nothing else
       # answers on a tenant or preview host, so a wrong deploy here is a
