@@ -33,11 +33,7 @@ const notHere = (c: Context<App>) => c.text("No site here.", 404, NO_STORE)
 
 /** One constant answer for every cookie that does not open this preview. No scheme is offered, so no `WWW-Authenticate`. */
 const noPreview = (c: Context<App>) =>
-  c.text(
-    "No preview here. Open a preview link from the console.",
-    401,
-    NO_STORE
-  )
+  c.text("No preview here. Open a fresh preview link.", 401, NO_STORE)
 
 /** R4: a failure that is ours leaves as the §28.1 envelope. */
 const envelope = (

@@ -34,7 +34,6 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { GOAL_MAX, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
-import consoleHtml from "./console.html?raw"
 import {
   activeDeployment,
   decideApproval,
@@ -100,17 +99,6 @@ type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
 const app = new Hono<ConsoleEnv>()
 
 app.get("/health", (c) => c.json({ status: "ok" }))
-
-// FIXME: a test surface, see the comment at the top of console.html. Delete
-// with it once the owner screens read these routes.
-app.get("/console", (c) =>
-  c.html(consoleHtml, 200, {
-    // The page's own script and style are inline; it fetches only this origin.
-    "content-security-policy":
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-    "referrer-policy": "no-referrer",
-  })
-)
 
 /** The console, mounted at `/assignments` below. */
 const console_ = new Hono<ConsoleEnv>({ strict: false })
@@ -224,9 +212,8 @@ console_.post("/", async (c) => {
   // Which of the two coding defaults this assignment runs on (the plan's
   // `--model A|B`). Recorded on the log for the spec resolver to read (N2).
   const model = body.model === "B" ? "B" : "A"
-  // FIXME: a test knob, like console.html. Fact keys left out of the
-  // snapshot so a run has to ask for them; the Developer story's withheld
-  // phone run is the one user. Delete with the console.
+  // Fact keys left out of the snapshot, so a run has to ask for them. Driven
+  // by `scripts/builder.mjs --withhold <key>` and the tier-2 golden builds.
   const withhold = Array.isArray(body.withhold)
     ? body.withhold.filter((k): k is string => typeof k === "string")
     : []
