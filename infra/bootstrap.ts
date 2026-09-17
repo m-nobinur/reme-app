@@ -55,7 +55,7 @@ const environments = {
     neonOwner: "neondb_owner",
     hyperdrive: "reme-staging-postgres",
     kv: "reme-staging-web-cache",
-    /** The router's routing cache (ADR-032, §11.1.3); production's lands with its router. */
+    /** The router's routing cache (ADR-032, §11.1.3), one per environment. */
     routesKv: "reme-staging-routes",
     /**
      * The three the session rests on (ADR-024, ADR-026, open item 24).
@@ -110,7 +110,7 @@ const environments = {
     neonOwner: "neondb_owner",
     hyperdrive: "reme-prod-postgres",
     kv: "reme-prod-web-cache",
-    routesKv: null,
+    routesKv: "reme-prod-routes",
     secrets: {
       "reme-web-production": [
         "WORKOS_API_KEY",
@@ -125,11 +125,15 @@ const environments = {
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",
         "RUNTIME_SPEC_KEY",
+        // Signs the preview links the router verifies with the same value,
+        // as on staging (ADR-032).
+        "PREVIEW_KEY",
         "OPENROUTER_API_KEY",
         "REME_MODEL_PRIMARY",
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
       ],
+      "reme-router-production": ["PREVIEW_KEY"],
     },
   },
 } as const

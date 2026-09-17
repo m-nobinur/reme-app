@@ -157,3 +157,21 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   (issue #90). The staging router deploys with `*-stg.remeai.co.uk/*` on this measurement. With
   the router serving previews, `staging-preview.remeai.co.uk` is no longer a hostname of the
   orchestrator; its custom domain is removed with the stand-in (issue #71).
+- **Amended 2026-09-18, with the production router (issue #90).** The production router owns
+  `*.remeai.co.uk/*`, the whole zone, and passes a hostname it does not serve back to Cloudflare
+  with `fetch(request)`. Two kinds pass through: a service hostname, named in the `SERVICE_HOSTS`
+  var because production's `SITE_HOST_SUFFIX` is `.remeai.co.uk` and every hostname in the zone
+  therefore ends in it; and a host no business holds a slug for, which is another name's request.
+  A pointer that resolves and a file that does not stays this site's own 404.
+
+  **The exact pair was not measured.** The owner declined the run, and the reason stands on its
+  own: `*.remeai.co.uk/*` sits in front of the live `api.remeai.co.uk` and `preview.remeai.co.uk`
+  for the length of the test, and a passthrough that misbehaves is the production api down. What
+  is relied on instead is the 2026-09-16 measurement above, that the pattern with the longer
+  literal suffix wins the host, which makes `*-stg.remeai.co.uk/*` keep the `-stg` hosts against
+  the zone-wide pattern. That is an inference from a measured rule and not the pair itself.
+
+  What would show it wrong: a `-stg` host answering from the production router after this deploys.
+  The staging deploy's own probe asserts a `-stg` host answers the staging router's 404, so the
+  next staging run after the first production tag is the check. If it goes red, staging previews
+  move to the `staging-preview` host as the 2026-09-15 amendment says.
