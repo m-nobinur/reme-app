@@ -173,10 +173,10 @@ console_.use("*", async (c, next) => {
 })
 
 /**
- * FIXME: a test surface, see sandbox.ts. Behind the bearer and the org, and
- * it takes nothing else from the request: the commands are a constant. The
- * result is appended like any other execution, so a probe leaves a trace.
- * Q4 moves the probes into CI and deletes this route.
+ * The live sandbox probe the staging deploy runs, see sandbox.ts. Behind the
+ * bearer and the org, and it takes nothing else from the request: the
+ * commands are a constant. The result is appended like any other execution,
+ * so a probe leaves a trace.
  */
 console_.get("/sandbox/probe", async (c) => {
   const orgId = c.get("orgId")
