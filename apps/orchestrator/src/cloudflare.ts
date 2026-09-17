@@ -35,9 +35,12 @@ import {
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import { publishedSource, restoreAndMap } from "./revise.ts"
 import {
+  checkpoint,
+  endSandbox,
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
+  rehydrate,
   SLEEP_AFTER,
   sandboxFor,
 } from "./sandbox.ts"
@@ -148,7 +151,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       if (superseded) {
         // §13 rule 3: a cancelled assignment's container does not outlive it.
         await step.do(`destroy ${superseded}`, async () => {
-          await sandboxFor(this.env, superseded).destroy()
+          await endSandbox(this.env, {
+            orgId: ids.orgId,
+            assignmentId: superseded,
+          })
           return { destroyed: superseded }
         })
       }
@@ -268,7 +274,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         run((kit) => advance(kit, ids, "failed", { reason }))
       )
       await step.do("destroy sandbox", async () => {
-        await sandboxFor(this.env, ids.assignmentId).destroy()
+        await endSandbox(this.env, ids)
         return { destroyed: ids.assignmentId }
       })
       return { outcome: "failed" as const }
@@ -355,7 +361,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         }
         // ADR-032: the sandbox ends with the build, not at publish.
         await step.do("destroy sandbox", async () => {
-          await sandboxFor(this.env, ids.assignmentId).destroy()
+          await endSandbox(this.env, ids)
           return { destroyed: ids.assignmentId }
         })
         return { outcome: verdict.outcome }
@@ -378,9 +384,33 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           })
         )
       )
-      const answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
-        type: "answer",
-        timeout: "7 days",
+      // Before the container can sleep: a stopped container keeps no disk,
+      // and the answer may take days. The rehydrate puts the site back only
+      // when the container lost it, so a quick answer costs one tarball.
+      const saved = await step.do(`checkpoint ${round}`, async () => {
+        const taken = await checkpoint(this.env, ids)
+        await run((kit) => appendAudit(kit, ids, "sandbox.checkpointed", taken))
+        return taken
+      })
+      // Nothing to come back to: the container slept before the checkpoint
+      // ran. An answer could not resume this build, so end it here rather
+      // than leave the owner waiting on a question that leads nowhere.
+      if (!saved.taken) return fail(`lost ${round}`, "sandbox.site_lost")
+      let answer: { payload: AnswerEvent }
+      try {
+        answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
+          type: "answer",
+          timeout: "7 days",
+        })
+      } catch {
+        // Seven days with no answer. `fail` releases the site lock and takes
+        // the checkpoint out of R2 with the container.
+        return fail(`unanswered ${round}`, "information.unanswered")
+      }
+      await step.do(`rehydrate ${round}`, async () => {
+        const result = await rehydrate(this.env, ids)
+        await run((kit) => appendAudit(kit, ids, "sandbox.rehydrated", result))
+        return result
       })
       await step.do(`resume ${round}`, async () => {
         const fact = await run((kit) =>

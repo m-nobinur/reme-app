@@ -14,7 +14,7 @@ import { repoMap } from "./repo-map.ts"
  */
 
 /** Where the site lives in the container; the agent's `SITE_ROOT`. */
-const SITE_ROOT = "/workspace/site"
+export const SITE_ROOT = "/workspace/site"
 
 /** The revision a revise starts from: what the site serves now, or null before the first publish. */
 export async function publishedSource(
@@ -58,25 +58,38 @@ export type Restorable = {
 /** The files the map describes: the site's source and its three config files. */
 const MAPPED = String.raw`find . -type f \( -path './src/*' -o -name 'astro.config.mjs' -o -name 'tsconfig.json' -o -name 'package.json' \) -not -path './node_modules/*' -not -path './.git/*' | sort`
 
+type Sites = {
+  get: (key: string) => Promise<{ body: ReadableStream } | null>
+}
+
 /**
- * Restore the snapshot into the container and map what it holds. The
- * tarball carries `.git` and no `node_modules`; the toolchain is linked in,
- * as the seed does for a fresh site.
+ * Restore a snapshot into the container. The tarball carries `.git` and no
+ * `node_modules`; the toolchain is linked in, as the seed does for a fresh
+ * site.
  */
-export async function restoreAndMap(
+export async function restore(
   sandbox: Restorable,
-  sites: { get: (key: string) => Promise<{ body: ReadableStream } | null> },
+  sites: Sites,
   sourceKey: string
-): Promise<string> {
+): Promise<void> {
   const object = await sites.get(sourceKey)
   if (!object) throw new Error(`no source snapshot at ${sourceKey}`)
   await sandbox.writeFile("/tmp/source.tar.zst", object.body)
-  const restore = await sandbox.exec(
+  const restored = await sandbox.exec(
     `mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
     { timeout: 120_000 }
   )
-  if (restore.exitCode !== 0)
-    throw new Error(`restore failed: ${restore.stderr}`)
+  if (restored.exitCode !== 0)
+    throw new Error(`restore failed: ${restored.stderr}`)
+}
+
+/** Restore the snapshot into the container and map what it holds. */
+export async function restoreAndMap(
+  sandbox: Restorable,
+  sites: Sites,
+  sourceKey: string
+): Promise<string> {
+  await restore(sandbox, sites, sourceKey)
   const listing = await sandbox.exec(`cd ${SITE_ROOT} && ${MAPPED}`)
   const files: Record<string, string> = {}
   for (const line of listing.stdout.split("\n").filter(Boolean)) {

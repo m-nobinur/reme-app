@@ -42,7 +42,7 @@ import {
   requestReview,
 } from "./publish.ts"
 import { publishedSource } from "./revise.ts"
-import { probe, sandboxFor } from "./sandbox.ts"
+import { endSandbox, probe } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
 import {
   appendEvent,
@@ -581,7 +581,7 @@ console_.post("/:id/cancel", async (c) => {
   }
   try {
     // §13 rule 3: a cancelled assignment's container does not outlive it.
-    await sandboxFor(c.env, id).destroy()
+    await endSandbox(c.env, { orgId: c.get("orgId"), assignmentId: id })
   } catch {
     // Never started, or already gone.
   }
