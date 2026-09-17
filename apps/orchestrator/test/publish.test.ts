@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import { readdirSync, readFileSync } from "node:fs"
 import {
   approvals,
@@ -6,8 +5,6 @@ import {
   deployments,
   eq,
   siteRevisions,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
 import fc from "fast-check"
 import { afterAll, describe, expect, it, vi } from "vitest"
@@ -58,19 +55,19 @@ const {
   FACTS,
   fakeStep,
   GOOD_HTML,
+  kit,
   previewed,
   serveFromPointer,
+  sha,
   stateOf,
   storage,
   SUFFIX,
   TO_PREVIEW,
   workflowEnv,
 } = await import("./site.ts")
-const sha = (bytes: string) => createHash("sha256").update(bytes).digest("hex")
 
-const url = process.env.DATABASE_URL
-const live = describe.skipIf(!url)
-const kit: Tenancy = tenancy(url ?? "postgres://unused")
+const live = describe.skipIf(!process.env.DATABASE_URL)
+// The pool these helpers run on, so this file closes the one it used.
 afterAll(() => kit.close())
 
 live("a review", () => {
