@@ -3,6 +3,7 @@ import {
   getSandbox,
   type Sandbox,
 } from "@cloudflare/sandbox"
+import { restore, SITE_ROOT } from "./revise.ts"
 
 /**
  * The sandbox as the orchestrator uses it (ADR-031): one container per
@@ -22,7 +23,8 @@ export const NPM_REGISTRY_HOST = "registry.npmjs.org"
 /**
  * Idle time before the container stops. The Developer's loop spends most of
  * its wall time waiting on tokens, and containers bill active CPU, so a short
- * window keeps an idle container off the bill; Q3 releases on a block.
+ * window keeps an idle container off the bill. A stopped container's disk is
+ * gone (Cloudflare's containers FAQ), which is why a block checkpoints first.
  */
 export const SLEEP_AFTER = "5m"
 
@@ -70,6 +72,67 @@ export async function provision(
     throw error
   }
   return { cold_start_ms: Date.now() - started }
+}
+
+type Ids = { orgId: string; assignmentId: string }
+
+/** Where a blocked build's site waits for its answer, one object per assignment. */
+export const checkpointKey = (ids: Ids) =>
+  `sites/${ids.orgId}/checkpoints/${ids.assignmentId}.tar.zst`
+
+/**
+ * The site as the Developer left it when it asked, in R2, so the container
+ * can stop while the question waits: a sleeping container comes back with
+ * the image's disk, and a question can wait days. Taken at the block, before
+ * `SLEEP_AFTER` can run out. Uncommitted edits and `.git` both travel.
+ */
+export async function checkpoint(
+  env: Env,
+  ids: Ids
+): Promise<{ key: string; bytes: number; ms: number }> {
+  const started = Date.now()
+  const sandbox = sandboxFor(env, ids.assignmentId)
+  const packed = await sandbox.exec(
+    `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`,
+    { timeout: 120_000 }
+  )
+  if (packed.exitCode !== 0) {
+    throw new Error(`checkpoint failed: ${packed.stderr}`)
+  }
+  const file = await sandbox.readFile("/tmp/checkpoint.tar.zst", {
+    encoding: "base64",
+  })
+  const body = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+  const key = checkpointKey(ids)
+  await env.SITES.put(key, body)
+  return { key, bytes: body.length, ms: Date.now() - started }
+}
+
+/**
+ * Put the checkpoint back before the Developer resumes, when the container
+ * lost it: slept, or replaced. A container that kept its disk is left as it
+ * is. The check itself starts a stopped container, so `ms` is the cold
+ * start plus the restore.
+ */
+export async function rehydrate(
+  env: Env,
+  ids: Ids
+): Promise<{ restored: boolean; ms: number }> {
+  const started = Date.now()
+  const sandbox = sandboxFor(env, ids.assignmentId)
+  const kept = await sandbox.exec(`test -d ${SITE_ROOT}/.git`)
+  if (kept.exitCode === 0) return { restored: false, ms: Date.now() - started }
+  await restore(sandbox, env.SITES, checkpointKey(ids))
+  return { restored: true, ms: Date.now() - started }
+}
+
+/**
+ * §13 rule 3: an assignment's container does not outlive it, and neither
+ * does its checkpoint. Both calls are idempotent.
+ */
+export async function endSandbox(env: Env, ids: Ids): Promise<void> {
+  await sandboxFor(env, ids.assignmentId).destroy()
+  await env.SITES.delete(checkpointKey(ids))
 }
 
 /**

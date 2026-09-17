@@ -108,6 +108,9 @@ vi.mock("../src/sandbox.ts", () => ({
     return { cold_start_ms: 1 }
   },
   sandboxFor: () => ({ destroy: async () => undefined }),
+  endSandbox: async () => undefined,
+  checkpoint: async () => ({ key: "k", bytes: 1, ms: 1 }),
+  rehydrate: async () => ({ restored: true, ms: 1 }),
 }))
 const advanced: [string, string | undefined][] = []
 vi.mock("../src/state.ts", () => ({
