@@ -28,12 +28,35 @@ export type BudgetGuard = {
 export function createBudgetGuard(options: {
   capUsd: number
   spentUsd?: number
+  /**
+   * What the assignment already spent before this guard existed, read from
+   * the log once, before the first model call. A guard lives as long as its
+   * isolate, and a conversation outlives many, so without this every
+   * eviction would hand the model a fresh cap. A failed read refuses the
+   * call and is retried on the next one: the guard fails closed.
+   */
+  spentBefore?: () => Promise<number>
   warnAt?: number
   onEvent: (event: BudgetEvent) => void
 }): BudgetGuard {
   const warnAt = options.warnAt ?? 0.8
   let spent = options.spentUsd ?? 0
   let warned = spent >= warnAt * options.capUsd
+  let seed: Promise<void> | undefined
+  const seeded = () => {
+    if (!options.spentBefore) return
+    seed ??= options.spentBefore().then(
+      (usd) => {
+        spent += usd
+        warned ||= spent >= warnAt * options.capUsd
+      },
+      (error: unknown) => {
+        seed = undefined
+        throw error
+      }
+    )
+    return seed
+  }
 
   const observe = (event: FlueObservation) => {
     if (event.type !== "turn") return
@@ -46,6 +69,7 @@ export function createBudgetGuard(options: {
     next
   ) => {
     if (operation.type !== "model") return next()
+    await seeded()
     const payload = {
       cap_usd: options.capUsd,
       spent_usd: spent,

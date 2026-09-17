@@ -75,6 +75,58 @@ describe("the pre-call budget guard", () => {
     expect(events[0]?.payload.ratio).toBeCloseTo(0.85)
   })
 
+  it("counts what the log says was spent before it, read once", async () => {
+    const events: BudgetEvent[] = []
+    let reads = 0
+    const guard = createBudgetGuard({
+      capUsd: 0.01,
+      spentBefore: async () => {
+        reads += 1
+        return 0.004
+      },
+      onEvent: (e) => events.push(e),
+    })
+    const { interceptor, observe } = guard.instrumentation
+    let calls = 0
+    const next = async () => {
+      calls += 1
+      return "ok"
+    }
+    await expect(interceptor(modelCall, {}, next)).resolves.toBe("ok")
+    // A spend the fresh guard alone would allow, and the assignment would not.
+    await observe(turn(0.007), {} as never)
+    await expect(interceptor(modelCall, {}, next)).rejects.toMatchObject({
+      code: "budget.exhausted",
+    })
+    expect(calls).toBe(1)
+    expect(reads).toBe(1)
+    expect(guard.spent()).toBeCloseTo(0.011)
+  })
+
+  it("refuses the call when the log cannot be read, and reads again next time", async () => {
+    let reads = 0
+    const { interceptor } = createBudgetGuard({
+      capUsd: 1,
+      spentBefore: async () => {
+        reads += 1
+        if (reads === 1) throw new Error("database unavailable")
+        return 0
+      },
+      onEvent: () => undefined,
+    }).instrumentation
+    let calls = 0
+    const next = async () => {
+      calls += 1
+      return "ok"
+    }
+    await expect(interceptor(modelCall, {}, next)).rejects.toThrow(
+      "database unavailable"
+    )
+    expect(calls).toBe(0)
+    await expect(interceptor(modelCall, {}, next)).resolves.toBe("ok")
+    expect(reads).toBe(2)
+  })
+
   it("leaves tool and agent operations alone", async () => {
     const { interceptor } = createBudgetGuard({
       capUsd: 0,

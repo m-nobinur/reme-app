@@ -27,6 +27,23 @@ const byId = new Map(data.map((m) => [m.id, m]))
 /** Dollars per token as OpenRouter prints them, to dollars per million. */
 const perMillion = (value) => Math.round(Number(value ?? 0) * 1e6 * 1e6) / 1e6
 
+/** The highest rate a pricing block charges for `key` at any hour of any day. */
+const peak = (pricing, key) =>
+  Math.max(
+    perMillion(pricing?.[key]),
+    ...(pricing?.overrides ?? []).map((o) => perMillion(o[key]))
+  )
+
+/** Every provider serving `id`, with its own pricing (one request per id). */
+async function endpoints(id) {
+  const r = await fetch(`https://openrouter.ai/api/v1/models/${id}/endpoints`)
+  if (!r.ok) {
+    console.error(`openrouter answered ${r.status} for ${id}'s endpoints`)
+    process.exit(1)
+  }
+  return (await r.json()).data.endpoints
+}
+
 const models = []
 const missing = []
 for (const id of ids) {
@@ -34,6 +51,23 @@ for (const id of ids) {
   if (!m) {
     missing.push(id)
     continue
+  }
+  // Pi's cost table has one rate, and OpenRouter's list price moves by the
+  // hour for some models, so the rate is the day's peak. Cache reads are not
+  // capped by routing, so theirs is the dearest provider the cap still admits.
+  const cost = {
+    input: peak(m.pricing, "prompt"),
+    output: peak(m.pricing, "completion"),
+    cacheRead: 0,
+    cacheWrite: 0,
+  }
+  for (const e of await endpoints(id)) {
+    if (peak(e.pricing, "prompt") > cost.input) continue
+    if (peak(e.pricing, "completion") > cost.output) continue
+    cost.cacheRead = Math.max(
+      cost.cacheRead,
+      peak(e.pricing, "input_cache_read")
+    )
   }
   models.push({
     id,
@@ -45,17 +79,20 @@ for (const id of ids) {
     input: (m.architecture?.input_modalities ?? ["text"]).filter(
       (mode) => mode === "text" || mode === "image"
     ),
-    // The list price. OpenRouter publishes time-of-day overrides for some
-    // models; Pi's cost table has one rate, so this is the one the day pays.
-    cost: {
-      input: perMillion(m.pricing?.prompt),
-      output: perMillion(m.pricing?.completion),
-      cacheRead: perMillion(m.pricing?.input_cache_read),
-      cacheWrite: 0,
-    },
+    cost,
     contextWindow: m.context_length,
     maxTokens: m.top_provider?.max_completion_tokens ?? 0,
-    compat: { thinkingFormat: "openrouter" },
+    compat: {
+      thinkingFormat: "openrouter",
+      // The rate above is a ceiling OpenRouter routes under, so what it bills
+      // for a turn is never more than the log says the turn cost, and the
+      // budget cap summed from the log holds (§29.2). Measured 2026-09-17:
+      // unbounded, a turn went to a provider 5% under the list rate, and
+      // two others serving this model charge up to 25% over it.
+      openRouterRouting: {
+        max_price: { prompt: cost.input, completion: cost.output },
+      },
+    },
   })
 }
 if (missing.length > 0) {

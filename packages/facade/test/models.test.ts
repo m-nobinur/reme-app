@@ -19,6 +19,20 @@ describe("the generated OpenRouter models", () => {
     }
   })
 
+  it("route only to providers at or under the rate the log charges", () => {
+    for (const id of OPENROUTER_IDS) {
+      const model = openrouterModels().find((m) => m.id === id)
+      expect(model?.compat, id).toMatchObject({
+        openRouterRouting: {
+          max_price: {
+            prompt: model?.cost.input,
+            completion: model?.cost.output,
+          },
+        },
+      })
+    }
+  })
+
   it("throw naming the declared ids when the generated entries are gone", () => {
     expect(() => openrouterModels([])).toThrow(
       /deepseek\/deepseek-v4.1-flash, x-ai\/grok-4.6, z-ai\/glm-5.3-flash/
