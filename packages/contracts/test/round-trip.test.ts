@@ -125,13 +125,12 @@ describe.each(Object.keys(contracts))("%s", (name) => {
               fc.option(fc.jsonValue(), { nil: undefined })
             )
             .map(([path, value]) => mutate(sample, path, value)),
-          // Add a field the contract never declared. `__proto__` is excluded
-          // because Zod 4.4.3 genuinely disagrees with the JSON Schema there;
-          // the test below pins that divergence so it stays visible.
+          // Add a field the contract never declared, `__proto__` included:
+          // the test below pins that Zod and the JSON Schema agree on it.
           fc
             .tuple(
               fc.constantFrom(...objectPaths),
-              fc.string({ minLength: 1 }).filter((key) => key !== "__proto__"),
+              fc.string({ minLength: 1 }),
               fc.jsonValue()
             )
             .map(([path, key, value]) => mutate(sample, [...path, key], value))
@@ -178,17 +177,13 @@ describe("seq pairs with session_id", () => {
 })
 
 /**
- * A known, narrow divergence between Zod 4.4.3 and the JSON Schema we publish.
  * `{"__proto__": ...}` is valid JSON, and `JSON.parse` turns it into an
- * ordinary own key rather than touching the prototype. Ajv rejects it under
- * `additionalProperties: false`, which is correct. Zod accepts it and strips
- * it, so nothing pollutes anything, but a consumer validating against our
- * OpenAPI document would reject a payload our own API waves through.
+ * ordinary own key rather than touching the prototype. Both the published
+ * JSON Schema and Zod refuse it under `additionalProperties: false`.
  *
- * Every other inherited key name (`constructor`, `toString`, ...) is rejected
- * by both, so the gap is exactly one key wide. This test fails when Zod fixes
- * it, which is the signal to drop the `__proto__` filter from the fuzz
- * generator above.
+ * Zod up to 4.4.3 accepted and stripped it instead, which meant a consumer
+ * validating against our OpenAPI document rejected a payload our own API waved
+ * through. These cases pin the agreement, so the gap cannot reopen unnoticed.
  */
 describe("__proto__ as a wire key", () => {
   const wire =

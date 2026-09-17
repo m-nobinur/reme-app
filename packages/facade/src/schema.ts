@@ -73,10 +73,8 @@ function convert(node: Node, root: Node): v.GenericSchema {
       return v.null()
     case "array": {
       const items = node.items ? convert(node.items as Node, root) : v.unknown()
-      const checks: v.GenericSchema[] = []
       if (typeof node.minItems === "number") {
-        checks.push(v.pipe(v.array(items), v.minLength(node.minItems)))
-        return checks[0] as v.GenericSchema
+        return v.pipe(v.array(items), v.minLength(node.minItems))
       }
       return v.array(items)
     }

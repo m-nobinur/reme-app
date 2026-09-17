@@ -2,7 +2,7 @@ import { z } from "zod"
 
 /**
  * Every environment variable the stack reads, with the shape it must have.
- * Add a variable here and to `.env.example` in the same change: `pnpm doctor`
+ * Add a variable here and to `.env.example` in the same change: `pnpm preflight`
  * reports against this schema, so a variable missing from it is unchecked.
  */
 export const envSchema = z.object({

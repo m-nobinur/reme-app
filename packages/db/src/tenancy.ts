@@ -222,23 +222,8 @@ export type Tenancy = {
 }
 
 /**
- * The one read that happens outside an org context, because it is the read that
- * produces one (ADR-029).
- *
- * `resolve_org` is SECURITY DEFINER, so it runs as its owner and no policy is
- * evaluated inside it; migration 0005 carries the reasoning and the body that
- * is therefore the whole boundary. What this adds is the role: the call runs as
- * `reme_app` in a transaction of its own, so the connecting role, which on Neon
- * holds BYPASSRLS, executes nothing on this path either, and `reme_app` is the
- * only role granted EXECUTE. No org context is set and no handle is handed out.
- *
- * Returns the org id, or null when the person holds no active membership in
- * that organization. Null is the ordinary answer for a signed-in person whose
- * org we do not mirror yet, not an error.
- */
-/**
- * The org a slug names, for the operator console (M3), which addresses a
- * business by its slug and holds no session. The same definer path as
+ * The org a slug names, for the orchestrator, which addresses a business by
+ * its slug and holds no session. The same definer path as
  * `resolveOrg`: a null for an unknown slug, never an error that says so.
  */
 export async function resolveOrgBySlug(
@@ -272,6 +257,21 @@ export async function listOrgIds(kit: Tenancy): Promise<string[]> {
   })
 }
 
+/**
+ * The one read that happens outside an org context, because it is the read that
+ * produces one (ADR-029).
+ *
+ * `resolve_org` is SECURITY DEFINER, so it runs as its owner and no policy is
+ * evaluated inside it; migration 0005 carries the reasoning and the body that
+ * is therefore the whole boundary. What this adds is the role: the call runs as
+ * `reme_app` in a transaction of its own, so the connecting role, which on Neon
+ * holds BYPASSRLS, executes nothing on this path either, and `reme_app` is the
+ * only role granted EXECUTE. No org context is set and no handle is handed out.
+ *
+ * Returns the org id, or null when the person holds no active membership in
+ * that organization. Null is the ordinary answer for a signed-in person whose
+ * org we do not mirror yet, not an error.
+ */
 export async function resolveOrg(
   kit: Tenancy,
   identity: Identity

@@ -92,6 +92,28 @@ const unauthenticated = () =>
     detail: {},
   })
 
+/**
+ * The `revision_id` an approval or a rejection names, or the 400 that says it
+ * was not named. Both routes take the same body under the same rule.
+ */
+const namedRevision = async (
+  c: Context,
+  noun: "An approval" | "A rejection"
+): Promise<string | Response> => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    revision_id?: unknown
+  }
+  if (typeof body.revision_id !== "string" || !body.revision_id) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "approval.malformed",
+      message: `${noun} names the revision_id the reviewer saw.`,
+      detail: {},
+    })
+  }
+  return body.revision_id
+}
+
 type Bindings = Env
 type Variables = { kit: Tenancy; orgId: string }
 type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
@@ -847,23 +869,14 @@ console_.post("/:id/approve", async (c) => {
       detail: {},
     })
   }
-  const body = (await c.req.json().catch(() => ({}))) as {
-    revision_id?: unknown
-  }
-  if (typeof body.revision_id !== "string" || !body.revision_id) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "approval.malformed",
-      message: "An approval names the revision_id the reviewer saw.",
-      detail: {},
-    })
-  }
+  const revisionId = await namedRevision(c, "An approval")
+  if (typeof revisionId !== "string") return revisionId
   const orgId = c.get("orgId")
   const ids = { orgId, assignmentId: c.req.param("id") }
   let decision: Awaited<ReturnType<typeof decideApproval>>
   try {
     decision = await decideApproval(c.get("kit"), ids, {
-      revisionId: body.revision_id,
+      revisionId,
       decidedBy: { kind: "console" },
     })
   } catch (error) {
@@ -895,21 +908,12 @@ console_.post("/:id/approve", async (c) => {
 console_.post("/:id/reject", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
-  const body = (await c.req.json().catch(() => ({}))) as {
-    revision_id?: unknown
-  }
-  if (typeof body.revision_id !== "string" || !body.revision_id) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "approval.malformed",
-      message: "A rejection names the revision_id the reviewer saw.",
-      detail: {},
-    })
-  }
+  const revisionId = await namedRevision(c, "A rejection")
+  if (typeof revisionId !== "string") return revisionId
   const ids = { orgId: c.get("orgId"), assignmentId: c.req.param("id") }
   try {
     const { decision, replayed } = await rejectApproval(c.get("kit"), ids, {
-      revisionId: body.revision_id,
+      revisionId,
       decidedBy: { kind: "console" },
     })
     return c.json(decision, replayed ? 200 : 201)
