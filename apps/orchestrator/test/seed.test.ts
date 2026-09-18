@@ -2,6 +2,7 @@ import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
+import { repoMap } from "../src/repo-map.ts"
 import {
   SEED_DIGEST,
   SEED_FIELDS,
@@ -51,6 +52,10 @@ describe("the seed", () => {
       "serviceArea",
       "standardCleanHourly",
     ])
+  })
+
+  it("maps the whole seed, so the Developer sees every page and the site config", () => {
+    expect(repoMap(STARTER_FILES)).not.toContain("[Map cut")
   })
 
   it("digests every component manifest the package commits", () => {
