@@ -108,6 +108,10 @@ const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
  * and is always optional. A union, so "required with no fact" cannot be
  * written down. The declaration order of a site's fields is the order the
  * Developer asks for missing facts.
+ *
+ * `required` is about asking, never about rendering: the Developer must ask
+ * for a required fact that is missing, unless the owner has asked for it to
+ * be left off the site. A required field may end up empty (ADR-033).
  */
 export const SiteField = z.discriminatedUnion("kind", [
   z.strictObject({
