@@ -39,6 +39,7 @@ import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
+import { checkpoint, recover } from "../sandbox.ts"
 import {
   SEED_DIGEST,
   SEED_REQUIRED_FACTS,
@@ -164,6 +165,37 @@ instrument({
   },
 })
 
+const sandboxIds = (found: Session) => ({
+  orgId: found.runtime.spec.org_id,
+  assignmentId: found.brief.snapshot.assignment_id,
+})
+
+/**
+ * The agent's `checkpoint` is a commit on the container's disk, and the
+ * platform can replace the container under a running turn (open item 56). So
+ * each commit also goes to R2, where the next turn can find it. A save that
+ * fails is logged and the turn goes on: the work is no worse off than before.
+ */
+async function save(found: Session) {
+  try {
+    found.tee.emit(
+      "sandbox.checkpointed",
+      await checkpoint(env, sandboxIds(found))
+    )
+  } catch (error) {
+    found.tee.emit("sandbox.checkpoint_failed", {
+      message: String(error).slice(0, 300),
+    })
+  }
+}
+
+/** Whether a turn after the first has a site to go on with, logged when it had to be found. */
+async function siteKept(found: Session): Promise<boolean> {
+  const back = await recover(env, sandboxIds(found))
+  if (back.site !== "kept") found.tee.emit("sandbox.recovered", back)
+  return back.site !== "gone"
+}
+
 /** The Workflow instance for an assignment, which the tools write to and nothing else reaches. */
 const workflow = (assignmentId: string) => env.ASSIGNMENTS.get(assignmentId)
 
@@ -198,6 +230,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
   created.gate = createTurnGate({
     onInterrupt: (reason) => wake(created, `gate:${reason}`, reason),
     interruptNow: platformInterrupted,
+    onToolDone: (name) => (name === "checkpoint" ? save(created) : undefined),
   })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
@@ -262,7 +295,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
     "- Call checkpoint after a coherent set of edits.",
-    "- A run.interrupted message means your last model call failed before your turn finished; the files you wrote are still there. Continue from where you left off.",
+    "- A run.interrupted message means your turn ended before you finished it. Your work up to your last checkpoint is there; anything after it may not be. Look at git log and git status, then continue from what you find.",
     "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
     "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
     "",
@@ -356,7 +389,7 @@ export function Developer({ id }: AgentProps) {
       setSegmentLogged(true)
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
-    if (restored) return
+    if (restored && (await siteKept(current))) return
     const sandbox = harness.sandbox
     await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
     if (brief.restore_key) {

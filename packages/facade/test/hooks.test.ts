@@ -283,6 +283,27 @@ describe("the turn gate", () => {
     async () =>
       value
 
+  it("tells the caller a tool returned before the model sees it, and never for one that threw", async () => {
+    const order: string[] = []
+    const gate = createTurnGate({
+      onToolDone: async (name) => {
+        await Promise.resolve()
+        order.push(`done:${name}`)
+      },
+    })
+    const result = await gate.interceptor(op("checkpoint"), ctx, async () => {
+      order.push("ran")
+      return "committed"
+    })
+    order.push(`returned:${result}`)
+    await expect(
+      gate.interceptor(op("bash"), ctx, async () => {
+        throw new Error("no")
+      })
+    ).rejects.toThrow("no")
+    expect(order).toEqual(["ran", "done:checkpoint", "returned:committed"])
+  })
+
   it("ends the turn after three identical thrown failures, once, and only reads after it", async () => {
     const reasons: string[] = []
     const gate = createTurnGate({ onInterrupt: (r) => reasons.push(r) })
