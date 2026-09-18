@@ -125,13 +125,52 @@ async function later(c: Context<App>, work: Promise<unknown>) {
 const edge = () =>
   (globalThis as { caches?: { default?: Cache } }).caches?.default
 
-const edgeKey = (host: string, key: string) => `https://${host}/.edge/${key}`
+// Each segment escaped: a file name may hold `#`, `?` or `\`, and a URL would
+// otherwise drop or rewrite them and file two objects under one key.
+const edgeKey = (host: string, key: string) =>
+  `https://${host}/.edge/${key.split("/").map(encodeURIComponent).join("/")}`
 
 /** Stored under a lifetime the cache will keep; what the visitor is told is set on the way out. */
 const KEEP = "public, max-age=31536000, immutable"
 
-/** How long "no business holds this name" is believed here before Postgres is asked again. */
-const NOBODY_FOR = "public, max-age=60"
+/** How long an answer from Postgres about a name is believed here before it is asked again. */
+const BELIEVED_FOR = "public, max-age=60"
+
+/** Keep what Postgres said about a host: its pointer, or that nobody holds it. */
+async function believe(
+  c: Context<App>,
+  host: string,
+  what: "pointer" | "nobody",
+  body: string | null
+) {
+  const put = edge()?.put(
+    edgeKey(host, what),
+    new Response(body, { headers: { "cache-control": BELIEVED_FOR } })
+  )
+  if (put) await later(c, put)
+}
+
+/**
+ * Who is asking, for the limiter. One IPv6 customer holds a /64, so the whole
+ * address would hand them 2^64 keys; the first four groups are the customer.
+ * Off Cloudflare there is no header and every request shares one key.
+ */
+function asker(c: Context<App>): string {
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown"
+  if (!ip.includes(":")) return ip
+  const [head = "", tail = ""] = ip.split("::")
+  const front = head ? head.split(":") : []
+  const back = tail ? tail.split(":") : []
+  const groups = [
+    ...front,
+    ...new Array(Math.max(0, 8 - front.length - back.length)).fill("0"),
+    ...back,
+  ]
+  return groups
+    .slice(0, 4)
+    .map((group) => group.replace(/^0+(?=.)/, ""))
+    .join(":")
+}
 
 async function fromR2(
   c: Context<App>,
@@ -202,6 +241,10 @@ async function serve(
   const etag = found.headers.get("etag")
   if (etag) headers.set("etag", etag)
   const bodiless = c.req.method === "HEAD" || found.status === 304
+  // On a miss the body is one half of a tee whose other half fills the cache;
+  // left unread it would be buffered whole. Not awaited: a tee's cancel
+  // settles only when both halves are done, and the other is still filling.
+  if (bodiless) found.body?.cancel().catch(() => undefined)
   return new Response(bodiless ? null : found.body, {
     status: found.status,
     headers,
@@ -326,25 +369,27 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     pointer = parsed.data
   } else {
     // Postgres is 1.5 to 2.7 s away (measured 2026-09-18) and the zone's
-    // wildcard record sends any name here, so the way to it is narrow: a name
-    // already found to be nobody's is believed for a minute, and one address
-    // gets `MISSES` askings a minute. The second is the control that holds
-    // against made-up names, each of which is new to the first.
-    const nobody = edgeKey(host, "nobody")
-    if (await edge()?.match(nobody)) return unserved(c)
-    const { success } = await c.env.MISSES.limit({
-      key: c.req.header("cf-connecting-ip") ?? "unknown",
-    })
-    if (!success) return tooMany(c)
-    pointer = await pointerFromTruth(c, host)
-    if (pointer) {
-      await later(c, c.env.ROUTES.put(`host:${host}`, JSON.stringify(pointer)))
+    // wildcard record sends any name here, so the way to it is narrow. What
+    // it last said about a name is believed for a minute, either way: KV can
+    // go on answering "no pointer" for that long after the write-back, and a
+    // page is many requests, each of which would otherwise spend an asking.
+    // Then one asker gets `MISSES` askings a minute, which is the control
+    // that holds against made-up names, each of which is new to the first.
+    const known = await edge()?.match(edgeKey(host, "pointer"))
+    if (known) {
+      pointer = SitePointer.parse(await known.json())
     } else {
-      const put = edge()?.put(
-        nobody,
-        new Response(null, { headers: { "cache-control": NOBODY_FOR } })
-      )
-      if (put) await later(c, put)
+      if (await edge()?.match(edgeKey(host, "nobody"))) return unserved(c)
+      const { success } = await c.env.MISSES.limit({ key: asker(c) })
+      if (!success) return tooMany(c)
+      pointer = await pointerFromTruth(c, host)
+      if (pointer) {
+        const found = JSON.stringify(pointer)
+        await later(c, c.env.ROUTES.put(`host:${host}`, found))
+        await believe(c, host, "pointer", found)
+      } else {
+        await believe(c, host, "nobody", null)
+      }
     }
   }
   // No pointer and no row behind it: nothing here was ever published under

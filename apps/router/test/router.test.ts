@@ -1,5 +1,5 @@
 import { signPreview } from "@workspace/gates/preview"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import app from "../src/index.ts"
 
 /**
@@ -28,6 +28,8 @@ const objects = new Map<string, string>()
 const reads: string[] = []
 /** Flipped by a test to stand in for an address that has used its askings. */
 let limited = false
+/** Every key the limiter was asked about. */
+const askers: string[] = []
 const pointers = new Map<string, unknown>()
 
 function revision(
@@ -72,7 +74,12 @@ const env = {
       return body === undefined ? null : { body, httpEtag: `"${key}"` }
     },
   },
-  MISSES: { limit: async () => ({ success: !limited }) },
+  MISSES: {
+    limit: async ({ key }: { key: string }) => {
+      askers.push(key)
+      return { success: !limited }
+    },
+  },
   ROUTES: {
     get: async (key: string) => pointers.get(key) ?? null,
     put: async (key: string, value: string) => {
@@ -142,19 +149,29 @@ async function passedThrough(
  */
 function withEdgeCache() {
   const stored = new Map<string, Response>()
+  // An HTTP cache never sees a fragment, so two keys that differ only after a
+  // `#` are one entry. Node's `Request` keeps it; this drops it, as the real
+  // cache does.
+  const keyOf = (at: Request | string) => {
+    const parsed = new URL(typeof at === "string" ? at : at.url)
+    parsed.hash = ""
+    return parsed.href
+  }
   ;(globalThis as { caches?: unknown }).caches = {
     default: {
       match: async (key: Request | string) => {
         const request = new Request(key)
-        const hit = stored.get(request.url)?.clone()
+        const hit = stored.get(keyOf(request))?.clone()
         if (!hit) return undefined
         const tag = request.headers.get("if-none-match")
         return tag && tag === hit.headers.get("etag")
           ? new Response(null, { status: 304, headers: hit.headers })
           : hit
       },
+      // As the real one: nothing is kept without a lifetime to keep it for.
       put: async (at: string, response: Response) => {
-        stored.set(at, response)
+        const lifetime = response.headers.get("cache-control") ?? ""
+        if (/max-age=[1-9]/.test(lifetime)) stored.set(keyOf(at), response)
       },
     },
   }
@@ -165,7 +182,16 @@ afterEach(() => {
   ;(globalThis as { caches?: unknown }).caches = undefined
   limited = false
   reads.length = 0
+  askers.length = 0
 })
+
+/** The router in a new isolate: the edge cache is as it was, the manifests kept in memory are gone. */
+async function newIsolate() {
+  vi.resetModules()
+  const fresh = (await import("../src/index.ts")).default
+  return (host: string, path: string, init: RequestInit = {}) =>
+    fresh.request(`https://${host}${path}`, init, env)
+}
 
 describe("the edge cache", () => {
   const point = (revisionId: string, version: number) =>
@@ -227,20 +253,55 @@ describe("the edge cache", () => {
   it("keeps a validator away from the manifest", async () => {
     withEdgeCache()
     point(REV, 1)
-    await get(SITE_HOST, "/")
-    const res = await get(SITE_HOST, "/", {
+    // One isolate puts the manifest in the cache; the next reads it from
+    // there with the visitor's header in hand.
+    await (await newIsolate())(SITE_HOST, "/")
+    const res = await (await newIsolate())(SITE_HOST, "/", {
       headers: { "if-none-match": `"sites/${ORG}/${REV}/manifest.json"` },
     })
     expect(res.status).toBe(200)
   })
 
-  it("never stores a preview", async () => {
+  it("never stores a preview, manifest included", async () => {
     const stored = withEdgeCache()
-    const res = await get(PREVIEW_HOST, "/", {
+    const res = await (await newIsolate())(PREVIEW_HOST, "/", {
       headers: cookie(await claimFor()),
     })
     expect(res.status).toBe(200)
     expect(stored.size).toBe(0)
+  })
+
+  it("answers HEAD from the cache with no body", async () => {
+    withEdgeCache()
+    point(REV, 1)
+    const cold = await get(SITE_HOST, "/", { method: "HEAD" })
+    expect(cold.status).toBe(200)
+    expect(await cold.text()).toBe("")
+    await get(SITE_HOST, "/")
+    reads.length = 0
+    const warm = await get(SITE_HOST, "/", { method: "HEAD" })
+    expect(warm.headers.get("etag")).toBeTruthy()
+    expect(await warm.text()).toBe("")
+    expect(reads).toEqual([])
+  })
+
+  it("files a name with a fragment in it under its own key", async () => {
+    withEdgeCache()
+    const id = "10000001-0000-4000-8000-00000000000a"
+    revision(ORG, id, {
+      files: {
+        "index.html": "a".repeat(64),
+        "_astro/x": "b".repeat(64),
+        "_astro/x#y": "c".repeat(64),
+      },
+    })
+    objects.set(`sites/${ORG}/${id}/dist/_astro/x`, "plain")
+    objects.set(`sites/${ORG}/${id}/dist/_astro/x#y`, "fragment")
+    point(id, 3)
+    expect(await (await get(SITE_HOST, "/_astro/x%23y")).text()).toBe(
+      "fragment"
+    )
+    expect(await (await get(SITE_HOST, "/_astro/x")).text()).toBe("plain")
   })
 })
 
@@ -262,6 +323,36 @@ describe("the way to Postgres", () => {
     const res = await get(`nobody${SUFFIX}`, "/")
     expect(res.status).toBe(429)
     expect(res.headers.get("retry-after")).toBe("60")
+  })
+
+  it("never asks the limiter about a host KV holds a pointer for", async () => {
+    pointers.set(`host:${SITE_HOST}`, {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 1,
+    })
+    limited = true
+    expect((await get(SITE_HOST, "/")).status).toBe(200)
+    expect(askers).toEqual([])
+  })
+
+  it("counts one IPv6 customer as one asker, however the address is written", async () => {
+    limited = true
+    for (const ip of [
+      "2001:db8:0:12::1",
+      "2001:db8:0:12:ffff:ffff:ffff:ffff",
+      "2001:0db8::12:0:0:0:9",
+      "203.0.113.7",
+    ]) {
+      await get(`nobody${SUFFIX}`, "/", { headers: { "cf-connecting-ip": ip } })
+    }
+    expect(askers).toEqual([
+      "2001:db8:0:12",
+      "2001:db8:0:12",
+      "2001:db8:0:12",
+      "203.0.113.7",
+    ])
   })
 
   it("believes a cached nobody without asking again", async () => {
@@ -647,6 +738,30 @@ live("a published host, against a real database", () => {
     )
     expect(nobody.status).toBe(404)
     expect(pointers.has(`host:nobody-here${SUFFIX}`)).toBe(false)
+
+    // KV can go on answering "no pointer" for a minute after the write-back,
+    // and a page is many requests. What Postgres said is believed meanwhile,
+    // so an asker with nothing left is still served, and told 404 not 429.
+    const stored = withEdgeCache()
+    pointers.delete(`host:${host}`)
+    await app.request(`https://${host}/`, {}, liveEnv)
+    await app.request(`https://nobody-here${SUFFIX}/`, {}, liveEnv)
+    pointers.delete(`host:${host}`)
+    limited = true
+    const served = await app.request(`https://${host}/`, {}, liveEnv)
+    expect(served.status).toBe(200)
+    const refused = await app.request(
+      `https://nobody-here${SUFFIX}/`,
+      {},
+      liveEnv
+    )
+    expect(refused.status).toBe(404)
+    expect([...stored.keys()]).toEqual(
+      expect.arrayContaining([
+        `https://${host}/.edge/pointer`,
+        `https://nobody-here${SUFFIX}/.edge/nobody`,
+      ])
+    )
   })
 
   // The other half of issue #90: the same miss, on the environment whose route
