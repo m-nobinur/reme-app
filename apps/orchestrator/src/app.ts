@@ -32,7 +32,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
-import { GOAL_MAX, updateFacts } from "./brief.ts"
+import { GOAL_MAX, hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import {
   activeDeployment,
@@ -423,6 +423,16 @@ console_.get("/facts", async (c) => {
 const FACTS_MAX = 20
 const FACT_VALUE_MAX = 1000
 
+/** The refusal a key the org holds no fact for gets, wherever it is named. */
+const factNotFound = (c: Context, key: string) =>
+  failure(c, 404, {
+    class: "resource",
+    code: "fact.not_found",
+    message:
+      "This business holds no fact with that key; the console only restates facts it holds.",
+    detail: { key },
+  })
+
 /**
  * The console restating facts the org holds (architect ruling on the
  * console). `updateFacts` owns the rules; this route owns the request's shape.
@@ -463,15 +473,7 @@ console_.post("/facts", async (c) => {
       changes: changes as { key: string; value: unknown }[],
     })
   )
-  if (result.outcome === "unknown_key") {
-    return failure(c, 404, {
-      class: "resource",
-      code: "fact.not_found",
-      message:
-        "This business holds no fact with that key; the console only restates facts it holds.",
-      detail: { key: result.key },
-    })
-  }
+  if (result.outcome === "unknown_key") return factNotFound(c, result.key)
   if (result.outcome === "shape_changed") {
     return failure(c, 400, {
       class: "validation",
@@ -518,6 +520,42 @@ console_.get("/site", async (c) => {
       ? (byId.get(found.active.previousRevisionId) ?? null)
       : null,
   })
+})
+
+/**
+ * ADR-033: the facts the owner has asked the site not to show, as the whole
+ * set. `hideFacts` owns the rules; this route owns the request's shape. A
+ * shorter list shows a fact again and an empty one shows them all, so there
+ * is no second verb to undo. Before `/:id`, which would take the path.
+ */
+console_.post("/site/hidden", async (c) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  const body = (await c.req.json().catch(() => ({}))) as { fact_keys?: unknown }
+  const factKeys = body.fact_keys
+  const wellFormed =
+    Array.isArray(factKeys) &&
+    factKeys.length <= FACTS_MAX &&
+    new Set(factKeys).size === factKeys.length &&
+    factKeys.every(
+      (k) => typeof k === "string" && k.length > 0 && k.length <= 100
+    )
+  if (!wellFormed) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "hidden.malformed",
+      message: `Name up to ${FACTS_MAX} distinct fact keys, each of at most 100 characters, as fact_keys.`,
+      detail: {},
+    })
+  }
+  const orgId = c.get("orgId")
+  const result = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) =>
+      hideFacts(db, { orgId, idempotencyKey: key, factKeys })
+    )
+  if (result.outcome === "unknown_key") return factNotFound(c, result.key)
+  return c.json({ hidden: result.hidden }, result.replayed ? 200 : 201)
 })
 
 console_.get("/:id", async (c) => {

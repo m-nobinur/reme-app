@@ -78,7 +78,7 @@ RLS policy, its own tenancy-kit registration and a migration, to hold one array 
 gets undo free: facts are versioned and never overwritten (§10.2), so showing a hidden fact again
 is a new version of the same record without that key, and the history says who hid what and when.
 
-Writing it is `POST /console/site/hidden` with `{ fact_keys: [...] }` and an `Idempotency-Key`,
+Writing it is `POST /assignments/site/hidden` with `{ fact_keys: [...] }` and an `Idempotency-Key`,
 which supersedes the record through `supersedeFact` in the caller's transaction. The route takes the
 whole set rather than a hide and a show verb, so undo is the same call with a shorter list and a
 replay of an unchanged set writes nothing. Every key must name a fact the org currently holds, the
@@ -223,7 +223,7 @@ the gate red.
 4. `packages/starter-site`: the `fields` doc comment, and `test/site.test.ts` calls `factsToAsk`
    instead of inlining the predicate. First failing test: the existing "asks for the required facts
    first, in order" case, rewritten to route through the function, fails until it is exported.
-5. `apps/orchestrator`: `POST /console/site/hidden`. First failing test: hiding a key writes one
+5. `apps/orchestrator`: `POST /assignments/site/hidden`. First failing test: hiding a key writes one
    record, replaying the same set writes nothing, and a shorter set restores the ask list. Mutation
    that proves a gate red: write the record outside `withOrg`, which the tenancy suite refuses.
 6. `evals/tier-1`: one scenario for the measured request, asserting no price on the built site,

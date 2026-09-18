@@ -23,6 +23,8 @@
 //   rollback <org> [reason]                  activate the previous revision through the publisher
 //   site     <org>                           what the site serves now, and what a rollback would restore
 //   facts    <org> [<key> <value>]           the business's facts, or restate one (JSON or text)
+//   hide     <org> <fact key>... | --none    the facts the owner leaves off the site: the whole set each
+//                                            time, so a shorter list shows one again and --none shows all
 import { bad, loadLocalEnv, note, repoRoot } from "./lib.mjs"
 
 process.chdir(repoRoot)
@@ -314,10 +316,23 @@ switch (command) {
     }
     break
   }
+  case "hide": {
+    need(org, "<org>")
+    // The whole set every time (ADR-033): the route has no show verb, so a
+    // shorter list is the undo and `--none` puts every fact back on the site.
+    const keys = "none" in flags ? [] : [id, ...more].filter(Boolean)
+    if (keys.length === 0 && !("none" in flags)) {
+      bad("missing <fact key>")
+      note("Clear the set with: pnpm builder hide <org> --none")
+      process.exit(2)
+    }
+    print(await call("POST", "/assignments/site/hidden", { fact_keys: keys }))
+    break
+  }
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site"
+      "create | revise | facts | hide | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site"
     )
     process.exit(2)
   }

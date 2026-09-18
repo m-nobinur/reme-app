@@ -16,6 +16,7 @@ import {
   modelRouting,
   signSpec,
 } from "@workspace/facade"
+import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import { appendEvent, type Ids } from "./state.ts"
 
@@ -189,6 +190,80 @@ export async function updateFacts(
     payload: { idempotency_key: input.idempotencyKey, facts: written },
   })
   return { outcome: "written", replayed: false, facts: written }
+}
+
+export type HiddenUpdate =
+  | { outcome: "written"; replayed: boolean; hidden: string[] }
+  | { outcome: "unknown_key"; key: string }
+
+/**
+ * ADR-033: what the owner has asked the site not to show, as one
+ * `owner_stated` record holding the whole set of fact keys. The call carries
+ * the set rather than a hide and a show verb, so showing a fact again is the
+ * same call with a shorter list, and an unchanged set writes nothing: the set
+ * is what makes a repeat safe, and the idempotency key rides on the event as
+ * the record of the request. Every key must name a fact the org holds, the
+ * refusal `updateFacts` gives an unknown key, so nobody hides what does not
+ * exist. `updateFacts` cannot write this record, because the org holds no
+ * fact under this key until the first call.
+ */
+export async function hideFacts(
+  db: OrgScopedDb,
+  input: {
+    orgId: string
+    idempotencyKey: string
+    factKeys: readonly string[]
+  }
+): Promise<HiddenUpdate> {
+  const current = await db
+    .select()
+    .from(facts)
+    .where(sql`${facts.validTo} is null`)
+  const wanted = [...new Set(input.factKeys)].sort()
+  for (const key of wanted) {
+    if (!current.some((row) => row.key === key)) {
+      return { outcome: "unknown_key", key }
+    }
+  }
+  const existing = current.find((row) => row.key === HIDDEN_FACTS_KEY)?.value
+  const held = Array.isArray(existing)
+    ? existing.filter((key): key is string => typeof key === "string")
+    : []
+  if (held.join("\n") === wanted.join("\n")) {
+    return { outcome: "written", replayed: true, hidden: held }
+  }
+  const [chief] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(eq(staff.staffCode, "COS-001"))
+  const written = await supersedeFact(db, {
+    orgId: input.orgId,
+    key: HIDDEN_FACTS_KEY,
+    factType: "site_display",
+    value: wanted,
+    provenance: {
+      source: "owner_stated",
+      confidence: 1,
+      verifiedByStaffId: chief?.id ?? null,
+    },
+  })
+  await appendEvent(db, {
+    orgId: input.orgId,
+    assignmentId: null,
+    staffId: chief?.id ?? null,
+    type: "facts.updated",
+    payload: {
+      idempotency_key: input.idempotencyKey,
+      facts: [
+        {
+          key: HIDDEN_FACTS_KEY,
+          fact_id: written.factId,
+          version: written.version,
+        },
+      ],
+    },
+  })
+  return { outcome: "written", replayed: false, hidden: wanted }
 }
 
 /**

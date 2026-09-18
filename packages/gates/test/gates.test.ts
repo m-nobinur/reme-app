@@ -12,6 +12,7 @@ import {
   checkStructuredData,
   checkTypes,
   factsForContent,
+  HIDDEN_FACTS_KEY,
   parsePage,
   runGates,
 } from "../src/index.ts"
@@ -120,6 +121,18 @@ describe("the content gate", () => {
     expect(
       checkContent(pages(home("<p>Call +15550199</p>")), facts).passed
     ).toBe(false)
+  })
+
+  // ADR-033: what the owner left off the site is one fact whose value is fact
+  // keys and no value of its own, so it supports no claim and decides nothing.
+  it("is unchanged by the record of what the owner left off the site", () => {
+    const facts = [
+      ...FACTS,
+      fact(HIDDEN_FACTS_KEY, ["pricing.standard_clean_hourly"]),
+    ]
+    const noPrice = pages(home("<p>Weekdays 08:00 to 17:00</p>"))
+    expect(checkContent(noPrice, facts).passed).toBe(true)
+    expect(checkContent(pages(), facts)).toEqual(checkContent(pages(), FACTS))
   })
 })
 
