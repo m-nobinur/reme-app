@@ -9,6 +9,14 @@
  * write or keep, whose claims must trace to facts; the labels below make no
  * claim at all.
  *
+ * `required` is about asking, never about rendering (ADR-033): the Developer
+ * asks for a required fact that is missing, and a field the owner asked to
+ * keep off the site stays empty.
+ *
+ * Numbered fields are one list each, filled from 1 upwards. A list entry
+ * renders only when its own fields are set, and a section whose entries are
+ * all empty renders nothing at all, heading included.
+ *
  * `fields` is read in declaration order when asking for missing facts, so the
  * required facts come first. Its keys are exactly the keys of `site`, which
  * the type below enforces and the starter's tests check against the
@@ -35,16 +43,81 @@ const values = {
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
   areaServed: "",
-  standardCleanName: "Standard clean",
+  /** testimonials.quote_1, the review's own words, unedited. */
+  testimonial1Quote: "",
+  /** testimonials.author_1, the reviewer's name as the review gives it. */
+  testimonial1Author: "",
+  /** testimonials.quote_2, the review's own words, unedited. */
+  testimonial2Quote: "",
+  /** testimonials.author_2, the reviewer's name as the review gives it. */
+  testimonial2Author: "",
+  /** about.years_in_business, the number on its own, as "12". */
+  statYearsValue: "",
+  /** about.clients_served, the number on its own, as "400". */
+  statClientsValue: "",
+  /** reviews.average_rating, as "4.8". */
+  statRatingValue: "",
+  /** media.photo_1, a path the site already holds, as "/photos/kitchen.jpg". */
+  photo1Src: "",
+  /** media.photo_1_alt, what that photo shows, in one sentence. */
+  photo1Alt: "",
+  /** media.photo_2, a path the site already holds. */
+  photo2Src: "",
+  /** media.photo_2_alt, what that photo shows, in one sentence. */
+  photo2Alt: "",
+  /** media.photo_3, a path the site already holds. */
+  photo3Src: "",
+  /** media.photo_3_alt, what that photo shows, in one sentence. */
+  photo3Alt: "",
+  /** The home page's h1: a short slogan. Falls back to the business name. */
+  heroHeading: "",
   tagline: "",
+  standardCleanName: "Standard clean",
   homeIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
   contactIntro: "",
   quoteIntro: "",
   bookingIntro: "",
+  valuePropsHeading: "Why choose us",
+  valueProp1Title: "",
+  valueProp1Body: "",
+  valueProp2Title: "",
+  valueProp2Body: "",
+  valueProp3Title: "",
+  valueProp3Body: "",
+  serviceCardsHeading: "What we do",
+  service1Name: "",
+  service1Body: "",
+  service2Name: "",
+  service2Body: "",
+  service3Name: "",
+  service3Body: "",
+  stepsHeading: "How it works",
+  step1Title: "",
+  step1Body: "",
+  step2Title: "",
+  step2Body: "",
+  step3Title: "",
+  step3Body: "",
+  statYearsLabel: "Years in business",
+  statClientsLabel: "Clients served",
+  statRatingLabel: "Average rating",
+  testimonialsHeading: "What clients say",
+  galleryHeading: "Our work",
+  faqHeading: "Common questions",
+  faq1Question: "",
+  faq1Answer: "",
+  faq2Question: "",
+  faq2Answer: "",
+  faq3Question: "",
+  faq3Answer: "",
+  ctaHeading: "",
+  ctaBody: "",
+  ctaLabel: "Get in touch",
   skipLink: "Skip to content",
   primaryNavLabel: "Main",
+  footerNavLabel: "Footer",
   navHome: "Home",
   navServices: "Services",
   navServiceArea: "Service area",
@@ -91,16 +164,95 @@ export const fields: Record<keyof typeof site, Field> = {
     fact_key: "service_area.radius",
     required: false,
   },
-  standardCleanName: composed,
+  testimonial1Quote: {
+    kind: "fact",
+    fact_key: "testimonials.quote_1",
+    required: false,
+  },
+  testimonial1Author: {
+    kind: "fact",
+    fact_key: "testimonials.author_1",
+    required: false,
+  },
+  testimonial2Quote: {
+    kind: "fact",
+    fact_key: "testimonials.quote_2",
+    required: false,
+  },
+  testimonial2Author: {
+    kind: "fact",
+    fact_key: "testimonials.author_2",
+    required: false,
+  },
+  statYearsValue: {
+    kind: "fact",
+    fact_key: "about.years_in_business",
+    required: false,
+  },
+  statClientsValue: {
+    kind: "fact",
+    fact_key: "about.clients_served",
+    required: false,
+  },
+  statRatingValue: {
+    kind: "fact",
+    fact_key: "reviews.average_rating",
+    required: false,
+  },
+  photo1Src: { kind: "fact", fact_key: "media.photo_1", required: false },
+  photo1Alt: { kind: "fact", fact_key: "media.photo_1_alt", required: false },
+  photo2Src: { kind: "fact", fact_key: "media.photo_2", required: false },
+  photo2Alt: { kind: "fact", fact_key: "media.photo_2_alt", required: false },
+  photo3Src: { kind: "fact", fact_key: "media.photo_3", required: false },
+  photo3Alt: { kind: "fact", fact_key: "media.photo_3_alt", required: false },
+  heroHeading: composed,
   tagline: composed,
+  standardCleanName: composed,
   homeIntro: composed,
   servicesIntro: composed,
   serviceAreaIntro: composed,
   contactIntro: composed,
   quoteIntro: composed,
   bookingIntro: composed,
+  valuePropsHeading: composed,
+  valueProp1Title: composed,
+  valueProp1Body: composed,
+  valueProp2Title: composed,
+  valueProp2Body: composed,
+  valueProp3Title: composed,
+  valueProp3Body: composed,
+  serviceCardsHeading: composed,
+  service1Name: composed,
+  service1Body: composed,
+  service2Name: composed,
+  service2Body: composed,
+  service3Name: composed,
+  service3Body: composed,
+  stepsHeading: composed,
+  step1Title: composed,
+  step1Body: composed,
+  step2Title: composed,
+  step2Body: composed,
+  step3Title: composed,
+  step3Body: composed,
+  statYearsLabel: composed,
+  statClientsLabel: composed,
+  statRatingLabel: composed,
+  testimonialsHeading: composed,
+  galleryHeading: composed,
+  faqHeading: composed,
+  faq1Question: composed,
+  faq1Answer: composed,
+  faq2Question: composed,
+  faq2Answer: composed,
+  faq3Question: composed,
+  faq3Answer: composed,
+  ctaHeading: composed,
+  ctaBody: composed,
+  ctaLabel: composed,
   skipLink: composed,
   primaryNavLabel: composed,
+  footerNavLabel: composed,
   navHome: composed,
   navServices: composed,
   navServiceArea: composed,

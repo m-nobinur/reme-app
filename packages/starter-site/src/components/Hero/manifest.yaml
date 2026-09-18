@@ -10,11 +10,18 @@ props:
     type: string
     required: false
     description: One sentence under the heading, read from a site field.
+  - name: variant
+    type: '"split" | "centered" | "compact"'
+    required: false
+    description: split for the home page, compact for a page header, centered otherwise.
 constraints:
   - One per page, first inside the layout.
   - Children are ActionLink elements only.
+  - split for the home page, compact for a page under it, centered otherwise.
+  - Renders nothing when the heading, the lede and the actions are all empty.
 examples:
-  - "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+  - "<Hero heading={site.servicesHeading} lede={site.servicesIntro}
+    variant=\"compact\" />"
 forbidden:
   - a second Hero on a page
   - literal text in heading or lede

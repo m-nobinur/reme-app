@@ -1,0 +1,13 @@
+component: Testimonials
+path: src/components/Testimonials/Testimonials.astro
+summary: Reviews quoted from the facts, with the reviewer's name.
+props: []
+constraints:
+  - Quote and author are both fact fields. A quote is rendered as the fact gives
+    it, unedited and untrimmed.
+examples:
+  - "<Testimonials />"
+forbidden:
+  - a review written here
+  - editing or shortening a quote
+source: generated

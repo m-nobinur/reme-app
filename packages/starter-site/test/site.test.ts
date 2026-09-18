@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
@@ -38,13 +38,58 @@ const FILLED: Record<string, string> = {
   standardCleanHourly: "$35.00 an hour",
   openingHours: "Mo-Fr 08:00-17:00",
   areaServed: "Fairhaven",
+  testimonial1Quote: "They have never missed a week.",
+  testimonial1Author: "Dana R.",
+  testimonial2Quote: "Booked on a Monday, cleaned on the Tuesday.",
+  testimonial2Author: "Sam O.",
+  statYearsValue: "12",
+  statClientsValue: "400",
+  statRatingValue: "4.8",
+  photo1Src: "/photos/one.jpg",
+  photo1Alt: "A kitchen worktop after a clean",
+  photo2Src: "/photos/two.jpg",
+  photo2Alt: "A hallway floor after a clean",
+  photo3Src: "/photos/three.jpg",
+  photo3Alt: "A bathroom mirror after a clean",
+  heroHeading: "A home you come back to",
+  tagline: "Weekly cleaning for homes in Fairhaven",
+  homeIntro: "We clean homes on a schedule the household picks.",
+  valueProp1Title: "The same cleaner",
+  valueProp1Body: "One cleaner learns your home and keeps it.",
+  valueProp2Title: "Nothing to buy",
+  valueProp2Body: "The kit arrives with the cleaner.",
+  valueProp3Title: "Easy to move",
+  valueProp3Body: "Change a visit by telephone.",
+  service1Name: "Weekly clean",
+  service1Body: "Kitchen, bathrooms, floors and surfaces.",
+  service2Name: "Deep clean",
+  service2Body: "A longer visit that reaches what a weekly clean skips.",
+  service3Name: "End of tenancy",
+  service3Body: "A clean for handing back the keys.",
+  step1Title: "Tell us about the home",
+  step1Body: "Rooms, floors and anything that needs care.",
+  step2Title: "Agree a visit",
+  step2Body: "Pick a day that suits the household.",
+  step3Title: "Come home to it done",
+  step3Body: "The same cleaner, on the same day.",
+  faq1Question: "Do I need to be in?",
+  faq1Answer: "No, as long as the cleaner can get in.",
+  faq2Question: "Do you bring what you need?",
+  faq2Answer: "Yes, the kit comes with the cleaner.",
+  faq3Question: "Can I move a visit?",
+  faq3Answer: "Yes, by telephone.",
+  ctaHeading: "Ready for a clean home?",
+  ctaBody: "Tell us about the home and we take it from there.",
 }
 
+// The planted page carries an empty Hero, which the starter's own pages cannot
+// show: every page ships with its heading field set.
 const PLANTED = `---
+import Hero from "../components/Hero/Hero.astro"
 import Base from "../layouts/Base.astro"
 ---
 
-<Base title="" />
+<Base title=""><Hero heading="" /></Base>
 `
 
 // Each value is its own key between markers, so any text left after the
@@ -128,6 +173,120 @@ describe("the site as shipped, with no facts", () => {
         .map((text) => `${page.file}: ${text}`),
     ])
     expect(findings).toEqual([])
+  })
+})
+
+/**
+ * Every component that decides for itself whether to render: the class it
+ * wraps itself in, and something the filled fixture puts inside it. The
+ * shipped build has none of their fields set, so none of them may appear in
+ * it; the filled build has all of them set, so all of them must.
+ */
+const SECTIONS: { name: string; selector: string; shows: string }[] = [
+  { name: "Stats", selector: "stats", shows: "12" },
+  { name: "ValueProps", selector: "value-props", shows: "The same cleaner" },
+  { name: "ServiceCards", selector: "service-cards", shows: "Weekly clean" },
+  { name: "Steps", selector: "steps", shows: "Tell us about the home" },
+  { name: "PriceCard", selector: "price-card", shows: "$35.00 an hour" },
+  {
+    name: "Testimonials",
+    selector: "testimonials",
+    shows: "They have never missed a week.",
+  },
+  {
+    name: "Gallery",
+    selector: "gallery",
+    shows: "A kitchen worktop after a clean",
+  },
+  { name: "Faq", selector: "faq", shows: "Do I need to be in?" },
+  { name: "CtaBand", selector: "cta-band", shows: "Ready for a clean home?" },
+  {
+    name: "ContactDetails",
+    selector: "contact-details",
+    shows: "+15550142",
+  },
+]
+
+const hasClass = (pages: Page[], name: string) =>
+  pages.some((page) =>
+    page.elements.some((el) => (el.attrs.class ?? "").split(" ").includes(name))
+  )
+/** What a visitor reads, the alt text of any image included. */
+const visible = (pages: Page[]) =>
+  pages.flatMap((page) => [
+    ...page.texts,
+    ...page.elements.flatMap((el) => (el.attrs.alt ? [el.attrs.alt] : [])),
+  ])
+
+describe("a component with nothing to show", () => {
+  const shipped = readPages(join(ROOT, "dist"))
+
+  for (const section of SECTIONS) {
+    test(`${section.name} renders nothing`, () => {
+      expect(hasClass(shipped, section.selector)).toBe(false)
+    })
+  }
+
+  test("Hero renders nothing", () => {
+    const page = pagesOf(planted).filter((p) => p.file === "planted/index.html")
+    expect(page).toHaveLength(1)
+    expect(hasClass(page, "hero")).toBe(false)
+  })
+})
+
+describe("a component with its fields filled", () => {
+  for (const section of SECTIONS) {
+    test(`${section.name} renders`, () => {
+      const pages = pagesOf(filled)
+      expect(hasClass(pages, section.selector)).toBe(true)
+      expect(visible(pages)).toContain(section.shows)
+    })
+  }
+
+  test("Hero renders", () => {
+    const pages = pagesOf(filled)
+    expect(hasClass(pages, "hero")).toBe(true)
+    expect(visible(pages)).toContain("A home you come back to")
+  })
+})
+
+describe("the page recipes", () => {
+  const recipes = JSON.parse(
+    readFileSync(join(ROOT, "src/recipes.json"), "utf8")
+  ) as {
+    packs: Record<
+      string,
+      {
+        recipes: { page: string; components: string[]; fields: string[] }[]
+      }
+    >
+  }
+  const all = Object.values(recipes.packs).flatMap((pack) => pack.recipes)
+
+  test("name a page that exists, components that exist and fields that exist", () => {
+    expect(all.length).toBeGreaterThan(0)
+    const components = readdirSync(join(ROOT, "src/components"))
+    for (const recipe of all) {
+      expect(existsSync(join(ROOT, recipe.page)), recipe.page).toBe(true)
+      for (const component of recipe.components) {
+        expect(components, recipe.page).toContain(component)
+      }
+      for (const field of recipe.fields) {
+        expect(Object.keys(site), recipe.page).toContain(field)
+      }
+    }
+  })
+
+  test("list the components their page actually renders", () => {
+    for (const recipe of all) {
+      const source = readFileSync(join(ROOT, recipe.page), "utf8")
+      const used = [...source.matchAll(/<([A-Z]\w+)/g)].map((match) =>
+        String(match[1])
+      )
+      expect(new Set(recipe.components), recipe.page).toEqual(
+        new Set(used.filter((name) => name !== "Base"))
+      )
+    }
   })
 })
 
@@ -277,7 +436,7 @@ describe("templates", () => {
     ]
     const inline = pagesOf(marked).flatMap((page) =>
       leftovers(page)
-        .map((text) => text.replace(/«[A-Za-z]+»/g, ""))
+        .map((text) => text.replace(/«[A-Za-z0-9]+»/g, ""))
         .filter((rest) => /[\p{L}\p{N}]/u.test(rest))
         .map((rest) => `${page.file}: "${rest.trim()}"`)
     )

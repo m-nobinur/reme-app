@@ -1,0 +1,12 @@
+component: Faq
+path: src/components/Faq/Faq.astro
+summary: Questions and answers, each one a native disclosure that needs no script.
+props: []
+constraints:
+  - Reads faq1Question to faq3Answer itself; an entry needs both halves to
+    render.
+examples:
+  - "<Faq />"
+forbidden:
+  - an answer stating a price, hour or guarantee no fact carries
+source: generated

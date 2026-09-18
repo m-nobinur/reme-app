@@ -1,15 +1,20 @@
 ---
 import ActionLink from "../components/ActionLink/ActionLink.astro"
-import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
+import CtaBand from "../components/CtaBand/CtaBand.astro"
+import Faq from "../components/Faq/Faq.astro"
+import Gallery from "../components/Gallery/Gallery.astro"
 import Hero from "../components/Hero/Hero.astro"
 import PriceCard from "../components/PriceCard/PriceCard.astro"
 import Section from "../components/Section/Section.astro"
+import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
+import Stats from "../components/Stats/Stats.astro"
+import Steps from "../components/Steps/Steps.astro"
+import Testimonials from "../components/Testimonials/Testimonials.astro"
+import ValueProps from "../components/ValueProps/ValueProps.astro"
 import Base from "../layouts/Base.astro"
-import { hasRoute } from "../routes"
+import { primaryAction } from "../routes"
 import { site } from "../site-config"
 import { localBusiness, webSite } from "../structured-data"
-
-const hasContact = Boolean(site.phone || site.email || site.weekdayHours)
 ---
 
 <Base
@@ -17,15 +22,27 @@ const hasContact = Boolean(site.phone || site.email || site.weekdayHours)
   description={site.tagline}
   jsonLd={[...webSite(Astro.site), ...localBusiness(Astro.site)]}
 >
-  <Hero heading={site.businessName} lede={site.tagline}>
+  <Hero
+    variant="split"
+    heading={site.heroHeading || site.businessName}
+    lede={site.tagline}
+  >
     {site.phone && <ActionLink href={`tel:${site.phone}`} label={site.phone} />}
     {
-      hasRoute("/quote/") && (
-        <ActionLink href="/quote/" label={site.navQuote} variant="secondary" />
+      primaryAction && (
+        <ActionLink
+          href={primaryAction.href}
+          label={primaryAction.label}
+          variant="secondary"
+        />
       )
     }
   </Hero>
+  <Stats />
   {site.homeIntro && <p class="intro">{site.homeIntro}</p>}
+  <ValueProps />
+  <ServiceCards />
+  <Steps />
   {
     site.standardCleanHourly && (
       <Section heading={site.priceHeading}>
@@ -36,18 +53,8 @@ const hasContact = Boolean(site.phone || site.email || site.weekdayHours)
       </Section>
     )
   }
-  {
-    site.serviceArea && (
-      <Section heading={site.serviceAreaHeading}>
-        <p>{site.serviceArea}</p>
-      </Section>
-    )
-  }
-  {
-    hasContact && (
-      <Section heading={site.contactHeading}>
-        <ContactDetails />
-      </Section>
-    )
-  }
+  <Testimonials />
+  <Gallery />
+  <Faq />
+  <CtaBand />
 </Base>

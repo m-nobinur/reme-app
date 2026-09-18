@@ -11,6 +11,10 @@ import { localBusiness } from "../structured-data"
   description={site.contactIntro}
   jsonLd={localBusiness(Astro.site)}
 >
-  <Hero heading={site.contactHeading} lede={site.contactIntro} />
+  <Hero
+    variant="compact"
+    heading={site.contactHeading}
+    lede={site.contactIntro}
+  />
   <ContactDetails />
 </Base>

@@ -40,13 +40,52 @@
   {
     "component": "ContactDetails",
     "path": "src/components/ContactDetails/ContactDetails.astro",
-    "summary": "The business's phone, email and weekday hours as a list.",
+    "summary": "Phone, email, weekday hours and service area as a labelled list.",
     "props": [],
     "constraints": [
-      "Reads site.phone, site.email and site.weekdayHours itself; each row renders only when its field is set."
+      "Reads site.phone, site.email, site.weekdayHours and site.serviceArea itself; each row renders only when its field is set."
     ],
     "examples": ["<ContactDetails />"],
     "forbidden": ["passing contact details as props or children"],
+    "source": "generated"
+  },
+  {
+    "component": "CtaBand",
+    "path": "src/components/CtaBand/CtaBand.astro",
+    "summary": "A closing band with a heading, a line and the site's main action.",
+    "props": [],
+    "constraints": [
+      "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact.",
+      "Last on a page, after everything else."
+    ],
+    "examples": ["<CtaBand />"],
+    "forbidden": ["an offer, discount or deadline"],
+    "source": "generated"
+  },
+  {
+    "component": "Faq",
+    "path": "src/components/Faq/Faq.astro",
+    "summary": "Questions and answers, each one a native disclosure that needs no script.",
+    "props": [],
+    "constraints": [
+      "Reads faq1Question to faq3Answer itself; an entry needs both halves to render."
+    ],
+    "examples": ["<Faq />"],
+    "forbidden": [
+      "an answer stating a price, hour or guarantee no fact carries"
+    ],
+    "source": "generated"
+  },
+  {
+    "component": "Gallery",
+    "path": "src/components/Gallery/Gallery.astro",
+    "summary": "The owner's photos, each with the alt text its fact gives.",
+    "props": [],
+    "constraints": [
+      "Path and alt text are both fact fields; a photo renders only when it has both. The site ships with none."
+    ],
+    "examples": ["<Gallery />"],
+    "forbidden": ["a path or alt text written here", "a stock or remote image"],
     "source": "generated"
   },
   {
@@ -65,14 +104,22 @@
         "type": "string",
         "required": false,
         "description": "One sentence under the heading, read from a site field."
+      },
+      {
+        "name": "variant",
+        "type": "\"split\" | \"centered\" | \"compact\"",
+        "required": false,
+        "description": "split for the home page, compact for a page header, centered otherwise."
       }
     ],
     "constraints": [
       "One per page, first inside the layout.",
-      "Children are ActionLink elements only."
+      "Children are ActionLink elements only.",
+      "split for the home page, compact for a page under it, centered otherwise.",
+      "Renders nothing when the heading, the lede and the actions are all empty."
     ],
     "examples": [
-      "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+      "<Hero heading={site.servicesHeading} lede={site.servicesIntro} variant=\"compact\" />"
     ],
     "forbidden": ["a second Hero on a page", "literal text in heading or lede"],
     "source": "generated"
@@ -171,11 +218,27 @@
     "source": "generated"
   },
   {
+    "component": "ServiceCards",
+    "path": "src/components/ServiceCards/ServiceCards.astro",
+    "summary": "The services on offer, as cards of a name and a sentence.",
+    "props": [],
+    "constraints": [
+      "Reads service1Name to service3Body itself; a card renders only when one of its two fields is set.",
+      "Prices stay in PriceCard, which renders the pricing fact."
+    ],
+    "examples": ["<ServiceCards />"],
+    "forbidden": ["a price", "a service the facts give no sign of"],
+    "source": "generated"
+  },
+  {
     "component": "SiteFooter",
     "path": "src/components/SiteFooter/SiteFooter.astro",
-    "summary": "The footer with business name, service area and contact details.",
+    "summary": "The footer with business name, contact details and navigation.",
     "props": [],
-    "constraints": ["The Base layout renders it on every page."],
+    "constraints": [
+      "The Base layout renders it on every page.",
+      "Every part comes from a field and vanishes when that field is empty."
+    ],
     "examples": ["<SiteFooter />"],
     "forbidden": ["using it in a page"],
     "source": "generated"
@@ -183,14 +246,63 @@
   {
     "component": "SiteHeader",
     "path": "src/components/SiteHeader/SiteHeader.astro",
-    "summary": "The header with business name and navigation built from the page files.",
+    "summary": "The header with business name, navigation and one call to action.",
     "props": [],
     "constraints": [
       "The Base layout renders it on every page.",
-      "A link shows only when its page exists and its label field is set."
+      "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set."
     ],
     "examples": ["<SiteHeader />"],
     "forbidden": ["using it in a page", "a hard-coded navigation link"],
+    "source": "generated"
+  },
+  {
+    "component": "Stats",
+    "path": "src/components/Stats/Stats.astro",
+    "summary": "Up to three figures about the business, each one a fact.",
+    "props": [],
+    "constraints": [
+      "Reads statYearsValue, statClientsValue and statRatingValue, which are fact fields, and their labels, which are not. A figure with no value does not render, label or no label."
+    ],
+    "examples": ["<Stats />"],
+    "forbidden": ["a figure no fact states"],
+    "source": "generated"
+  },
+  {
+    "component": "Steps",
+    "path": "src/components/Steps/Steps.astro",
+    "summary": "How working with the business goes, as numbered steps.",
+    "props": [],
+    "constraints": [
+      "Reads step1Title to step3Body itself; a step renders only when one of its two fields is set. The numbers are drawn by CSS, not written into a field."
+    ],
+    "examples": ["<Steps />"],
+    "forbidden": ["a time, price or promise no fact states"],
+    "source": "generated"
+  },
+  {
+    "component": "Testimonials",
+    "path": "src/components/Testimonials/Testimonials.astro",
+    "summary": "Reviews quoted from the facts, with the reviewer's name.",
+    "props": [],
+    "constraints": [
+      "Quote and author are both fact fields. A quote is rendered as the fact gives it, unedited and untrimmed."
+    ],
+    "examples": ["<Testimonials />"],
+    "forbidden": ["a review written here", "editing or shortening a quote"],
+    "source": "generated"
+  },
+  {
+    "component": "ValueProps",
+    "path": "src/components/ValueProps/ValueProps.astro",
+    "summary": "Up to three reasons to choose the business, each a title and a sentence.",
+    "props": [],
+    "constraints": [
+      "Reads valueProp1Title to valueProp3Body itself, in order; an entry renders only when one of its two fields is set.",
+      "Renders nothing when all six fields are empty."
+    ],
+    "examples": ["<ValueProps />"],
+    "forbidden": ["a number, rating, award or guarantee no fact states"],
     "source": "generated"
   }
 ]

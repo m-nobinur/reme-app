@@ -1,0 +1,119 @@
+{
+  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside home-services and its own pages; nothing here is a template engine.",
+  "packs": {
+    "home-services": {
+      "label": "Home services, cleaning first",
+      "recipes": [
+        {
+          "name": "home",
+          "page": "src/pages/index.astro",
+          "purpose": "The one page a visitor lands on: what the business does, why to call it, and how to.",
+          "components": [
+            "Hero",
+            "ActionLink",
+            "Stats",
+            "ValueProps",
+            "ServiceCards",
+            "Steps",
+            "Section",
+            "PriceCard",
+            "Testimonials",
+            "Gallery",
+            "Faq",
+            "CtaBand"
+          ],
+          "fields": [
+            "heroHeading",
+            "tagline",
+            "homeIntro",
+            "statYearsValue",
+            "statClientsValue",
+            "statRatingValue",
+            "valueProp1Title",
+            "valueProp1Body",
+            "valueProp2Title",
+            "valueProp2Body",
+            "valueProp3Title",
+            "valueProp3Body",
+            "service1Name",
+            "service1Body",
+            "service2Name",
+            "service2Body",
+            "service3Name",
+            "service3Body",
+            "step1Title",
+            "step1Body",
+            "step2Title",
+            "step2Body",
+            "step3Title",
+            "step3Body",
+            "standardCleanHourly",
+            "testimonial1Quote",
+            "testimonial1Author",
+            "faq1Question",
+            "faq1Answer",
+            "faq2Question",
+            "faq2Answer",
+            "faq3Question",
+            "faq3Answer",
+            "ctaHeading",
+            "ctaBody"
+          ]
+        },
+        {
+          "name": "services",
+          "page": "src/pages/services.astro",
+          "purpose": "What the business does, in more words than the home page gives it.",
+          "components": [
+            "Hero",
+            "ServiceCards",
+            "Section",
+            "PriceCard",
+            "Steps",
+            "CtaBand"
+          ],
+          "fields": [
+            "servicesHeading",
+            "servicesIntro",
+            "service1Name",
+            "service1Body",
+            "service2Name",
+            "service2Body",
+            "service3Name",
+            "service3Body",
+            "standardCleanHourly",
+            "step1Title",
+            "step1Body"
+          ]
+        },
+        {
+          "name": "service area",
+          "page": "src/pages/service-area.astro",
+          "purpose": "Where the business works, for the visitor checking whether that includes them.",
+          "components": ["Hero", "CtaBand"],
+          "fields": [
+            "serviceAreaHeading",
+            "serviceAreaIntro",
+            "serviceArea",
+            "ctaHeading",
+            "ctaBody"
+          ]
+        },
+        {
+          "name": "contact",
+          "page": "src/pages/contact.astro",
+          "purpose": "How to reach the business, with nothing in the way.",
+          "components": ["Hero", "ContactDetails"],
+          "fields": [
+            "contactHeading",
+            "contactIntro",
+            "phone",
+            "email",
+            "weekdayHours",
+            "serviceArea"
+          ]
+        }
+      ]
+    }
+  }
+}

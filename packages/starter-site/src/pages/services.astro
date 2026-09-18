@@ -1,7 +1,10 @@
 ---
+import CtaBand from "../components/CtaBand/CtaBand.astro"
 import Hero from "../components/Hero/Hero.astro"
 import PriceCard from "../components/PriceCard/PriceCard.astro"
 import Section from "../components/Section/Section.astro"
+import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
+import Steps from "../components/Steps/Steps.astro"
 import Base from "../layouts/Base.astro"
 import { site } from "../site-config"
 import { service } from "../structured-data"
@@ -12,7 +15,12 @@ import { service } from "../structured-data"
   description={site.servicesIntro}
   jsonLd={service(Astro.site)}
 >
-  <Hero heading={site.servicesHeading} lede={site.servicesIntro} />
+  <Hero
+    variant="compact"
+    heading={site.servicesHeading}
+    lede={site.servicesIntro}
+  />
+  <ServiceCards />
   {
     site.standardCleanHourly && (
       <Section heading={site.priceHeading}>
@@ -23,6 +31,7 @@ import { service } from "../structured-data"
       </Section>
     )
   }
+  <Steps />
   {
     site.serviceArea && (
       <Section heading={site.serviceAreaHeading}>
@@ -30,4 +39,5 @@ import { service } from "../structured-data"
       </Section>
     )
   }
+  <CtaBand />
 </Base>

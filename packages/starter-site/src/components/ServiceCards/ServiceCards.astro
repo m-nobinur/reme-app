@@ -1,0 +1,25 @@
+---
+import { site } from "../../site-config"
+
+const items = [
+  { name: site.service1Name, body: site.service1Body },
+  { name: site.service2Name, body: site.service2Body },
+  { name: site.service3Name, body: site.service3Body },
+].filter((item) => item.name || item.body)
+---
+
+{
+  items.length > 0 && (
+    <section class="service-cards">
+      {site.serviceCardsHeading && <h2>{site.serviceCardsHeading}</h2>}
+      <ul class="card-grid">
+        {items.map((item) => (
+          <li class="card card-bordered">
+            {item.name && <h3>{item.name}</h3>}
+            {item.body && <p>{item.body}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

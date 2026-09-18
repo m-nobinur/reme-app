@@ -1,39 +1,40 @@
 ---
-import { hasRoute } from "../../routes"
+import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
+import ActionLink from "../ActionLink/ActionLink.astro"
 
-const links: [string, string][] = [
-  ["/", site.navHome],
-  ["/services/", site.navServices],
-  ["/service-area/", site.navServiceArea],
-  ["/contact/", site.navContact],
-  ["/quote/", site.navQuote],
-  ["/booking/", site.navBooking],
-]
-const shown = links.filter(([href, label]) => label && hasRoute(href))
 const current = Astro.url.pathname
 ---
 
-<header class="site-header">
-  <div class="wrap">
-    {site.businessName && <a class="site-name" href="/">{site.businessName}</a>}
-    {
-      shown.length > 0 && (
-        <nav aria-label={site.primaryNavLabel}>
-          <ul>
-            {shown.map(([href, label]) => (
-              <li>
-                <a
-                  href={href}
-                  aria-current={current === href ? "page" : undefined}
-                >
-                  {label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )
-    }
-  </div>
-</header>
+{
+  (site.businessName || navLinks.length > 0) && (
+    <header class="site-header">
+      <div class="wrap">
+        {site.businessName && (
+          <a class="site-name" href="/">
+            {site.businessName}
+          </a>
+        )}
+        {navLinks.length > 0 && (
+          <nav aria-label={site.primaryNavLabel}>
+            <ul>
+              {navLinks.map((link) => (
+                <li>
+                  <a
+                    href={link.href}
+                    aria-current={current === link.href ? "page" : undefined}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+        {primaryAction && (
+          <ActionLink href={primaryAction.href} label={primaryAction.label} />
+        )}
+      </div>
+    </header>
+  )
+}

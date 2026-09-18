@@ -1,0 +1,13 @@
+component: Gallery
+path: src/components/Gallery/Gallery.astro
+summary: The owner's photos, each with the alt text its fact gives.
+props: []
+constraints:
+  - Path and alt text are both fact fields; a photo renders only when it has
+    both. The site ships with none.
+examples:
+  - "<Gallery />"
+forbidden:
+  - a path or alt text written here
+  - a stock or remote image
+source: generated

@@ -1,0 +1,26 @@
+---
+import { site } from "../../site-config"
+
+// Quote and author are both facts. Nothing here is written: a review the
+// facts do not carry is a review the site does not show.
+const items = [
+  { quote: site.testimonial1Quote, author: site.testimonial1Author },
+  { quote: site.testimonial2Quote, author: site.testimonial2Author },
+].filter((item) => item.quote)
+---
+
+{
+  items.length > 0 && (
+    <section class="testimonials">
+      {site.testimonialsHeading && <h2>{site.testimonialsHeading}</h2>}
+      <div class="card-grid">
+        {items.map((item) => (
+          <figure class="card card-bordered">
+            <blockquote>{item.quote}</blockquote>
+            {item.author && <figcaption>{item.author}</figcaption>}
+          </figure>
+        ))}
+      </div>
+    </section>
+  )
+}

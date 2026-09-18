@@ -1,0 +1,14 @@
+component: CtaBand
+path: src/components/CtaBand/CtaBand.astro
+summary: A closing band with a heading, a line and the site's main action.
+props: []
+constraints:
+  - Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or
+    the body is set. The links come from the pages that exist and the phone
+    fact.
+  - Last on a page, after everything else.
+examples:
+  - "<CtaBand />"
+forbidden:
+  - an offer, discount or deadline
+source: generated

@@ -1,10 +1,11 @@
 component: SiteHeader
 path: src/components/SiteHeader/SiteHeader.astro
-summary: The header with business name and navigation built from the page files.
+summary: The header with business name, navigation and one call to action.
 props: []
 constraints:
   - The Base layout renders it on every page.
-  - A link shows only when its page exists and its label field is set.
+  - Navigation and the action come from src/routes.ts, so a link shows only when
+    its page exists and its label field is set.
 examples:
   - "<SiteHeader />"
 forbidden:
