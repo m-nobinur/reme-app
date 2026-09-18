@@ -1,6 +1,8 @@
 ---
 import "../styles/tokens.css"
+import "../styles/theme.css"
 import "../styles/site.css"
+import { brandTheme } from "../brand"
 import Seo from "../components/Seo/Seo.astro"
 import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
 import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
@@ -14,6 +16,9 @@ interface Props {
 }
 
 const props = Astro.props
+// Empty unless the owner chose a colour, and empty again if what they chose is
+// not a hex colour. See src/brand.ts.
+const brand = brandTheme(site.brandColor)
 ---
 
 <html lang="en">
@@ -21,6 +26,7 @@ const props = Astro.props
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo {...props} />
+    {brand && <style is:inline set:html={brand} />}
   </head>
   <body>
     <a class="skip-link" href="#main">{site.skipLink}</a>

@@ -4,10 +4,13 @@ import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
 
 const current = Astro.url.pathname
+// The action is one of the nav links, and a header that offers the same page
+// twice reads as a mistake, so the button takes it and the list drops it.
+const links = navLinks.filter((link) => link.href !== primaryAction?.href)
 ---
 
 {
-  (site.businessName || navLinks.length > 0) && (
+  (site.businessName || links.length > 0) && (
     <header class="site-header">
       <div class="wrap">
         {site.businessName && (
@@ -15,10 +18,10 @@ const current = Astro.url.pathname
             {site.businessName}
           </a>
         )}
-        {navLinks.length > 0 && (
+        {links.length > 0 && (
           <nav aria-label={site.primaryNavLabel}>
             <ul>
-              {navLinks.map((link) => (
+              {links.map((link) => (
                 <li>
                   <a
                     href={link.href}

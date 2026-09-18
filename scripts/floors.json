@@ -12,5 +12,6 @@
   "gates-unit": 31,
   "router-unit": 32,
   "router-unit+db": 34,
-  "starter-site": 48
+  "starter-site": 59,
+  "starter-site-a11y": 3
 }

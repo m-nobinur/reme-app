@@ -8,6 +8,7 @@
     "build": "astro build",
     "typecheck": "astro check",
     "test": "astro build && node ../../scripts/floor.mjs starter-site -- vitest run --dir test",
+    "test:a11y": "node ../../scripts/floor.mjs starter-site-a11y -- vitest run --dir a11y",
     "size": "node scripts/size.mjs",
     "manifests": "node scripts/manifests.ts && biome format --write manifests.json",
     "check:drift": "pnpm manifests && git diff --exit-code -- manifests.json src/components"
@@ -17,6 +18,8 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22",
     "@workspace/contracts": "workspace:*",
     "parse5": "8.0.1",

@@ -69,6 +69,11 @@ const values = {
   photo3Src: "",
   /** media.photo_3_alt, what that photo shows, in one sentence. */
   photo3Alt: "",
+  /**
+   * The colour the owner asked for, as #rrggbb. Empty is the default theme,
+   * and so is anything that is not a hex colour. Do not pick one for them.
+   */
+  brandColor: "",
   /** The home page's h1: a short slogan. Falls back to the business name. */
   heroHeading: "",
   tagline: "",
@@ -205,6 +210,7 @@ export const fields: Record<keyof typeof site, Field> = {
   photo2Alt: { kind: "fact", fact_key: "media.photo_2_alt", required: false },
   photo3Src: { kind: "fact", fact_key: "media.photo_3", required: false },
   photo3Alt: { kind: "fact", fact_key: "media.photo_3_alt", required: false },
+  brandColor: composed,
   heroHeading: composed,
   tagline: composed,
   standardCleanName: composed,
