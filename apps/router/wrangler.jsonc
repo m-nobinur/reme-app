@@ -47,6 +47,18 @@
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
   ],
+  // How often one address may send a name to Postgres on a pointer miss. A
+  // visitor reaches that path only when KV has lost a pointer, so the number
+  // is generous for them and small for a run of made-up names. Counted per
+  // Cloudflare location, which is what the binding offers. `1001` is the web
+  // app's sign-in limiter; a namespace id is unique across the account.
+  "ratelimits": [
+    {
+      "name": "MISSES",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   // Production's route is the whole zone, which runs before the custom domains
   // of the api, the orchestrator and the app, and its suffix matches every
   // hostname in the zone. Both are why `SERVICE_HOSTS` is not empty here: those
@@ -73,6 +85,13 @@
       "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
+      ],
+      "ratelimits": [
+        {
+          "name": "MISSES",
+          "namespace_id": "1002",
+          "simple": { "limit": 20, "period": 60 }
+        }
       ]
     }
   }

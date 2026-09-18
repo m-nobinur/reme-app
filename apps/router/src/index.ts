@@ -18,9 +18,9 @@ import { getCookie, setCookie } from "hono/cookie"
  * The site router (C6, ADR-030, ADR-032): every tenant site and every
  * preview, one Worker, routed by hostname. A published host is a pointer in
  * KV and a read from R2; a preview host is a signed claim and a read from
- * R2. Nothing here opens the database and nothing here reads an org from
- * the request: the org comes out of the pointer or the claim, both written
- * by the orchestrator (§11.1.8).
+ * R2. Nothing here reads an org from the request: the org comes out of the
+ * pointer or the claim, both written by the orchestrator (§11.1.8). Postgres
+ * is asked one thing only, on a pointer miss, and the way to it is narrow.
  */
 
 type Bindings = Env
@@ -35,6 +35,10 @@ const notHere = (c: Context<App>) => c.text("No site here.", 404, NO_STORE)
 const noPreview = (c: Context<App>) =>
   c.text("No preview here. Open a fresh preview link.", 401, NO_STORE)
 
+/** Says nothing about the host, so a guess still learns nothing. */
+const tooMany = (c: Context<App>) =>
+  c.text("Too many requests.", 429, { ...NO_STORE, "retry-after": "60" })
+
 /** R4: a failure that is ours leaves as the §28.1 envelope. */
 const envelope = (
   c: Context<App>,
@@ -42,6 +46,14 @@ const envelope = (
   body: Omit<ErrorEnvelope, "occurred_at">
 ) =>
   c.json({ ...body, occurred_at: new Date().toISOString() }, status, NO_STORE)
+
+/**
+ * What is left of a host once the suffix is off has to be one DNS label. No
+ * slug rule is written down anywhere else yet, so this is the loosest one a
+ * hostname allows, and it is checked before any binding is read: a name with a
+ * dot in it, or one a business could never hold, costs nothing to refuse.
+ */
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
 /** A preview host, by ADR-030's reserved prefix. */
 const isPreviewHost = (host: string) => host.startsWith("preview-")
@@ -86,13 +98,75 @@ const cacheFor = (file: string) =>
     ? "public, max-age=31536000, immutable"
     : "no-cache"
 
+/** Work that outlives the response. Outside a Worker (the route test) there is no execution context, so it is awaited. */
+async function later(c: Context<App>, work: Promise<unknown>) {
+  let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
+  try {
+    ctx = c.executionCtx
+  } catch {
+    ctx = null
+  }
+  if (ctx) ctx.waitUntil(work)
+  else await work
+}
+
+/**
+ * This data centre's cache, in front of R2 for a published host. Measured on
+ * staging 2026-09-18: the router answers in 13 ms when it reads nothing and in
+ * 560 ms when it reads a manifest and a file, both from a bucket in WEUR.
+ *
+ * Every key names a revision, and a revision never changes, so an entry is
+ * never stale and nothing is ever purged: a publish or a rollback moves the
+ * pointer, the pointer names another revision, and those are other keys
+ * (ADR-032). The key is built from the pointer and the file the manifest
+ * resolved, never from the request's own path or query, so a visitor cannot
+ * choose one. A preview never comes through here: it is one person's.
+ */
+const edge = () =>
+  (globalThis as { caches?: { default?: Cache } }).caches?.default
+
+const edgeKey = (host: string, key: string) => `https://${host}/.edge/${key}`
+
+/** Stored under a lifetime the cache will keep; what the visitor is told is set on the way out. */
+const KEEP = "public, max-age=31536000, immutable"
+
+/** How long "no business holds this name" is believed here before Postgres is asked again. */
+const NOBODY_FOR = "public, max-age=60"
+
+async function fromR2(
+  c: Context<App>,
+  // The published host whose cache this may come from, or null for a preview,
+  // which is one person's and is never shared.
+  host: string | null,
+  key: string,
+  // The visitor's validator, for the file they asked for and nothing else:
+  // with it the cache answers 304 itself, and a manifest read that carried
+  // `If-None-Match: *` would come back with no body to parse.
+  tag?: string
+): Promise<Response | null> {
+  const cache = host ? edge() : undefined
+  const url = edgeKey(host ?? "preview", key)
+  const hit = await cache?.match(
+    new Request(url, tag ? { headers: { "if-none-match": tag } } : undefined)
+  )
+  if (hit) return hit
+  const object = await c.env.SITES.get(key)
+  if (!object) return null
+  const fresh = new Response(object.body, {
+    headers: { etag: object.httpEtag, "cache-control": KEEP },
+  })
+  if (cache) await later(c, cache.put(url, fresh.clone()))
+  return fresh
+}
+
 /** The revision's manifest, checked against the ids the caller trusts. */
 async function manifestFor(
-  sites: R2Bucket,
+  c: Context<App>,
+  host: string | null,
   ids: { org_id: string; site_id: string; revision_id: string }
 ): Promise<{ manifest: DeploymentManifest; base: string } | null> {
   const base = `sites/${ids.site_id}/${ids.revision_id}/`
-  const stored = await sites.get(`${base}manifest.json`)
+  const stored = await fromR2(c, host, `${base}manifest.json`)
   if (!stored) return null
   const parsed = DeploymentManifest.safeParse(await stored.json())
   if (!parsed.success) return null
@@ -109,12 +183,17 @@ async function manifestFor(
 
 async function serve(
   c: Context<App>,
+  host: string | null,
   key: string,
   headers: Headers
 ): Promise<Response> {
-  const object = await c.env.SITES.get(key)
-  if (!object) return notHere(c)
-  return new Response(c.req.method === "HEAD" ? null : object.body, {
+  const found = await fromR2(c, host, key, c.req.header("if-none-match"))
+  if (!found) return notHere(c)
+  const etag = found.headers.get("etag")
+  if (etag) headers.set("etag", etag)
+  const bodiless = c.req.method === "HEAD" || found.status === 304
+  return new Response(bodiless ? null : found.body, {
+    status: found.status,
     headers,
   })
 }
@@ -150,15 +229,7 @@ async function pointerFromTruth(
       config_version: row.configVersion,
     })
   } finally {
-    // Outside a Worker (the route test) there is no execution context.
-    let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
-    try {
-      ctx = c.executionCtx
-    } catch {
-      ctx = null
-    }
-    if (ctx) ctx.waitUntil(kit.close())
-    else await kit.close()
+    await later(c, kit.close())
   }
 }
 
@@ -173,6 +244,9 @@ app.use("*", async (c, next) => {
   const host = new URL(c.req.url).hostname
   if (serviceHosts(c.env).has(host)) return passThrough(c)
   if (!host.endsWith(c.env.SITE_HOST_SUFFIX)) return unserved(c)
+  if (!LABEL.test(host.slice(0, -c.env.SITE_HOST_SUFFIX.length))) {
+    return unserved(c)
+  }
   return next()
 })
 
@@ -216,12 +290,13 @@ app.on(["GET", "HEAD"], "*", async (c) => {
       c.env.PREVIEW_KEY
     )
     if (!claim || claim.host !== host) return noPreview(c)
-    const found = await manifestFor(c.env.SITES, claim)
+    const found = await manifestFor(c, null, claim)
     if (!found) return notHere(c)
     const resolved = resolvePreviewPath(url.pathname, found.manifest.files)
     if (!resolved) return notHere(c)
     return serve(
       c,
+      null,
       `${found.base}${resolved.key}`,
       previewHeaders(found.manifest.headers, resolved.file)
     )
@@ -240,21 +315,39 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     }
     pointer = parsed.data
   } else {
+    // Postgres is 1.5 to 2.7 s away (measured 2026-09-18) and the zone's
+    // wildcard record sends any name here, so the way to it is narrow: a name
+    // already found to be nobody's is believed for a minute, and one address
+    // gets `MISSES` askings a minute. The second is the control that holds
+    // against made-up names, each of which is new to the first.
+    const nobody = edgeKey(host, "nobody")
+    if (await edge()?.match(nobody)) return unserved(c)
+    const { success } = await c.env.MISSES.limit({
+      key: c.req.header("cf-connecting-ip") ?? "unknown",
+    })
+    if (!success) return tooMany(c)
     pointer = await pointerFromTruth(c, host)
     if (pointer) {
-      await c.env.ROUTES.put(`host:${host}`, JSON.stringify(pointer))
+      await later(c, c.env.ROUTES.put(`host:${host}`, JSON.stringify(pointer)))
+    } else {
+      const put = edge()?.put(
+        nobody,
+        new Response(null, { headers: { "cache-control": NOBODY_FOR } })
+      )
+      if (put) await later(c, put)
     }
   }
   // No pointer and no row behind it: nothing here was ever published under
   // this name. On production that is another name's request (issue #90); a
   // pointer that resolves and a file that does not is this site's 404, below.
   if (!pointer) return unserved(c)
-  const found = await manifestFor(c.env.SITES, pointer)
+  const found = await manifestFor(c, host, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
   return serve(
     c,
+    host,
     `${found.base}dist/${file}`,
     previewHeaders(found.manifest.headers, file, cacheFor(file))
   )

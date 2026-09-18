@@ -1,5 +1,5 @@
 import { signPreview } from "@workspace/gates/preview"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 import app from "../src/index.ts"
 
 /**
@@ -13,6 +13,7 @@ const ORG = "10000001-0000-4000-8000-000000000001"
 const OTHER = "10000001-0000-4000-8000-000000000002"
 const REV = "10000001-0000-4000-8000-000000000003"
 const OTHER_REV = "10000001-0000-4000-8000-000000000004"
+const ROLLED_BACK_TO = "10000001-0000-4000-8000-000000000005"
 const PREVIEW_HOST = `preview-v3-brightclean${SUFFIX}`
 const SITE_HOST = `brightclean${SUFFIX}`
 const HEADERS = {
@@ -23,6 +24,10 @@ const HEADERS = {
 }
 
 const objects = new Map<string, string>()
+/** Every key R2 was asked for, so a test can say what a request cost. */
+const reads: string[] = []
+/** Flipped by a test to stand in for an address that has used its askings. */
+let limited = false
 const pointers = new Map<string, unknown>()
 
 function revision(
@@ -62,12 +67,12 @@ const env = {
   PREVIEW_KEY: KEY,
   SITES: {
     get: async (key: string) => {
+      reads.push(key)
       const body = objects.get(key)
-      return body === undefined
-        ? null
-        : { body, text: async () => body, json: async () => JSON.parse(body) }
+      return body === undefined ? null : { body, httpEtag: `"${key}"` }
     },
   },
+  MISSES: { limit: async () => ({ success: !limited }) },
   ROUTES: {
     get: async (key: string) => pointers.get(key) ?? null,
     put: async (key: string, value: string) => {
@@ -130,6 +135,142 @@ async function passedThrough(
     globalThis.fetch = real
   }
 }
+
+/**
+ * A data centre's cache as a map, with the one behaviour of the real one the
+ * router leans on: a matching `If-None-Match` is answered 304 with no body.
+ */
+function withEdgeCache() {
+  const stored = new Map<string, Response>()
+  ;(globalThis as { caches?: unknown }).caches = {
+    default: {
+      match: async (key: Request | string) => {
+        const request = new Request(key)
+        const hit = stored.get(request.url)?.clone()
+        if (!hit) return undefined
+        const tag = request.headers.get("if-none-match")
+        return tag && tag === hit.headers.get("etag")
+          ? new Response(null, { status: 304, headers: hit.headers })
+          : hit
+      },
+      put: async (at: string, response: Response) => {
+        stored.set(at, response)
+      },
+    },
+  }
+  return stored
+}
+
+afterEach(() => {
+  ;(globalThis as { caches?: unknown }).caches = undefined
+  limited = false
+  reads.length = 0
+})
+
+describe("the edge cache", () => {
+  const point = (revisionId: string, version: number) =>
+    pointers.set(`host:${SITE_HOST}`, {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: revisionId,
+      config_version: version,
+    })
+
+  it("serves a second request without reading R2", async () => {
+    withEdgeCache()
+    point(REV, 1)
+    expect((await get(SITE_HOST, "/")).status).toBe(200)
+    expect(reads).toHaveLength(2)
+    reads.length = 0
+    const again = await get(SITE_HOST, "/")
+    expect(await again.text()).toBe(`<h1>${REV.slice(-4)}</h1>`)
+    expect(again.headers.get("cache-control")).toBe("no-cache")
+    expect(again.headers.get("x-frame-options")).toBe("DENY")
+    expect(reads).toEqual([])
+  })
+
+  it("shows a rollback at once, with the old revision still cached", async () => {
+    withEdgeCache()
+    revision(ORG, ROLLED_BACK_TO)
+    point(REV, 2)
+    await get(SITE_HOST, "/")
+    point(ROLLED_BACK_TO, 1)
+    const after = await get(SITE_HOST, "/")
+    expect(await after.text()).toBe(`<h1>${ROLLED_BACK_TO.slice(-4)}</h1>`)
+  })
+
+  it("keys on the file the manifest resolved, never on the query", async () => {
+    const stored = withEdgeCache()
+    point(REV, 1)
+    await get(SITE_HOST, "/")
+    const size = stored.size
+    reads.length = 0
+    await get(SITE_HOST, "/?bust=1")
+    await get(SITE_HOST, "/index.html?bust=2")
+    expect(stored.size).toBe(size)
+    expect(reads).toEqual([])
+  })
+
+  it("answers a matching validator 304 with no body", async () => {
+    withEdgeCache()
+    point(REV, 1)
+    const etag = (await get(SITE_HOST, "/")).headers.get("etag") as string
+    expect(etag).toBeTruthy()
+    const res = await get(SITE_HOST, "/", {
+      headers: { "if-none-match": etag },
+    })
+    expect(res.status).toBe(304)
+    expect(await res.text()).toBe("")
+    expect(res.headers.get("cache-control")).toBe("no-cache")
+  })
+
+  it("keeps a validator away from the manifest", async () => {
+    withEdgeCache()
+    point(REV, 1)
+    await get(SITE_HOST, "/")
+    const res = await get(SITE_HOST, "/", {
+      headers: { "if-none-match": `"sites/${ORG}/${REV}/manifest.json"` },
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it("never stores a preview", async () => {
+    const stored = withEdgeCache()
+    const res = await get(PREVIEW_HOST, "/", {
+      headers: cookie(await claimFor()),
+    })
+    expect(res.status).toBe(200)
+    expect(stored.size).toBe(0)
+  })
+})
+
+describe("the way to Postgres", () => {
+  it("refuses a name that is not one label before reading anything", async () => {
+    for (const host of [
+      `a.b${SUFFIX}`,
+      `-lead${SUFFIX}`,
+      `${"x".repeat(64)}${SUFFIX}`,
+    ]) {
+      const res = await get(host, "/")
+      expect(res.status).toBe(404)
+    }
+    expect(reads).toEqual([])
+  })
+
+  it("answers 429 without asking when the address has used its askings", async () => {
+    limited = true
+    const res = await get(`nobody${SUFFIX}`, "/")
+    expect(res.status).toBe(429)
+    expect(res.headers.get("retry-after")).toBe("60")
+  })
+
+  it("believes a cached nobody without asking again", async () => {
+    const stored = withEdgeCache()
+    stored.set(`https://nobody${SUFFIX}/.edge/nobody`, new Response(null))
+    limited = true
+    expect((await get(`nobody${SUFFIX}`, "/")).status).toBe(404)
+  })
+})
 
 describe("hosts", () => {
   it("answers 404 for a host outside the suffix before reading anything", async () => {
