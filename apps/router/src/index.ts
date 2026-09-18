@@ -47,6 +47,37 @@ const envelope = (
 const isPreviewHost = (host: string) => host.startsWith("preview-")
 
 /**
+ * The hostnames in the zone that are not tenant sites, each one a Worker
+ * behind its own custom domain. Empty on staging, whose route pattern matches
+ * no service hostname, and the whole list on production, whose route is the
+ * zone (issue #90, ADR-030): there `SITE_HOST_SUFFIX` is `.remeai.co.uk`, so
+ * `api.remeai.co.uk` and the rest would otherwise read as tenant hosts.
+ */
+const serviceHosts = (env: Env) =>
+  new Set(
+    (env.SERVICE_HOSTS ?? "")
+      .split(",")
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean)
+  )
+
+/**
+ * Hand the request back to Cloudflare, which routes it by the hostname's own
+ * record: a wildcard route beats a custom domain on the same hostname and
+ * `fetch(request)` is what reaches the Worker behind it (measured 2026-09-16).
+ * A subrequest to a URL on this Worker's own route does not re-enter it.
+ *
+ * Only ever called where the router has decided the host is not its own, and
+ * only where a list of service hostnames says this Worker sits on a route
+ * wider than the sites it serves. Staging has no list and answers 404.
+ */
+const passThrough = (c: Context<App>) => fetch(c.req.raw)
+
+/** A host in the zone that no site here claims: another name's, or nobody's. */
+const unserved = (c: Context<App>) =>
+  serviceHosts(c.env).size > 0 ? passThrough(c) : notHere(c)
+
+/**
  * Hashed assets are immutable; everything else is revalidated on every
  * request, so a publish or a rollback is visible at once (ADR-032, no purge).
  */
@@ -133,13 +164,15 @@ async function pointerFromTruth(
 
 const app = new Hono<App>()
 
-// A host outside this environment's suffix is nobody's: the route pattern
-// admits none on staging, and the production router passes them through
-// (issue #90). Answered before any binding is read.
+// Answered before any binding is read. A service hostname is checked first,
+// because on production every one of them also ends in `SITE_HOST_SUFFIX` and
+// would otherwise be read as a tenant host. What is left is a host this
+// environment does not serve: the zone apex among them, which ends in the
+// suffix for nobody.
 app.use("*", async (c, next) => {
-  if (!new URL(c.req.url).hostname.endsWith(c.env.SITE_HOST_SUFFIX)) {
-    return notHere(c)
-  }
+  const host = new URL(c.req.url).hostname
+  if (serviceHosts(c.env).has(host)) return passThrough(c)
+  if (!host.endsWith(c.env.SITE_HOST_SUFFIX)) return unserved(c)
   return next()
 })
 
@@ -212,7 +245,10 @@ app.on(["GET", "HEAD"], "*", async (c) => {
       await c.env.ROUTES.put(`host:${host}`, JSON.stringify(pointer))
     }
   }
-  if (!pointer) return notHere(c)
+  // No pointer and no row behind it: nothing here was ever published under
+  // this name. On production that is another name's request (issue #90); a
+  // pointer that resolves and a file that does not is this site's 404, below.
+  if (!pointer) return unserved(c)
   const found = await manifestFor(c.env.SITES, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)

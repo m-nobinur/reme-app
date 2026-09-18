@@ -146,6 +146,38 @@ jobs:
           [ "$code" = 200 ] || { echo "::error::$WEB/ answered $code"; exit 1; }
           echo "$WEB/ answered $code"
 
+      # Last of the Workers, and deliberately after the two it can break. The
+      # router's production route is `*.remeai.co.uk/*`, the whole zone, and a
+      # wildcard route beats a custom domain on the same hostname (measured
+      # 2026-09-16), so from here every request to the api and the app reaches
+      # this Worker first and is handed back by `SERVICE_HOSTS` (issue #90).
+      # Deploying it first would attribute its own breakage to them.
+      - name: Deploy the router
+        env:
+          RELEASE: ${{ github.ref_name }} ${{ github.sha }}
+        run: >
+          pnpm --filter router exec wrangler deploy --env production
+          --message "$RELEASE"
+
+      # The one thing that can go wrong here and nowhere else: the zone-wide
+      # route swallowing a service hostname. Both checks above are repeated
+      # through it, so a passthrough that does not pass through is this step
+      # rather than a puzzling failure in the smoke below.
+      - name: The service hostnames still answer through the router
+        run: |
+          body=$(curl -sS --max-time 30 "$API/health") || {
+            echo "::error::$API/health did not answer through the router"; exit 1; }
+          echo "$body" | jq -e '
+            .status == "ok" and .role == "reme_app"
+            and .bypasses_rls == false and .rows_for_absent_org == 0' >/dev/null || {
+            echo "::error::$API/health did not answer as the api through the router"
+            echo "::error::the wildcard route is serving it instead of passing it through"
+            exit 1; }
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$WEB/")
+          [ "$code" = 200 ] || {
+            echo "::error::$WEB/ answered $code through the router"; exit 1; }
+          echo "the api and the app both answered through the router"
+
       - run: pnpm --filter e2e exec playwright install --with-deps chromium
 
       # The owner path against the deployed production build: a real sign-in

@@ -94,6 +94,43 @@ const cookie = (token: string) => ({ cookie: `reme_preview=${token}` })
 const get = (host: string, path: string, init: RequestInit = {}) =>
   app.request(`https://${host}${path}`, init, env)
 
+/**
+ * Production's environment (issue #90): the route is the whole zone, so the
+ * suffix matches every hostname in it and the service names have to be listed.
+ * The same bindings otherwise, so a difference here is the environment's.
+ */
+const PROD_SUFFIX = ".remeai.co.uk"
+const prodEnv = {
+  ...env,
+  SITE_HOST_SUFFIX: PROD_SUFFIX,
+  SERVICE_HOSTS:
+    "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk",
+} as unknown as Env
+
+/**
+ * `fetch` stands in for Cloudflare's own routing: a passthrough is the request
+ * leaving this Worker unchanged, so the stub records it and answers 299, a
+ * status nothing else in the router returns.
+ */
+async function passedThrough(
+  host: string,
+  path: string,
+  environment: Env = prodEnv
+) {
+  const seen: string[] = []
+  const real = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    seen.push(typeof input === "string" ? input : (input as Request).url)
+    return new Response("passed", { status: 299 })
+  }) as typeof fetch
+  try {
+    const res = await app.request(`https://${host}${path}`, {}, environment)
+    return { res, seen }
+  } finally {
+    globalThis.fetch = real
+  }
+}
+
 describe("hosts", () => {
   it("answers 404 for a host outside the suffix before reading anything", async () => {
     pointers.set("host:staging.remeai.co.uk", {
@@ -106,6 +143,74 @@ describe("hosts", () => {
     expect(res.status).toBe(404)
     expect(res.headers.get("cache-control")).toBe("no-store")
     pointers.delete("host:staging.remeai.co.uk")
+  })
+
+  it("hands every production service hostname back to Cloudflare, unchanged", async () => {
+    for (const host of [
+      "api.remeai.co.uk",
+      "orchestrator.remeai.co.uk",
+      "preview.remeai.co.uk",
+      "www.remeai.co.uk",
+    ]) {
+      const { res, seen } = await passedThrough(host, "/health")
+      expect(res.status, host).toBe(299)
+      expect(seen, host).toEqual([`https://${host}/health`])
+    }
+  })
+
+  it("passes a service hostname through before it can read as a tenant site", async () => {
+    // The whole reason the list exists: on production every service hostname
+    // also ends in the suffix, and a pointer under that name would otherwise
+    // be served as somebody's site.
+    pointers.set("host:api.remeai.co.uk", {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 1,
+    })
+    const { res, seen } = await passedThrough("api.remeai.co.uk", "/")
+    expect(res.status).toBe(299)
+    expect(seen).toEqual(["https://api.remeai.co.uk/"])
+    pointers.delete("host:api.remeai.co.uk")
+  })
+
+  it("serves a production tenant site rather than passing it through", async () => {
+    pointers.set("host:brightclean.remeai.co.uk", {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 1,
+    })
+    const { res, seen } = await passedThrough("brightclean.remeai.co.uk", "/")
+    expect(res.status).toBe(200)
+    expect(seen).toEqual([])
+    expect(await res.text()).toContain("<h1>")
+    pointers.delete("host:brightclean.remeai.co.uk")
+  })
+
+  it("answers a published production site's missing path as its own 404", async () => {
+    // A pointer that resolves is this site's request: a path it does not have
+    // is its 404, never another name's problem.
+    pointers.set("host:brightclean.remeai.co.uk", {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 1,
+    })
+    const { res, seen } = await passedThrough("brightclean.remeai.co.uk", "/no")
+    expect(res.status).toBe(404)
+    expect(seen).toEqual([])
+    pointers.delete("host:brightclean.remeai.co.uk")
+  })
+
+  it("passes nothing through on staging, which owns no service hostname", async () => {
+    const { res, seen } = await passedThrough(
+      "staging-api.remeai.co.uk",
+      "/",
+      env
+    )
+    expect(res.status).toBe(404)
+    expect(seen).toEqual([])
   })
 
   it("answers /api/* with the typed 501 on any host", async () => {
@@ -401,5 +506,19 @@ live("a published host, against a real database", () => {
     )
     expect(nobody.status).toBe(404)
     expect(pointers.has(`host:nobody-here${SUFFIX}`)).toBe(false)
+  })
+
+  // The other half of issue #90: the same miss, on the environment whose route
+  // is the whole zone. Nothing here was ever published under that name, so it
+  // is another name's request and goes back to Cloudflare rather than 404.
+  it("passes a production host through when no business holds the slug", async () => {
+    const host = `nobody-here${PROD_SUFFIX}`
+    const { res, seen } = await passedThrough(host, "/", {
+      ...prodEnv,
+      HYPERDRIVE: { connectionString: url },
+    } as unknown as Env)
+    expect(res.status).toBe(299)
+    expect(seen).toEqual([`https://${host}/`])
+    expect(pointers.has(`host:${host}`)).toBe(false)
   })
 })

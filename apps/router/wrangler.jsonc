@@ -5,9 +5,15 @@
 // `*-stg.remeai.co.uk/*`. Measured 2026-09-16 with two throwaway Workers: a
 // pattern with the longer literal suffix wins the host, and a wildcard route
 // beats a custom domain on the same hostname, with `fetch(request)` as the
-// passthrough. Neither service hostname matches this pattern, so nothing here
-// passes through. The production router lands with its own `*.remeai.co.uk/*`
-// route and that passthrough.
+// passthrough. No staging service hostname matches `*-stg.remeai.co.uk/*`, so
+// staging passes nothing through and answers 404 instead.
+//
+// Production owns `*.remeai.co.uk/*`, which is the whole zone, so every service
+// hostname does reach it and is passed through by name. That the zone-wide
+// pattern loses `-stg` hosts to the longer literal suffix follows from the same
+// 2026-09-16 measurement, but the exact pair has not itself been run against
+// the production zone: doing so puts a Worker in front of the live api for the
+// length of the test. ADR-030 carries that as an amendment (issue #90).
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "reme-router",
@@ -25,7 +31,9 @@
   "routes": [
     { "pattern": "*-stg.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
   ],
-  "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk" },
+  // Empty on staging: no service hostname ends in `-stg.remeai.co.uk`, so the
+  // route pattern never sends one here and there is nothing to pass through.
+  "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk", "SERVICE_HOSTS": "" },
   // `reme-staging-routes`, created by `node infra/bootstrap.ts staging`. The
   // routing cache (§11.1.3): `host:{hostname}` to a `SitePointer`, written by
   // the publisher, read here. Postgres stays the truth.
@@ -38,5 +46,34 @@
   // the answer is written back to KV. The same staging config as the api.
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
-  ]
+  ],
+  // Production's route is the whole zone, which runs before the custom domains
+  // of the api, the orchestrator and the app, and its suffix matches every
+  // hostname in the zone. Both are why `SERVICE_HOSTS` is not empty here: those
+  // names are handed back to Cloudflare rather than read as tenant sites
+  // (issue #90, ADR-030).
+  "env": {
+    "production": {
+      "name": "reme-router-production",
+      "routes": [
+        { "pattern": "*.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
+      ],
+      "vars": {
+        "SITE_HOST_SUFFIX": ".remeai.co.uk",
+        "SERVICE_HOSTS": "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk"
+      },
+      "observability": { "enabled": true },
+      "preview_urls": false,
+      "workers_dev": false,
+      // `reme-prod-routes`, created by `node infra/bootstrap.ts prod`.
+      "kv_namespaces": [
+        { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" }
+      ],
+      // The one bucket, as on staging: every key carries its own site id.
+      "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+      "hyperdrive": [
+        { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
+      ]
+    }
+  }
 }
