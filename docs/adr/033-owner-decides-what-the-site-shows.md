@@ -149,8 +149,8 @@ rule at `:292` becomes:
 ```
 - src/site-config.ts is where every string on the site comes from, and its fields export says what
   each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact
-  field empty when its fact is missing or when the site-needs list above does not name it: an empty
-  field renders nothing, which is how the site leaves something out. A composed field is text you
+  field empty when its fact is missing or when the owner has asked for that fact not to appear: an
+  empty field renders nothing, which is how the site leaves something out. A composed field is text you
   may write or keep. It may say why the business is worth calling. Every checkable thing in it
   traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a
   rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A
