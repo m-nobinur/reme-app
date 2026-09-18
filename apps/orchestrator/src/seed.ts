@@ -1,7 +1,7 @@
 import { ComponentManifest, SiteFields } from "@workspace/contracts"
 import manifests from "@workspace/starter-site/manifests.json"
 import { fields } from "@workspace/starter-site/site-config"
-import { manifestDigest, requiredFacts } from "./repo-map.ts"
+import { manifestDigest } from "./repo-map.ts"
 
 /**
  * The seed (ruling 4): `packages/starter-site`'s config and `src`, with the
@@ -35,8 +35,8 @@ export const STARTER_FILES: Record<string, string> = Object.fromEntries(
   ])
 )
 
-/** The facts a first build asks for, in the order the site config declares them. Parsed here so a config the contract refuses fails the Worker at load. */
-export const SEED_REQUIRED_FACTS = requiredFacts(SiteFields.parse(fields))
+/** The starter's fields, which say what a build asks for. Parsed here so a config the contract refuses fails the Worker at load. */
+export const SEED_FIELDS = SiteFields.parse(fields)
 
 /** One line per starter component for the stable prompt segment. */
 export const SEED_DIGEST = manifestDigest(

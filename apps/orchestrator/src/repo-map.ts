@@ -10,7 +10,7 @@
  * references (Aider's repomap) is the upgrade.
  */
 
-import type { ComponentManifest, SiteFields } from "@workspace/contracts"
+import type { ComponentManifest } from "@workspace/contracts"
 
 /** 4,000 characters is about 1,000 tokens at the ratio measured on the starter. */
 export const REPO_MAP_MAX_CHARS = 4_000
@@ -124,16 +124,4 @@ export function manifestDigest(
     )
   }
   return digest
-}
-
-/**
- * The facts a site cannot be built without, in the order the Developer asks
- * for them: the site config's required fact fields, in declaration order. Read
- * from the bundled config and never from the sandbox, so an edit to the
- * sandbox copy cannot change what the Developer must ask for.
- */
-export function requiredFacts(fields: SiteFields): string[] {
-  return Object.values(fields).flatMap((field) =>
-    field.kind === "fact" && field.required ? [field.fact_key] : []
-  )
 }
