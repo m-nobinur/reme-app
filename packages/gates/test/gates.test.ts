@@ -308,6 +308,7 @@ describe("all the gates", () => {
       "links",
       "structured_data",
       "content",
+      "claims",
     ])
     for (const r of results) expect(GateResult.parse(r)).toEqual(r)
     expect(results.every((r) => r.passed)).toBe(true)

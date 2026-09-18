@@ -1,5 +1,5 @@
 import type { FactRecord } from "@workspace/contracts"
-import { HIDDEN_FACTS_KEY } from "@workspace/gates"
+import { CLAIM_VOCABULARY, HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { describe, expect, it } from "vitest"
 import { siteRules } from "../src/developer-rules.ts"
 
@@ -59,5 +59,26 @@ describe("the Developer's site rules", () => {
 
   it("sends a requested claim no fact supports to ask_chief", () => {
     expect(text(true)).toContain("call ask_chief for it rather than writing it")
+  })
+
+  it("says what persuasive copy is welcome", () => {
+    const rules = text(false)
+    expect(rules).toContain("benefit-led slogan under eight words")
+    expect(rules).toContain("call to action that names the action")
+  })
+
+  it("names every word the claims gate fails, from the gate's own list", () => {
+    const rules = text(false)
+    for (const word of Object.values(CLAIM_VOCABULARY).flat())
+      expect(rules, word).toContain(word)
+    expect(rules).toContain("Call ask_chief for the fact")
+  })
+
+  it("keeps the copy guidance short enough for the cached segment", () => {
+    const added = siteRules(false, []).filter((rule) =>
+      /Persuasive copy|claims gate fails/.test(rule)
+    )
+    expect(added).toHaveLength(2)
+    expect(added.join(" ").split(/\s+/).length).toBeLessThan(160)
   })
 })
