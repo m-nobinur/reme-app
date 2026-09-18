@@ -31,8 +31,6 @@ export const Route = createFileRoute("/app")({
   // route is protected by where it lives rather than by remembering.
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
-    // The organisation list and the current selection, both resolved on the
-    // server. This is what replaced the `listOwnerOrgs` placeholder.
     return { owner, ...(await getOrgContext()) }
   },
   component: AppLayout,

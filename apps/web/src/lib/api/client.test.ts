@@ -10,11 +10,9 @@ const SRC = fileURLToPath(new URL("../..", import.meta.url))
 /**
  * The seam is one module or it is not a seam.
  *
- * It pinned `./mock` until B5's read endpoints existed; it pins `./client` now,
- * and the property is the one that mattered either way. A loader that reached
- * past `source.ts` for one screen would still be reading whatever the previous
- * implementation was after the next swap, and nothing else in the repo would
- * notice.
+ * A loader that reached past `source.ts` for one screen would still be reading
+ * the previous implementation after the next swap, and nothing else in the repo
+ * would notice.
  */
 it("names an implementation in exactly one module", () => {
   const offenders = readdirSync(SRC, { recursive: true })

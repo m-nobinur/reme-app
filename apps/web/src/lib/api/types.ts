@@ -139,9 +139,8 @@ export type ActivityItem = {
 }
 
 /**
- * Every read the owner screens make. One object, so the mock and the real
- * client are interchangeable and `source.ts` is the only file that knows which
- * one is in use.
+ * Every read the owner screens make. One object, so implementations are
+ * interchangeable and `source.ts` is the only file that knows which is in use.
  */
 export type OwnerDataSource = {
   /** The organisations the signed-in owner belongs to. */

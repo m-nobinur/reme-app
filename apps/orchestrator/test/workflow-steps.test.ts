@@ -43,7 +43,10 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   return { AgentInstanceExistsError: InstanceExists }
 })
 const dispatched: { message: unknown }[] = []
-vi.mock("@workspace/facade", () => ({
+// The real module underneath, so the gate reasons the Workflow matches on are
+// the ones the gate actually emits. Only the agent entry point is stood in for.
+vi.mock("@workspace/facade", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@workspace/facade")>()),
   AgentInstanceExistsError,
   init: () => ({
     dispatch: async (request: { message: unknown }) => {

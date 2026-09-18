@@ -19,8 +19,8 @@ import type {
 
 /**
  * The server half of every product screen. Loaders call these; nothing calls
- * `source` directly, so the mock never reaches the client graph and the swap
- * in `source.ts` stays the only change B5 needs.
+ * `source` directly, so no implementation reaches the client graph and
+ * `source.ts` stays the only module that names one.
  *
  * Each function resolves the organisation itself. No screen passes an
  * organisation id, and none accepts one: the id is looked up from the owner's

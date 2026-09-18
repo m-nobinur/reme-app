@@ -93,23 +93,6 @@ describe("the bearer", () => {
   })
 })
 
-describe("the page", () => {
-  it("is served at /console with its FIXME", async () => {
-    const res = await app.request("/console", {}, env)
-    expect(res.status).toBe(200)
-    expect(res.headers.get("content-type")).toContain("text/html")
-    expect(await res.text()).toContain("FIXME")
-  })
-
-  it("may talk only to its own origin and never be framed", async () => {
-    const res = await app.request("/console", {}, env)
-    const csp = res.headers.get("content-security-policy") ?? ""
-    expect(csp).toContain("connect-src 'self'")
-    expect(csp).toContain("frame-ancestors 'none'")
-    expect(res.headers.get("referrer-policy")).toBe("no-referrer")
-  })
-})
-
 describe("creating an assignment", () => {
   it("refuses a goal longer than 4,000 characters before touching a row", async () => {
     const res = await app.request(

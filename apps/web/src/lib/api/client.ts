@@ -5,8 +5,7 @@ import type { OrgNode, OrgSummary, OwnerDataSource, StaffMember } from "./types"
 /**
  * The owner screens, read from `apps/api` over the contracts.
  *
- * This is what `mock.ts` was standing in for. Every value on every screen now
- * comes from a row a tenant owns, resolved from their own session: no request
+ * Every value on every screen comes from a row a tenant owns, resolved from their own session: no request
  * from here names an organisation, in any spelling, because `apps/api` produces
  * the org id from the sealed session and would not read one if we sent it.
  * `orgId` is still a parameter of `OwnerDataSource` and is deliberately unused

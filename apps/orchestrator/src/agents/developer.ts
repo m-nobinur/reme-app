@@ -22,6 +22,7 @@ import {
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
+  SANDBOX_UPDATING,
   type Tee,
   type TurnGate,
   toolInput,
@@ -37,6 +38,7 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { repoMap } from "../repo-map.ts"
+import { SITE_ROOT } from "../revise.ts"
 import {
   SEED_DIGEST,
   SEED_REQUIRED_FACTS,
@@ -54,8 +56,6 @@ import { assignmentCost } from "../state.ts"
  * budget guard sits in front of every model call.
  */
 
-/** Where the site lives in the container. `/opt/astro` is the toolchain, read-only. */
-export const SITE_ROOT = "/workspace/site"
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
 const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
 
@@ -146,7 +146,7 @@ function wake(found: Session, key: string, reason: string) {
 const platformInterrupted = (error: unknown) =>
   error instanceof OperationInterruptedError ||
   (error as { code?: string }).code === "OPERATION_INTERRUPTED"
-    ? "sandbox.updating"
+    ? SANDBOX_UPDATING
     : null
 instrument({
   key: Symbol.for("reme.developer"),
