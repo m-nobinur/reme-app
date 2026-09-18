@@ -87,7 +87,9 @@
         {
           "pattern": "preview.remeai.co.uk",
           "custom_domain": true
-        }
+        },
+        // Keeps this hostname off the site router: see apps/api/wrangler.jsonc.
+        { "pattern": "preview.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
       ],
       "vars": {
         "WORKOS_REDIRECT_URI": "https://preview.remeai.co.uk/api/auth/callback",

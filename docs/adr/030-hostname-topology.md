@@ -175,3 +175,11 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   The staging deploy's own probe asserts a `-stg` host answers the staging router's 404, so the
   next staging run after the first production tag is the check. If it goes red, staging previews
   move to the `staging-preview` host as the 2026-09-15 amendment says.
+- **Amended 2026-09-18, service hostnames keep their own route.** Measured with two throwaway
+  Workers on `svc-rtprobe.remeai.co.uk`, deleted afterwards: one held the custom domain, the other
+  the route `*-rtprobe.remeai.co.uk/*`. The wildcard answered, as on 2026-09-16. With the route
+  `svc-rtprobe.remeai.co.uk/*` added to the Worker holding the custom domain, that Worker answered
+  6 of 6 and every other matching host still reached the wildcard. So the production api, app and
+  orchestrator each carry an explicit host route beside their custom domain, and their requests
+  do not pass through the router. `SERVICE_HOSTS` stays, for a service Worker deployed without
+  its route.

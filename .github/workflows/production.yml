@@ -149,9 +149,11 @@ jobs:
       # Last of the Workers, and deliberately after the two it can break. The
       # router's production route is `*.remeai.co.uk/*`, the whole zone, and a
       # wildcard route beats a custom domain on the same hostname (measured
-      # 2026-09-16), so from here every request to the api and the app reaches
-      # this Worker first and is handed back by `SERVICE_HOSTS` (issue #90).
-      # Deploying it first would attribute its own breakage to them.
+      # 2026-09-16). The api, the app and the orchestrator each hold an explicit
+      # host route that beats the wildcard in turn (measured 2026-09-18), so
+      # their traffic should never arrive here, and `SERVICE_HOSTS` hands it
+      # back if it does (issue #90). Deploying this first would attribute its
+      # own breakage to them.
       - name: Deploy the router
         env:
           RELEASE: ${{ github.ref_name }} ${{ github.sha }}
