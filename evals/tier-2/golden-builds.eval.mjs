@@ -68,8 +68,10 @@ function numbers(events) {
     (e) => e.type === "assignment.validation_reported"
   )
   const gates = reports.flatMap((e) => e.payload.gates ?? [])
+  // Both gates that trace what is rendered to a fact: the content gate for
+  // prices, phones, emails, times and postcodes, the claims gate for the rest.
   const fabrications = gates.filter(
-    (g) => g.gate === "content" && !g.passed
+    (g) => (g.gate === "content" || g.gate === "claims") && !g.passed
   ).length
   const asked = events.filter((e) => e.type === "information.requested").length
   return {

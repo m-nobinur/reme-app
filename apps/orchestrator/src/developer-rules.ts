@@ -1,6 +1,22 @@
 import type { FactRecord } from "@workspace/contracts"
-import { factsToAsk } from "@workspace/gates"
+import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { SEED_FIELDS } from "./seed.ts"
+
+/**
+ * The cleaning pack's copy guidance, until a pack registry exists to carry it.
+ * The word lists are the claims gate's own, so the advice and the rule cannot
+ * drift apart; it sits in the cached stable segment, so it stays short.
+ */
+const WORDS = [
+  ...CLAIM_VOCABULARY.superlative,
+  ...CLAIM_VOCABULARY.credential,
+  ...CLAIM_VOCABULARY.guarantee,
+].join(", ")
+const COUNTS = CLAIM_VOCABULARY.counted.join(", ")
+const COPY_RULES = [
+  '- Persuasive copy is welcome: a benefit-led slogan under eight words, a supporting line under it, value propositions about care, reliability and convenience, and a call to action that names the action ("Book a clean").',
+  `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. Call ask_chief for the fact, or write the line without the claim.`,
+]
 
 /**
  * The Developer's rules about what the site shows and what it may claim
@@ -22,6 +38,7 @@ export function siteRules(
       : []),
     `- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
     "- If the change request asks for something checkable that no fact below supports, a price, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
+    ...COPY_RULES,
     ...(hidden.length > 0
       ? [
           `- The owner has asked that these facts not appear on the site: ${hidden.join(", ")}. No field may render them.`,

@@ -4,10 +4,25 @@ import {
   type FactRecord,
   type GateResult,
 } from "@workspace/contracts"
+import { claimFindings } from "./claims.ts"
 import { type Located, type Page, parsePage, resolveSitePath } from "./page.ts"
+import {
+  type ContentClaim,
+  type ContentKind,
+  contentClaimsIn,
+  factsForContent,
+} from "./text.ts"
 
+export {
+  CLAIM_VOCABULARY,
+  type ClaimFinding,
+  type ClaimKind,
+  claimFindings,
+  SUPPORTING_FACT_PREFIXES,
+} from "./claims.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage, resolveSitePath } from "./page.ts"
+export { factsForContent } from "./text.ts"
 
 /**
  * The gates P1 runs outside the sandbox, against the artifact that will be
@@ -213,83 +228,12 @@ export function checkStructuredData(pages: readonly Page[]): GateResult {
   return pass("structured_data", `${count} structured data items valid`)
 }
 
-/** The facts a claim may trace to: never an `inferred` one (§10.2). */
-export const factsForContent = (facts: readonly FactRecord[]) =>
-  facts.filter((f) => f.provenance.source !== "inferred")
-
-type Kind = "email" | "phone" | "price" | "time" | "postcode"
-type Claim = { kind: Kind; text: string; key: string }
-
-const CURRENCY: Record<string, string> = {
-  $: "USD",
-  "£": "GBP",
-  "€": "EUR",
-  USD: "USD",
-  GBP: "GBP",
-  EUR: "EUR",
-}
-const EXTRACT: {
-  kind: Kind
-  pattern: RegExp
-  key: (m: RegExpMatchArray) => string | null
-}[] = [
-  {
-    kind: "email",
-    pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
-    key: (m) => m[0].toLowerCase(),
-  },
-  {
-    kind: "price",
-    pattern:
-      /([$£€])\s?(\d[\d,]*(?:\.\d{1,2})?)|(\d[\d,]*(?:\.\d{1,2})?)\s?(USD|GBP|EUR)\b/g,
-    key: (m) => {
-      const currency = CURRENCY[m[1] ?? m[4] ?? ""]
-      const amount = Number((m[2] ?? m[3] ?? "").replace(/,/g, ""))
-      return currency && Number.isFinite(amount)
-        ? `${currency}:${amount.toFixed(2)}`
-        : null
-    },
-  },
-  {
-    kind: "phone",
-    pattern: /\+?\d[\d\s().-]{6,}\d/g,
-    key: (m) => {
-      const digits = m[0].replace(/\D/g, "")
-      return digits.length >= 7 ? digits : null
-    },
-  },
-  {
-    kind: "time",
-    pattern: /\b([01]?\d|2[0-3]):([0-5]\d)\b/g,
-    key: (m) => `${(m[1] ?? "").padStart(2, "0")}:${m[2]}`,
-  },
-  {
-    kind: "postcode",
-    pattern: /\b[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}\b/g,
-    key: (m) => m[0].replace(/\s/g, "").toUpperCase(),
-  },
-]
-
-function claimsIn(text: string): Claim[] {
-  const claims: Claim[] = []
-  let rest = text
-  for (const { kind, pattern, key } of EXTRACT) {
-    for (const m of rest.matchAll(pattern)) {
-      const k = key(m)
-      if (k) claims.push({ kind, text: m[0], key: k })
-    }
-    // A matched claim is not read again as another kind (a price's digits are not a phone).
-    rest = rest.replace(pattern, " ")
-  }
-  return claims
-}
-
 /** Everything a fact's value can support, keyed the way claims are. */
 function supported(facts: readonly FactRecord[]): Set<string> {
   const keys = new Set<string>()
   const visit = (value: unknown) => {
     if (typeof value === "string") {
-      for (const claim of claimsIn(value))
+      for (const claim of contentClaimsIn(value))
         keys.add(`${claim.kind}:${claim.key}`)
       const digits = value.replace(/\D/g, "")
       if (/^\+?[\d\s().-]+$/.test(value) && digits.length >= 7)
@@ -326,10 +270,10 @@ const FACT_BEARING = new Set([
   "priceRange",
 ])
 
-function locatedClaims(page: Page): (Claim & { node: string })[] {
-  const found: (Claim & { node: string })[] = []
+function locatedClaims(page: Page): (ContentClaim & { node: string })[] {
+  const found: (ContentClaim & { node: string })[] = []
   const add = (value: string, node: string) =>
-    found.push(...claimsIn(value).map((c) => ({ ...c, node })))
+    found.push(...contentClaimsIn(value).map((c) => ({ ...c, node })))
   for (const t of page.texts) add(t.value, t.node)
   for (const l of page.links) {
     const m = l.value.match(/^(mailto|tel):(.*)$/i)
@@ -349,7 +293,7 @@ function locatedClaims(page: Page): (Claim & { node: string })[] {
         if (
           /^\+?[\d\s().-]+$/.test(value) &&
           digits.length >= 7 &&
-          !claimsIn(value).length
+          !contentClaimsIn(value).length
         ) {
           found.push({
             kind: "phone",
@@ -373,7 +317,7 @@ function locatedClaims(page: Page): (Claim & { node: string })[] {
 export type ContentFinding = {
   file: string
   node: string
-  kind: Kind
+  kind: ContentKind
   claim: string
 }
 
@@ -414,7 +358,26 @@ export function checkContent(
   )
 }
 
-/** All five gates over one artifact, in the contract's order. */
+/** The claims gate v0: every rating, count, superlative, credential, guarantee and testimonial traced to a fact (§8.5). */
+export function checkClaims(
+  pages: readonly Page[],
+  facts: readonly FactRecord[]
+): GateResult {
+  const findings = claimFindings(pages, facts)
+  const first = findings[0]
+  if (!first)
+    return pass(
+      "claims",
+      "every rating, count, superlative, credential, guarantee and testimonial traces to a fact"
+    )
+  return fail(
+    "claims",
+    `${findings.length} claim(s) match no fact; the first is "${first.claim}" (${first.kind}) in ${first.file}`,
+    `${first.file} ${first.node}`
+  )
+}
+
+/** All six gates over one artifact, in the contract's order. */
 export async function runGates(input: {
   manifest: unknown
   read: (file: string) => Promise<Uint8Array | null>
@@ -433,6 +396,7 @@ export async function runGates(input: {
       fail("links", unreadable),
       fail("structured_data", unreadable),
       fail("content", unreadable),
+      fail("claims", unreadable),
     ]
   }
   const decoder = new TextDecoder()
@@ -449,6 +413,7 @@ export async function runGates(input: {
     checkLinks(pages, parsed.data.files),
     checkStructuredData(pages),
     checkContent(pages, input.facts),
+    checkClaims(pages, input.facts),
   ]
 }
 
