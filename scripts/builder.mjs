@@ -23,8 +23,6 @@
 //   rollback <org> [reason]                  activate the previous revision through the publisher
 //   site     <org>                           what the site serves now, and what a rollback would restore
 //   facts    <org> [<key> <value>]           the business's facts, or restate one (JSON or text)
-//   console                                  open /console with the token on the clipboard
-import { spawnSync } from "node:child_process"
 import { bad, loadLocalEnv, note, repoRoot } from "./lib.mjs"
 
 process.chdir(repoRoot)
@@ -316,28 +314,10 @@ switch (command) {
     }
     break
   }
-  case "console": {
-    // The token goes on the clipboard, never into a URL or the terminal.
-    const url = `${base}/console`
-    console.log(url)
-    if (!token) {
-      bad("ORCHESTRATOR_TOKEN is not set in .env.local")
-      process.exit(1)
-    }
-    const mac = process.platform === "darwin"
-    const copied = mac && spawnSync("pbcopy", { input: token }).status === 0
-    if (mac) spawnSync("open", [url])
-    note(
-      copied
-        ? "The console token is on your clipboard: paste it into the page once."
-        : "Paste ORCHESTRATOR_TOKEN from .env.local into the page once."
-    )
-    break
-  }
   default: {
     bad(command ? `unknown command: ${command}` : "no command")
     note(
-      "create | revise | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site | console"
+      "create | revise | facts | list | show | events | watch | open | start | cancel | answer | steer | review | approve | reject | rollback | site"
     )
     process.exit(2)
   }
