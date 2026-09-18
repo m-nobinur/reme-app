@@ -125,9 +125,9 @@ const visibleText = (html) =>
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
-/** Every `--primary` declaration, which is what a brand colour change moves. */
+/** Every `--brand` declaration, in the stylesheets or the page's own style block, which is what a brand colour change moves. */
 const brandColour = (css) =>
-  [...css.matchAll(/--primary:\s*([^;}]+)/g)].map((m) => m[1].trim()).join("|")
+  [...css.matchAll(/--brand:\s*([^;}]+)/g)].map((m) => m[1].trim()).join("|")
 
 /** What one run's log says about it. */
 function numbers(events) {
@@ -198,12 +198,12 @@ const SHAPES = [
   {
     name: "restyle",
     request: "Use a dark blue as the brand colour.",
-    check: ({ state, css, baseline, gates }) => {
+    check: ({ state, html, css, baseline, gates }) => {
       if (state !== "preview_ready") throw new Error(`settled in ${state}`)
-      const now = brandColour(css)
-      if (!now) throw new Error("the preview declares no --primary")
-      if (now === brandColour(baseline.css))
-        throw new Error(`--primary is still ${now}`)
+      const now = brandColour(css + html)
+      if (!now) throw new Error("the preview declares no --brand")
+      if (now === brandColour(baseline.css + baseline.html))
+        throw new Error(`--brand is still ${now}`)
       if (failedGates(gates)) throw new Error(failedGates(gates))
       return now
     },
