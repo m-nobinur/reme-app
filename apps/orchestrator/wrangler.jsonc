@@ -92,7 +92,12 @@
       "preview_urls": false,
       "workers_dev": false,
       "routes": [
-        { "pattern": "orchestrator.remeai.co.uk", "custom_domain": true }
+        { "pattern": "orchestrator.remeai.co.uk", "custom_domain": true },
+        // Keeps this hostname off the site router: see apps/api/wrangler.jsonc.
+        {
+          "pattern": "orchestrator.remeai.co.uk/*",
+          "zone_name": "remeai.co.uk"
+        }
       ],
       "vars": {
         "SANDBOX_TRANSPORT": "rpc",

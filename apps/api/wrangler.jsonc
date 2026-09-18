@@ -72,7 +72,16 @@
       // production Worker has no per-PR flow. Fewer URLs answering as prod.
       "preview_urls": false,
       "workers_dev": false,
-      "routes": [{ "pattern": "api.remeai.co.uk", "custom_domain": true }],
+      // The second entry keeps this hostname off the site router. Its route is
+      // `*.remeai.co.uk/*`, and a wildcard route beats a custom domain, so
+      // without this every request here would pass through that Worker first.
+      // An explicit host route beats the wildcard (measured 2026-09-18 with two
+      // throwaway Workers, 6 of 6). The router's `SERVICE_HOSTS` stays as the
+      // net under it (issue #90, ADR-030).
+      "routes": [
+        { "pattern": "api.remeai.co.uk", "custom_domain": true },
+        { "pattern": "api.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
+      ],
       "hyperdrive": [
         {
           "binding": "HYPERDRIVE",
