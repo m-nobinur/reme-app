@@ -1,0 +1,16 @@
+{
+  "_": "Owner-chosen colours the derived theme has to stay readable on, and values it has to refuse. The page the site renders on is white, so that is what brand-on-surface is measured against. Colour literals live here rather than in the test because the repo's lint plugin reads JavaScript and TypeScript, where a colour literal is always a mistake.",
+  "surface": "#ffffff",
+  "chosen": {
+    "very light yellow": "#fff7a1",
+    "mid blue": "#3b6fd4",
+    "near black": "#111318",
+    "saturated red": "#e01b24",
+    "pastel lilac": "#cdb4f6",
+    "mid grey": "#808080",
+    "white": "#ffffff",
+    "black": "#000000",
+    "three digits": "#0a7"
+  },
+  "refused": ["", "teal", "#12", "#1234567", "#gggggg", "rgb(1,2,3)", "0a7ea4"]
+}

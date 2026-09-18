@@ -1,0 +1,55 @@
+/* The marketing surface's own tokens, layered over tokens.css.
+
+   tokens.css is a byte-identical copy of packages/ui/src/styles/tokens.css and
+   stays that way: it is the colour source both design systems share, and the
+   starter's tests fail when the copy drifts. What a tenant site needs on top of
+   it is not colour but measure: a type scale, a spacing scale, section rhythm,
+   container widths and a brand ramp. Those are this file, and every colour in
+   them is mixed from a token above rather than written out.
+
+   The brand ramp defaults to the shared accent. When the owner has chosen a
+   colour, src/brand.ts derives --brand, --brand-foreground and --brand-text
+   from it at build time, checks both pairs against WCAG AA and writes them into
+   the page head, which overrides the three below and leaves the rest to follow. */
+
+:root {
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* A system serif for headings. It ships with every desktop and phone, costs
+     no download, and is what keeps the page from reading as another sans-serif
+     template. */
+  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+
+  --text-sm: 0.875rem;
+  --text-base: 1.0625rem;
+  --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
+  --text-xl: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
+  --text-2xl: clamp(1.6rem, 1.35rem + 1.2vw, 2.1rem);
+  --text-display: clamp(2.35rem, 1.7rem + 3.2vw, 4rem);
+
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4rem;
+
+  --section-gap: clamp(3.25rem, 2.2rem + 4vw, 5.5rem);
+  --container: 68rem;
+  --measure: 36rem;
+
+  --radius-sm: calc(var(--radius) - 0.15rem);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 2.5);
+  --shadow-card:
+    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 8px 24px -12px color-mix(in oklch, var(--foreground) 18%, transparent);
+
+  --brand: var(--primary);
+  --brand-foreground: var(--primary-foreground);
+  --brand-text: var(--primary);
+  --brand-soft: color-mix(in oklch, var(--brand) 7%, var(--background));
+  --brand-line: color-mix(in oklch, var(--brand) 22%, var(--border));
+}
