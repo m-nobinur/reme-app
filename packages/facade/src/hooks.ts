@@ -219,6 +219,12 @@ export type TurnGateOptions = {
    * sandbox; the gate does not.
    */
   interruptNow?: (error: unknown) => string | null
+  /**
+   * Runs after a tool returns, before the model sees its result, and is
+   * awaited: the caller's chance to act on what the tool just did. It must
+   * not throw, or the gate counts a failure the tool did not have.
+   */
+  onToolDone?: (name: string) => void | Promise<void>
 }
 
 /** Consecutive thrown tool errors with the same text before the gate ends the turn. */
@@ -298,6 +304,7 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
       const result = await next()
       repeats = 0
       lastFailure = null
+      await options.onToolDone?.(name)
       return result
     } catch (error) {
       if (TERMINAL.has(name)) closedBy = null
