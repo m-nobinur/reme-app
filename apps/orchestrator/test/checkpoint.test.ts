@@ -41,9 +41,8 @@ vi.mock("@cloudflare/sandbox", () => ({
   }),
 }))
 
-const { checkpoint, checkpointKey, endSandbox, rehydrate } = await import(
-  "../src/sandbox.ts"
-)
+const { checkpoint, checkpointKey, endSandbox, recover, rehydrate } =
+  await import("../src/sandbox.ts")
 
 const bucket = new Map<string, Uint8Array>()
 const env = {
@@ -56,12 +55,42 @@ const env = {
       const found = bucket.get(key)
       return found ? { body: new Blob([found]).stream() } : null
     },
+    head: async (key: string) => (bucket.has(key) ? {} : null),
     delete: async (key: string) => {
       bucket.delete(key)
     },
   },
 } as unknown as Env
 const ids = { orgId: "org-1", assignmentId: "asg-1" }
+
+// Open item 56: the platform replaced the container under a running turn.
+describe("a turn that comes back to a replaced container", () => {
+  const replaced = { orgId: "org-1", assignmentId: "asg-replaced" }
+
+  it("reads nothing from R2 when the disk is still there", async () => {
+    disk.set("site", "edited")
+    commands.length = 0
+    expect(await recover(env, replaced)).toMatchObject({ site: "kept" })
+    expect(commands).toEqual(["test -d /workspace/site/.git"])
+  })
+
+  it("says the site is gone when nothing was saved, and restores nothing", async () => {
+    disk.delete("site")
+    commands.length = 0
+    expect(await recover(env, replaced)).toMatchObject({ site: "gone" })
+    expect(disk.has("site")).toBe(false)
+    expect(commands).toHaveLength(1)
+  })
+
+  it("puts the last checkpoint back", async () => {
+    disk.set("site", "edited")
+    await checkpoint(env, replaced)
+    disk.delete("site")
+    expect(await recover(env, replaced)).toMatchObject({ site: "restored" })
+    expect(disk.get("site")).toBe("restored")
+    expect(disk.get("/tmp/source.tar.zst")).toBeTruthy()
+  })
+})
 
 describe("a blocked build's checkpoint", () => {
   it("packs the site into R2 under the assignment's key", async () => {

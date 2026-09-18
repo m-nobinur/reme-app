@@ -39,7 +39,7 @@ import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
-import { checkpoint, checkpointKey, rehydrate, sandboxFor } from "../sandbox.ts"
+import { checkpoint, recover } from "../sandbox.ts"
 import {
   SEED_DIGEST,
   SEED_REQUIRED_FACTS,
@@ -189,24 +189,11 @@ async function save(found: Session) {
   }
 }
 
-/**
- * Whether a turn after the first still has its site. The `restored` flag
- * outlives the container and the disk does not, so the disk is asked. A
- * container that lost it gets the last checkpoint back; with none saved yet
- * there is nothing to put back, and the caller seeds again.
- */
+/** Whether a turn after the first has a site to go on with, logged when it had to be found. */
 async function siteKept(found: Session): Promise<boolean> {
-  const ids = sandboxIds(found)
-  if (!(await env.SITES.head(checkpointKey(ids)))) {
-    const kept = await sandboxFor(env, ids.assignmentId).exec(
-      `test -d ${SITE_ROOT}/.git`
-    )
-    if (kept.exitCode !== 0) found.tee.emit("sandbox.reseeded", {})
-    return kept.exitCode === 0
-  }
-  const result = await rehydrate(env, ids)
-  if (result.restored) found.tee.emit("sandbox.rehydrated", result)
-  return true
+  const back = await recover(env, sandboxIds(found))
+  if (back.site !== "kept") found.tee.emit("sandbox.recovered", back)
+  return back.site !== "gone"
 }
 
 /** The Workflow instance for an assignment, which the tools write to and nothing else reaches. */

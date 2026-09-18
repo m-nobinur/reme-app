@@ -135,6 +135,30 @@ export async function rehydrate(
 }
 
 /**
+ * What a turn after the first finds where its site was (open item 56). The
+ * Developer remembers having seeded the site and the disk does not remember
+ * being seeded: the platform can replace a container under a running turn,
+ * and the new one has the image's disk. So the disk is asked. `kept` is the
+ * usual answer and reads nothing from R2; `restored` put the last checkpoint
+ * back; `gone` means none was saved yet, and the caller seeds again.
+ */
+export async function recover(
+  env: Env,
+  ids: Ids
+): Promise<{ site: "kept" | "restored" | "gone"; ms: number }> {
+  const started = Date.now()
+  const sandbox = sandboxFor(env, ids.assignmentId)
+  const kept = await sandbox.exec(`test -d ${SITE_ROOT}/.git`)
+  if (kept.exitCode === 0) return { site: "kept", ms: Date.now() - started }
+  const key = checkpointKey(ids)
+  if (!(await env.SITES.head(key))) {
+    return { site: "gone", ms: Date.now() - started }
+  }
+  await restore(sandbox, env.SITES, key)
+  return { site: "restored", ms: Date.now() - started }
+}
+
+/**
  * §13 rule 3: an assignment's container does not outlive it, and neither
  * does its checkpoint. Both calls are idempotent.
  */
