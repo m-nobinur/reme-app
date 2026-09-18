@@ -159,6 +159,9 @@ async function fromR2(
   return fresh
 }
 
+/** Parsed manifests for the life of the isolate. A revision never changes, so neither does its manifest. */
+const manifests = new Map<string, DeploymentManifest>()
+
 /** The revision's manifest, checked against the ids the caller trusts. */
 async function manifestFor(
   c: Context<App>,
@@ -166,11 +169,18 @@ async function manifestFor(
   ids: { org_id: string; site_id: string; revision_id: string }
 ): Promise<{ manifest: DeploymentManifest; base: string } | null> {
   const base = `sites/${ids.site_id}/${ids.revision_id}/`
-  const stored = await fromR2(c, host, `${base}manifest.json`)
-  if (!stored) return null
-  const parsed = DeploymentManifest.safeParse(await stored.json())
-  if (!parsed.success) return null
-  const manifest = parsed.data
+  let manifest = manifests.get(base)
+  if (!manifest) {
+    const stored = await fromR2(c, host, `${base}manifest.json`)
+    if (!stored) return null
+    const parsed = DeploymentManifest.safeParse(await stored.json())
+    if (!parsed.success) return null
+    manifest = parsed.data
+    // ponytail: emptied whole at the ceiling; an LRU if one isolate ever
+    // serves more live revisions than this.
+    if (manifests.size >= 256) manifests.clear()
+    manifests.set(base, manifest)
+  }
   if (
     manifest.org_id !== ids.org_id ||
     manifest.site_id !== ids.site_id ||
