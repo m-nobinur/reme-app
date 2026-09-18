@@ -40,6 +40,7 @@ export const GateName = z.enum([
   "links",
   "structured_data",
   "content",
+  "claims",
 ])
 
 export const GateResult = z.strictObject({
@@ -47,7 +48,7 @@ export const GateResult = z.strictObject({
   passed: z.boolean(),
   /** R2 key of the gate's output, when it wrote one. */
   evidence_key: ObjectKey.nullable(),
-  /** The exact node a claim failed on, for the content gate (§8.5). */
+  /** The exact node a claim failed on, for the content and claims gates (§8.5). */
   offending_node: z.string().min(1).nullable(),
   message: z.string().min(1).nullable(),
 })

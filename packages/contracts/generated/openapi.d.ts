@@ -609,7 +609,13 @@ export interface components {
       revision_id: string
       gates: {
         /** @enum {string} */
-        gate: "build" | "types" | "links" | "structured_data" | "content"
+        gate:
+          | "build"
+          | "types"
+          | "links"
+          | "structured_data"
+          | "content"
+          | "claims"
         passed: boolean
         evidence_key: string | null
         offending_node: string | null
