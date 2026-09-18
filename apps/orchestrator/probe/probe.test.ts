@@ -21,15 +21,26 @@ type Probe = {
   }[]
 }
 
+// This runs seconds after a deploy, and the deploy resets the sandbox's
+// Durable Object as it rolls out ("Durable Object reset because its code was
+// updated", twice on 2026-09-18, each a 503 mid-probe and a green re-run). So
+// a 503 gets two more tries, 20 s apart. A sandbox that is really broken
+// answers the same way every time and still fails.
+const ATTEMPTS = 3
+const WAIT_MS = 20_000
+
 let cached: Promise<Probe> | null = null
 const run = () => {
   cached ??= (async () => {
-    const res = await fetch(
-      `${url}/assignments/sandbox/probe?org=brightclean`,
-      {
+    let res: Response
+    for (let attempt = 1; ; attempt++) {
+      res = await fetch(`${url}/assignments/sandbox/probe?org=brightclean`, {
         headers: { authorization: `Bearer ${token}` },
-      }
-    )
+      })
+      if (res.status !== 503 || attempt === ATTEMPTS) break
+      console.log(`probe answered 503 on attempt ${attempt}, trying again`)
+      await new Promise((resolve) => setTimeout(resolve, WAIT_MS))
+    }
     if (!res.ok)
       throw new Error(`probe answered ${res.status}: ${await res.text()}`)
     const body = (await res.json()) as Probe
