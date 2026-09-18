@@ -369,6 +369,205 @@ export const brightclean: GoldenOrg = {
       validTo: AT,
       supersededByFactId: bc(44),
     },
+    // What the owner has said about the business beyond its contact details:
+    // the material a marketing page is built from. Without these a build can
+    // write a slogan and nothing else, because every checkable thing in
+    // persuasive copy has to trace to a fact (ADR-033). Ids start at 60
+    // because `staffEvents` below takes bc(50) to bc(56).
+    //
+    // The keys are the ones `packages/starter-site/src/site-config.ts`
+    // declares, plus the prefixes `SUPPORTING_FACT_PREFIXES` in the claims
+    // gate reads. No `media.photo_*`: the fixture holds no images, and a photo
+    // fact pointing at a path that is not there is a broken page.
+    {
+      id: bc(60),
+      orgId: bc(0),
+      key: "business.tagline",
+      factType: "identity",
+      value: { tagline: "Cleaning you can plan your week around" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(61),
+      orgId: bc(0),
+      key: "differentiators.same_cleaner",
+      factType: "differentiators",
+      value: { statement: "The same cleaner comes back every visit" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(62),
+      orgId: bc(0),
+      key: "differentiators.own_supplies",
+      factType: "differentiators",
+      value: { statement: "We bring our own supplies and equipment" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(63),
+      orgId: bc(0),
+      key: "differentiators.fixed_window",
+      factType: "differentiators",
+      value: {
+        statement: "Every clean is booked into a fixed two-hour window",
+      },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(64),
+      orgId: bc(0),
+      key: "about.story",
+      factType: "about",
+      value: {
+        story:
+          "Dana Reyes cleaned for a larger firm before starting BrightClean in Fairhaven, and still works alongside the team most weeks.",
+      },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(65),
+      orgId: bc(0),
+      key: "about.years_in_business",
+      factType: "about",
+      value: { years: 12 },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(66),
+      orgId: bc(0),
+      key: "about.clients_served",
+      factType: "about",
+      value: { clients: 400 },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(67),
+      orgId: bc(0),
+      key: "guarantees.put_it_right",
+      factType: "guarantees",
+      // The word "guarantee" is in the value and not only in the key: the
+      // claims gate reads a fact's value, so copy may say "guarantee" only
+      // because a fact says it.
+      value: {
+        statement:
+          "Our put-it-right guarantee: tell us within two working days and we clean it again at no charge",
+      },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(68),
+      orgId: bc(0),
+      key: "credentials.insurance",
+      factType: "credentials",
+      value: { statement: "Fully insured and bonded" },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    // Two reviews, each as a quote and an author, because the starter's
+    // `testimonials.quote_1` and `testimonials.author_1` are two fields. The
+    // quotes carry no number: a testimonial is matched as text, so a figure
+    // inside one would be a second claim to support.
+    {
+      id: bc(69),
+      orgId: bc(0),
+      key: "testimonials.quote_1",
+      factType: "testimonials",
+      value: {
+        quote:
+          "They worked around my hours and the kitchen has never looked so clean.",
+      },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(70),
+      orgId: bc(0),
+      key: "testimonials.author_1",
+      factType: "testimonials",
+      value: { author: "Marta L." },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(71),
+      orgId: bc(0),
+      key: "testimonials.quote_2",
+      factType: "testimonials",
+      value: {
+        quote:
+          "Booking was simple and the team left the place spotless without me having to chase anyone.",
+      },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(72),
+      orgId: bc(0),
+      key: "testimonials.author_2",
+      factType: "testimonials",
+      value: { author: "Owen B." },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
+    {
+      id: bc(73),
+      orgId: bc(0),
+      key: "reviews.average_rating",
+      factType: "reviews",
+      value: { rating: 4.8, out_of: 5 },
+      provenanceSource: "owner_stated",
+      provenanceConfidence: 1,
+      verifiedByStaffId: BC_ROOT,
+      verifiedAt: AT,
+      validFrom: AT,
+    },
   ],
   staffEvents: brightcleanHires.map((staffId, n) => ({
     id: bc(50 + n),
@@ -480,7 +679,8 @@ export const mopandbucket: GoldenOrg = {
   ],
   // Deliberately a different price and a different phone from brightclean's.
   // A cross-org leak that shows the wrong number is then visible as a wrong
-  // number rather than as a plausible one.
+  // number rather than as a plausible one. Thin on purpose, and it stays thin:
+  // the marketing facts brightclean carries would stop a build here asking.
   facts: [
     {
       id: mb(42),
