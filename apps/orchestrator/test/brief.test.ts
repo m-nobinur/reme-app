@@ -10,9 +10,15 @@ import {
   tenancy,
 } from "@workspace/db"
 import { verifySpec } from "@workspace/facade"
+import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { ulid } from "ulid"
 import { afterAll, describe, expect, it, vi } from "vitest"
-import { issueSpec, takeSnapshot, updateFacts } from "../src/brief.ts"
+import {
+  hideFacts,
+  issueSpec,
+  takeSnapshot,
+  updateFacts,
+} from "../src/brief.ts"
 import { eventSink, SeqGapError } from "../src/sink.ts"
 import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
@@ -305,5 +311,94 @@ live("updateFacts", () => {
       ])
     ).toEqual({ outcome: "unknown_key", key: "business.phone" })
     expect((await currentFacts(holder))[0]?.version).toBe(1)
+  })
+})
+
+/** ADR-033: the owner's omissions, as one record holding the whole set. */
+live("hideFacts", () => {
+  const PRICE = "pricing.standard_clean_hourly"
+
+  const hide = (orgId: string, idempotencyKey: string, factKeys: string[]) =>
+    kit.withOrg({ orgId }, (db) =>
+      hideFacts(db, { orgId, idempotencyKey, factKeys })
+    )
+
+  const held = async (orgId: string) =>
+    (await currentFacts(orgId)).find((row) => row.key === HIDDEN_FACTS_KEY)
+
+  const updates = (orgId: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db.select().from(events).where(sql`${events.type} = 'facts.updated'`)
+    )
+
+  const priced = async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    await kit.withOrg({ orgId }, (db) =>
+      supersedeFact(db, {
+        orgId,
+        key: PRICE,
+        factType: "pricing",
+        value: { currency: "USD", amount_minor: 3500 },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    return orgId
+  }
+
+  it("writes the whole set as one owner-stated record, logged once", async () => {
+    const orgId = await priced()
+    expect(await hide(orgId, "hide-1", [PRICE])).toMatchObject({
+      outcome: "written",
+      replayed: false,
+      hidden: [PRICE],
+    })
+    expect(await held(orgId)).toMatchObject({
+      value: [PRICE],
+      version: 1,
+      factType: "site_display",
+      provenanceSource: "owner_stated",
+    })
+    const logged = await updates(orgId)
+    expect(logged).toHaveLength(1)
+    expect(logged[0]?.payload).toMatchObject({ idempotency_key: "hide-1" })
+  })
+
+  it("writes nothing when the set has not changed", async () => {
+    const orgId = await priced()
+    await hide(orgId, "hide-2", [PRICE])
+    expect(await hide(orgId, "hide-2-again", [PRICE, PRICE])).toMatchObject({
+      outcome: "written",
+      replayed: true,
+      hidden: [PRICE],
+    })
+    expect((await held(orgId))?.version).toBe(1)
+    expect(await updates(orgId)).toHaveLength(1)
+  })
+
+  it("restores a fact with a shorter set and clears with an empty one", async () => {
+    const orgId = await priced()
+    await hide(orgId, "hide-3", [PRICE, "business.phone"])
+    expect(await hide(orgId, "hide-4", ["business.phone"])).toMatchObject({
+      hidden: ["business.phone"],
+    })
+    expect(await held(orgId)).toMatchObject({
+      value: ["business.phone"],
+      version: 2,
+    })
+    expect(await hide(orgId, "hide-5", [])).toMatchObject({ hidden: [] })
+    expect(await held(orgId)).toMatchObject({ value: [], version: 3 })
+    expect(await hide(orgId, "hide-6", [])).toMatchObject({ replayed: true })
+    expect((await held(orgId))?.version).toBe(3)
+  })
+
+  it("refuses a key the org holds no fact for and writes nothing", async () => {
+    const orgId = await priced()
+    expect(await hide(orgId, "hide-7", [PRICE, "pricing.invented"])).toEqual({
+      outcome: "unknown_key",
+      key: "pricing.invented",
+    })
+    expect(await held(orgId)).toBeUndefined()
+    expect(await updates(orgId)).toHaveLength(0)
   })
 })

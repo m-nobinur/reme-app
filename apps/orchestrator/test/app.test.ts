@@ -232,6 +232,43 @@ describe("the publish routes' edge", () => {
     }
   )
 
+  it.each([
+    ["fact_keys that is not an array", { fact_keys: "pricing.x" }],
+    ["a key that is not a string", { fact_keys: [1] }],
+    ["the same key twice", { fact_keys: ["pricing.x", "pricing.x"] }],
+    [
+      "more keys than one call takes",
+      { fact_keys: Array.from({ length: 21 }, (_, i) => `k.${i}`) },
+    ],
+  ])(
+    "site/hidden refuses %s as hidden.malformed, behind the bearer",
+    async (_, body) => {
+      expect((await post("/assignments/site/hidden", body, {})).status).toBe(
+        401
+      )
+      const res = await post("/assignments/site/hidden", body)
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({
+        class: "validation",
+        code: "hidden.malformed",
+      })
+    }
+  )
+
+  it("site/hidden needs an Idempotency-Key", async () => {
+    const res = await app.request(
+      "/assignments/site/hidden?org=brightclean",
+      {
+        method: "POST",
+        headers: { ...authed, "content-type": "application/json" },
+        body: JSON.stringify({ fact_keys: [] }),
+      },
+      env
+    )
+    expect(res.status).toBe(400)
+    expect((await envelope(res)).code).toBe("idempotency_key.missing")
+  })
+
   it("a slug nothing holds is 404 before any of them", async () => {
     const res = await app.request(
       "/assignments/x/answer?org=nobody",
