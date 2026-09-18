@@ -3,12 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { ComponentManifest } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import {
-  manifestDigest,
-  REPO_MAP_MAX_CHARS,
-  repoMap,
-  requiredFacts,
-} from "../src/repo-map.ts"
+import { manifestDigest, REPO_MAP_MAX_CHARS, repoMap } from "../src/repo-map.ts"
 
 const root = fileURLToPath(new URL("./fixtures/starter/", import.meta.url))
 const starter: Record<string, string> = Object.fromEntries(
@@ -101,18 +96,5 @@ describe("the manifest digest", () => {
   it("throws past the cap rather than hiding a forbidden use", () => {
     const many = Array.from({ length: 60 }, (_, i) => manifest(`Component${i}`))
     expect(() => manifestDigest(many)).toThrow(/3000 characters/)
-  })
-})
-
-describe("the required facts", () => {
-  it("keeps declaration order and leaves out optional and composed fields", () => {
-    expect(
-      requiredFacts({
-        name: { kind: "fact", fact_key: "business.name", required: true },
-        tagline: { kind: "composed" },
-        phone: { kind: "fact", fact_key: "business.phone", required: true },
-        fax: { kind: "fact", fact_key: "business.fax", required: false },
-      })
-    ).toEqual(["business.name", "business.phone"])
   })
 })

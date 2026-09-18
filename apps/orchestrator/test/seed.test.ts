@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
   SEED_DIGEST,
-  SEED_REQUIRED_FACTS,
+  SEED_FIELDS,
   STARTER_FILES,
   siteHost,
 } from "../src/seed.ts"
@@ -42,14 +42,14 @@ describe("the seed", () => {
     }
   })
 
-  it("names the required facts in the order the site config declares them", () => {
-    expect(SEED_REQUIRED_FACTS).toEqual([
-      "business.name",
-      "business.phone",
-      "business.email",
-      "hours.weekday",
-      "service_area.radius",
-      "pricing.standard_clean_hourly",
+  it("parses the starter's fields, the required facts first", () => {
+    expect(Object.keys(SEED_FIELDS).slice(0, 6)).toEqual([
+      "businessName",
+      "phone",
+      "email",
+      "weekdayHours",
+      "serviceArea",
+      "standardCleanHourly",
     ])
   })
 
