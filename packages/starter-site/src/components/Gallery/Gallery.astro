@@ -1,0 +1,26 @@
+---
+import { site } from "../../site-config"
+
+// Both halves are facts: the path names a file the owner supplied and the alt
+// text says what it shows. A photo with no alt text does not render.
+const items = [
+  { src: site.photo1Src, alt: site.photo1Alt },
+  { src: site.photo2Src, alt: site.photo2Alt },
+  { src: site.photo3Src, alt: site.photo3Alt },
+].filter((item) => item.src && item.alt)
+---
+
+{
+  items.length > 0 && (
+    <section class="gallery">
+      {site.galleryHeading && <h2>{site.galleryHeading}</h2>}
+      <ul class="gallery-grid">
+        {items.map((item) => (
+          <li>
+            <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

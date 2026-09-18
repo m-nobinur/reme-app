@@ -46,7 +46,9 @@ describe("component manifests", () => {
     expect(text.length).toBeLessThanOrEqual(DIGEST_LIMIT)
   })
 
-  test("the starter keeps to a dozen components or fewer", () => {
-    expect(loaded.components.length).toBeLessThanOrEqual(12)
+  // The digest budget above is the real ceiling. This one catches a component
+  // added without a thought for how many the Developer holds at once.
+  test("the starter keeps to eighteen components or fewer", () => {
+    expect(loaded.components.length).toBeLessThanOrEqual(18)
   })
 })

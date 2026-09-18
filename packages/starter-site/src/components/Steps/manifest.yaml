@@ -1,0 +1,12 @@
+component: Steps
+path: src/components/Steps/Steps.astro
+summary: How working with the business goes, as numbered steps.
+props: []
+constraints:
+  - Reads step1Title to step3Body itself; a step renders only when one of its
+    two fields is set. The numbers are drawn by CSS, not written into a field.
+examples:
+  - "<Steps />"
+forbidden:
+  - a time, price or promise no fact states
+source: generated

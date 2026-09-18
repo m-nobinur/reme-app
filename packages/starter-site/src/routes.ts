@@ -4,6 +4,8 @@
  * src/pages leaves all three at once, and a page added reaches the sitemap
  * without anyone editing it.
  */
+import { site } from "./site-config"
+
 const files = Object.keys(import.meta.glob("./pages/**/*.astro"))
 
 export const routes: string[] = files
@@ -14,3 +16,25 @@ export const routes: string[] = files
   .sort()
 
 export const hasRoute = (path: string): boolean => routes.includes(path)
+
+/**
+ * The navigation both the header and the footer render, in menu order: a
+ * page that exists and whose label field is set. One list, so the two agree.
+ */
+export const navLinks: { href: string; label: string }[] = [
+  { href: "/", label: site.navHome },
+  { href: "/services/", label: site.navServices },
+  { href: "/service-area/", label: site.navServiceArea },
+  { href: "/contact/", label: site.navContact },
+  { href: "/quote/", label: site.navQuote },
+  { href: "/booking/", label: site.navBooking },
+].filter((link) => link.label && hasRoute(link.href))
+
+/**
+ * The one action a call to action points at: the quote page, the contact
+ * page, or nothing when the site has neither.
+ */
+export const primaryAction: { href: string; label: string } | undefined = [
+  { href: "/quote/", label: site.navQuote },
+  { href: "/contact/", label: site.navContact },
+].find((link) => link.label && hasRoute(link.href))

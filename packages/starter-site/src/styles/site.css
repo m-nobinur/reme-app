@@ -31,12 +31,26 @@ body {
   padding-inline: 1.25rem;
 }
 
+/* Sections sit in the middle column; a band adds `full` and spans the page,
+   which is what lets the hero and the call to action carry a background
+   without any element reaching outside its parent. */
+main {
+  display: grid;
+  grid-template-columns: 1fr min(64rem, 100% - 2.5rem) 1fr;
+  padding-block-end: 4rem;
+}
+
+main > * {
+  grid-column: 2;
+}
+
 a {
   color: var(--primary);
   text-underline-offset: 0.2em;
 }
 
-a:focus-visible {
+a:focus-visible,
+summary:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: var(--radius);
@@ -55,12 +69,36 @@ h1 {
   margin: 0 0 0.75rem;
 }
 
+h2 {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 1.25rem;
+}
+
+h3 {
+  font-size: 1.0625rem;
+  margin: 0 0 0.375rem;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
 .lede {
   color: var(--muted-foreground);
   font-size: 1.125rem;
   max-width: 40rem;
   margin: 0;
 }
+
+.mark {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  color: var(--primary);
+}
+
+/* Header */
 
 .site-header {
   border-bottom: 1px solid var(--border);
@@ -72,16 +110,13 @@ h1 {
   align-items: center;
   gap: 0.5rem 1.5rem;
   min-height: 3.5rem;
+  padding-block: 0.5rem;
 }
 
 .site-name {
   color: var(--foreground);
   font-weight: 600;
   text-decoration: none;
-}
-
-main {
-  padding-block: 3rem 4rem;
 }
 
 .site-header nav {
@@ -110,8 +145,42 @@ main {
   text-decoration: underline;
 }
 
+/* Hero */
+
 .hero {
-  padding-block-end: 2rem;
+  padding-block: 3rem;
+}
+
+.hero-compact {
+  padding-block: 2.5rem 1.5rem;
+}
+
+.hero-inner {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+
+.hero-centered .hero-text,
+.hero-compact .hero-text {
+  max-width: 44rem;
+}
+
+.hero-panel {
+  display: none;
+  min-height: 15rem;
+  border-radius: var(--radius);
+  background: var(--secondary);
+}
+
+@media (min-width: 52rem) {
+  .hero-split .hero-inner {
+    grid-template-columns: 1.2fr 1fr;
+  }
+
+  .hero-split .hero-panel {
+    display: block;
+  }
 }
 
 .actions {
@@ -151,13 +220,22 @@ main {
   background: var(--secondary);
 }
 
+/* Sections */
+
 .intro {
   max-width: 40rem;
-  margin: 0 0 2rem;
+  margin: 0;
+  padding-block: 2rem;
 }
 
-.section {
-  padding-block: 2rem;
+.section,
+.value-props,
+.service-cards,
+.steps,
+.testimonials,
+.gallery,
+.faq {
+  padding-block: 2.5rem;
   border-top: 1px solid var(--border);
 }
 
@@ -166,9 +244,225 @@ main {
   margin: 0 0 1rem;
 }
 
-.section p {
+.section p:last-child {
   margin: 0;
 }
+
+.card-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card p:last-child {
+  margin: 0;
+}
+
+.card-bordered {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+/* Steps */
+
+.step-list {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  counter-reset: step;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step-list li {
+  counter-increment: step;
+  padding-block-start: 2.5rem;
+  position: relative;
+}
+
+.step-list li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 50%;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.step-list p:last-child {
+  margin: 0;
+}
+
+/* Stats */
+
+.stats {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin: 0;
+  padding-block: 2.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.25rem;
+}
+
+.stats dt {
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Testimonials */
+
+.testimonials figure {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.testimonials blockquote {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.testimonials figcaption {
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+}
+
+/* Gallery */
+
+.gallery-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gallery-grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--secondary);
+}
+
+/* Frequently asked questions */
+
+.faq-list {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 48rem;
+}
+
+.faq details {
+  border-bottom: 1px solid var(--border);
+}
+
+.faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq summary::after {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--muted-foreground);
+  border-bottom: 2px solid var(--muted-foreground);
+  transform: rotate(45deg) translate(-0.125rem, -0.125rem);
+  transition: transform 150ms ease;
+}
+
+.faq details[open] summary::after {
+  transform: rotate(225deg) translate(-0.125rem, -0.125rem);
+}
+
+.faq details p {
+  margin: 0 0 1rem;
+  max-width: 44rem;
+  color: var(--muted-foreground);
+}
+
+/* Call to action */
+
+.cta-band {
+  margin-block-start: 3rem;
+  padding-block: 2.5rem;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.cta-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.cta-text {
+  max-width: 34rem;
+}
+
+.cta-text h2 {
+  margin: 0 0 0.5rem;
+}
+
+.cta-text p:last-child {
+  margin: 0;
+}
+
+.cta-band .actions {
+  margin: 0;
+}
+
+/* The two bands that span the page, after the rules they override. */
+main > .hero,
+main > .cta-band {
+  grid-column: 1 / -1;
+}
+
+/* Prices */
 
 .price-card {
   display: inline-grid;
@@ -181,25 +475,34 @@ main {
 }
 
 .price-card .price-name {
+  margin: 0;
   color: var(--muted-foreground);
 }
 
 .price-card .price-value {
+  margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
+/* Contact details */
+
 .contact-details {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin: 0;
 }
 
 .contact-details div {
   display: grid;
-  grid-template-columns: 6rem 1fr;
-  gap: 1rem;
+  grid-template-columns: auto 6rem 1fr;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.contact-details .mark {
+  align-self: center;
 }
 
 .contact-details dt {
@@ -211,18 +514,52 @@ main {
   overflow-wrap: anywhere;
 }
 
+/* Footer */
+
 .site-footer {
   border-top: 1px solid var(--border);
-  padding-block: 2rem;
-  color: var(--muted-foreground);
+  padding-block: 2.5rem;
 }
 
-.site-footer p {
-  margin: 0 0 0.75rem;
+.footer-grid {
+  display: grid;
+  gap: 1.5rem 3rem;
+  align-items: start;
+}
+
+@media (min-width: 46rem) {
+  .footer-grid {
+    grid-template-columns: 1fr auto auto;
+  }
+}
+
+.site-footer .site-name {
+  margin: 0;
+}
+
+.site-footer ul {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-footer nav a {
+  display: inline-block;
+  padding-block: 0.375rem;
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.site-footer nav a:hover {
+  color: var(--foreground);
+  text-decoration: underline;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .action {
+  .action,
+  .faq summary::after {
     transition: none;
   }
 }

@@ -1,0 +1,25 @@
+---
+import { site } from "../../site-config"
+
+const items = [
+  { question: site.faq1Question, answer: site.faq1Answer },
+  { question: site.faq2Question, answer: site.faq2Answer },
+  { question: site.faq3Question, answer: site.faq3Answer },
+].filter((item) => item.question && item.answer)
+---
+
+{
+  items.length > 0 && (
+    <section class="faq">
+      {site.faqHeading && <h2>{site.faqHeading}</h2>}
+      <div class="faq-list">
+        {items.map((item) => (
+          <details>
+            <summary>{item.question}</summary>
+            <p>{item.answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
