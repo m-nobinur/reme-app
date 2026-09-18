@@ -6,6 +6,7 @@ import {
 } from "@workspace/contracts"
 import { type Located, type Page, parsePage, resolveSitePath } from "./page.ts"
 
+export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage, resolveSitePath } from "./page.ts"
 
 /**
