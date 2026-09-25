@@ -4,6 +4,7 @@ import {
   getRequestProtocol,
   setCookie,
 } from "@tanstack/react-start/server"
+import { waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
@@ -118,10 +119,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
       activity,
       counts: {
         staff: staff.filter((member) => member.status === "active").length,
-        // Reports and alerts are there to read; only these two wait on an answer.
-        waiting: attention.filter(
-          (item) => item.kind === "approval" || item.kind === "question"
-        ).length,
+        waiting: waitingOnOwner(attention),
         // "Needs action" is a follow-up date, not a stage: a completed lead
         // with nothing scheduled is not waiting on anyone.
         pipeline: pipeline.filter((item) => item.followUpAt !== null).length,

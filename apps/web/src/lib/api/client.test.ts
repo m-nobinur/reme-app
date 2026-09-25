@@ -385,6 +385,7 @@ for (const [status, code, reason] of [
   [409, "approval.target_mismatch", "replaced"],
   [409, "approval.not_requested", "gone"],
   [404, "approval.not_found", "gone"],
+  [404, "assignment.not_found", "gone"],
 ] as const) {
   it(`says why a decision was refused: ${code}`, async () => {
     answers[`POST /approvals/${APPROVAL}/decision`] = refusal(status, code)
@@ -402,4 +403,19 @@ it("throws on any other refusal, so nothing looks recorded", async () => {
   await expect(
     apiSource.decideApproval(ORG, APPROVAL, REVISION, "approved")
   ).rejects.toThrow()
+})
+
+it("names an item raised by someone outside the directory as Reme", async () => {
+  // The requester is not in the directory this session can read, so the card
+  // says who it can vouch for rather than a staff id.
+  const stranger = "00000000-0000-4000-8000-000000000009"
+  const unknown = {
+    ...approval,
+    request: { ...approval.request, requested_by_staff_id: stranger },
+  }
+  answers["GET /workspace"] = { ...workspace, attention: [unknown] }
+  const [listed] = await apiSource.approvals(ORG)
+  expect(listed?.requestedBy).toBe("Reme")
+  const [card] = await apiSource.attention(ORG, Promise.resolve([alex]))
+  expect(card?.raisedBy).toBe("Reme")
 })

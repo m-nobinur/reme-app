@@ -194,7 +194,13 @@ test("a new owner's dashboard and profile say what comes next", async ({
  * runs the same WCAG 2.2 AA rule set against the assembled page under a real
  * session, which is the only place it is visible.
  */
-for (const path of ["/app", "/app/staff", "/app/approvals", "/app/pipeline"]) {
+for (const path of [
+  "/app",
+  "/app/staff",
+  "/app/approvals",
+  "/app/pipeline",
+  "/app/profile",
+]) {
   test(`${path} has no accessibility violations`, async ({ page }) => {
     await visit(page, path)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()

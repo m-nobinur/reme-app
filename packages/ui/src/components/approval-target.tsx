@@ -57,14 +57,13 @@ function describe(
   switch (target.kind) {
     case "revision":
       // The version is what the owner reads; the short id is what support
-      // and the preview link match it against.
-      return version === undefined
-        ? { label: "Version", value: target.revision_id }
-        : {
-            label: "Site",
-            value: `Version ${version}`,
-            id: target.revision_id.slice(0, 8),
-          }
+      // and the preview link match it against. The full id is never shown
+      // as though it were a version.
+      return {
+        label: "Site",
+        value: version === undefined ? "A new version" : `Version ${version}`,
+        id: target.revision_id.slice(0, 8),
+      }
     case "domain":
       return { label: "Domain", value: target.hostname }
     case "spend":

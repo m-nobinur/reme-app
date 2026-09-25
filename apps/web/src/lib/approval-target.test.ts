@@ -20,3 +20,14 @@ it("shows a revision as its version, with the short id as secondary text", () =>
   expect(html).toContain("ID 2f41c9ab")
   expect(html).not.toContain(REVISION)
 })
+
+it("never labels the full revision id a version when the number is unknown", () => {
+  const html = renderToStaticMarkup(
+    createElement(ApprovalTargetSummary, {
+      target: { kind: "revision", revision_id: REVISION },
+    })
+  )
+  expect(html).not.toContain(REVISION)
+  expect(html).not.toMatch(/Version [0-9a-f-]{9,}/)
+  expect(html).toContain("ID 2f41c9ab")
+})
