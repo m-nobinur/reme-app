@@ -1,37 +1,20 @@
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import Ajv2020 from "ajv/dist/2020.js"
-import addFormats from "ajv-formats"
 import { describe, expect, it } from "vitest"
 import {
+  ActivityFeed,
   AttentionItem,
   FactValue,
   GOAL_MAX,
   OwnerChangeRequest,
   PreviewLink,
   SetFactsRequest,
+  WorkspaceStatus,
 } from "../src/owner.ts"
+import { ajv, generated } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
 // Every branch of the two owner unions, through Zod and through the published
 // JSON Schema. The round-trip suite fuzzes one sample per contract; a union has
 // a branch per kind, and a branch nobody parses is a branch nobody checked.
-
-const generated = JSON.parse(
-  readFileSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "generated",
-      "openapi.json"
-    ),
-    "utf8"
-  )
-) as { components: { schemas: Record<string, object> } }
-
-const ajv = new Ajv2020({ strict: false, allErrors: false })
-addFormats(ajv)
 
 type Verdict = { zod: boolean; json: boolean }
 const verdict = (
@@ -170,6 +153,12 @@ describe("FactValue", () => {
       { key: "business.name", value: { name: "Brightclean", legal: "Ltd" } },
     ],
     ["an empty name", { key: "business.name", value: { name: "" } }],
+    ["a blank name", { key: "business.name", value: { name: "   " } }],
+    [
+      "a blank centre",
+      { key: "service_area.radius", value: { centre: "\t", radius_km: 5 } },
+    ],
+    ["a blank tagline", { key: "business.tagline", value: { tagline: " " } }],
     ["a bare value", { key: "business.name", value: "Brightclean" }],
   ]
   it.each(refused)("refuses %s", (_name, fact) => {
@@ -178,19 +167,20 @@ describe("FactValue", () => {
 })
 
 describe("the requests around them", () => {
-  it("takes one to seven facts at a time", () => {
+  it("takes from one fact to as many as there are keys", () => {
     const one = { key: "business.name", value: facts["business.name"] }
+    const keys = FactValue.options.length
     expect(verdict("SetFactsRequest", SetFactsRequest, { facts: [] })).toEqual(
       REFUSED
     )
     expect(
       verdict("SetFactsRequest", SetFactsRequest, {
-        facts: Array(7).fill(one),
+        facts: Array(keys).fill(one),
       })
     ).toEqual(ACCEPTED)
     expect(
       verdict("SetFactsRequest", SetFactsRequest, {
-        facts: Array(8).fill(one),
+        facts: Array(keys + 1).fill(one),
       })
     ).toEqual(REFUSED)
   })
@@ -205,19 +195,39 @@ describe("the requests around them", () => {
     expect(verdict("OwnerChangeRequest", OwnerChangeRequest, over)).toEqual(
       REFUSED
     )
+    const blank = { text: " \n\t " }
+    expect(verdict("OwnerChangeRequest", OwnerChangeRequest, blank)).toEqual(
+      REFUSED
+    )
+  })
+
+  it("lists only reports and alerts as activity", () => {
+    const feed = (item: unknown) =>
+      verdict("ActivityFeed", ActivityFeed, { items: [item] })
+    expect(feed(attention.report)).toEqual(ACCEPTED)
+    expect(feed(attention.alert)).toEqual(ACCEPTED)
+    expect(feed(attention.question)).toEqual(REFUSED)
+    expect(feed(attention.approval)).toEqual(REFUSED)
+  })
+
+  it("names a missing fact only by a key the owner can state", () => {
+    const status = (missing_facts: string[]) =>
+      verdict("WorkspaceStatus", WorkspaceStatus, {
+        ...(samples.WorkspaceStatus as object),
+        missing_facts,
+      })
+    expect(status(["business.email", "hours.weekday"])).toEqual(ACCEPTED)
+    expect(status(["site.hidden_facts"])).toEqual(REFUSED)
   })
 
   it("links a preview over https only, with exactly three screenshots", () => {
     const link = samples.PreviewLink as { screenshots: string[] }
-    // Pinned gap: Zod checks the protocol, but `z.url({ protocol })` emits
-    // only `format: uri`, so the published schema still takes `http:`. This
-    // fails when the two agree, and should then say REFUSED.
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,
         url: "http://example.invalid/open",
       })
-    ).toEqual({ zod: false, json: true })
+    ).toEqual(REFUSED)
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,

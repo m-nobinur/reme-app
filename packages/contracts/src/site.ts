@@ -99,7 +99,7 @@ export const ComponentManifest = z.strictObject({
 })
 
 /** A canonical fact key: dotted, lower case, e.g. `business.phone`. */
-export const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
+const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
 
 /**
  * `SiteField`: what one string in the starter's `site` config needs. A

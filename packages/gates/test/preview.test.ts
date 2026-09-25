@@ -22,6 +22,29 @@ const claim = {
   exp: NOW / 1000 + 3600,
 }
 
+/** A token over any body, signed with the key but not through the contract. */
+async function signRaw(body: unknown): Promise<string> {
+  const b64 = (bytes: Uint8Array) =>
+    btoa(String.fromCharCode(...bytes))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "")
+  const encoded = b64(new TextEncoder().encode(JSON.stringify(body)))
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(KEY),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(encoded)
+  )
+  return `${encoded}.${b64(new Uint8Array(mac))}`
+}
+
 describe("the preview token", () => {
   it("round-trips a claim signed with the key", async () => {
     const token = await signPreview(claim, KEY)
@@ -70,6 +93,17 @@ describe("the preview token", () => {
       .replace(/\//g, "_")
       .replace(/=+$/, "")
     expect(await verifyPreview(`${body}.${mac}`, KEY, NOW)).toBeNull()
+  })
+
+  it("reads a claim signed before scope existed as a site claim", async () => {
+    const { scope: _scope, ...unscoped } = claim
+    const token = await signRaw(unscoped)
+    expect(await verifyPreview(token, KEY, NOW)).toEqual(claim)
+    const screenshots = await signRaw({ ...claim, scope: "screenshots" })
+    expect(await verifyPreview(screenshots, KEY, NOW)).toEqual({
+      ...claim,
+      scope: "screenshots",
+    })
   })
 })
 

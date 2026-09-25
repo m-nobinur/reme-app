@@ -1,7 +1,12 @@
-import type { FactRecord } from "@workspace/contracts"
-import { CLAIM_VOCABULARY, HIDDEN_FACTS_KEY } from "@workspace/gates"
+import { type FactRecord, WorkspaceStatus } from "@workspace/contracts"
+import {
+  CLAIM_VOCABULARY,
+  factsToAsk,
+  HIDDEN_FACTS_KEY,
+} from "@workspace/gates"
 import { describe, expect, it } from "vitest"
 import { siteRules } from "../src/developer-rules.ts"
+import { SEED_FIELDS } from "../src/seed.ts"
 
 const hidden = (keys: string[]): FactRecord => ({
   fact_id: "10000001-0000-4000-8000-000000000001",
@@ -80,5 +85,16 @@ describe("the Developer's site rules", () => {
     )
     expect(added).toHaveLength(2)
     expect(added.join(" ").split(/\s+/).length).toBeLessThan(160)
+  })
+})
+
+describe("the facts a build asks for", () => {
+  it("are all keys the owner can state, so the workspace can list them", () => {
+    const { ask } = factsToAsk(SEED_FIELDS, [])
+    expect(ask.length).toBeGreaterThan(0)
+    expect(
+      WorkspaceStatus.shape.missing_facts.safeParse(ask).success,
+      "a required site field names a fact FactValue has no shape for"
+    ).toBe(true)
   })
 })

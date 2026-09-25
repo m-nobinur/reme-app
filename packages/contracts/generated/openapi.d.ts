@@ -11,78 +11,6 @@ export interface components {
       items: (
         | {
             /** @constant */
-            kind: "question"
-            request: {
-              /** Format: uuid */
-              request_id: string
-              /** Format: uuid */
-              org_id: string
-              /** Format: uuid */
-              assignment_id: string
-              /** Format: uuid */
-              requested_by_staff_id: string
-              field: string
-              why: string
-              answer_schema: {
-                [key: string]: unknown
-              }
-              options: string[] | null
-              blocking: boolean
-              /** Format: date-time */
-              requested_at: string
-              expires_at: string | null
-            }
-          }
-        | {
-            /** @constant */
-            kind: "approval"
-            request: {
-              /** Format: uuid */
-              approval_id: string
-              /** Format: uuid */
-              org_id: string
-              assignment_id: string | null
-              /** Format: uuid */
-              requested_by_staff_id: string
-              /** Format: uuid */
-              approver_staff_id: string
-              action_kind: string
-              target:
-                | {
-                    /** @constant */
-                    kind: "revision"
-                    /** Format: uuid */
-                    revision_id: string
-                  }
-                | {
-                    /** @constant */
-                    kind: "domain"
-                    hostname: string
-                  }
-                | {
-                    /** @constant */
-                    kind: "spend"
-                    amount_usd: number
-                    /** @constant */
-                    currency: "USD"
-                  }
-                | {
-                    /** @constant */
-                    kind: "sensitive_claim"
-                    /** Format: uuid */
-                    fact_id: string
-                    claim: string
-                  }
-              rationale: string
-              /** Format: date-time */
-              requested_at: string
-              /** Format: date-time */
-              expires_at: string
-            }
-            version: number
-          }
-        | {
-            /** @constant */
             kind: "report"
             event_id: string
             assignment_id: string | null
@@ -1160,7 +1088,15 @@ export interface components {
             reason: "build_failed" | "budget_parked" | "publish_rolled_back"
           }
       )[]
-      missing_facts: string[]
+      missing_facts: (
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "pricing.standard_clean_hourly"
+        | "business.tagline"
+      )[]
     }
   }
   responses: never
