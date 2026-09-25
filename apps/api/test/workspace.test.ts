@@ -13,6 +13,7 @@ import {
   type Owner,
   owner,
   question,
+  type Stub,
   SUFFIX,
   seed,
   stubOrchestrator,
@@ -42,6 +43,19 @@ const json = (body: unknown, key = crypto.randomUUID()) => ({
   body: JSON.stringify(body),
 })
 
+/** The orchestrator's refusal at the daily cap. */
+const capped = () =>
+  Response.json(
+    {
+      class: "budgetary",
+      code: "builds.daily_cap",
+      message: "A business starts at most 20 builds in 24 hours.",
+      detail: { max: 20 },
+      occurred_at: new Date().toISOString(),
+    },
+    { status: 429 }
+  )
+
 /** The `Assignment` the orchestrator's create answers with, for a stub. */
 const created = (who: Owner, body: { kind: string; goal: string }) => ({
   assignment_id: crypto.randomUUID(),
@@ -69,19 +83,23 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   let realFetch: typeof fetch
   let fresh: Owner
   let busy: Owner
+  let asker: Owner
   let changes: Owner
   let busyIds: Record<string, string>
+  let askIds: Record<string, string>
 
   beforeAll(async () => {
     realFetch = globalThis.fetch
     globalThis.fetch = stubJwksFetch()
     fresh = await owner(kit, url as string, "fresh")
     busy = await owner(kit, url as string, "busy")
+    asker = await owner(kit, url as string, "asker")
     changes = await owner(kit, url as string, "changes")
 
-    // The busy org: a live site, two open reviews, a question, a failure, a
-    // parked build and a publish. States are set directly, since the site
-    // lock allows one writing build and derivation reads rows, not rules.
+    // The busy org: a live site, a review whose request expired before the
+    // hourly sweep parked it, a cancelled build's undecided request, a
+    // failure, a build parked on its budget and a publish. The site lock
+    // allows one writing build per org, so the question lives in its own.
     const s = seed(kit, busy)
     const live = await s.assignment("published")
     const liveRevision = await s.revision(live, 1)
@@ -93,23 +111,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       kind: "publish",
       revision_id: liveRevision,
     })
-    const later = await s.assignment("cancelled")
-    const soon = await s.assignment("cancelled")
-    const laterApproval = await s.approval(
-      later,
-      await s.revision(later, 2),
-      48
-    )
-    const soonApproval = await s.approval(soon, await s.revision(soon, 3), 2)
-    const asking = await s.assignment("blocked_on_information")
-    const askingRevision = await s.revision(asking, 4)
-    const request = question(busy, asking)
-    await s.event(asking, "information.requested", request)
-    const answered = question(busy, asking, "business.email")
-    await s.event(asking, "information.requested", answered)
-    await s.event(asking, "information.answered", {
-      request_id: answered.request_id,
-    })
+    const reviewing = await s.assignment("awaiting_review")
+    const reviewRevision = await s.revision(reviewing, 2)
+    const review = await s.approval(reviewing, reviewRevision, -1)
+    const dropped = await s.assignment("cancelled")
+    const dangling = await s.approval(dropped, await s.revision(dropped, 3), 48)
     const failed = await s.assignment("failed")
     const failure = await s.event(failed, "assignment.state_changed", {
       from: "validating",
@@ -135,18 +141,33 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       spent_usd: 5,
     })
     busyIds = {
-      live,
       liveRevision,
       published,
-      laterApproval,
-      soonApproval,
-      asking,
-      askingRevision,
-      request: request.request_id,
+      reviewing,
+      reviewRevision,
+      review,
+      dangling,
       failure,
       old,
       budget,
       parked,
+    }
+
+    const a = seed(kit, asker)
+    const asking = await a.assignment("blocked_on_information")
+    const askingRevision = await a.revision(asking, 1)
+    const request = question(asker, asking)
+    await a.event(asking, "information.requested", request)
+    const answered = question(asker, asking, "business.email")
+    await a.event(asking, "information.requested", answered)
+    await a.event(asking, "information.answered", {
+      request_id: answered.request_id,
+    })
+    askIds = {
+      asking,
+      askingRevision,
+      request: request.request_id,
+      answered: answered.request_id,
     }
   }, 60_000)
 
@@ -170,7 +191,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("orders attention: approvals by expiry, questions, alerts, reports", async () => {
+  it("derives the review, alerts and report, and the live site", async () => {
     const body = WorkspaceStatus.parse(await (await workspace(busy)).json())
     expect(
       body.attention.map((item) =>
@@ -181,22 +202,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
             : item.event_id
       )
     ).toEqual([
-      busyIds.soonApproval,
-      busyIds.laterApproval,
-      busyIds.request,
+      busyIds.review,
       busyIds.budget,
       busyIds.failure,
       busyIds.published,
     ])
-    expect(body.attention.map((item) => item.kind)).toEqual([
-      "approval",
-      "approval",
-      "question",
-      "alert",
-      "alert",
-      "report",
-    ])
-    expect(body.attention[1]).toMatchObject({ version: 2 })
+    expect(body.attention[0]).toMatchObject({ kind: "approval", version: 2 })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
       live: { revision_id: busyIds.liveRevision, version: 1 },
@@ -206,10 +217,39 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     ).toEqual([
       [busyIds.parked, "paused", null],
       [
-        busyIds.asking,
-        "blocked_on_information",
-        { revision_id: busyIds.askingRevision, version: 4 },
+        busyIds.reviewing,
+        "awaiting_review",
+        { revision_id: busyIds.reviewRevision, version: 2 },
       ],
+    ])
+  })
+
+  it("lists an expired, undecided review, since a late decision still counts", async () => {
+    const body = WorkspaceStatus.parse(await (await workspace(busy)).json())
+    const approvals = body.attention.flatMap((item) =>
+      item.kind === "approval" ? [item.request] : []
+    )
+    expect(approvals.map((a) => a.approval_id)).toEqual([busyIds.review])
+    expect(Date.parse(approvals[0]?.expires_at as string)).toBeLessThan(
+      Date.now()
+    )
+  })
+
+  it("leaves out an undecided request whose build has ended", async () => {
+    const body = WorkspaceStatus.parse(await (await workspace(busy)).json())
+    const ids = body.attention.flatMap((item) =>
+      item.kind === "approval" ? [item.request.approval_id] : []
+    )
+    expect(ids).not.toContain(busyIds.dangling)
+  })
+
+  it("lists an open question and not an answered one", async () => {
+    const body = WorkspaceStatus.parse(await (await workspace(asker)).json())
+    expect(body.attention).toEqual([
+      expect.objectContaining({
+        kind: "question",
+        request: expect.objectContaining({ request_id: askIds.request }),
+      }),
     ])
   })
 
@@ -377,7 +417,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   describe("changes", () => {
     const creating = (who: Owner) =>
       stubOrchestrator(async (request) => {
-        if (new URL(request.url).pathname.endsWith("/reject")) {
+        if (/\/(reject|cancel)$/.test(new URL(request.url).pathname)) {
           return Response.json({}, { status: 201 })
         }
         return Response.json(created(who, await request.clone().json()), {
@@ -462,11 +502,26 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       await s.state(asking, "cancelled")
     })
 
-    it("turns down an open review, then builds again", async () => {
+    const reviewIn = async (
+      state: "awaiting_review" | "blocked_on_approval",
+      hours: number,
+      version: number
+    ) => {
       const s = seed(kit, changes)
-      const reviewing = await s.assignment("awaiting_review")
-      const revision = await s.revision(reviewing, 10)
-      await s.approval(reviewing, revision, 72)
+      const reviewing = await s.assignment(state)
+      const revision = await s.revision(reviewing, version)
+      await s.approval(reviewing, revision, hours)
+      return { s, reviewing, revision }
+    }
+    const paths = (stub: Stub) =>
+      stub.calls.map((c) => new URL(c.request.url).pathname)
+
+    it("builds first, then turns down the open review", async () => {
+      const { s, reviewing, revision } = await reviewIn(
+        "awaiting_review",
+        72,
+        10
+      )
       const stub = creating(changes)
       const response = await changes.call(
         stub,
@@ -474,27 +529,74 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         json({ text: "Change the hero." })
       )
       expect(response.status).toBe(201)
-      expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
-        `/assignments/${reviewing}/reject`,
+      expect(paths(stub)).toEqual([
         "/assignments/",
+        `/assignments/${reviewing}/reject`,
       ])
-      expect(stub.calls[0]?.body).toEqual({ revision_id: revision })
+      expect(stub.calls[1]?.body).toEqual({ revision_id: revision })
       await s.state(reviewing, "cancelled")
     })
 
-    it("passes the orchestrator's refusal on as it came", async () => {
-      const stub = stubOrchestrator(() =>
-        Response.json(
-          {
-            class: "budgetary",
-            code: "builds.daily_cap",
-            message: "A business starts at most 20 builds in 24 hours.",
-            detail: { max: 20 },
-            occurred_at: new Date().toISOString(),
-          },
-          { status: 429 }
-        )
+    it("leaves the review open when the build is refused", async () => {
+      const { s, reviewing } = await reviewIn("awaiting_review", 72, 11)
+      const stub = stubOrchestrator(() => capped())
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Change the hero." })
       )
+      expect(response.status).toBe(429)
+      expect(paths(stub)).toEqual(["/assignments/"])
+      await s.state(reviewing, "cancelled")
+    })
+
+    it("turns down a review the sweep parked", async () => {
+      const { s, reviewing } = await reviewIn("blocked_on_approval", -2, 12)
+      const stub = creating(changes)
+      await changes.call(stub, "/changes", json({ text: "Change the hero." }))
+      expect(paths(stub)).toEqual([
+        "/assignments/",
+        `/assignments/${reviewing}/reject`,
+      ])
+      await s.state(reviewing, "cancelled")
+    })
+
+    it("cancels a review that expired before the sweep parked it", async () => {
+      const { s, reviewing } = await reviewIn("awaiting_review", -1, 13)
+      const stub = creating(changes)
+      await changes.call(stub, "/changes", json({ text: "Change the hero." }))
+      expect(paths(stub)).toEqual([
+        "/assignments/",
+        `/assignments/${reviewing}/cancel`,
+      ])
+      await s.state(reviewing, "cancelled")
+    })
+
+    it("routes on every unfinished build, not the panel's ten", async () => {
+      const s = seed(kit, changes)
+      const asking = await s.assignment("blocked_on_information")
+      const queued: string[] = []
+      for (let i = 0; i < 10; i++) queued.push(await s.assignment("queued"))
+      const panel = WorkspaceStatus.parse(
+        await (await workspace(changes)).json()
+      )
+      expect(panel.builds).toHaveLength(10)
+      expect(panel.builds.map((b) => b.assignment_id)).not.toContain(asking)
+      const stub = creating(changes)
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Change the hero." })
+      )
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "change.question_open"
+      )
+      expect(stub.calls).toHaveLength(0)
+      for (const id of [asking, ...queued]) await s.state(id, "cancelled")
+    })
+
+    it("passes the orchestrator's refusal on as it came", async () => {
+      const stub = stubOrchestrator(() => capped())
       const response = await changes.call(
         stub,
         "/changes",
@@ -538,36 +640,54 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       decided_at: new Date().toISOString(),
       workflow_instance_id: approvalId,
     })
+    const impersonated = {
+      cookie: { impersonator: { email: "admin@probe.invalid", reason: null } },
+    }
 
-    it("refuses an impersonated session before the binding", async () => {
-      const stub = stubOrchestrator()
-      const response = await busy.call(
-        stub,
-        `/approvals/${busyIds.soonApproval}/decision`,
-        {
-          ...json({ decision: "approved", revision_id: busyIds.liveRevision }),
-          cookie: {
-            impersonator: { email: "admin@probe.invalid", reason: null },
-          },
-        }
-      )
-      expect(response.status).toBe(403)
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "approval.impersonated"
-      )
-      expect(stub.calls).toHaveLength(0)
+    it.each([
+      ["POST", "/facts", "owner.impersonated"],
+      ["POST", "/changes", "owner.impersonated"],
+      ["POST", "answer", "owner.impersonated"],
+      ["POST", "cancel", "owner.impersonated"],
+      ["POST", "decision", "approval.impersonated"],
+    ])(
+      "refuses an impersonated %s %s before anything else",
+      async (_m, route, code) => {
+        const path =
+          route === "decision"
+            ? `/approvals/${busyIds.review}/decision`
+            : route.startsWith("/")
+              ? route
+              : `/builds/${askIds.asking}/${route}`
+        const who = route === "decision" ? busy : asker
+        const stub = stubOrchestrator()
+        const response = await who.call(stub, path, {
+          ...json({ text: "x" }),
+          ...impersonated,
+        })
+        expect(response.status).toBe(403)
+        expect(ErrorEnvelope.parse(await response.json()).code).toBe(code)
+        expect(stub.calls).toHaveLength(0)
+      }
+    )
+
+    it("lets an impersonated session read", async () => {
+      for (const path of ["/workspace", "/facts", "/activity"]) {
+        const response = await busy.call(stubOrchestrator(), path, impersonated)
+        expect(response.status, path).toBe(200)
+      }
     })
 
     it("approves through the build's route and drops the console's handle", async () => {
       const revision = crypto.randomUUID()
       const stub = stubOrchestrator(() =>
-        Response.json(decision(revision, busyIds.soonApproval as string), {
+        Response.json(decision(revision, busyIds.review as string), {
           status: 202,
         })
       )
       const response = await busy.call(
         stub,
-        `/approvals/${busyIds.soonApproval}/decision`,
+        `/approvals/${busyIds.review}/decision`,
         json({ decision: "approved", revision_id: revision })
       )
       expect(response.status).toBe(202)
@@ -575,72 +695,125 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(body).not.toHaveProperty("workflow_instance_id")
       ApprovalDecision.parse(body)
       const [call] = stub.calls
-      const [, , assignmentId, verb] = new URL(
-        call?.request.url as string
-      ).pathname.split("/")
-      expect(verb).toBe("approve")
+      expect(new URL(call?.request.url as string).pathname).toBe(
+        `/assignments/${busyIds.reviewing}/approve`
+      )
       expect(call?.body).toEqual({ revision_id: revision })
-      expect(assignmentId).toBeTruthy()
     })
 
     it("rejects through the reject route", async () => {
       const stub = stubOrchestrator()
       await busy.call(
         stub,
-        `/approvals/${busyIds.laterApproval}/decision`,
+        `/approvals/${busyIds.review}/decision`,
         json({ decision: "rejected", revision_id: crypto.randomUUID() })
       )
       expect(stub.calls[0]?.request.url).toMatch(/\/reject$/)
     })
 
+    it("answers 502, not a retry, when a success is off contract", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json({ approval_id: "not a decision" }, { status: 202 })
+      )
+      const response = await busy.call(
+        stub,
+        `/approvals/${busyIds.review}/decision`,
+        json({ decision: "approved", revision_id: crypto.randomUUID() })
+      )
+      expect(response.status).toBe(502)
+      const body = ErrorEnvelope.parse(await response.json())
+      expect(body.class).toBe("integrity")
+      expect(body.code).toBe("orchestrator.off_contract")
+    })
+
     it("validates an answer before the binding, then relays it", async () => {
       const stub = stubOrchestrator()
-      const bad = await busy.call(
+      const bad = await asker.call(
         stub,
-        `/builds/${busyIds.asking}/answer`,
+        `/builds/${askIds.asking}/answer`,
         json({ value: "+15550142" })
       )
       expect(bad.status).toBe(400)
       expect(stub.calls).toHaveLength(0)
-      const good = await busy.call(
+      const good = await asker.call(
         stub,
-        `/builds/${busyIds.asking}/answer`,
-        json({ request_id: busyIds.request, value: { e164: "+15550142" } })
+        `/builds/${askIds.asking}/answer`,
+        json(
+          { request_id: askIds.request, value: { e164: "+15550142" } },
+          "answer-1"
+        )
       )
       expect(good.status).toBe(409)
       expect(stub.calls[0]?.body).toEqual({
-        request_id: busyIds.request,
+        request_id: askIds.request,
         value: { e164: "+15550142" },
       })
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        "answer-1"
+      )
+    })
+
+    it("refuses a second answer to a question already answered", async () => {
+      const stub = stubOrchestrator()
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/answer`,
+        json({ request_id: askIds.answered, value: { address: "a@b.invalid" } })
+      )
+      expect(response.status).toBe(409)
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "answer.already_given"
+      )
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("needs an idempotency key to answer or cancel", async () => {
+      const stub = stubOrchestrator()
+      for (const action of ["answer", "cancel"]) {
+        const response = await asker.call(
+          stub,
+          `/builds/${askIds.asking}/${action}`,
+          {
+            method: "POST",
+            body: JSON.stringify({ request_id: askIds.request, value: "x" }),
+          }
+        )
+        expect(ErrorEnvelope.parse(await response.json()).code, action).toBe(
+          "idempotency_key.missing"
+        )
+      }
+      expect(stub.calls).toHaveLength(0)
     })
 
     it("fetches a preview with GET and cancels with POST", async () => {
       const stub = stubOrchestrator()
-      await busy.call(stub, `/builds/${busyIds.asking}/preview`)
-      await busy.call(stub, `/builds/${busyIds.asking}/cancel`, {
-        method: "POST",
-      })
+      await asker.call(stub, `/builds/${askIds.asking}/preview`)
+      await asker.call(stub, `/builds/${askIds.asking}/cancel`, json({}))
       expect(
         stub.calls.map((c) => [
           c.request.method,
           new URL(c.request.url).pathname,
         ])
       ).toEqual([
-        ["GET", `/assignments/${busyIds.asking}/preview`],
-        ["POST", `/assignments/${busyIds.asking}/cancel`],
+        ["GET", `/assignments/${askIds.asking}/preview`],
+        ["POST", `/assignments/${askIds.asking}/cancel`],
       ])
-      const wrong = await busy.call(stub, `/builds/${busyIds.asking}/preview`, {
-        method: "POST",
-      })
+      const wrong = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/preview`,
+        json({})
+      )
       expect(wrong.status).toBe(404)
       expect(stub.calls).toHaveLength(2)
     })
 
     it("answers a malformed id with 404 and no binding call", async () => {
       const stub = stubOrchestrator()
-      const response = await busy.call(stub, "/builds/not-a-uuid/cancel", {
-        method: "POST",
-      })
+      const response = await busy.call(
+        stub,
+        "/builds/not-a-uuid/cancel",
+        json({})
+      )
       expect(response.status).toBe(404)
       expect(stub.calls).toHaveLength(0)
     })

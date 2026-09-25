@@ -44,9 +44,15 @@ type Alert = Extract<AttentionItem, { kind: "alert" }>
 
 const iso = (at: Date) => at.toISOString()
 
-/** Site builds that have not finished, newest first, each with its latest revision. */
-export async function readBuilds(db: OrgScopedDb): Promise<BuildSummary[]> {
-  const rows = await db
+/**
+ * Site builds that have not finished, newest first, each with its latest
+ * revision. The panel caps the list; routing a change reads all of them.
+ */
+export async function readBuilds(
+  db: OrgScopedDb,
+  limit: number | null = 10
+): Promise<BuildSummary[]> {
+  const query = db
     .select({
       id: assignments.id,
       kind: assignments.kind,
@@ -63,7 +69,7 @@ export async function readBuilds(db: OrgScopedDb): Promise<BuildSummary[]> {
       sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ('published', 'failed', 'cancelled')`
     )
     .orderBy(sql`${assignments.createdAt} desc`)
-    .limit(10)
+  const rows = await (limit === null ? query : query.limit(limit))
   return rows.map((row) => ({
     assignment_id: row.id,
     kind: row.kind as BuildSummary["kind"],
@@ -75,7 +81,12 @@ export async function readBuilds(db: OrgScopedDb): Promise<BuildSummary[]> {
   }))
 }
 
-/** Revision approvals nobody has decided and that have not expired, soonest expiry first. */
+/**
+ * Revision approvals nobody has decided, on a build still waiting for one,
+ * soonest expiry first. An expired request stays: the sweep parks its build
+ * and the orchestrator still accepts a late decision from the park
+ * (ADR-032), so the owner sees `expires_at` rather than losing the item.
+ */
 export async function readApprovals(
   db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "approval" }>[]> {
@@ -83,8 +94,9 @@ export async function readApprovals(
     .select({ row: approvals, version: siteRevisions.version })
     .from(approvals)
     .innerJoin(siteRevisions, eq(siteRevisions.id, approvals.revisionId))
+    .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
     .where(
-      sql`${approvals.decision} is null and ${approvals.revisionId} is not null and ${approvals.expiresAt} > now()`
+      sql`${approvals.decision} is null and ${assignments.state} in ('awaiting_review', 'blocked_on_approval')`
     )
     .orderBy(approvals.expiresAt)
   return rows.map(({ row, version }) => ({
@@ -225,6 +237,20 @@ function missingFacts(current: FactRecord[]): FactValueKey[] {
   )
 }
 
+/** §7.3's order: approvals, questions, then alerts and reports, each list as read. */
+export function orderAttention(
+  approvalItems: AttentionItem[],
+  questions: AttentionItem[],
+  feed: (Report | Alert)[]
+): AttentionItem[] {
+  return [
+    ...approvalItems,
+    ...questions,
+    ...feed.filter((item) => item.kind === "alert"),
+    ...feed.filter((item) => item.kind === "report"),
+  ]
+}
+
 /** Reports and alerts stay in the panel for a day; `/activity` keeps 30. */
 const PANEL_HOURS = 24
 
@@ -248,13 +274,7 @@ export async function readWorkspace(
     return WorkspaceStatus.parse({
       site,
       builds,
-      // §7.3's order: approvals by expiry, questions, then alerts and reports.
-      attention: [
-        ...approvalItems,
-        ...questions,
-        ...feed.filter((item) => item.kind === "alert"),
-        ...feed.filter((item) => item.kind === "report"),
-      ],
+      attention: orderAttention(approvalItems, questions, feed),
       missing_facts: missingFacts(current),
     })
   })

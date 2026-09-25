@@ -1,7 +1,7 @@
 import { CreateOrgRequest } from "@workspace/contracts"
 import { resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { checkTenantPath } from "./health.ts"
-import { failure, idempotencyKey } from "./http.ts"
+import { failure, idempotencyKey, invalid } from "./http.ts"
 import {
   createOrg,
   type Directory,
@@ -93,14 +93,7 @@ async function signup(
   // work.
   const body = await request.json().catch(() => null)
   const parsed = CreateOrgRequest.safeParse(body)
-  if (!parsed.success) {
-    return failure(400, {
-      class: "validation",
-      code: "request.invalid",
-      message: "The request body does not match the contract.",
-      detail: { issues: parsed.error.issues.map((i) => i.path.join(".")) },
-    })
-  }
+  if (!parsed.success) return invalid(parsed.error.issues)
   // The two halves of the SDK the writer needs. Organizations live on
   // `organizations` and memberships on `userManagement`, and `createOrg` takes
   // one object so it can be handed a stand-in.

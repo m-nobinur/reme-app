@@ -190,6 +190,7 @@ export function seed(kit: Tenancy, who: Owner) {
       kit.withOrg({ orgId }, async (db) => {
         const id = crypto.randomUUID()
         const now = new Date()
+        const expiresAt = new Date(now.getTime() + hours * 3_600_000)
         await db.insert(approvals).values({
           id,
           orgId,
@@ -200,8 +201,9 @@ export function seed(kit: Tenancy, who: Owner) {
           target: { kind: "revision", revision_id: revisionId },
           revisionId,
           rationale: "The preview passed every gate.",
-          requestedAt: now,
-          expiresAt: new Date(now.getTime() + hours * 3_600_000),
+          // The 72 hours `requestReview` gives, ending `hours` from now.
+          requestedAt: new Date(expiresAt.getTime() - 72 * 3_600_000),
+          expiresAt,
           ...(decided
             ? {
                 decision: "approved" as const,

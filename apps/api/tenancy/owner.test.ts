@@ -1,4 +1,5 @@
 import {
+  ActivityFeed,
   ErrorEnvelope,
   FactList,
   OWNER_BRIDGE_HEADERS,
@@ -39,6 +40,7 @@ const kit = tenancy(url, { max: 2 })
 let realFetch: typeof fetch
 let mine: Owner
 let theirs: Owner
+let theirAlert: string
 const ids: Record<"mine" | "theirs", { build: string; approval: string }> = {
   mine: { build: "", approval: "" },
   theirs: { build: "", approval: "" },
@@ -58,6 +60,12 @@ beforeAll(async () => {
     const revision = await s.revision(build, 1)
     ids[name] = { build, approval: await s.approval(build, revision, 72) }
   }
+  const s = seed(kit, theirs)
+  const failed = await s.assignment("failed")
+  theirAlert = await s.event(failed, "assignment.state_changed", {
+    from: "validating",
+    to: "failed",
+  })
   await theirs.call(stubOrchestrator(), "/facts", {
     method: "POST",
     headers: {
@@ -90,7 +98,7 @@ const routes = (which: "mine" | "theirs"): [string, RequestInit][] => {
       `/builds/${build}/answer`,
       post({ request_id: crypto.randomUUID(), value: "x" }),
     ],
-    [`/builds/${build}/cancel`, { method: "POST" }],
+    [`/builds/${build}/cancel`, post({})],
     [`/builds/${build}/preview`, { method: "GET" }],
     [
       `/approvals/${approval}/decision`,
@@ -131,6 +139,15 @@ describe("the owner's reads are the owner's org", () => {
     )
     expect(approvals.map((a) => a.approval_id)).toEqual([ids.mine.approval])
     for (const a of approvals) expect(a.org_id).toBe(mine.orgId)
+  })
+
+  it("lists none of another org's reports or alerts as activity", async () => {
+    const activity = async (who: Owner) =>
+      ActivityFeed.parse(
+        await (await who.call(stubOrchestrator(), "/activity")).json()
+      ).items.map((item) => item.event_id)
+    expect(await activity(theirs)).toContain(theirAlert)
+    expect(await activity(mine)).not.toContain(theirAlert)
   })
 
   it("lists none of another org's facts", async () => {

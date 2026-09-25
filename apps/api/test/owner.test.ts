@@ -2,7 +2,7 @@ import { ErrorEnvelope } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
 import { type ChangeInput, routeChange } from "../src/owner.ts"
-import { etag, unchanged } from "../src/workspace.ts"
+import { etag, orderAttention, unchanged } from "../src/workspace.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
@@ -54,7 +54,7 @@ describe("routeChange, row by row", () => {
             { assignment_id: A, state: "awaiting_review" },
             { assignment_id: B, state: "blocked_on_information" },
           ],
-          reviews: [{ assignment_id: A, revision_id: R }],
+          reviews: [{ assignment_id: A, revision_id: R, expired: false }],
         })
       )
     ).toEqual({ route: "refuse", reason: "question_open", assignment_id: B })
@@ -63,27 +63,74 @@ describe("routeChange, row by row", () => {
   it("turns down an open review, then builds or revises", () => {
     const reviewing = {
       builds: [{ assignment_id: A, state: "awaiting_review" as const }],
-      reviews: [{ assignment_id: A, revision_id: R }],
+      reviews: [{ assignment_id: A, revision_id: R, expired: false }],
     }
     expect(routeChange(site(reviewing))).toEqual({
-      route: "reject_then_rebuild",
+      route: "replace",
+      via: "reject",
       assignment_id: A,
       revision_id: R,
       rebuild: "site.build",
     })
     expect(routeChange(site({ ...reviewing, live: true }))).toMatchObject({
-      route: "reject_then_rebuild",
+      route: "replace",
+      via: "reject",
       rebuild: "site.revise",
     })
   })
 
-  it("refuses a build that is past working and not under review", () => {
+  it("turns down a review the sweep parked, expired or not", () => {
+    expect(
+      routeChange(
+        site({
+          builds: [{ assignment_id: A, state: "blocked_on_approval" }],
+          reviews: [{ assignment_id: A, revision_id: R, expired: true }],
+        })
+      )
+    ).toMatchObject({ route: "replace", via: "reject", assignment_id: A })
+  })
+
+  it("cancels a review that expired before the sweep parked it", () => {
+    expect(
+      routeChange(
+        site({
+          builds: [{ assignment_id: A, state: "awaiting_review" }],
+          reviews: [{ assignment_id: A, revision_id: R, expired: true }],
+        })
+      )
+    ).toEqual({
+      route: "replace",
+      via: "cancel",
+      assignment_id: A,
+      revision_id: null,
+      rebuild: "site.build",
+    })
+  })
+
+  it("cancels a build parked on its budget", () => {
+    expect(
+      routeChange(
+        site({ builds: [{ assignment_id: A, state: "blocked_on_approval" }] })
+      )
+    ).toMatchObject({ route: "replace", via: "cancel", assignment_id: A })
+  })
+
+  it("ignores an open review whose build has finished", () => {
+    expect(
+      routeChange(
+        site({
+          live: true,
+          reviews: [{ assignment_id: A, revision_id: R, expired: false }],
+        })
+      )
+    ).toEqual({ route: "revise" })
+  })
+
+  it("refuses a build that is settling on its own", () => {
     for (const state of [
       "queued",
       "preview_ready",
-      "awaiting_review",
       "release_candidate",
-      "blocked_on_approval",
       "paused",
     ] as const) {
       expect(
@@ -103,6 +150,30 @@ describe("routeChange, row by row", () => {
         })
       )
     ).toEqual({ route: "steer", assignment_id: A })
+  })
+})
+
+describe("attention order", () => {
+  it("puts approvals, then questions, then alerts, then reports", () => {
+    const logged = { assignment_id: null, at: "2026-09-26T00:00:00.000Z" }
+    const approval = { kind: "approval" } as never
+    const question = { kind: "question" } as never
+    const alert = {
+      kind: "alert",
+      event_id: "2",
+      reason: "build_failed",
+      ...logged,
+    } as const
+    const report = {
+      kind: "report",
+      event_id: "1",
+      what: "published",
+      revision: { revision_id: R, version: 1 },
+      ...logged,
+    } as const
+    expect(
+      orderAttention([approval], [question], [report, alert]).map((i) => i.kind)
+    ).toEqual(["approval", "question", "alert", "report"])
   })
 })
 

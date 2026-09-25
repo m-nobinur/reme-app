@@ -90,11 +90,32 @@ async function bridge(
 /**
  * The orchestrator's answer, checked against the contract on the way out. A
  * refusal is passed on when it is the §28.1 envelope; anything else is a bug
- * on one side of the binding and fails as one.
+ * on one side of the binding and fails as one. A success that fails the
+ * contract is 502 `integrity`, never a retryable class: the side effect has
+ * already happened, and a retry would ask for it twice.
  */
 function relay(result: Bridged, parse: (body: unknown) => unknown): Response {
   if (result.status < 300) {
-    return Response.json(parse(result.body), { status: result.status })
+    let body: unknown
+    try {
+      body = parse(result.body)
+    } catch (error) {
+      const issues = (error as { issues?: { path: PropertyKey[] }[] }).issues
+      console.error(
+        JSON.stringify({
+          code: "orchestrator.off_contract",
+          status: result.status,
+          issues: issues?.map((i) => i.path.join(".")) ?? [],
+        })
+      )
+      return failure(502, {
+        class: "integrity",
+        code: "orchestrator.off_contract",
+        message: "The builder answered in a shape we do not accept.",
+        detail: {},
+      })
+    }
+    return Response.json(body, { status: result.status })
   }
   const refusal = ErrorEnvelope.safeParse(result.body)
   if (refusal.success) {
@@ -129,10 +150,14 @@ const readBody = (request: Request) => request.json().catch(() => null)
 
 export type ChangeInput = {
   live: boolean
-  /** Unfinished builds, newest first. */
+  /** Every unfinished build, newest first. */
   builds: { assignment_id: string; state: AssignmentState }[]
-  /** Open revision approvals. */
-  reviews: { assignment_id: string | null; revision_id: string }[]
+  /** Undecided revision approvals, and whether each is past its expiry. */
+  reviews: {
+    assignment_id: string | null
+    revision_id: string
+    expired: boolean
+  }[]
 }
 
 export type ChangeRoute =
@@ -144,9 +169,11 @@ export type ChangeRoute =
       assignment_id: string
     }
   | {
-      route: "reject_then_rebuild"
+      /** Start the new build, then end the one holding the site. */
+      route: "replace"
+      via: "reject" | "cancel"
       assignment_id: string
-      revision_id: string
+      revision_id: string | null
       rebuild: "site.build" | "site.revise"
     }
 
@@ -162,12 +189,15 @@ const STEERABLE: readonly AssignmentState[] = [
 
 /**
  * Where an owner's change goes, from the site's state alone. A question
- * blocks everything, since the answer is what the build is waiting for. An
- * open review is turned down so the change becomes the next build rather
- * than sitting behind the site lock. A working build takes the change as a
- * steer. A build that is past working (queued, previewed, publishing,
- * parked) is refused until it settles. With nothing running, a live site is
- * revised and an unpublished one built.
+ * blocks everything, since the answer is what the build is waiting for.
+ * A build waiting on a decision is replaced, so a change never waits on a
+ * review nobody will answer: its review is turned down when the
+ * orchestrator would take the decision (awaiting review and in date, or
+ * parked by the sweep), and the build is cancelled otherwise (a review that
+ * expired before the sweep, or a budget park). A working build takes the
+ * change as a steer. A build settling on its own (queued, previewed,
+ * publishing, paused from the console) is refused until it settles. With
+ * nothing running, a live site is revised and an unpublished one built.
  */
 export function routeChange(site: ChangeInput): ChangeRoute {
   const asking = site.builds.find((b) => b.state === "blocked_on_information")
@@ -178,19 +208,22 @@ export function routeChange(site: ChangeInput): ChangeRoute {
       assignment_id: asking.assignment_id,
     }
   }
-  for (const review of site.reviews) {
-    const build = site.builds.find(
-      (b) =>
-        b.assignment_id === review.assignment_id &&
-        b.state === "awaiting_review"
+  const rebuild = site.live ? "site.revise" : "site.build"
+  const waiting = site.builds.find(
+    (b) => b.state === "awaiting_review" || b.state === "blocked_on_approval"
+  )
+  if (waiting) {
+    const review = site.reviews.find(
+      (r) => r.assignment_id === waiting.assignment_id
     )
-    if (build) {
-      return {
-        route: "reject_then_rebuild",
-        assignment_id: build.assignment_id,
-        revision_id: review.revision_id,
-        rebuild: site.live ? "site.revise" : "site.build",
-      }
+    const decidable =
+      review && (waiting.state === "blocked_on_approval" || !review.expired)
+    return {
+      route: "replace",
+      via: decidable ? "reject" : "cancel",
+      assignment_id: waiting.assignment_id,
+      revision_id: decidable ? review.revision_id : null,
+      rebuild,
     }
   }
   const working = site.builds.find((b) => STEERABLE.includes(b.state))
@@ -298,7 +331,7 @@ async function requestChange(
         .where(eq(assignments.idempotencyKey, key))
       if (made) return { made: toAssignment(made) }
       const [builds, reviews, site] = await Promise.all([
-        readBuilds(db),
+        readBuilds(db, null),
         readApprovals(db),
         readSite(db, env.SITE_HOST_SUFFIX),
       ])
@@ -309,12 +342,10 @@ async function requestChange(
   const route = routeChange({
     live: state.live,
     builds: state.builds,
-    reviews: state.reviews.map((item) => ({
-      assignment_id: item.request.assignment_id,
-      revision_id:
-        item.request.target.kind === "revision"
-          ? item.request.target.revision_id
-          : "",
+    reviews: state.reviews.map(({ request: r }) => ({
+      assignment_id: r.assignment_id,
+      revision_id: r.target.kind === "revision" ? r.target.revision_id : "",
+      expired: Date.parse(r.expires_at) <= Date.now(),
     })),
   })
   const create = (kind: "site.build" | "site.revise") =>
@@ -345,15 +376,32 @@ async function requestChange(
       )
       return relay(result, () => build)
     }
-    case "reject_then_rebuild": {
-      const rejected = await bridge(
+    case "replace": {
+      // The new build first: while the old one holds the site it queues
+      // behind the lock and claims it once the old one ends. A refused
+      // create (the daily cap) leaves the review standing.
+      const created = await bridge(env, owner, "/", {
+        body: { kind: route.rebuild, goal: text },
+        key,
+      })
+      if (created.status >= 300) return relay(created, () => null)
+      const ended = await bridge(
         env,
         owner,
-        `/${route.assignment_id}/reject`,
-        { body: { revision_id: route.revision_id }, key }
+        `/${route.assignment_id}/${route.via}`,
+        {
+          body:
+            route.via === "reject"
+              ? { revision_id: route.revision_id }
+              : undefined,
+          key,
+        }
       )
-      if (rejected.status >= 300) return relay(rejected, () => null)
-      return create(route.rebuild)
+      // ponytail: a refused reject leaves the new build queued behind the
+      // review until the sweep re-drives it, and a retry with this key
+      // replays the build without ending the review again.
+      if (ended.status >= 300) return relay(ended, () => null)
+      return relay(created, summary)
     }
     case "build":
       return create("site.build")
@@ -362,18 +410,26 @@ async function requestChange(
   }
 }
 
-/** Whether the org holds this row. RLS answers: another org's id finds nothing. */
+/**
+ * Whether the org holds this row. RLS answers: another org's id finds
+ * nothing. For a build, also whether `requestId` already has an answer.
+ */
 async function holds(
   kit: Tenancy,
   orgId: string,
   table: typeof assignments | typeof approvals,
-  id: string
-): Promise<{ assignmentId: string | null } | null> {
+  id: string,
+  requestId = ""
+): Promise<{ assignmentId: string | null; answered?: boolean } | null> {
   if (!Uuid.safeParse(id).success) return null
   const [row] = await kit.withOrg({ orgId }, (db) =>
     table === assignments
       ? db
-          .select({ assignmentId: assignments.id })
+          .select({
+            assignmentId: assignments.id,
+            // Written out: in a one-table select drizzle drops the table name.
+            answered: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and e.type = 'information.answered' and e.payload->>'request_id' = ${requestId})`,
+          })
           .from(assignments)
           .where(eq(assignments.id, id))
       : db
@@ -394,19 +450,31 @@ async function buildAction(
 ) {
   const method = request.method
   if ((action === "preview") !== (method === "GET")) return null
-  let body: unknown
+  const key = idempotencyKey(request)
+  if (method === "POST" && !key) return keyMissing()
+  let body: AnswerRequest | undefined
   if (action === "answer") {
     const parsed = AnswerRequest.safeParse(await readBody(request))
     if (!parsed.success) return invalid(parsed.error.issues)
     body = parsed.data
   }
-  if (!(await holds(kit, owner.orgId, assignments, id))) {
-    return notFound("assignment")
+  const found = await holds(kit, owner.orgId, assignments, id, body?.request_id)
+  if (!found) return notFound("assignment")
+  // ponytail: checked here and written by the orchestrator, so two answers
+  // sent at the same moment can both pass. The orchestrator's state check
+  // narrows it to the moment before the Workflow wakes.
+  if (found.answered) {
+    return failure(409, {
+      class: "validation",
+      code: "answer.already_given",
+      message: "That question has been answered.",
+      detail: { request_id: body?.request_id ?? null },
+    })
   }
   const result = await bridge(env, owner, `/${id}/${action}`, {
     method: method === "GET" ? "GET" : "POST",
     body,
-    key: idempotencyKey(request),
+    key,
   })
   if (action === "answer") return relay(result, InformationAnswer.parse)
   if (action === "preview") return relay(result, PreviewLink.parse)
@@ -423,16 +491,6 @@ async function decide(
   owner: Owner,
   id: string
 ) {
-  // An admin signed in as the owner can look, never decide: a publish is
-  // the owner's own act (§7.3).
-  if (owner.session.impersonated) {
-    return failure(403, {
-      class: "permission",
-      code: "approval.impersonated",
-      message: "An impersonated session cannot approve or reject.",
-      detail: {},
-    })
-  }
   const key = idempotencyKey(request)
   if (!key) return keyMissing()
   const parsed = DecisionRequest.safeParse(await readBody(request))
@@ -462,6 +520,19 @@ export async function ownerRoute(
 ): Promise<Response | null> {
   const { pathname } = new URL(request.url)
   const method = request.method
+  // An admin signed in as the owner can look, never act: a write is the
+  // owner's own (§7.3). Every write here is a POST, so one check covers them.
+  if (method !== "GET" && owner.session.impersonated) {
+    const decision = pathname.startsWith("/approvals/")
+    return failure(403, {
+      class: "permission",
+      code: decision ? "approval.impersonated" : "owner.impersonated",
+      message: decision
+        ? "An impersonated session cannot approve or reject."
+        : "An impersonated session can read, not change anything.",
+      detail: {},
+    })
+  }
   if (pathname === "/workspace" && method === "GET") {
     const status = await readWorkspace(kit, owner.orgId, env.SITE_HOST_SUFFIX)
     const body = JSON.stringify(status)
