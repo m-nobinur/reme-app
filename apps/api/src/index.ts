@@ -1,12 +1,14 @@
-import { CreateOrgRequest, type ErrorEnvelope } from "@workspace/contracts"
+import { CreateOrgRequest } from "@workspace/contracts"
 import { resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { checkTenantPath } from "./health.ts"
+import { failure, idempotencyKey, invalid } from "./http.ts"
 import {
   createOrg,
   type Directory,
   readOrg,
   readStaffDirectory,
 } from "./org.ts"
+import { OWNER_PATH, type Owner, ownerRoute } from "./owner.ts"
 import { readSession, type Session, workos } from "./session.ts"
 
 /**
@@ -20,18 +22,6 @@ import { readSession, type Session, workos } from "./session.ts"
  * never comes from client input is a property of this file rather than a check
  * somebody has to remember to write.
  */
-
-/** R4: every failure leaves as the §28.1 envelope, never a raw exception. */
-function failure(
-  status: number,
-  envelope: Omit<ErrorEnvelope, "occurred_at">
-): Response {
-  const body: ErrorEnvelope = {
-    ...envelope,
-    occurred_at: new Date().toISOString(),
-  }
-  return Response.json(body, { status })
-}
 
 const UNAUTHENTICATED = {
   class: "permission",
@@ -49,11 +39,9 @@ const UNAUTHENTICATED = {
  * act on differently: both mean sign in again, or create the org.
  */
 async function currentOrg(
-  request: Request,
-  env: Env,
+  session: Session,
   kit: Tenancy
-): Promise<{ orgId: string } | { response: Response }> {
-  const session = await readSession(request, env)
+): Promise<Owner | { response: Response }> {
   if (!session) return { response: failure(401, UNAUTHENTICATED) }
   const orgId = session.workosOrganizationId
     ? await resolveOrg(kit, {
@@ -71,7 +59,7 @@ async function currentOrg(
       }),
     }
   }
-  return { orgId }
+  return { orgId, session }
 }
 
 /**
@@ -82,11 +70,6 @@ async function currentOrg(
  * keyed-results table is needed for this endpoint. The one that mutates rows a
  * tenant can see will need one.
  */
-function idempotencyKey(request: Request): string | null {
-  const key = request.headers.get("idempotency-key")?.trim()
-  return key && key.length <= 255 ? key : null
-}
-
 async function signup(
   request: Request,
   env: Env,
@@ -108,14 +91,7 @@ async function signup(
   // work.
   const body = await request.json().catch(() => null)
   const parsed = CreateOrgRequest.safeParse(body)
-  if (!parsed.success) {
-    return failure(400, {
-      class: "validation",
-      code: "request.invalid",
-      message: "The request body does not match the contract.",
-      detail: { issues: parsed.error.issues.map((i) => i.path.join(".")) },
-    })
-  }
+  if (!parsed.success) return invalid(parsed.error.issues)
   // The two halves of the SDK the writer needs. Organizations live on
   // `organizations` and memberships on `userManagement`, and `createOrg` takes
   // one object so it can be handed a stand-in.
@@ -153,15 +129,30 @@ async function route(
     })
   }
 
+  const session = await readSession(request, env)
+  // An admin signed in as someone can look, never act: every write is a
+  // POST, and a decision above all is the owner's own (§7.3).
+  if (method === "POST" && session?.impersonated) {
+    const decision = pathname.startsWith("/approvals/")
+    return failure(403, {
+      class: "permission",
+      code: decision ? "approval.impersonated" : "owner.impersonated",
+      message: decision
+        ? "An impersonated session cannot approve or reject."
+        : "An impersonated session can read, not change anything.",
+      detail: {},
+    })
+  }
+
   if (pathname === "/org" && method === "POST") {
-    return signup(request, env, kit, await readSession(request, env))
+    return signup(request, env, kit, session)
   }
 
   if (
     (pathname === "/org" || pathname === "/staff") &&
     (method === "GET" || method === "HEAD")
   ) {
-    const resolved = await currentOrg(request, env, kit)
+    const resolved = await currentOrg(session, kit)
     if ("response" in resolved) return resolved.response
     if (pathname === "/staff") {
       return Response.json(await readStaffDirectory(kit, resolved.orgId))
@@ -177,6 +168,13 @@ async function route(
           message: "That organisation no longer exists.",
           detail: {},
         })
+  }
+
+  if (OWNER_PATH.test(pathname)) {
+    const resolved = await currentOrg(session, kit)
+    if ("response" in resolved) return resolved.response
+    const answered = await ownerRoute(request, env, kit, resolved)
+    if (answered) return answered
   }
 
   return failure(404, {

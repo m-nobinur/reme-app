@@ -50,6 +50,12 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@workspace/gates':
+        specifier: workspace:*
+        version: link:../../packages/gates
+      '@workspace/starter-site':
+        specifier: workspace:*
+        version: link:../../packages/starter-site
     devDependencies:
       '@types/node':
         specifier: ^22

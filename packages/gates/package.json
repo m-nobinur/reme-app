@@ -18,6 +18,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./fields": "./src/fields.ts",
     "./preview": "./src/preview.ts"
   }
 }

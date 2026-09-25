@@ -150,9 +150,10 @@ jobs:
       # `reme-api` binds the staging Hyperdrive config, so this preview reads
       # staging data rather than the branch above. Pointing it at the branch
       # needs a Hyperdrive config per PR, and the free plan allows ten per
-      # account. Nothing reads
-      # the api through a preview yet: `apps/web` has no service binding to it.
-      # Build that seam in the change that gives it a reader.
+      # account. Its ORCHESTRATOR binding reaches the deployed staging
+      # orchestrator, not this PR's upload: a binding names a Worker, and
+      # nothing sends a version override. The web preview below reads this
+      # version through `REME_API_URL`.
       - name: Upload the api version
         run: >
           pnpm --filter api exec wrangler versions upload
@@ -173,10 +174,12 @@ jobs:
 
       - run: pnpm --filter web build
 
-      # `--var` overrides the committed `WORKOS_REDIRECT_URI`, which names the
-      # staging hostname. A deployed `reme-web` without a redirect URI that
-      # matches its own hostname answers 500 on every route, the public page
-      # included, because the AuthKit middleware validates config per request.
+      # `--var` overrides the committed `REME_API_URL`, so the preview web
+      # reads this PR's api rather than staging's, and the committed
+      # `WORKOS_REDIRECT_URI`, which names the staging hostname. A deployed
+      # `reme-web` without a redirect URI that matches its own hostname answers
+      # 500 on every route, the public page included, because the AuthKit
+      # middleware validates config per request.
       #
       # WorkOS honours this hostname because the staging environment carries the
       # wildcard `https://*-reme-web.beapp.workers.dev/api/auth/callback`, added
@@ -189,6 +192,7 @@ jobs:
           --config dist/server/wrangler.json
           --preview-alias "$PREVIEW_ALIAS"
           --var "WORKOS_REDIRECT_URI:${{ steps.urls.outputs.web }}/api/auth/callback"
+          --var "REME_API_URL:${{ steps.urls.outputs.api }}"
           --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
 
       # One comment, edited in place on every push, rather than a new one per

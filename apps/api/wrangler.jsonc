@@ -57,6 +57,21 @@
       "id": "51fda187d78445c6852dbc334d9ac7ed"
     }
   ],
+  // The owner's way to the builder (ADR-032 amendment): the orchestrator's
+  // named `OwnerApi` entrypoint, which no route, custom domain or version URL
+  // can reach. A preview version of this Worker binds the deployed
+  // orchestrator, never the pull request's copy, because nothing here sends a
+  // version override.
+  "services": [
+    {
+      "binding": "ORCHESTRATOR",
+      "service": "reme-orchestrator",
+      "entrypoint": "OwnerApi"
+    }
+  ],
+  // The suffix the router serves sites on (ADR-030), for the live site's host
+  // in `/workspace`. The orchestrator and the router carry the same value.
+  "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk" },
   // Production. Everything above is staging, which is what the default
   // environment has always been; naming that is a later cleanup.
   //
@@ -87,7 +102,16 @@
           "binding": "HYPERDRIVE",
           "id": "42db5d04bb0e4249b3e5a88e62549218"
         }
-      ]
+      ],
+      // Bindings and vars do not inherit either.
+      "services": [
+        {
+          "binding": "ORCHESTRATOR",
+          "service": "reme-orchestrator-production",
+          "entrypoint": "OwnerApi"
+        }
+      ],
+      "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" }
     }
   }
 }
