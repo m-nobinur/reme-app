@@ -342,11 +342,16 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     // A screenshot shows inline in the owner app, which holds no cookie for
     // this host, so the three screenshot paths also take `?t=` with a
     // `screenshots` claim. Every other path, and the cookie, take `site`
-    // only, so a screenshot link never opens a page (ADR-032 amendment).
+    // only, so a screenshot link never opens a page (ADR-032 amendment). A
+    // `?t=` that does not open this host's screenshots leaves the cookie to
+    // decide, so a stale link in an open preview tab still loads.
     const shot = c.req.query("t")
+    const byLink = SCREENSHOTS.has(url.pathname.replace(/^\/+/, ""))
+      ? await verifyPreview(shot, c.env.PREVIEW_KEY, "screenshots")
+      : null
     const claim =
-      shot !== undefined && SCREENSHOTS.has(url.pathname.replace(/^\/+/, ""))
-        ? await verifyPreview(shot, c.env.PREVIEW_KEY, "screenshots")
+      byLink?.host === host
+        ? byLink
         : await verifyPreview(
             getCookie(c, PREVIEW_COOKIE),
             c.env.PREVIEW_KEY,

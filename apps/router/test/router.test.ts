@@ -614,6 +614,21 @@ describe("a screenshot link", () => {
     }
   })
 
+  it("falls back to the preview cookie when ?t= does not verify", async () => {
+    const site = cookie(await claimFor())
+    for (const token of [
+      "junk",
+      await claimFor(),
+      await shots({ host: `preview-v2-other${SUFFIX}` }),
+    ]) {
+      const res = await get(PREVIEW_HOST, `${SHOT}?t=${token}`, {
+        headers: site,
+      })
+      expect(res.status).toBe(200)
+      expect((await get(PREVIEW_HOST, `${SHOT}?t=${token}`)).status).toBe(401)
+    }
+  })
+
   it("takes ?t= on a preview host only", async () => {
     pointers.set(`host:${SITE_HOST}`, {
       org_id: ORG,
