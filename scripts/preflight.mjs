@@ -93,32 +93,32 @@ if (process.env.NEON_OFFLINE === "1") {
   )
 }
 
-// The development owner's browser session from `pnpm dev:session`. Having none
-// is fine. One that no longer works is worth saying, because the app answers it
-// as a signed-out visitor and nothing else says why.
+// The development owner's browser session from `pnpm dev:session`. Only ever a
+// warning: the stack runs without one, and a stale one is fixed by the command
+// that made it. Said at all because the app answers a dead session as a
+// signed-out visitor and nothing else says why.
+const renew = "`pnpm dev:session` makes a new one"
 if (!existsSync(".dev-session.json")) {
   warn("no local owner session. `pnpm dev:session` opens one")
 } else {
-  const { email, sealedSession } = JSON.parse(
-    readFileSync(".dev-session.json", "utf8")
-  )
-  const { client, sessionStatus } = await import(
-    "../apps/api/scripts/dev-owner.mjs"
-  )
-  const status = await (async () => {
+  try {
+    const { email, sealedSession } = JSON.parse(
+      readFileSync(".dev-session.json", "utf8")
+    )
+    const { client, sessionStatus } = await import(
+      "../apps/api/scripts/dev-owner.mjs"
+    )
     const vars = parseDotenv(readFileSync("apps/web/.dev.vars", "utf8"))
-    return sessionStatus(
+    const status = await sessionStatus(
       await client(vars),
       sealedSession,
       vars.WORKOS_COOKIE_PASSWORD
     )
-  })().catch((error) => `unchecked (${error.message})`)
-  check(
-    status === "valid",
-    `local owner session for ${email} is present and valid`,
-    `local owner session for ${email} is ${status}`,
-    "pnpm dev:session"
-  )
+    if (status === "valid") ok(`local owner session for ${email} is valid`)
+    else warn(`local owner session for ${email} is ${status}. ${renew}`)
+  } catch (error) {
+    warn(`local owner session is unchecked (${error.message}). ${renew}`)
+  }
 }
 
 if (fixes.length === 0) {
