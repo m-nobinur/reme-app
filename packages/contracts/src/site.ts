@@ -146,6 +146,11 @@ export const PreviewClaim = z.strictObject({
   site_id: Uuid,
   revision_id: Uuid,
   host: Hostname,
+  /**
+   * `site` opens the page and sets the cookie. `screenshots` serves the
+   * three screenshots and never a page.
+   */
+  scope: z.enum(["site", "screenshots"]),
   exp: z.int().positive(),
 })
 

@@ -15,6 +15,29 @@ const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
  * double as the worked example of each shape. All content is fictional (R8).
  */
 export const samples: Record<ContractName, unknown> = {
+  ActivityFeed: {
+    items: [
+      {
+        kind: "report",
+        event_id: ULID,
+        assignment_id: ASSIGNMENT,
+        at: NOW,
+        what: "published",
+        revision: { revision_id: REVISION, version: 3 },
+      },
+      {
+        kind: "alert",
+        event_id: "01JZ8QK5M7N9P0R2T4V6W8X0Y3",
+        assignment_id: null,
+        at: NOW,
+        reason: "budget_parked",
+      },
+    ],
+  },
+  AnswerRequest: {
+    request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
+    value: { centre: "Fairhaven", radius_km: 25 },
+  },
   ApprovalDecision: {
     approval_id: "20000001-0000-4000-8000-000000000001",
     org_id: ORG,
@@ -58,6 +81,31 @@ export const samples: Record<ContractName, unknown> = {
     budget_usd: 12.5,
     deadline: LATER,
     priority: "normal",
+    created_at: NOW,
+    updated_at: NOW,
+  },
+  AttentionItem: {
+    kind: "question",
+    request: {
+      request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
+      org_id: ORG,
+      assignment_id: ASSIGNMENT,
+      requested_by_staff_id: STAFF,
+      field: "service_area.radius",
+      why: "The contact page says where you clean, and nothing says that yet.",
+      answer_schema: { type: "object" },
+      options: null,
+      blocking: true,
+      requested_at: NOW,
+      expires_at: null,
+    },
+  },
+  BuildSummary: {
+    assignment_id: ASSIGNMENT,
+    kind: "site.revise",
+    state: "implementing",
+    goal: "Put the weekend hours on the contact page.",
+    revision: { revision_id: REVISION, version: 4 },
     created_at: NOW,
     updated_at: NOW,
   },
@@ -121,6 +169,10 @@ export const samples: Record<ContractName, unknown> = {
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
   },
+  DecisionRequest: {
+    decision: "approved",
+    revision_id: REVISION,
+  },
   DeploymentManifest: {
     revision_id: REVISION,
     site_id: ORG,
@@ -159,6 +211,27 @@ export const samples: Record<ContractName, unknown> = {
     idempotency_key: ULID,
     taint: [],
     payload: { from: "planning", to: "implementing" },
+  },
+  FactList: {
+    facts: [
+      {
+        fact_id: "a3b4c5d6-e7f8-43b4-9576-011223344556",
+        org_id: ORG,
+        key: "business.name",
+        fact_type: "identity",
+        value: { name: "Brightclean Cleaning Co. (fixture)" },
+        version: 1,
+        provenance: {
+          source: "owner_stated",
+          confidence: 1,
+          verified_by_staff_id: STAFF,
+          verified_at: NOW,
+        },
+        valid_from: NOW,
+        valid_to: null,
+        superseded_by_fact_id: null,
+      },
+    ],
   },
   FactRecord: {
     fact_id: "a3b4c5d6-e7f8-43b4-9576-011223344556",
@@ -201,6 +274,10 @@ export const samples: Record<ContractName, unknown> = {
         superseded_by_fact_id: null,
       },
     ],
+  },
+  FactValue: {
+    key: "pricing.standard_clean_hourly",
+    value: { amount_minor: 3500, currency: "GBP" },
   },
   FailureReport: {
     failure_id: ULID,
@@ -250,12 +327,26 @@ export const samples: Record<ContractName, unknown> = {
     name: "Brightclean Cleaning Co. (fixture)",
     created_at: NOW,
   },
+  OwnerChangeRequest: {
+    text: "Add a line saying we bring our own supplies.",
+  },
   PreviewClaim: {
     org_id: ORG,
     site_id: ORG,
     revision_id: REVISION,
     host: "preview-v3-brightclean.remeai.co.uk",
+    scope: "site",
     exp: 1789567110,
+  },
+  PreviewLink: {
+    revision_id: REVISION,
+    url: "https://preview-v3-brightclean.remeai.co.uk/open?t=abc.def",
+    screenshots: [
+      "https://preview-v3-brightclean.remeai.co.uk/screenshots/home-390.png",
+      "https://preview-v3-brightclean.remeai.co.uk/screenshots/home-768.png",
+      "https://preview-v3-brightclean.remeai.co.uk/screenshots/home-1440.png",
+    ],
+    expires_at: LATER,
   },
   ProgressEvent: {
     state: "implementing",
@@ -297,6 +388,12 @@ export const samples: Record<ContractName, unknown> = {
     issued_at: NOW,
     expires_at: LATER,
     signature: "ed25519:AbC123",
+  },
+  SetFactsRequest: {
+    facts: [
+      { key: "business.phone", value: { e164: "+15550142" } },
+      { key: "hours.weekday", value: { open: "08:00", close: "17:00" } },
+    ],
   },
   SiteFields: {
     name: { kind: "fact", fact_key: "business.name", required: true },
@@ -355,6 +452,42 @@ export const samples: Record<ContractName, unknown> = {
     department_id: null,
     created_at: NOW,
     updated_at: NOW,
+  },
+  WorkspaceStatus: {
+    site: {
+      host: "brightclean.remeai.co.uk",
+      live: { revision_id: REVISION, version: 3 },
+    },
+    builds: [
+      {
+        assignment_id: ASSIGNMENT,
+        kind: "site.revise",
+        state: "awaiting_review",
+        goal: "Put the weekend hours on the contact page.",
+        revision: null,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+    ],
+    attention: [
+      {
+        kind: "approval",
+        request: {
+          approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
+          org_id: ORG,
+          assignment_id: ASSIGNMENT,
+          requested_by_staff_id: STAFF,
+          approver_staff_id: "5e6f7081-92a3-4e8f-b021-5c6d7e8f9001",
+          action_kind: "publish_site_revision",
+          target: { kind: "revision", revision_id: REVISION },
+          rationale: "Version 4 adds the weekend hours.",
+          requested_at: NOW,
+          expires_at: LATER,
+        },
+        version: 4,
+      },
+    ],
+    missing_facts: ["business.email"],
   },
   ValidationReport: {
     report_id: "f8091a2b-3c4d-4809-8acb-556677889900",

@@ -27,6 +27,17 @@ describe("PreviewClaim", () => {
     const { site_id: _site, ...siteless } = claim
     expect(PreviewClaim.safeParse(siteless).success).toBe(false)
   })
+
+  it("says whether it opens the site or only shows its screenshots", () => {
+    expect(
+      PreviewClaim.safeParse({ ...claim, scope: "screenshots" }).success
+    ).toBe(true)
+    expect(PreviewClaim.safeParse({ ...claim, scope: "admin" }).success).toBe(
+      false
+    )
+    const { scope: _scope, ...unscoped } = claim
+    expect(PreviewClaim.safeParse(unscoped).success).toBe(false)
+  })
 })
 
 describe("SitePointer", () => {

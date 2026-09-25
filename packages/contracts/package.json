@@ -7,7 +7,7 @@
     "generate": "node scripts/generate.ts && openapi-typescript generated/openapi.json -o generated/openapi.d.ts && biome check --write --no-errors-on-unmatched generated",
     "check:drift": "pnpm generate && git diff --exit-code -- generated",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node ../../scripts/floor.mjs contracts-unit -- vitest run"
   },
   "dependencies": {
     "zod": "4.6.5"

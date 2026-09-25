@@ -19,6 +19,7 @@ describe("the preview host", () => {
         site_id: "10000001-0000-4000-8000-000000000001",
         revision_id: "10000001-0000-4000-8000-000000000003",
         host,
+        scope: "site",
         exp: 1,
       }).success
     ).toBe(true)

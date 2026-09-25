@@ -9,6 +9,19 @@ import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
+import {
+  ActivityFeed,
+  AnswerRequest,
+  AttentionItem,
+  BuildSummary,
+  DecisionRequest,
+  FactList,
+  FactValue,
+  OwnerChangeRequest,
+  PreviewLink,
+  SetFactsRequest,
+  WorkspaceStatus,
+} from "./owner.ts"
 import { CompletionReport, ProgressEvent, ValidationReport } from "./report.ts"
 import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
 import {
@@ -26,31 +39,42 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  ActivityFeed,
+  AnswerRequest,
   ApprovalDecision,
   ApprovalRequest,
   Assignment,
+  AttentionItem,
+  BuildSummary,
   CapabilityCall,
   CompletionReport,
   ComponentManifest,
   CreateOrgRequest,
+  DecisionRequest,
   DeploymentManifest,
   ErrorEnvelope,
   EventEnvelope,
+  FactList,
   FactRecord,
   FactSnapshot,
+  FactValue,
   FailureReport,
   InformationAnswer,
   InformationRequest,
   Org,
+  OwnerChangeRequest,
   PreviewClaim,
+  PreviewLink,
   ProgressEvent,
   RuntimeSpec,
+  SetFactsRequest,
   SiteFields,
   SitePointer,
   SiteRevision,
   StaffDirectory,
   StaffMember,
   ValidationReport,
+  WorkspaceStatus,
 } as const
 
 export type ContractName = keyof typeof contracts

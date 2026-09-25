@@ -78,9 +78,12 @@ export async function verifyPreview(
   }
   if (!ok) return null
   try {
-    const parsed = PreviewClaim.safeParse(
-      JSON.parse(new TextDecoder().decode(fromB64url(body)))
-    )
+    // A claim signed before `scope` existed was a site claim. The contract
+    // keeps `scope` required, so the default lives here, on the verify side.
+    const parsed = PreviewClaim.safeParse({
+      scope: "site",
+      ...JSON.parse(new TextDecoder().decode(fromB64url(body))),
+    })
     if (!parsed.success || parsed.data.exp * 1000 <= now) return null
     return parsed.data
   } catch {

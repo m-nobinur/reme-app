@@ -1,33 +1,14 @@
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import Ajv2020 from "ajv/dist/2020.js"
-import addFormats from "ajv-formats"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { ErrorEnvelope } from "../src/error.ts"
 import { EventEnvelope } from "../src/event.ts"
 import { contracts } from "../src/registry.ts"
+import { ajv, generated } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
 // The property that matters: the Zod schema and the JSON Schema we publish
 // mean the same thing. Consumers in other languages only ever see the second
 // one, so a divergence between them is a silent cross-boundary bug.
-
-const generated = JSON.parse(
-  readFileSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "generated",
-      "openapi.json"
-    ),
-    "utf8"
-  )
-) as { components: { schemas: Record<string, object> } }
-
-const ajv = new Ajv2020({ strict: false, allErrors: false })
-addFormats(ajv)
 
 type Path = (string | number)[]
 

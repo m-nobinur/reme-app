@@ -97,6 +97,7 @@ const claimFor = (overrides: Record<string, unknown> = {}) =>
       site_id: ORG,
       revision_id: REV,
       host: PREVIEW_HOST,
+      scope: "site",
       exp: soon(),
       ...overrides,
     } as never,
