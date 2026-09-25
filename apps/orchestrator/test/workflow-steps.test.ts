@@ -349,6 +349,33 @@ describe("the assignment Workflow's step names", () => {
     expect(await reviews("owner", "failed")).toBe(0)
   })
 
+  it("hands an owner's goal to the Developer only inside a tainted signal", async () => {
+    const first = async (origin: "owner" | "console") => {
+      dispatched.length = 0
+      script.verdicts = ["preview_ready"]
+      script.origin = origin
+      await drive([completion]).run()
+      return dispatched[0] as {
+        message: unknown
+        initialData: { goal: string; goal_tainted: boolean }
+      }
+    }
+    const owner = await first("owner")
+    expect(owner.message).toEqual({
+      kind: "signal",
+      type: "site.change_requested",
+      body: ROW.goal,
+      attributes: { taint: "untrusted_input" },
+    })
+    expect(owner.initialData.goal_tainted).toBe(true)
+    // The console's build is dispatched as it always was.
+    const console_ = await first("console")
+    expect(console_.message).toBe(
+      `Build the site from the canonical facts. ${ROW.goal}`
+    )
+    expect(console_.initialData.goal_tainted).toBe(false)
+  })
+
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
     script.verdicts = ["preview_ready"]
     script.origin = "owner"

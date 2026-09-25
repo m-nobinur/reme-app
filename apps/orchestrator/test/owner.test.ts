@@ -1,3 +1,4 @@
+import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import { assignments, events, facts, sql } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { appendEvent } from "../src/state.ts"
@@ -32,9 +33,17 @@ vi.mock("../src/sandbox.ts", () => ({
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // A steer dispatches to the Developer's Durable Object; here it only records.
+const { dispatched } = vi.hoisted(() => ({
+  dispatched: [] as { message: unknown }[],
+}))
 vi.mock("@workspace/facade", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@workspace/facade")>()),
-  init: () => ({ dispatch: async () => ({ submissionId: "s" }) }),
+  init: () => ({
+    dispatch: async (request: { message: unknown }) => {
+      dispatched.push(request)
+      return { submissionId: "s" }
+    },
+  }),
 }))
 
 const { OwnerApi } = await import("../src/cloudflare.ts")
@@ -66,9 +75,9 @@ const env = {
 const USER = "user_owner_probe"
 const SESSION = "session_owner_probe"
 const as = (orgId: string) => ({
-  "x-reme-org-id": orgId,
-  "x-reme-workos-user-id": USER,
-  "x-reme-session-id": SESSION,
+  [OWNER_BRIDGE_HEADERS.orgId]: orgId,
+  [OWNER_BRIDGE_HEADERS.workosUserId]: USER,
+  [OWNER_BRIDGE_HEADERS.sessionId]: SESSION,
 })
 
 /** A request as `apps/api` builds it, sent to the entrypoint. */
@@ -157,6 +166,7 @@ live("an owner starting a build", () => {
   it("taints an owner's steer and leaves the console's alone", async () => {
     const { orgId, slug } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
+    dispatched.length = 0
     const steered = await owner(orgId, `/${ids.assignmentId}/steer`, {
       message: "Make the header green",
     })
@@ -186,6 +196,16 @@ live("an owner starting a build", () => {
         taint: ["untrusted_input"],
       },
       { payload: { message: "Use the brand blue" }, taint: [] },
+    ])
+    // What reaches the Developer: the owner's words only as a tainted signal.
+    expect(dispatched.map((d) => d.message)).toEqual([
+      {
+        kind: "signal",
+        type: "site.change_requested",
+        body: "Make the header green",
+        attributes: { taint: "untrusted_input" },
+      },
+      { kind: "user", body: "Use the brand blue" },
     ])
   })
 

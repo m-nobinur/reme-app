@@ -31,6 +31,8 @@ export type Brief = {
   spec: RuntimeSpec
   snapshot: FactSnapshot
   goal: string
+  /** The goal is the owner's words: it reaches the model only as a tainted signal. */
+  goal_tainted: boolean
   acceptance_criteria: string[]
   /** R2 key of the source snapshot to restore, or null for the starter. */
   restore_key: string | null

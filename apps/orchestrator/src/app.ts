@@ -890,8 +890,17 @@ bridge.post("/:id/steer", async (c) => {
     return found
   })
   if (!row) return notFound(c, id)
+  // An owner's words reach the model the way a change request does: as a
+  // tainted signal, never as a user turn (§28.3). The console's stay a turn.
   const receipt = await init(Developer, { id }).dispatch({
-    message: { kind: "user", body: message },
+    message: byOwner(c)
+      ? {
+          kind: "signal",
+          type: "site.change_requested",
+          body: message,
+          attributes: { taint: "untrusted_input" },
+        }
+      : { kind: "user", body: message },
   })
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })
@@ -1177,7 +1186,13 @@ export const consoleRoutes = () => tree(consoleAuth, bridge, consoleOnly)
 /** The bridge alone, so nothing else is there to reach. */
 export const ownerRoutes = () => tree(ownerAuth, bridge)
 
-/** §28.1 for a path nothing serves, on both callers' apps. */
+/**
+ * §28.1 for a path nothing serves, on the console's app and the owner's.
+ * Under `/assignments` the caller's middleware runs first, so an unknown
+ * path answers 404 only after the bearer and the slug (console) or the owner
+ * headers (owner) pass; a caller who fails them sees the 401. Any other path
+ * answers 404 directly.
+ */
 export const noRoute: NotFoundHandler = (c) =>
   failure(c, 404, {
     class: "resource",

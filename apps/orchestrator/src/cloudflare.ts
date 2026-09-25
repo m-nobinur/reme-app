@@ -233,7 +233,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // instance and returns. The spec and the snapshot are bodies, so they
     // travel inside the step and never cross its boundary (R8).
     const admitted = await step.do("developer", async () => {
-      const { brief, revise, origin } = await run((kit) =>
+      const { brief, origin } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -255,15 +255,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             spec,
             snapshot,
             goal: row.goal,
+            goal_tainted:
+              row.kind === "site.revise" || choices.origin === "owner",
             acceptance_criteria: row.acceptanceCriteria,
             restore_key: source?.source_key ?? null,
             map: null,
           }
-          return {
-            brief: built,
-            revise: row.kind === "site.revise",
-            origin: choices.origin,
-          }
+          return { brief: built, origin: choices.origin }
         })
       )
       if (brief.restore_key) {
@@ -280,9 +278,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           id: ids.assignmentId,
           uid: null,
         }).dispatch({
-          // The change request is data the owner typed, not an instruction:
-          // it travels as a signal, tainted on the log (§28.3).
-          message: revise
+          // An owner's words are data, not an instruction: a revise's change
+          // request and an owner's build goal travel as a signal, tainted on
+          // the log (§28.3). A console goal keeps its plain message.
+          message: brief.goal_tainted
             ? {
                 kind: "signal",
                 type: "site.change_requested",
