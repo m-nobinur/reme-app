@@ -11,7 +11,8 @@ import {
   users,
 } from "@workspace/db"
 import { brightclean, emptyco } from "@workspace/db/fixtures"
-import { afterAll, describe, expect, it } from "vitest"
+import postgres from "postgres"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
 import {
   createOrg,
@@ -207,6 +208,61 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     displayName: "Probe Owner",
   }
 
+  /**
+   * The test's own connection, as the connecting role and outside `withOrg`,
+   * so it sees every org's rows and can count what signup wrote anywhere.
+   * Only the orgs that existed before signup and the new one are counted:
+   * suites running beside this one add orgs of their own.
+   */
+  const admin = postgres(url as string, { max: 1 })
+  const staffIn = async (orgIds: string[]) => {
+    const [row] = await admin<{ n: number }[]>`
+      select count(*)::int as n from staff where org_id = any(${orgIds}::uuid[])`
+    return row?.n ?? 0
+  }
+
+  /**
+   * An org this suite wrote, gone: staff leaves first, whatever the codes,
+   * then the membership an owner row points at, then the org. A run that
+   * failed halfway leaves nothing the next run trips on.
+   */
+  const drop = (dropped: string) =>
+    kit.withOrg({ orgId: dropped }, async (db) => {
+      for (;;) {
+        const gone = await db
+          .delete(staff)
+          .where(
+            sql`${staff.id} not in (select ${staff.managerId} from ${staff} where ${staff.managerId} is not null)`
+          )
+        if ((gone as unknown as { count: number }).count === 0) break
+      }
+      await db.delete(memberships).where(eq(memberships.orgId, dropped))
+      await db.delete(orgs).where(eq(orgs.id, dropped))
+    })
+
+  let org: Org
+  let orgId: string
+  /**
+   * The orgs that existed before signup, so suites running beside this one
+   * and making orgs of their own cannot move the count.
+   */
+  let before: { orgIds: string[]; staff: number }
+  const others: string[] = []
+
+  beforeAll(async () => {
+    const orgIds = (await admin<{ id: string }[]>`select id from orgs`).map(
+      (row) => row.id
+    )
+    before = { orgIds, staff: await staffIn(orgIds) }
+    org = Org.parse(await createOrg(kit, directory, input))
+    const resolved = await resolveOrg(kit, {
+      workosUserId: WORKOS_USER,
+      workosOrganizationId: `${WORKOS_ORG}_1`,
+    })
+    if (!resolved) throw new Error("signup wrote no org the session resolves")
+    orgId = resolved
+  }, 60_000)
+
   afterAll(async () => {
     // The org and its membership go. The person does not: `users` has no delete
     // policy on purpose (§10.5 owns removing a human), so the probe row stays
@@ -216,22 +272,12 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
       workosUserId: WORKOS_USER,
       workosOrganizationId: `${WORKOS_ORG}_1`,
     })
-    if (written) {
-      await kit.withOrg({ orgId: written }, async (db) => {
-        // Reports before managers, and staff before the membership the owner
-        // row points at.
-        for (const code of ["DEV-001", "COS-001", "OWN-001"]) {
-          await db.delete(staff).where(eq(staff.staffCode, code))
-        }
-        await db.delete(memberships).where(eq(memberships.orgId, written))
-        await db.delete(orgs).where(eq(orgs.id, written))
-      })
-    }
+    for (const id of [...others, ...(written ? [written] : [])]) await drop(id)
+    await admin.end()
     await kit.close()
   }, 60_000)
 
-  it("creates the org and gives the caller the contract shape", async () => {
-    const org = Org.parse(await createOrg(kit, directory, input))
+  it("creates the org and gives the caller the contract shape", () => {
     expect(org.name).toBe(input.name)
     // Derived from the name, suffixed with the org's own id, so it is unique
     // without a read and cannot be chosen by a caller.
@@ -239,21 +285,12 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   })
 
   it("resolves that org from the pair the session carries", async () => {
-    const resolved = await resolveOrg(kit, {
-      workosUserId: WORKOS_USER,
-      workosOrganizationId: `${WORKOS_ORG}_1`,
-    })
-    const org = await readOrg(kit, resolved as string)
-    expect(org?.name).toBe(input.name)
+    expect((await readOrg(kit, orgId))?.name).toBe(input.name)
   })
 
   it("replays rather than making a second tenant", async () => {
-    const first = await resolveOrg(kit, {
-      workosUserId: WORKOS_USER,
-      workosOrganizationId: `${WORKOS_ORG}_1`,
-    })
     const again = await createOrg(kit, directory, input)
-    expect(again.org_id).toBe(first)
+    expect(again.org_id).toBe(orgId)
     // And no second organization was asked for. This is the assertion that
     // catches the real failure: the writer used to create one per attempt and
     // rely on the idempotency key to give the same one back, which WorkOS does
@@ -261,17 +298,24 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(calls).toBe(1)
   })
 
-  const writtenOrg = async () =>
-    (await resolveOrg(kit, {
-      workosUserId: WORKOS_USER,
-      workosOrganizationId: `${WORKOS_ORG}_1`,
-    })) as string
+  const person = async () => {
+    const [row] = await kit.withOrg(
+      { orgId, workosUserId: WORKOS_USER },
+      (db) =>
+        db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.workosUserId, WORKOS_USER))
+    )
+    return row?.id as string
+  }
 
-  const team = (orgId: string) =>
-    kit.withOrg({ orgId }, (db) =>
+  const team = (id: string) =>
+    kit.withOrg({ orgId: id }, (db) =>
       db
         .select({
           id: staff.id,
+          orgId: staff.orgId,
           code: staff.staffCode,
           name: staff.displayName,
           kind: staff.kind,
@@ -284,15 +328,6 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     )
 
   it("gives the new org its owner, a Chief of Staff and a Developer", async () => {
-    const orgId = await writtenOrg()
-    const [person] = await kit.withOrg(
-      { orgId, workosUserId: WORKOS_USER },
-      (db) =>
-        db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.workosUserId, WORKOS_USER))
-    )
     const rows = await team(orgId)
     expect(rows.map((row) => row.code)).toEqual([
       "COS-001",
@@ -303,7 +338,7 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(owner).toMatchObject({
       name: input.displayName,
       kind: "human",
-      userId: person?.id,
+      userId: await person(),
       managerId: null,
     })
     expect(chief).toMatchObject({ name: "Maya", kind: "agent" })
@@ -313,41 +348,67 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     for (const row of rows) expect(row.status).toBe("active")
   })
 
-  it("is found by the lookup the orchestrator runs before a build", async () => {
-    // The where clause of `createAssignment` in apps/orchestrator/src/app.ts,
-    // copied because an app cannot import another. A build for this org would
-    // otherwise stop at 409 `staff.developer_missing`.
-    const orgId = await writtenOrg()
-    const codes = await kit.withOrg({ orgId }, (db) =>
-      db
-        .select({ code: staff.staffCode })
-        .from(staff)
-        .where(sql`${staff.staffCode} in ('DEV-001', 'COS-001')`)
-    )
-    expect(codes.map((row) => row.code).sort()).toEqual(["COS-001", "DEV-001"])
+  it("writes exactly three staff rows, all in the new org", async () => {
+    const rows = await team(orgId)
+    expect(rows.length).toBe(3)
+    for (const row of rows) expect(row.orgId).toBe(orgId)
+    expect(await staffIn([...before.orgIds, orgId])).toBe(before.staff + 3)
   })
 
   it("adds nobody when the team is ensured again", async () => {
-    const orgId = await writtenOrg()
-    const before = await team(orgId)
-    const owner = before.find((row) => row.code === "OWN-001")
-    await kit.withOrg({ orgId }, (db) =>
+    const was = await team(orgId)
+    await kit.withOrg({ orgId }, async (db) =>
       ensureStartingTeam(db, {
         orgId,
-        userId: owner?.userId as string,
+        userId: await person(),
         ownerName: "Someone Else",
       })
     )
-    expect(await team(orgId)).toEqual(before)
+    expect(await team(orgId)).toEqual(was)
   })
 
-  it("leaves every other org's staff where it was", async () => {
-    const orgId = await writtenOrg()
-    const ours = new Set((await team(orgId)).map((row) => row.id))
-    const theirs = await readStaffDirectory(kit, brightclean.org.id as string)
-    expect(theirs.staff.length).toBe(brightclean.staff.length)
-    for (const member of theirs.staff) {
-      expect(ours.has(member.staff_id)).toBe(false)
-    }
+  it("puts the team under a root that has another code", async () => {
+    // An org made before this, whose owner row is not OWN-001. The owner insert
+    // meets the one-root index rather than the code, and has to stand aside
+    // rather than fail the call.
+    const other = crypto.randomUUID()
+    others.push(other)
+    const userId = await person()
+    await kit.withOrg({ orgId: other }, async (db) => {
+      await db.insert(orgs).values({
+        id: other,
+        slug: `older-${other.slice(0, 8)}`,
+        name: "Older Cleaning Co. (fixture)",
+      })
+      await db.insert(memberships).values({
+        orgId: other,
+        userId,
+        workosMembershipId: `om_probe_older_${other}`,
+        role: "owner",
+        status: "active",
+      })
+      await db.insert(staff).values({
+        orgId: other,
+        staffCode: "HUM-001",
+        displayName: "Older Owner",
+        kind: "human",
+        userId,
+        status: "active",
+      })
+      await ensureStartingTeam(db, {
+        orgId: other,
+        userId,
+        ownerName: "Older Owner",
+      })
+    })
+    const rows = await team(other)
+    expect(rows.map((row) => row.code)).toEqual([
+      "COS-001",
+      "DEV-001",
+      "HUM-001",
+    ])
+    const [chief, developer, root] = rows
+    expect(chief?.managerId).toBe(root?.id)
+    expect(developer?.managerId).toBe(chief?.id)
   })
 })

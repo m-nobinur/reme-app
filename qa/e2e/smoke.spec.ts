@@ -31,7 +31,9 @@ const FIXTURE_CONTENT = [
   "Brightclean",
   "Mop & Bucket",
   "Dana Reyes",
-  "Maya",
+  // Not "Maya": every new org's Chief of Staff carries that name, so it no
+  // longer marks someone else's business. The other golden owner does.
+  "Kit Mbeki",
   "brightclean.mypareme.app",
 ]
 
