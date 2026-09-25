@@ -3,8 +3,10 @@ import {
   asc,
   eq,
   memberships,
+  type OrgScopedDb,
   orgs,
   resolveOrg,
+  sql,
   staff,
   type Tenancy,
   toOrg,
@@ -88,6 +90,63 @@ function slugFor(name: string, orgId: string): string {
 }
 
 /**
+ * The team every org starts with (§5.2): the owner as the human root, a Chief
+ * of Staff reporting to the root and a Developer reporting to the Chief, so
+ * the first build has someone to run it. Names are the golden fixtures'. Role
+ * and department stay null: a new org has no rows of either to point at.
+ *
+ * Safe to call again, and on an org made before this: each insert does
+ * nothing on any unique conflict, the code or the one-root index, so a second
+ * call adds nobody and an org whose root has another code keeps it. Each
+ * manager comes from a subquery in the insert rather than a read back, so no
+ * statement returns a row (the reason `createOrg` gives). `userId` is our
+ * `users.id`, and the owner needs a membership in this org first, because
+ * `staff_user_fk` points at it.
+ */
+export async function ensureStartingTeam(
+  db: OrgScopedDb,
+  team: { orgId: string; userId: string; ownerName: string }
+): Promise<void> {
+  const { orgId } = team
+  const root = sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.kind} = 'human' and ${staff.managerId} is null)`
+  const chief = sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.staffCode} = 'COS-001')`
+  const hired = { orgId, status: "active" as const }
+  await db
+    .insert(staff)
+    .values({
+      ...hired,
+      staffCode: "OWN-001",
+      displayName: team.ownerName,
+      kind: "human",
+      userId: team.userId,
+      positionTitle: "Owner",
+    })
+    .onConflictDoNothing()
+  await db
+    .insert(staff)
+    .values({
+      ...hired,
+      staffCode: "COS-001",
+      displayName: "Maya",
+      kind: "agent",
+      managerId: root,
+      positionTitle: "Chief of Staff",
+    })
+    .onConflictDoNothing()
+  await db
+    .insert(staff)
+    .values({
+      ...hired,
+      staffCode: "DEV-001",
+      displayName: "Alex",
+      kind: "agent",
+      managerId: chief,
+      positionTitle: "Developer",
+    })
+    .onConflictDoNothing()
+}
+
+/**
  * Creates the org: the WorkOS organization first, then ours.
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
@@ -115,10 +174,11 @@ function slugFor(name: string, orgId: string): string {
  * organisation per person. It is the signup writer, and a second business for
  * the same owner is a different story with a different shape.
  *
- * Our three inserts run in one `withOrg` under the id this function generated,
- * so no policy is widened for them: `orgs_org_isolation` passes because the
- * row's id is the context, `users_self_insert` because the context names the
- * person signing up, and `memberships_org_isolation` on the same org id. None
+ * Our inserts, the starting team's included, run in one `withOrg` under the
+ * id this function generated, so no policy is widened for them:
+ * `orgs_org_isolation` passes because the row's id is the context,
+ * `users_self_insert` because the context names the person signing up, and
+ * `memberships_org_isolation` and `staff_org_isolation` on the same org id. None
  * of them uses RETURNING, because the SELECT policy is applied to returned rows
  * and reports the refusal as an insert failure against the wrong policy.
  */
@@ -213,6 +273,11 @@ export async function createOrg(
           status: "active",
         })
         .onConflictDoNothing()
+      await ensureStartingTeam(db, {
+        orgId,
+        userId: person.id,
+        ownerName: input.displayName ?? input.email,
+      })
       return true
     }
   )
