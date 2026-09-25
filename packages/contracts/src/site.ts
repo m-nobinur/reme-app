@@ -99,7 +99,7 @@ export const ComponentManifest = z.strictObject({
 })
 
 /** A canonical fact key: dotted, lower case, e.g. `business.phone`. */
-const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
+export const FactKey = z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
 
 /**
  * `SiteField`: what one string in the starter's `site` config needs. A
@@ -146,6 +146,11 @@ export const PreviewClaim = z.strictObject({
   site_id: Uuid,
   revision_id: Uuid,
   host: Hostname,
+  /**
+   * `site` opens the page and sets the cookie. `screenshots` serves the
+   * three screenshots and never a page.
+   */
+  scope: z.enum(["site", "screenshots"]),
   exp: z.int().positive(),
 })
 

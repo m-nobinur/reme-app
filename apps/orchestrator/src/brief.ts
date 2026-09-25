@@ -96,9 +96,6 @@ export async function creationChoices(
   return { withhold, model: payload.model === "B" ? "B" : "A" }
 }
 
-/** The longest goal an assignment takes, in characters: it is in every turn's instructions. */
-export const GOAL_MAX = 4000
-
 /** What a fact value keeps across versions: its JSON type, and an object's keys. */
 const shape = (value: unknown): string => {
   if (value === null) return "null"

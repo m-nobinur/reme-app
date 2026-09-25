@@ -7,6 +7,112 @@ export type paths = Record<string, never>
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    ActivityFeed: {
+      items: (
+        | {
+            /** @constant */
+            kind: "question"
+            request: {
+              /** Format: uuid */
+              request_id: string
+              /** Format: uuid */
+              org_id: string
+              /** Format: uuid */
+              assignment_id: string
+              /** Format: uuid */
+              requested_by_staff_id: string
+              field: string
+              why: string
+              answer_schema: {
+                [key: string]: unknown
+              }
+              options: string[] | null
+              blocking: boolean
+              /** Format: date-time */
+              requested_at: string
+              expires_at: string | null
+            }
+          }
+        | {
+            /** @constant */
+            kind: "approval"
+            request: {
+              /** Format: uuid */
+              approval_id: string
+              /** Format: uuid */
+              org_id: string
+              assignment_id: string | null
+              /** Format: uuid */
+              requested_by_staff_id: string
+              /** Format: uuid */
+              approver_staff_id: string
+              action_kind: string
+              target:
+                | {
+                    /** @constant */
+                    kind: "revision"
+                    /** Format: uuid */
+                    revision_id: string
+                  }
+                | {
+                    /** @constant */
+                    kind: "domain"
+                    hostname: string
+                  }
+                | {
+                    /** @constant */
+                    kind: "spend"
+                    amount_usd: number
+                    /** @constant */
+                    currency: "USD"
+                  }
+                | {
+                    /** @constant */
+                    kind: "sensitive_claim"
+                    /** Format: uuid */
+                    fact_id: string
+                    claim: string
+                  }
+              rationale: string
+              /** Format: date-time */
+              requested_at: string
+              /** Format: date-time */
+              expires_at: string
+            }
+            version: number
+          }
+        | {
+            /** @constant */
+            kind: "report"
+            event_id: string
+            assignment_id: string | null
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            what: "published"
+            revision: {
+              /** Format: uuid */
+              revision_id: string
+              version: number
+            }
+          }
+        | {
+            /** @constant */
+            kind: "alert"
+            event_id: string
+            assignment_id: string | null
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          }
+      )[]
+    }
+    AnswerRequest: {
+      /** Format: uuid */
+      request_id: string
+      value: unknown
+    }
     ApprovalDecision: {
       /** Format: uuid */
       approval_id: string
@@ -145,6 +251,138 @@ export interface components {
       /** Format: date-time */
       updated_at: string
     }
+    AttentionItem:
+      | {
+          /** @constant */
+          kind: "question"
+          request: {
+            /** Format: uuid */
+            request_id: string
+            /** Format: uuid */
+            org_id: string
+            /** Format: uuid */
+            assignment_id: string
+            /** Format: uuid */
+            requested_by_staff_id: string
+            field: string
+            why: string
+            answer_schema: {
+              [key: string]: unknown
+            }
+            options: string[] | null
+            blocking: boolean
+            /** Format: date-time */
+            requested_at: string
+            expires_at: string | null
+          }
+        }
+      | {
+          /** @constant */
+          kind: "approval"
+          request: {
+            /** Format: uuid */
+            approval_id: string
+            /** Format: uuid */
+            org_id: string
+            assignment_id: string | null
+            /** Format: uuid */
+            requested_by_staff_id: string
+            /** Format: uuid */
+            approver_staff_id: string
+            action_kind: string
+            target:
+              | {
+                  /** @constant */
+                  kind: "revision"
+                  /** Format: uuid */
+                  revision_id: string
+                }
+              | {
+                  /** @constant */
+                  kind: "domain"
+                  hostname: string
+                }
+              | {
+                  /** @constant */
+                  kind: "spend"
+                  amount_usd: number
+                  /** @constant */
+                  currency: "USD"
+                }
+              | {
+                  /** @constant */
+                  kind: "sensitive_claim"
+                  /** Format: uuid */
+                  fact_id: string
+                  claim: string
+                }
+            rationale: string
+            /** Format: date-time */
+            requested_at: string
+            /** Format: date-time */
+            expires_at: string
+          }
+          version: number
+        }
+      | {
+          /** @constant */
+          kind: "report"
+          event_id: string
+          assignment_id: string | null
+          /** Format: date-time */
+          at: string
+          /** @enum {string} */
+          what: "published"
+          revision: {
+            /** Format: uuid */
+            revision_id: string
+            version: number
+          }
+        }
+      | {
+          /** @constant */
+          kind: "alert"
+          event_id: string
+          assignment_id: string | null
+          /** Format: date-time */
+          at: string
+          /** @enum {string} */
+          reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+        }
+    BuildSummary: {
+      /** Format: uuid */
+      assignment_id: string
+      /** @enum {string} */
+      kind: "site.build" | "site.revise"
+      /** @enum {string} */
+      state:
+        | "queued"
+        | "briefing"
+        | "planning"
+        | "implementing"
+        | "validating"
+        | "preview_ready"
+        | "awaiting_review"
+        | "revising"
+        | "release_candidate"
+        | "published"
+        | "blocked_on_information"
+        | "blocked_on_approval"
+        | "repairing"
+        | "paused"
+        | "failed"
+        | "cancelled"
+      goal: string
+      revision: {
+        /** Format: uuid */
+        revision_id: string
+        version: number
+      } | null
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
     CapabilityCall: {
       /** Format: uuid */
       call_id: string
@@ -210,6 +448,12 @@ export interface components {
     }
     CreateOrgRequest: {
       name: string
+    }
+    DecisionRequest: {
+      /** @enum {string} */
+      decision: "approved" | "rejected"
+      /** Format: uuid */
+      revision_id: string
     }
     DeploymentManifest: {
       /** Format: uuid */
@@ -281,6 +525,29 @@ export interface components {
           seq?: number
         }
     )
+    FactList: {
+      facts: {
+        /** Format: uuid */
+        fact_id: string
+        /** Format: uuid */
+        org_id: string
+        key: string
+        fact_type: string
+        value: unknown
+        version: number
+        provenance: {
+          /** @enum {string} */
+          source: "owner_stated" | "document" | "integration" | "inferred"
+          confidence: number
+          verified_by_staff_id: string | null
+          verified_at: string | null
+        }
+        /** Format: date-time */
+        valid_from: string
+        valid_to: string | null
+        superseded_by_fact_id: string | null
+      }[]
+    }
     FactRecord: {
       /** Format: uuid */
       fact_id: string
@@ -333,6 +600,61 @@ export interface components {
         superseded_by_fact_id: string | null
       }[]
     }
+    FactValue:
+      | {
+          /** @constant */
+          key: "business.name"
+          value: {
+            name: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.phone"
+          value: {
+            e164: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.email"
+          value: {
+            /** Format: email */
+            address: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "hours.weekday"
+          value: {
+            open: string
+            close: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "service_area.radius"
+          value: {
+            centre: string
+            radius_km: number
+          }
+        }
+      | {
+          /** @constant */
+          key: "pricing.standard_clean_hourly"
+          value: {
+            amount_minor: number
+            /** @enum {string} */
+            currency: "GBP" | "USD" | "EUR"
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.tagline"
+          value: {
+            tagline: string
+          }
+        }
     FailureReport: {
       failure_id: string
       /** Format: uuid */
@@ -406,6 +728,9 @@ export interface components {
       /** Format: date-time */
       created_at: string
     }
+    OwnerChangeRequest: {
+      text: string
+    }
     PreviewClaim: {
       /** Format: uuid */
       org_id: string
@@ -414,7 +739,18 @@ export interface components {
       /** Format: uuid */
       revision_id: string
       host: string
+      /** @enum {string} */
+      scope: "site" | "screenshots"
       exp: number
+    }
+    PreviewLink: {
+      /** Format: uuid */
+      revision_id: string
+      /** Format: uri */
+      url: string
+      screenshots: string[]
+      /** Format: date-time */
+      expires_at: string
     }
     ProgressEvent: {
       /** @enum {string} */
@@ -497,6 +833,64 @@ export interface components {
       /** Format: date-time */
       expires_at: string
       signature: string
+    }
+    SetFactsRequest: {
+      facts: (
+        | {
+            /** @constant */
+            key: "business.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.phone"
+            value: {
+              e164: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.email"
+            value: {
+              /** Format: email */
+              address: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "hours.weekday"
+            value: {
+              open: string
+              close: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.radius"
+            value: {
+              centre: string
+              radius_km: number
+            }
+          }
+        | {
+            /** @constant */
+            key: "pricing.standard_clean_hourly"
+            value: {
+              amount_minor: number
+              /** @enum {string} */
+              currency: "GBP" | "USD" | "EUR"
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.tagline"
+            value: {
+              tagline: string
+            }
+          }
+      )[]
     }
     SiteFields: {
       [key: string]:
@@ -623,6 +1017,150 @@ export interface components {
       }[]
       /** Format: date-time */
       produced_at: string
+    }
+    WorkspaceStatus: {
+      site: {
+        host: string | null
+        live: {
+          /** Format: uuid */
+          revision_id: string
+          version: number
+        } | null
+      }
+      builds: {
+        /** Format: uuid */
+        assignment_id: string
+        /** @enum {string} */
+        kind: "site.build" | "site.revise"
+        /** @enum {string} */
+        state:
+          | "queued"
+          | "briefing"
+          | "planning"
+          | "implementing"
+          | "validating"
+          | "preview_ready"
+          | "awaiting_review"
+          | "revising"
+          | "release_candidate"
+          | "published"
+          | "blocked_on_information"
+          | "blocked_on_approval"
+          | "repairing"
+          | "paused"
+          | "failed"
+          | "cancelled"
+        goal: string
+        revision: {
+          /** Format: uuid */
+          revision_id: string
+          version: number
+        } | null
+        /** Format: date-time */
+        created_at: string
+        /** Format: date-time */
+        updated_at: string
+      }[]
+      attention: (
+        | {
+            /** @constant */
+            kind: "question"
+            request: {
+              /** Format: uuid */
+              request_id: string
+              /** Format: uuid */
+              org_id: string
+              /** Format: uuid */
+              assignment_id: string
+              /** Format: uuid */
+              requested_by_staff_id: string
+              field: string
+              why: string
+              answer_schema: {
+                [key: string]: unknown
+              }
+              options: string[] | null
+              blocking: boolean
+              /** Format: date-time */
+              requested_at: string
+              expires_at: string | null
+            }
+          }
+        | {
+            /** @constant */
+            kind: "approval"
+            request: {
+              /** Format: uuid */
+              approval_id: string
+              /** Format: uuid */
+              org_id: string
+              assignment_id: string | null
+              /** Format: uuid */
+              requested_by_staff_id: string
+              /** Format: uuid */
+              approver_staff_id: string
+              action_kind: string
+              target:
+                | {
+                    /** @constant */
+                    kind: "revision"
+                    /** Format: uuid */
+                    revision_id: string
+                  }
+                | {
+                    /** @constant */
+                    kind: "domain"
+                    hostname: string
+                  }
+                | {
+                    /** @constant */
+                    kind: "spend"
+                    amount_usd: number
+                    /** @constant */
+                    currency: "USD"
+                  }
+                | {
+                    /** @constant */
+                    kind: "sensitive_claim"
+                    /** Format: uuid */
+                    fact_id: string
+                    claim: string
+                  }
+              rationale: string
+              /** Format: date-time */
+              requested_at: string
+              /** Format: date-time */
+              expires_at: string
+            }
+            version: number
+          }
+        | {
+            /** @constant */
+            kind: "report"
+            event_id: string
+            assignment_id: string | null
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            what: "published"
+            revision: {
+              /** Format: uuid */
+              revision_id: string
+              version: number
+            }
+          }
+        | {
+            /** @constant */
+            kind: "alert"
+            event_id: string
+            assignment_id: string | null
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          }
+      )[]
+      missing_facts: string[]
     }
   }
   responses: never

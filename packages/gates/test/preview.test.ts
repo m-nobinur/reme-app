@@ -18,6 +18,7 @@ const claim = {
   site_id: ORG,
   revision_id: REV,
   host: HOST,
+  scope: "site" as const,
   exp: NOW / 1000 + 3600,
 }
 

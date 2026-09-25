@@ -1,5 +1,6 @@
 import {
   type ErrorEnvelope,
+  GOAL_MAX,
   InformationAnswer,
   PreviewClaim,
   type TaintLabel,
@@ -32,7 +33,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
-import { GOAL_MAX, hideFacts, updateFacts } from "./brief.ts"
+import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import {
   activeDeployment,
@@ -837,6 +838,7 @@ console_.get("/:id/preview", async (c) => {
       site_id: found.revision.siteId,
       revision_id: found.revision.id,
       host,
+      scope: "site",
       exp,
     }),
     c.env.PREVIEW_KEY
