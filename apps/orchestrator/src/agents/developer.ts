@@ -37,7 +37,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
-import { siteRules } from "../developer-rules.ts"
+import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
@@ -277,7 +277,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
       : "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
     "",
     "Rules:",
-    ...siteRules(revising, brief.snapshot.facts),
+    ...siteRules(revising, brief.snapshot.facts, goalTainted(brief, revising)),
     "- Build pages from the components below, as their manifests say, and never in a way a manifest forbids.",
     "- Read every file you need in one turn; reads run together.",
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
@@ -287,9 +287,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
     "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
     "",
-    revising
-      ? "Assignment goal: apply the owner's change request to the published site."
-      : `Assignment goal: ${brief.goal}`,
+    assignmentGoal(brief, revising),
     "Acceptance criteria:",
     ...brief.acceptance_criteria.map((c) => `- ${c}`),
     "",

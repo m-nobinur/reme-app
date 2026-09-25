@@ -9,6 +9,7 @@ import {
   PREVIEW_COOKIE,
   previewHeaders,
   resolvePreviewPath,
+  SCREENSHOTS,
   verifyPreview,
 } from "@workspace/gates/preview"
 import { type Context, Hono } from "hono"
@@ -322,7 +323,7 @@ app.get("/open", async (c) => {
   const host = new URL(c.req.url).hostname
   if (!isPreviewHost(host)) return notHere(c)
   const token = c.req.query("t")
-  const claim = await verifyPreview(token, c.env.PREVIEW_KEY)
+  const claim = await verifyPreview(token, c.env.PREVIEW_KEY, "site")
   if (!claim || !token || claim.host !== host) return noPreview(c)
   setCookie(c, PREVIEW_COOKIE, token, {
     httpOnly: true,
@@ -338,10 +339,24 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   const url = new URL(c.req.url)
   const host = url.hostname
   if (isPreviewHost(host)) {
-    const claim = await verifyPreview(
-      getCookie(c, PREVIEW_COOKIE),
-      c.env.PREVIEW_KEY
-    )
+    // A screenshot shows inline in the owner app, which holds no cookie for
+    // this host, so the three screenshot paths also take `?t=` with a
+    // `screenshots` claim. Every other path, and the cookie, take `site`
+    // only, so a screenshot link never opens a page (ADR-032 amendment). A
+    // `?t=` that does not open this host's screenshots leaves the cookie to
+    // decide, so a stale link in an open preview tab still loads.
+    const shot = c.req.query("t")
+    const byLink = SCREENSHOTS.has(url.pathname.replace(/^\/+/, ""))
+      ? await verifyPreview(shot, c.env.PREVIEW_KEY, "screenshots")
+      : null
+    const claim =
+      byLink?.host === host
+        ? byLink
+        : await verifyPreview(
+            getCookie(c, PREVIEW_COOKIE),
+            c.env.PREVIEW_KEY,
+            "site"
+          )
     if (!claim || claim.host !== host) return noPreview(c)
     const found = await manifestFor(c, null, claim)
     if (!found) return notHere(c)

@@ -10,6 +10,7 @@ import steps from "./workflow-steps.json" with { type: "json" }
  */
 
 vi.mock("cloudflare:workers", () => ({
+  WorkerEntrypoint: class {},
   WorkflowEntrypoint: class {
     env: unknown
     constructor(_ctx: unknown, env: unknown) {
@@ -33,6 +34,14 @@ vi.mock("../src/publish.ts", () => ({
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
   redriveQueued: async () => [],
+  requestReview: async () => {
+    if (script.reviewRefusal) {
+      const { TransitionError } = await import("../src/state.ts")
+      throw new TransitionError(script.reviewRefusal, "validation", "refused")
+    }
+    script.reviews++
+    return { request: { approval_id: "a" }, replayed: false }
+  },
   verifyArtifact: async () => ({ ok: true }),
   writePointer: async () => ({}),
 }))
@@ -83,7 +92,11 @@ vi.mock("@workspace/db", () => ({
   }),
 }))
 vi.mock("../src/brief.ts", () => ({
-  creationChoices: async () => ({ withhold: [], model: "A" }),
+  creationChoices: async () => ({
+    withhold: [],
+    model: "A",
+    origin: script.origin,
+  }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
 }))
@@ -94,6 +107,9 @@ const script = {
   provisions: [] as boolean[],
   verdicts: [] as string[],
   checkpoints: [] as boolean[],
+  origin: "console" as "owner" | "console",
+  reviews: 0,
+  reviewRefusal: null as string | null,
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -124,7 +140,12 @@ vi.mock("../src/sandbox.ts", () => ({
 const advanced: [string, string | undefined][] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
-    errorClass = "validation"
+    constructor(
+      readonly code = "",
+      readonly errorClass = "validation"
+    ) {
+      super(code)
+    }
   },
   advance: async (
     _kit: unknown,
@@ -223,9 +244,17 @@ type Setup = {
   verdicts?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
+  origin?: "owner"
 }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
+  // An owner's build opens its own review once the sandbox is gone.
+  [
+    "owner build",
+    [completion],
+    { origin: "owner" },
+    { outcome: "preview_ready" },
+  ],
   [
     "information round trip",
     [information, completion],
@@ -301,15 +330,71 @@ describe("the assignment Workflow's step names", () => {
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
+    script.origin = setup.origin ?? "console"
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
+  })
+
+  it("opens a review for an owner's preview only", async () => {
+    const reviews = async (origin: "owner" | "console", verdict: string) => {
+      script.reviews = 0
+      script.verdicts = [verdict]
+      script.origin = origin
+      await drive([completion]).run()
+      return script.reviews
+    }
+    expect(await reviews("owner", "preview_ready")).toBe(1)
+    expect(await reviews("console", "preview_ready")).toBe(0)
+    expect(await reviews("owner", "failed")).toBe(0)
+  })
+
+  it("hands an owner's goal to the Developer only inside a tainted signal", async () => {
+    const first = async (origin: "owner" | "console") => {
+      dispatched.length = 0
+      script.verdicts = ["preview_ready"]
+      script.origin = origin
+      await drive([completion]).run()
+      return dispatched[0] as {
+        message: unknown
+        initialData: { goal: string; goal_tainted: boolean }
+      }
+    }
+    const owner = await first("owner")
+    expect(owner.message).toEqual({
+      kind: "signal",
+      type: "site.change_requested",
+      body: ROW.goal,
+      attributes: { taint: "untrusted_input" },
+    })
+    expect(owner.initialData.goal_tainted).toBe(true)
+    // The console's build is dispatched as it always was.
+    const console_ = await first("console")
+    expect(console_.message).toBe(
+      `Build the site from the canonical facts. ${ROW.goal}`
+    )
+    expect(console_.initialData.goal_tainted).toBe(false)
+  })
+
+  it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
+    script.verdicts = ["preview_ready"]
+    script.origin = "owner"
+    // Superseded or cancelled between the gates and the review step.
+    script.reviewRefusal = "assignment.not_previewable"
+    const { names, run } = drive([completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(names).toEqual(expected["owner build"])
+    // Any other refusal is still final.
+    script.reviewRefusal = "revision.not_preview"
+    await expect(drive([completion]).run()).rejects.toThrow()
+    script.reviewRefusal = null
   })
 
   it("names every path the file lists", () => {
     expect(Object.keys(expected).sort()).toEqual(
       [
         "build",
+        "owner build",
         "information round trip",
         "gate failure repaired",
         "gate failure ends failed",

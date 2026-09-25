@@ -12,6 +12,18 @@
       "gates 1",
       "destroy sandbox"
     ],
+    "owner build": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "gates 1",
+      "destroy sandbox",
+      "review"
+    ],
     "information round trip": [
       "claim 1",
       "sandbox 1",

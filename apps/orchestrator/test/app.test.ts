@@ -1,3 +1,4 @@
+import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 
 // Past the bearer, every console route resolves the org and opens a tenancy
@@ -28,7 +29,8 @@ vi.mock("../src/sandbox.ts", () => ({
 // dispatch to it stop at the bearer or the row in this suite.
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
-const { default: app } = await import("../src/app.ts")
+const { default: app, ownerRoutes } = await import("../src/app.ts")
+const { Hono } = await import("hono")
 
 /**
  * The console's edge, without a database: the bearer, the page, and the
@@ -277,5 +279,167 @@ describe("the publish routes' edge", () => {
     )
     expect(res.status).toBe(404)
     expect((await envelope(res)).code).toBe("org.unresolved")
+  })
+})
+
+describe("owner mode", () => {
+  // Mounted the way `OwnerApi` mounts it (cloudflare.ts), without workerd.
+  const owner = new Hono<{ Bindings: Env }>({ strict: false }).route(
+    "/assignments",
+    ownerRoutes()
+  )
+  const ORG = "10000001-0000-4000-8000-000000000000"
+  const identity = {
+    [OWNER_BRIDGE_HEADERS.orgId]: ORG,
+    [OWNER_BRIDGE_HEADERS.workosUserId]: "user_1",
+    [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
+  }
+
+  // The seven routes that cross the bridge, and every route the console has
+  // besides. A route added to either tree lands in one of these lists.
+  const BRIDGE: [string, string][] = [
+    ["POST", "/assignments"],
+    ["POST", "/assignments/x/answer"],
+    ["POST", "/assignments/x/cancel"],
+    ["POST", "/assignments/x/steer"],
+    ["GET", "/assignments/x/preview"],
+    ["POST", "/assignments/x/approve"],
+    ["POST", "/assignments/x/reject"],
+  ]
+  const CONSOLE_ONLY: [string, string][] = [
+    ["GET", "/assignments"],
+    ["GET", "/assignments/sandbox/probe"],
+    ["POST", "/assignments/x/start"],
+    ["GET", "/assignments/facts"],
+    ["POST", "/assignments/facts"],
+    ["GET", "/assignments/site"],
+    ["POST", "/assignments/site/hidden"],
+    ["GET", "/assignments/x"],
+    ["GET", "/assignments/x/events"],
+    ["POST", "/assignments/x/review"],
+    ["POST", "/assignments/rollback"],
+  ]
+
+  it("is not reachable through the default export with forged owner headers", async () => {
+    for (const [method, path] of BRIDGE) {
+      const res = await app.request(
+        `${path}?org=brightclean`,
+        { method, headers: identity },
+        env
+      )
+      expect(res.status).toBe(401)
+      expect((await envelope(res)).code).toBe("console.unauthenticated")
+    }
+  })
+
+  it("refuses a missing or malformed identity, whatever ?org= and the bearer say", async () => {
+    const bearer = { authorization: "Bearer test-token" }
+    for (const headers of [
+      bearer,
+      { ...bearer, ...identity, [OWNER_BRIDGE_HEADERS.orgId]: "brightclean" },
+      { ...identity, [OWNER_BRIDGE_HEADERS.sessionId]: "" },
+      { ...identity, [OWNER_BRIDGE_HEADERS.workosUserId]: " " },
+    ]) {
+      const res = await owner.request(
+        "/assignments/x/answer?org=brightclean",
+        { method: "POST", headers },
+        env
+      )
+      expect(res.status).toBe(401)
+      expect(await envelope(res)).toMatchObject({
+        class: "permission",
+        code: "owner.unauthenticated",
+      })
+    }
+  })
+
+  it("answers the bridge routes and 404s every other one", async () => {
+    for (const [method, path] of BRIDGE) {
+      const res = await owner.request(path, { method, headers: identity }, env)
+      expect(res.status, `${method} ${path}`).not.toBe(404)
+      expect(res.status, `${method} ${path}`).not.toBe(401)
+    }
+    for (const [method, path] of CONSOLE_ONLY) {
+      const res = await owner.request(path, { method, headers: identity }, env)
+      expect(res.status, `${method} ${path}`).toBe(404)
+    }
+  })
+
+  it("leaves the console every route it had", async () => {
+    for (const [method, path] of [...BRIDGE, ...CONSOLE_ONLY]) {
+      const res = await app.request(
+        `${path}?org=brightclean`,
+        { method, headers: { authorization: "Bearer test-token" } },
+        env
+      )
+      expect(res.status, `${method} ${path}`).not.toBe(404)
+    }
+  })
+
+  it("skips the console's approval gate for an owner", async () => {
+    const res = await owner.request(
+      "/assignments/x/approve",
+      {
+        method: "POST",
+        headers: { ...identity, "idempotency-key": "k" },
+        body: JSON.stringify({ revision_id: "x" }),
+      },
+      env
+    )
+    // Past the gate, into the database this suite does not have.
+    expect(res.status).toBe(503)
+  })
+})
+
+describe("a steer", () => {
+  it("refuses a message longer than a goal, from either caller", async () => {
+    const body = JSON.stringify({ message: "x".repeat(4001) })
+    const console_ = await app.request(
+      "/assignments/x/steer?org=brightclean",
+      { method: "POST", headers: { authorization: "Bearer test-token" }, body },
+      env
+    )
+    const owner = await new Hono<{ Bindings: Env }>()
+      .route("/assignments", ownerRoutes())
+      .request(
+        "/assignments/x/steer",
+        {
+          method: "POST",
+          headers: {
+            [OWNER_BRIDGE_HEADERS.orgId]:
+              "10000001-0000-4000-8000-000000000000",
+            [OWNER_BRIDGE_HEADERS.workosUserId]: "user_1",
+            [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
+          },
+          body,
+        },
+        env
+      )
+    for (const res of [console_, owner]) {
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({
+        class: "validation",
+        code: "steer.too_long",
+      })
+    }
+  })
+})
+
+describe("a path nothing serves", () => {
+  it("answers the typed 404 envelope, not plain text", async () => {
+    for (const [path, headers] of [
+      ["/nowhere", {}],
+      [
+        "/assignments/x/nothing?org=brightclean",
+        { authorization: "Bearer test-token" },
+      ],
+    ] as const) {
+      const res = await app.request(path, { headers }, env)
+      expect(res.status).toBe(404)
+      expect(await envelope(res)).toMatchObject({
+        class: "resource",
+        code: "route.not_found",
+      })
+    }
   })
 })

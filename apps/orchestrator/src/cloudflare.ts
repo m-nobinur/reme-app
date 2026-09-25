@@ -1,4 +1,5 @@
 import {
+  WorkerEntrypoint,
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
@@ -20,7 +21,9 @@ import {
   REPEATING_FAILURE,
   SANDBOX_UPDATING,
 } from "@workspace/facade"
+import { Hono } from "hono"
 import { Developer } from "./agents/developer.ts"
+import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
 import {
   type Brief,
   creationChoices,
@@ -34,6 +37,7 @@ import {
   probeHost,
   readTarget,
   redriveQueued,
+  requestReview,
   verifyArtifact,
   writePointer,
 } from "./publish.ts"
@@ -88,6 +92,23 @@ export class RemeSandbox extends Sandbox<Env> {
 // it runs. Assigned rather than declared as a static field, because a field
 // would shadow the base class's setter instead of registering the handler.
 RemeSandbox.outbound = (request: Request) => fetch(request)
+
+/** The owner's route tree: the bridge routes alone, behind `ownerAuth`. */
+const ownerApp = new Hono<ConsoleEnv>({ strict: false })
+  .route("/assignments", ownerRoutes())
+  .notFound(noRoute)
+
+/**
+ * The owner's way in (ADR-032 amendment): a named entrypoint that only a
+ * service binding naming it can reach. `apps/api` binds it; no route, custom
+ * domain or version URL can, so the headers `ownerAuth` reads arrive from
+ * `apps/api` and nowhere else (staging spike, 2026-09-26).
+ */
+export class OwnerApi extends WorkerEntrypoint<Env> {
+  override fetch(request: Request) {
+    return ownerApp.fetch(request, this.env, this.ctx)
+  }
+}
 
 /** R8: ids only. Everything else is read from the row inside a step. */
 export type AssignmentParams = { assignment_id: string; org_id: string }
@@ -211,17 +232,17 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // step cannot admit the Developer twice: the second attempt finds the
     // instance and returns. The spec and the snapshot are bodies, so they
     // travel inside the step and never cross its boundary (R8).
-    await step.do("developer", async () => {
-      const { brief, revise } = await run((kit) =>
+    const admitted = await step.do("developer", async () => {
+      const { brief, origin } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
             .from(assignments)
             .where(eq(assignments.id, ids.assignmentId))
           if (!row) throw new NonRetryableError("assignment.not_found")
-          const { withhold, model } = await creationChoices(db, ids)
-          const snapshot = await takeSnapshot(db, ids, withhold)
-          const spec = await issueSpec(db, this.env, row, model)
+          const choices = await creationChoices(db, ids)
+          const snapshot = await takeSnapshot(db, ids, choices.withhold)
+          const spec = await issueSpec(db, this.env, row, choices.model)
           // A revise starts from what the site serves (ADR-032), never a preview.
           const source =
             row.kind === "site.revise"
@@ -234,11 +255,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             spec,
             snapshot,
             goal: row.goal,
+            goal_tainted:
+              row.kind === "site.revise" || choices.origin === "owner",
             acceptance_criteria: row.acceptanceCriteria,
             restore_key: source?.source_key ?? null,
             map: null,
           }
-          return { brief: built, revise: row.kind === "site.revise" }
+          return { brief: built, origin: choices.origin }
         })
       )
       if (brief.restore_key) {
@@ -255,9 +278,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           id: ids.assignmentId,
           uid: null,
         }).dispatch({
-          // The change request is data the owner typed, not an instruction:
-          // it travels as a signal, tainted on the log (§28.3).
-          message: revise
+          // An owner's words are data, not an instruction: a revise's change
+          // request and an owner's build goal travel as a signal, tainted on
+          // the log (§28.3). A console goal keeps its plain message.
+          message: brief.goal_tainted
             ? {
                 kind: "signal",
                 type: "site.change_requested",
@@ -267,10 +291,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             : `Build the site from the canonical facts. ${brief.goal}`,
           initialData: brief,
         })
-        return { submission_id: receipt.submissionId }
+        return { submission_id: receipt.submissionId, origin }
       } catch (error) {
         if (error instanceof AgentInstanceExistsError) {
-          return { submission_id: null }
+          return { submission_id: null, origin }
         }
         throw error
       }
@@ -376,6 +400,33 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           await endSandbox(this.env, ids)
           return { destroyed: ids.assignmentId }
         })
+        // An owner's build goes in front of the owner as soon as the preview
+        // exists, so the 72 h clock starts then. `requestReview` answers a
+        // retry with the request it already holds. A build superseded or
+        // cancelled since the gates has nothing to review and ends as it is.
+        // The console asks for its own review, so its builds stop at
+        // `preview_ready` as before.
+        if (
+          verdict.outcome === "preview_ready" &&
+          admitted.origin === "owner"
+        ) {
+          await step.do("review", () =>
+            run(async (kit) => {
+              try {
+                const { request } = await requestReview(kit, ids)
+                return { approval_id: request.approval_id }
+              } catch (error) {
+                if (
+                  error instanceof TransitionError &&
+                  error.code === "assignment.not_previewable"
+                ) {
+                  return { approval_id: null }
+                }
+                throw error
+              }
+            })
+          )
+        }
         return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {
