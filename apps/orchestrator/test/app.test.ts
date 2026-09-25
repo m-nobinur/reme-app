@@ -1,3 +1,4 @@
+import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 
 // Past the bearer, every console route resolves the org and opens a tenancy
@@ -289,9 +290,9 @@ describe("owner mode", () => {
   )
   const ORG = "10000001-0000-4000-8000-000000000000"
   const identity = {
-    "x-reme-org-id": ORG,
-    "x-reme-workos-user-id": "user_1",
-    "x-reme-session-id": "session_1",
+    [OWNER_BRIDGE_HEADERS.orgId]: ORG,
+    [OWNER_BRIDGE_HEADERS.workosUserId]: "user_1",
+    [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
   }
 
   // The seven routes that cross the bridge, and every route the console has
@@ -335,9 +336,9 @@ describe("owner mode", () => {
     const bearer = { authorization: "Bearer test-token" }
     for (const headers of [
       bearer,
-      { ...bearer, ...identity, "x-reme-org-id": "brightclean" },
-      { ...identity, "x-reme-session-id": "" },
-      { ...identity, "x-reme-workos-user-id": " " },
+      { ...bearer, ...identity, [OWNER_BRIDGE_HEADERS.orgId]: "brightclean" },
+      { ...identity, [OWNER_BRIDGE_HEADERS.sessionId]: "" },
+      { ...identity, [OWNER_BRIDGE_HEADERS.workosUserId]: " " },
     ]) {
       const res = await owner.request(
         "/assignments/x/answer?org=brightclean",
@@ -405,9 +406,10 @@ describe("a steer", () => {
         {
           method: "POST",
           headers: {
-            "x-reme-org-id": "10000001-0000-4000-8000-000000000000",
-            "x-reme-workos-user-id": "user_1",
-            "x-reme-session-id": "session_1",
+            [OWNER_BRIDGE_HEADERS.orgId]:
+              "10000001-0000-4000-8000-000000000000",
+            [OWNER_BRIDGE_HEADERS.workosUserId]: "user_1",
+            [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
           },
           body,
         },
