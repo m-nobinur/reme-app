@@ -19,6 +19,8 @@ coverage/
 !.env.example
 .dev.vars
 .dev.vars.*
+# The development owner's sealed session, written by `pnpm dev:session`.
+.dev-session.json
 
 # test output. Screenshot baselines are here too: they are PNGs that every
 # visual change rewrites and that git then keeps forever, so the visual

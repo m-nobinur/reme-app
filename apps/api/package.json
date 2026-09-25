@@ -19,6 +19,7 @@
     "@workspace/starter-site": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22",
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",

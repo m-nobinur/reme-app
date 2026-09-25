@@ -8,8 +8,8 @@ import {
 } from "./workos"
 
 /**
- * Staging WorkOS is kept at zero users, so the run that added one takes it away
- * again. Asserted rather than fired and forgotten. The delete is confirmed by
+ * Staging WorkOS holds no users but the development owners (`qa/e2e/workos.ts`
+ * names them), so the run that added one takes it away again. Asserted rather than fired and forgotten. The delete is confirmed by
  * reading the account back and requiring a 404.
  *
  * It checks only the accounts this run created. A global "no users exist" check

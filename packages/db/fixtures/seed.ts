@@ -1,4 +1,4 @@
-import { inArray, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { connect } from "../src/client.ts"
 import {
   approvals,
@@ -210,6 +210,50 @@ export async function seedGolden({ reset = false } = {}): Promise<SeedCounts> {
         )
       }
       return counts
+    })
+  } finally {
+    await client.end()
+  }
+}
+
+/**
+ * Clears the local mirror of one person: their orgs named `orgName`, and their
+ * user row. The other half of deleting a WorkOS user, for `pnpm dev:session
+ * --delete`.
+ *
+ * Needed because `users.email` is unique and the WorkOS id is not carried over:
+ * a user deleted and made again under the same address is a new WorkOS id, and
+ * `createOrg` then meets the old row on the email and fails. The migrator
+ * connection for the reasons `seedGolden` gives. Matching on the name as well
+ * as the person means an org they joined any other way stays, and then the
+ * user delete fails on its foreign key rather than taking that org with it.
+ */
+export async function clearOwner(
+  email: string,
+  orgName: string
+): Promise<{ orgs: number; users: number }> {
+  const { sql: client, db } = connect()
+  try {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_ID})`)
+      const people = (
+        await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, email))
+      ).map((row) => row.id)
+      if (people.length === 0) return { orgs: 0, users: 0 }
+      const owned = (
+        await tx
+          .selectDistinct({ id: orgs.id })
+          .from(orgs)
+          .innerJoin(memberships, eq(memberships.orgId, orgs.id))
+          .where(
+            and(inArray(memberships.userId, people), eq(orgs.name, orgName))
+          )
+      ).map((row) => row.id)
+      await clearOrgs(tx, owned, people)
+      return { orgs: owned.length, users: people.length }
     })
   } finally {
     await client.end()
