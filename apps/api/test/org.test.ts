@@ -210,16 +210,9 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
 
   /**
    * The test's own connection, as the connecting role and outside `withOrg`,
-   * so it sees every org's rows and can count what signup wrote anywhere.
-   * Only the orgs that existed before signup and the new one are counted:
-   * suites running beside this one add orgs of their own.
+   * so it sees every org's rows and can look for what signup wrote anywhere.
    */
   const admin = postgres(url as string, { max: 1 })
-  const staffIn = async (orgIds: string[]) => {
-    const [row] = await admin<{ n: number }[]>`
-      select count(*)::int as n from staff where org_id = any(${orgIds}::uuid[])`
-    return row?.n ?? 0
-  }
 
   /**
    * An org this suite wrote, gone: staff leaves first, whatever the codes,
@@ -242,18 +235,9 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
 
   let org: Org
   let orgId: string
-  /**
-   * The orgs that existed before signup, so suites running beside this one
-   * and making orgs of their own cannot move the count.
-   */
-  let before: { orgIds: string[]; staff: number }
   const others: string[] = []
 
   beforeAll(async () => {
-    const orgIds = (await admin<{ id: string }[]>`select id from orgs`).map(
-      (row) => row.id
-    )
-    before = { orgIds, staff: await staffIn(orgIds) }
     org = Org.parse(await createOrg(kit, directory, input))
     const resolved = await resolveOrg(kit, {
       workosUserId: WORKOS_USER,
@@ -352,7 +336,17 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     const rows = await team(orgId)
     expect(rows.length).toBe(3)
     for (const row of rows) expect(row.orgId).toBe(orgId)
-    expect(await staffIn([...before.orgIds, orgId])).toBe(before.staff + 3)
+    // Nothing elsewhere names the new person or the new rows. Read by what
+    // links to this signup rather than by counting whole orgs, because other
+    // suites write staff into this database while this one runs.
+    const ids = rows.map((row) => row.id)
+    const [stray] = await admin<{ n: number }[]>`
+      select count(*)::int as n from staff
+      where org_id <> ${orgId}
+        and (user_id = ${await person()}
+          or id = any(${ids}::uuid[])
+          or manager_id = any(${ids}::uuid[]))`
+    expect(stray?.n).toBe(0)
   })
 
   it("adds nobody when the team is ensured again", async () => {
