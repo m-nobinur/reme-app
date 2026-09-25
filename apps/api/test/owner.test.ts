@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
 import { type ChangeInput, routeChange } from "../src/owner.ts"
 import { etag, orderAttention, unchanged } from "../src/workspace.ts"
-import { env, stubJwksFetch } from "./sealed-session.ts"
+import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
  * The owner routes' pure halves: where a change goes, the workspace tag, and
@@ -54,7 +54,7 @@ describe("routeChange, row by row", () => {
             { assignment_id: A, state: "awaiting_review" },
             { assignment_id: B, state: "blocked_on_information" },
           ],
-          reviews: [{ assignment_id: A, revision_id: R, expired: false }],
+          reviews: [{ assignment_id: A, revision_id: R }],
         })
       )
     ).toEqual({ route: "refuse", reason: "question_open", assignment_id: B })
@@ -63,7 +63,7 @@ describe("routeChange, row by row", () => {
   it("turns down an open review, then builds or revises", () => {
     const reviewing = {
       builds: [{ assignment_id: A, state: "awaiting_review" as const }],
-      reviews: [{ assignment_id: A, revision_id: R, expired: false }],
+      reviews: [{ assignment_id: A, revision_id: R }],
     }
     expect(routeChange(site(reviewing))).toEqual({
       route: "replace",
@@ -79,32 +79,25 @@ describe("routeChange, row by row", () => {
     })
   })
 
-  it("turns down a review the sweep parked, expired or not", () => {
+  it("turns down a review the sweep parked", () => {
     expect(
       routeChange(
         site({
           builds: [{ assignment_id: A, state: "blocked_on_approval" }],
-          reviews: [{ assignment_id: A, revision_id: R, expired: true }],
+          reviews: [{ assignment_id: A, revision_id: R }],
         })
       )
     ).toMatchObject({ route: "replace", via: "reject", assignment_id: A })
   })
 
-  it("cancels a review that expired before the sweep parked it", () => {
+  it("waits out a review that expired before the sweep parked it", () => {
+    // `readApprovals` hides it: the orchestrator refuses a decision on it
+    // until the hourly sweep parks the build.
     expect(
       routeChange(
-        site({
-          builds: [{ assignment_id: A, state: "awaiting_review" }],
-          reviews: [{ assignment_id: A, revision_id: R, expired: true }],
-        })
+        site({ builds: [{ assignment_id: A, state: "awaiting_review" }] })
       )
-    ).toEqual({
-      route: "replace",
-      via: "cancel",
-      assignment_id: A,
-      revision_id: null,
-      rebuild: "site.build",
-    })
+    ).toEqual({ route: "refuse", reason: "build_busy", assignment_id: A })
   })
 
   it("cancels a build parked on its budget", () => {
@@ -120,7 +113,7 @@ describe("routeChange, row by row", () => {
       routeChange(
         site({
           live: true,
-          reviews: [{ assignment_id: A, revision_id: R, expired: false }],
+          reviews: [{ assignment_id: A, revision_id: R }],
         })
       )
     ).toEqual({ route: "revise" })
@@ -194,6 +187,34 @@ describe("the workspace tag", () => {
 })
 
 describe("owner routes refuse before the database", () => {
+  it("refuses an impersonated signup, and passes HEAD through", async () => {
+    const ctx = { waitUntil: () => undefined } as unknown as ExecutionContext
+    const headers = await cookieHeader(
+      { sub: "user_probe_impersonated" },
+      { impersonator: { email: "admin@probe.invalid", reason: null } }
+    )
+    const call = (method: string) =>
+      worker.fetch(
+        new Request("http://api.invalid/org", {
+          method,
+          headers: { ...headers, "idempotency-key": "k" },
+          body: method === "POST" ? "{}" : undefined,
+        }),
+        env("postgresql://127.0.0.1:1/none"),
+        ctx
+      )
+    const post = await call("POST")
+    expect(post.status).toBe(403)
+    expect(ErrorEnvelope.parse(await post.json()).code).toBe(
+      "owner.impersonated"
+    )
+    // HEAD reaches the org resolver, which answers 403 for a session with
+    // no organisation: not the impersonation refusal.
+    const head = await call("HEAD")
+    expect(head.status).toBe(403)
+    expect(ErrorEnvelope.parse(await head.json()).code).toBe("org.unresolved")
+  })
+
   let realFetch: typeof fetch
   beforeAll(() => {
     realFetch = globalThis.fetch

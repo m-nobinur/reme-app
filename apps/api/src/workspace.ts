@@ -82,10 +82,11 @@ export async function readBuilds(
 }
 
 /**
- * Revision approvals nobody has decided, on a build still waiting for one,
- * soonest expiry first. An expired request stays: the sweep parks its build
- * and the orchestrator still accepts a late decision from the park
- * (ADR-032), so the owner sees `expires_at` rather than losing the item.
+ * Revision approvals the orchestrator would take a decision on now, soonest
+ * expiry first: undecided, on a build awaiting review and in date, or on a
+ * build the sweep parked, where a late decision still counts (ADR-032). One
+ * that expired before the hourly sweep parked it is left out, since until
+ * then the orchestrator refuses it.
  */
 export async function readApprovals(
   db: OrgScopedDb
@@ -96,7 +97,7 @@ export async function readApprovals(
     .innerJoin(siteRevisions, eq(siteRevisions.id, approvals.revisionId))
     .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
     .where(
-      sql`${approvals.decision} is null and ${assignments.state} in ('awaiting_review', 'blocked_on_approval')`
+      sql`${approvals.decision} is null and ((${assignments.state} = 'awaiting_review' and ${approvals.expiresAt} > now()) or ${assignments.state} = 'blocked_on_approval')`
     )
     .orderBy(approvals.expiresAt)
   return rows.map(({ row, version }) => ({

@@ -4,9 +4,10 @@ import {
   BuildSummary,
   ErrorEnvelope,
   FactList,
+  InformationAnswer,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { eq, staff, type Tenancy, tenancy } from "@workspace/db"
+import { eq, staff, supersedeFact, type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { readWorkspace } from "../src/workspace.ts"
 import {
@@ -111,7 +112,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       kind: "publish",
       revision_id: liveRevision,
     })
-    const reviewing = await s.assignment("awaiting_review")
+    // Parked by the sweep after its request expired: still decidable.
+    const reviewing = await s.assignment("blocked_on_approval")
     const reviewRevision = await s.revision(reviewing, 2)
     const review = await s.approval(reviewing, reviewRevision, -1)
     const dropped = await s.assignment("cancelled")
@@ -160,8 +162,22 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await a.event(asking, "information.requested", request)
     const answered = question(asker, asking, "business.email")
     await a.event(asking, "information.requested", answered)
+    const fact = await kit.withOrg({ orgId: asker.orgId }, (db) =>
+      supersedeFact(db, {
+        orgId: asker.orgId,
+        key: "business.email",
+        factType: "contact",
+        value: { address: "owner@asker.invalid" },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
     await a.event(asking, "information.answered", {
+      answer_id: crypto.randomUUID(),
+      org_id: asker.orgId,
+      assignment_id: asking,
       request_id: answered.request_id,
+      fact_id: fact.factId,
+      answered_at: new Date().toISOString(),
     })
     askIds = {
       asking,
@@ -218,13 +234,13 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       [busyIds.parked, "paused", null],
       [
         busyIds.reviewing,
-        "awaiting_review",
+        "blocked_on_approval",
         { revision_id: busyIds.reviewRevision, version: 2 },
       ],
     ])
   })
 
-  it("lists an expired, undecided review, since a late decision still counts", async () => {
+  it("lists an expired review the sweep parked, since a late decision counts", async () => {
     const body = WorkspaceStatus.parse(await (await workspace(busy)).json())
     const approvals = body.attention.flatMap((item) =>
       item.kind === "approval" ? [item.request] : []
@@ -561,15 +577,73 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       await s.state(reviewing, "cancelled")
     })
 
-    it("cancels a review that expired before the sweep parked it", async () => {
+    it("hides a review that expired before the sweep, and waits it out", async () => {
       const { s, reviewing } = await reviewIn("awaiting_review", -1, 13)
+      const panel = WorkspaceStatus.parse(
+        await (await workspace(changes)).json()
+      )
+      expect(panel.attention.filter((i) => i.kind === "approval")).toEqual([])
       const stub = creating(changes)
-      await changes.call(stub, "/changes", json({ text: "Change the hero." }))
-      expect(paths(stub)).toEqual([
-        "/assignments/",
-        `/assignments/${reviewing}/cancel`,
-      ])
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Change the hero." })
+      )
+      expect(response.status).toBe(409)
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "change.build_busy"
+      )
+      expect(stub.calls).toHaveLength(0)
       await s.state(reviewing, "cancelled")
+    })
+
+    it("cancels the new build when the old review cannot be turned down", async () => {
+      for (const [n, refusal] of [
+        () =>
+          Response.json(
+            {
+              class: "validation",
+              code: "approval.not_requested",
+              message: "No open approval request on this assignment.",
+              detail: {},
+              occurred_at: new Date().toISOString(),
+            },
+            { status: 409 }
+          ),
+        () => new Response("upstream broke", { status: 500 }),
+      ].entries()) {
+        const { s, reviewing } = await reviewIn("awaiting_review", 72, 14 + n)
+        let made = ""
+        const stub = stubOrchestrator(async (request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/assignments/") {
+            const body = created(changes, await request.clone().json())
+            made = body.assignment_id
+            return Response.json(body, { status: 201 })
+          }
+          if (path.endsWith("/reject")) return refusal()
+          return Response.json({ assignment_id: made, state: "cancelled" })
+        })
+        const response = await changes.call(
+          stub,
+          "/changes",
+          json({ text: "Change the hero." })
+        )
+        const status = response.status
+        expect([409, 502]).toContain(status)
+        const body = ErrorEnvelope.parse(await response.json())
+        expect(body.code).toBe(
+          status === 409
+            ? "approval.not_requested"
+            : "orchestrator.off_contract"
+        )
+        expect(paths(stub)).toEqual([
+          "/assignments/",
+          `/assignments/${reviewing}/reject`,
+          `/assignments/${made}/cancel`,
+        ])
+        await s.state(reviewing, "cancelled")
+      }
     })
 
     it("routes on every unfinished build, not the panel's ten", async () => {
@@ -753,7 +827,39 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       )
     })
 
-    it("refuses a second answer to a question already answered", async () => {
+    it("replays an answer given again with the same value", async () => {
+      const stub = stubOrchestrator()
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/answer`,
+        json({
+          request_id: askIds.answered,
+          value: { address: "owner@asker.invalid" },
+        })
+      )
+      expect(response.status).toBe(202)
+      const answer = InformationAnswer.parse(await response.json())
+      expect(answer.request_id).toBe(askIds.answered)
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("answers 502 when the builder fails outside the envelope", async () => {
+      const stub = stubOrchestrator(
+        () => new Response("upstream broke", { status: 500 })
+      )
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/preview`
+      )
+      expect(response.status).toBe(502)
+      const body = ErrorEnvelope.parse(await response.json())
+      expect([body.class, body.code]).toEqual([
+        "integrity",
+        "orchestrator.off_contract",
+      ])
+    })
+
+    it("refuses a different answer to a question already answered", async () => {
       const stub = stubOrchestrator()
       const response = await asker.call(
         stub,

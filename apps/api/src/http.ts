@@ -26,11 +26,15 @@ export const keyMissing = () =>
     detail: {},
   })
 
+/** Where a contract parse failed, as dotted paths and never the values. */
+export const issuePaths = (issues: { path: PropertyKey[] }[] = []) =>
+  issues.map((i) => i.path.join("."))
+
 /** A body the contract refused, naming the paths it refused and nothing else. */
 export const invalid = (issues: { path: PropertyKey[] }[]) =>
   failure(400, {
     class: "validation",
     code: "request.invalid",
     message: "The request body does not match the contract.",
-    detail: { issues: issues.map((i) => i.path.join(".")) },
+    detail: { issues: issuePaths(issues) },
   })

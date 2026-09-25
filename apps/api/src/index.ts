@@ -39,11 +39,9 @@ const UNAUTHENTICATED = {
  * act on differently: both mean sign in again, or create the org.
  */
 async function currentOrg(
-  request: Request,
-  env: Env,
+  session: Session,
   kit: Tenancy
 ): Promise<Owner | { response: Response }> {
-  const session = await readSession(request, env)
   if (!session) return { response: failure(401, UNAUTHENTICATED) }
   const orgId = session.workosOrganizationId
     ? await resolveOrg(kit, {
@@ -131,15 +129,30 @@ async function route(
     })
   }
 
+  const session = await readSession(request, env)
+  // An admin signed in as someone can look, never act: every write is a
+  // POST, and a decision above all is the owner's own (§7.3).
+  if (method === "POST" && session?.impersonated) {
+    const decision = pathname.startsWith("/approvals/")
+    return failure(403, {
+      class: "permission",
+      code: decision ? "approval.impersonated" : "owner.impersonated",
+      message: decision
+        ? "An impersonated session cannot approve or reject."
+        : "An impersonated session can read, not change anything.",
+      detail: {},
+    })
+  }
+
   if (pathname === "/org" && method === "POST") {
-    return signup(request, env, kit, await readSession(request, env))
+    return signup(request, env, kit, session)
   }
 
   if (
     (pathname === "/org" || pathname === "/staff") &&
     (method === "GET" || method === "HEAD")
   ) {
-    const resolved = await currentOrg(request, env, kit)
+    const resolved = await currentOrg(session, kit)
     if ("response" in resolved) return resolved.response
     if (pathname === "/staff") {
       return Response.json(await readStaffDirectory(kit, resolved.orgId))
@@ -158,7 +171,7 @@ async function route(
   }
 
   if (OWNER_PATH.test(pathname)) {
-    const resolved = await currentOrg(request, env, kit)
+    const resolved = await currentOrg(session, kit)
     if ("response" in resolved) return resolved.response
     const answered = await ownerRoute(request, env, kit, resolved)
     if (answered) return answered
