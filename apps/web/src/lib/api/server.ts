@@ -4,13 +4,14 @@ import {
   getRequestProtocol,
   setCookie,
 } from "@tanstack/react-start/server"
-import { record, text } from "@/lib/auth/input"
+import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
   ActivityItem,
   ApprovalItem,
   AttentionItem,
   BusinessProfile,
+  DecisionOutcome,
   OrgNode,
   OrgSummary,
   PipelineItem,
@@ -103,10 +104,12 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
         counts: { staff: 0, waiting: 0, pipeline: 0 },
       }
     }
+    // One directory read, shared: the tile counts it and attention names from it.
+    const directory = source.staff(org.id)
     const [attention, activity, staff, pipeline] = await Promise.all([
-      source.attention(org.id),
+      source.attention(org.id, directory),
       source.activity(org.id),
-      source.staff(org.id),
+      directory,
       source.pipeline(org.id),
     ])
     return {
@@ -115,7 +118,10 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
       activity,
       counts: {
         staff: staff.filter((member) => member.status === "active").length,
-        waiting: attention.length,
+        // Reports and alerts are there to read; only these two wait on an answer.
+        waiting: attention.filter(
+          (item) => item.kind === "approval" || item.kind === "question"
+        ).length,
         // "Needs action" is a follow-up date, not a stage: a completed lead
         // with nothing scheduled is not waiting on anyone.
         pipeline: pipeline.filter((item) => item.followUpAt !== null).length,
@@ -159,15 +165,15 @@ export const decideApproval = createServerFn({ method: "POST" })
       approvalId: text(data.approvalId, 64),
       // The revision the owner was shown, which the decision binds to.
       revisionId: text(data.revisionId, 64),
-      decision: data.decision === "approved" ? "approved" : "rejected",
-    } as const
+      decision: oneOf(data.decision, ["approved", "rejected"] as const),
+    }
   })
-  .handler(async ({ data }): Promise<void> => {
+  .handler(async ({ data }): Promise<DecisionOutcome> => {
     const org = await activeOrg()
     if (!org || !data.approvalId || !data.revisionId) {
       throw new Error("no approval to decide")
     }
-    await source.decideApproval(
+    return await source.decideApproval(
       org.id,
       data.approvalId,
       data.revisionId,

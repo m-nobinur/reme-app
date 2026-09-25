@@ -8,8 +8,20 @@ import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
 import { useState } from "react"
 import { decideApproval, getApprovals } from "@/lib/api/server"
-import type { ApprovalItem } from "@/lib/api/types"
+import type { ApprovalItem, DecisionOutcome } from "@/lib/api/types"
 import { validateListSearch } from "@/lib/search"
+
+/** Why a decision was refused, in the owner's words. */
+const REFUSED: Record<
+  Exclude<DecisionOutcome, { recorded: true }>["reason"],
+  string
+> = {
+  expired:
+    "That review expired before your answer reached it, so nothing was published.",
+  replaced:
+    "A newer version replaced that one. Check the latest before you decide.",
+  gone: "That is no longer waiting on you. It was already decided, or the build stopped.",
+}
 
 export const Route = createFileRoute("/app/approvals")({
   validateSearch: validateListSearch,
@@ -23,7 +35,7 @@ function Approvals() {
   const router = useRouter()
   const { approvals } = Route.useLoaderData()
   const [pending, setPending] = useState<string | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   /**
    * Nothing changes on screen until the server has answered. An approval is
@@ -33,20 +45,32 @@ function Approvals() {
    * newer one the owner has not seen.
    */
   const decide = (item: ApprovalItem, decision: "approved" | "rejected") => {
-    const { target, approval_id: approvalId } = item.request
-    if (target.kind !== "revision") {
-      return
-    }
+    const approvalId = item.request.approval_id
     setPending(approvalId)
-    setFailed(null)
+    setNotice(null)
     void (async () => {
+      let outcome: DecisionOutcome
       try {
-        await decideApproval({
-          data: { approvalId, revisionId: target.revision_id, decision },
+        outcome = await decideApproval({
+          data: { approvalId, revisionId: item.revisionId, decision },
         })
+      } catch {
+        setNotice("That did not go through. Try again.")
+        setPending(null)
+        return
+      }
+      if (!outcome.recorded) {
+        setNotice(REFUSED[outcome.reason])
+      }
+      // Recorded or refused, the card on screen is stale either way.
+      try {
         await router.invalidate()
       } catch {
-        setFailed(approvalId)
+        if (outcome.recorded) {
+          setNotice(
+            "Your decision was recorded. Reload the page to see the latest."
+          )
+        }
       } finally {
         setPending(null)
       }
@@ -68,6 +92,12 @@ function Approvals() {
         description="Decisions Reme cannot take on its own. Each one shows what it changes and when it expires."
         title="Approvals"
       />
+
+      {notice ? (
+        <p className="mb-4 text-sm" role="alert">
+          {notice}
+        </p>
+      ) : null}
 
       {approvals.length === 0 ? (
         <EmptyState
@@ -125,14 +155,6 @@ function Approvals() {
                         >
                           Decline
                         </Button>
-                        {failed === item.request.approval_id ? (
-                          <p
-                            className="basis-full text-destructive text-sm"
-                            role="alert"
-                          >
-                            That did not go through. Try again.
-                          </p>
-                        ) : null}
                       </>
                     }
                     detail={item.request.rationale}
@@ -142,7 +164,10 @@ function Approvals() {
                     raisedAt={item.request.requested_at}
                     raisedBy={item.requestedBy}
                     target={
-                      <ApprovalTargetSummary target={item.request.target} />
+                      <ApprovalTargetSummary
+                        target={item.request.target}
+                        version={item.version}
+                      />
                     }
                     title={item.title}
                   />

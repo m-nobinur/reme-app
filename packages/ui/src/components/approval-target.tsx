@@ -19,10 +19,15 @@ import type { ComponentProps } from "react"
  */
 function ApprovalTargetSummary({
   target,
+  version,
   className,
   ...props
-}: Omit<ComponentProps<"div">, "children"> & { target: ApprovalTarget }) {
-  const { label, value } = describe(target)
+}: Omit<ComponentProps<"div">, "children"> & {
+  target: ApprovalTarget
+  /** The revision's version number, which is what an owner calls it. */
+  version?: number
+}) {
+  const { label, value, id } = describe(target, version)
   return (
     <div
       className={cn(
@@ -32,17 +37,34 @@ function ApprovalTargetSummary({
       {...props}
     >
       <span className="uppercase tracking-wide">{label}</span>
-      <p className="mt-0.5 break-words font-mono text-foreground text-sm">
+      <p
+        className={cn(
+          "mt-0.5 break-words text-foreground text-sm",
+          id ? null : "font-mono"
+        )}
+      >
         {value}
       </p>
+      {id ? <p className="mt-0.5">ID {id}</p> : null}
     </div>
   )
 }
 
-function describe(target: ApprovalTarget): { label: string; value: string } {
+function describe(
+  target: ApprovalTarget,
+  version?: number
+): { label: string; value: string; id?: string } {
   switch (target.kind) {
     case "revision":
-      return { label: "Version", value: target.revision_id }
+      // The version is what the owner reads; the short id is what support
+      // and the preview link match it against.
+      return version === undefined
+        ? { label: "Version", value: target.revision_id }
+        : {
+            label: "Site",
+            value: `Version ${version}`,
+            id: target.revision_id.slice(0, 8),
+          }
     case "domain":
       return { label: "Domain", value: target.hostname }
     case "spend":

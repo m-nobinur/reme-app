@@ -69,13 +69,20 @@ export type AttentionItem =
   | (AttentionBase & { kind: "question" | "report" | "alert" })
   // The approval carries its contract, because the immutable target is drawn
   // from it and a loosened copy could name a different one.
-  | (AttentionBase & { kind: "approval"; request: ApprovalRequest })
+  | (AttentionBase & {
+      kind: "approval"
+      request: ApprovalRequest
+      /** The version number of the revision the approval is bound to. */
+      version: number
+    })
 
 /** An approval as the inbox renders it: the contract, plus who to name. */
 export type ApprovalItem = {
   request: ApprovalRequest
   /** The version number of the revision the approval is bound to. */
   version: number
+  /** The revision a decision names, read from `request.target`. */
+  revisionId: string
   /** What the owner is being asked, in one line. */
   title: string
   /** Display name of the staff member who raised it. */
@@ -145,6 +152,14 @@ export type ActivityItem = {
 }
 
 /**
+ * What became of a decision. A refusal the owner can act on comes back with
+ * its reason; anything else throws.
+ */
+export type DecisionOutcome =
+  | { recorded: true }
+  | { recorded: false; reason: "expired" | "replaced" | "gone" }
+
+/**
  * Every read the owner screens make. One object, so implementations are
  * interchangeable and `source.ts` is the only file that knows which is in use.
  */
@@ -153,7 +168,11 @@ export type OwnerDataSource = {
   orgs: () => Promise<OrgSummary[]>
   staff: (orgId: string) => Promise<StaffMember[]>
   orgTree: (orgId: string) => Promise<OrgNode[]>
-  attention: (orgId: string) => Promise<AttentionItem[]>
+  /** `staff` is the directory the caller has already read, for names. */
+  attention: (
+    orgId: string,
+    staff: Promise<StaffMember[]>
+  ) => Promise<AttentionItem[]>
   approvals: (orgId: string) => Promise<ApprovalItem[]>
   pipeline: (orgId: string) => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `orgs()` empty. */
@@ -170,5 +189,5 @@ export type OwnerDataSource = {
     approvalId: string,
     revisionId: string,
     decision: DecisionRequest["decision"]
-  ) => Promise<void>
+  ) => Promise<DecisionOutcome>
 }

@@ -216,6 +216,7 @@ beforeEach(() => {
     vi.fn(async (url: URL, init?: RequestInit) => {
       calls.push({ path: url.pathname, init })
       const body = answers[`${init?.method ?? "GET"} ${url.pathname}`]
+      if (body instanceof Response) return body
       return body === undefined
         ? new Response(null, { status: 404 })
         : Response.json(body)
@@ -227,9 +228,28 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** The directory the dashboard has already read, handed to `attention`. */
+const alex: StaffMember = { ...member(DEV, null), displayName: "Alex" }
+
+const refusal = (status: number, code: string) =>
+  Response.json(
+    { class: "validation", code, message: code, occurred_at: AT, detail: {} },
+    { status }
+  )
+
+const domainApproval = {
+  ...approval,
+  request: {
+    ...approval.request,
+    approval_id: "00000000-0000-4000-8000-000000000008",
+    target: { kind: "domain", hostname: "fictional.invalid" },
+  },
+}
+
 it("reads attention from the workspace, in its order and the owner's words", async () => {
-  const items = await apiSource.attention(ORG)
-  expect(calls.map((call) => call.path)).toContain("/workspace")
+  const items = await apiSource.attention(ORG, Promise.resolve([alex]))
+  // Names come from the directory the caller already has, not a second read.
+  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
   expect(
     items.map(({ kind, id, title, raisedBy, expiresAt }) => ({
       kind,
@@ -270,7 +290,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
   ])
   // The approval carries its contract whole, so the target drawn is the one
   // the decision binds to.
-  expect(items[0]).toMatchObject({ request: approval.request })
+  expect(items[0]).toMatchObject({ request: approval.request, version: 4 })
 })
 
 it("lists only the workspace's approvals, each with its version", async () => {
@@ -279,11 +299,33 @@ it("lists only the workspace's approvals, each with its version", async () => {
     {
       request: approval.request,
       version: 4,
+      revisionId: REVISION,
       title: "Version 4 is ready to publish",
       requestedBy: "Alex",
       onExpiry: expect.any(String),
     },
   ])
+})
+
+it("reads the directory for approvals only when there is one to name", async () => {
+  answers["GET /workspace"] = { ...workspace, attention: [alert, report] }
+  expect(await apiSource.approvals(ORG)).toEqual([])
+  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
+})
+
+it("leaves out an approval with no version to decide on", async () => {
+  // A decision names a revision, so a domain or spend approval could only
+  // offer buttons that do nothing. `/workspace` lists none today.
+  answers["GET /workspace"] = {
+    ...workspace,
+    attention: [domainApproval, approval],
+  }
+  const listed = await apiSource.approvals(ORG)
+  expect(listed.map((item) => item.request.approval_id)).toEqual([APPROVAL])
+  const attention = await apiSource.attention(ORG, Promise.resolve([alex]))
+  expect(
+    attention.filter((item) => item.kind === "approval").map((item) => item.id)
+  ).toEqual([APPROVAL])
 })
 
 it("reads activity from /activity", async () => {
@@ -305,7 +347,7 @@ it("answers empty for a session with no organisation", async () => {
     "fetch",
     vi.fn(async () => new Response(null, { status: 403 }))
   )
-  expect(await apiSource.attention(ORG)).toEqual([])
+  expect(await apiSource.attention(ORG, Promise.resolve([]))).toEqual([])
   expect(await apiSource.approvals(ORG)).toEqual([])
   expect(await apiSource.activity(ORG)).toEqual([])
   expect(await apiSource.profile(ORG)).toBeNull()
@@ -313,11 +355,13 @@ it("answers empty for a session with no organisation", async () => {
 
 it("refuses a workspace off contract rather than rendering it", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [{ kind: "memo" }] }
-  await expect(apiSource.attention(ORG)).rejects.toThrow()
+  await expect(apiSource.attention(ORG, Promise.resolve([]))).rejects.toThrow()
 })
 
 it("posts a decision bound to the revision, with an idempotency key", async () => {
-  await apiSource.decideApproval(ORG, APPROVAL, REVISION, "rejected")
+  expect(
+    await apiSource.decideApproval(ORG, APPROVAL, REVISION, "rejected")
+  ).toEqual({ recorded: true })
   const [call] = calls
   expect(call?.path).toBe(`/approvals/${APPROVAL}/decision`)
   expect(call?.init?.method).toBe("POST")
@@ -336,8 +380,25 @@ it("posts a decision bound to the revision, with an idempotency key", async () =
   expect(new Headers(calls[1]?.init?.headers).get("idempotency-key")).toBe(key)
 })
 
-it("throws when a decision is refused, so nothing looks recorded", async () => {
-  answers[`POST /approvals/${APPROVAL}/decision`] = undefined
+for (const [status, code, reason] of [
+  [409, "approval.expired", "expired"],
+  [409, "approval.target_mismatch", "replaced"],
+  [409, "approval.not_requested", "gone"],
+  [404, "approval.not_found", "gone"],
+] as const) {
+  it(`says why a decision was refused: ${code}`, async () => {
+    answers[`POST /approvals/${APPROVAL}/decision`] = refusal(status, code)
+    expect(
+      await apiSource.decideApproval(ORG, APPROVAL, REVISION, "approved")
+    ).toEqual({ recorded: false, reason })
+  })
+}
+
+it("throws on any other refusal, so nothing looks recorded", async () => {
+  answers[`POST /approvals/${APPROVAL}/decision`] = refusal(
+    403,
+    "approval.impersonated"
+  )
   await expect(
     apiSource.decideApproval(ORG, APPROVAL, REVISION, "approved")
   ).rejects.toThrow()

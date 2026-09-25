@@ -3,16 +3,18 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
+  ErrorEnvelope,
   FactList,
-  type FactValueKey,
   Org,
   StaffDirectory,
   WorkspaceStatus,
 } from "@workspace/contracts"
+import { factLabel } from "../facts"
 import type {
   ActivityItem,
   ApprovalItem,
   AttentionItem,
+  DecisionOutcome,
   OrgNode,
   OrgSummary,
   OwnerDataSource,
@@ -89,15 +91,12 @@ async function get(path: string): Promise<unknown | null> {
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
-/**
- * One write. Unlike a read, every refusal throws, 401 and 403 included: a
- * decision that was not recorded must not look like one that was.
- */
+/** One write. The caller reads the answer, since some refusals are the owner's to act on. */
 async function post(
   path: string,
   body: unknown,
   idempotencyKey: string
-): Promise<unknown> {
+): Promise<Response> {
   const session = getCookie(COOKIE)
   if (!session) {
     throw new Error(`no session to send ${path} with`)
@@ -111,10 +110,7 @@ async function post(
     },
     body: JSON.stringify(body),
   })
-  if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for ${path}`)
-  }
-  return await response.json()
+  return response
 }
 
 /**
@@ -175,21 +171,6 @@ async function staffOf(): Promise<StaffMember[]> {
   }))
 }
 
-/** What each fact a question can ask for is called on the owner's screen. */
-const FIELD: Record<FactValueKey, string> = {
-  "business.name": "Business name",
-  "business.phone": "Phone number",
-  "business.email": "Email address",
-  "hours.weekday": "Weekday hours",
-  "service_area.radius": "Service area",
-  "pricing.standard_clean_hourly": "Hourly price for a standard clean",
-  "business.tagline": "Tagline",
-}
-
-const fieldLabel = (field: string): string =>
-  FIELD[field as FactValueKey] ??
-  (field.split(".").at(-1) ?? field).replace(/_/g, " ")
-
 /** Reports and alerts come from the event log, not a staff member. */
 const SYSTEM = "Reme"
 
@@ -229,20 +210,24 @@ const APPROVAL_EXPIRY =
 const approvalTitle = (version: number) =>
   `Version ${version} is ready to publish`
 
-/** The workspace's attention list and who raised each item, or null with no org. */
-async function workspaceAttention(): Promise<{
-  items: Attention[]
-  names: Map<string, string>
-} | null> {
-  const [body, staff] = await Promise.all([get("/workspace"), staffOf()])
+/**
+ * The workspace's attention list. An approval whose target is not a revision
+ * is left out: a decision names a revision, so it could only offer buttons
+ * that do nothing, and `/workspace` lists none today.
+ */
+async function workspaceAttention(): Promise<Attention[]> {
+  const body = await get("/workspace")
   if (body === null) {
-    return null
+    return []
   }
-  return {
-    items: WorkspaceStatus.parse(body).attention,
-    names: new Map(staff.map((member) => [member.id, member.displayName])),
-  }
+  return WorkspaceStatus.parse(body).attention.filter(
+    (item) =>
+      item.kind !== "approval" || item.request.target.kind === "revision"
+  )
 }
+
+const namesOf = (staff: StaffMember[]) =>
+  new Map(staff.map((member) => [member.id, member.displayName]))
 
 function toAttention(
   item: Attention,
@@ -253,6 +238,7 @@ function toAttention(
       return {
         kind: "approval",
         request: item.request,
+        version: item.version,
         id: item.request.approval_id,
         title: approvalTitle(item.version),
         detail: item.request.rationale,
@@ -265,7 +251,7 @@ function toAttention(
       return {
         kind: "question",
         id: item.request.request_id,
-        title: fieldLabel(item.request.field),
+        title: factLabel(item.request.field),
         detail: item.request.why,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
         raisedAt: item.request.requested_at,
@@ -287,28 +273,58 @@ function toAttention(
   }
 }
 
-async function attention(): Promise<AttentionItem[]> {
-  const read = await workspaceAttention()
-  return read ? read.items.map((item) => toAttention(item, read.names)) : []
+async function attention(
+  _orgId: string,
+  staff: Promise<StaffMember[]>
+): Promise<AttentionItem[]> {
+  const [items, members] = await Promise.all([workspaceAttention(), staff])
+  const names = namesOf(members)
+  return items.map((item) => toAttention(item, names))
 }
 
-/** `GET /approvals` was dropped: the workspace's attention list carries them. */
+/**
+ * `GET /approvals` was dropped: the workspace's attention list carries them.
+ * The directory is read only when there is an approval to name.
+ */
 async function approvals(): Promise<ApprovalItem[]> {
-  const read = await workspaceAttention()
-  return (read?.items ?? []).flatMap((item) =>
-    item.kind === "approval"
+  const found = (await workspaceAttention()).filter(
+    (item) => item.kind === "approval"
+  )
+  if (found.length === 0) {
+    return []
+  }
+  const names = namesOf(await staffOf())
+  return found.flatMap((item) => {
+    const card = toAttention(item, names)
+    const { target } = item.request
+    return card.kind === "approval" && target.kind === "revision"
       ? [
           {
-            request: item.request,
-            version: item.version,
-            title: approvalTitle(item.version),
-            requestedBy:
-              read?.names.get(item.request.requested_by_staff_id) ?? SYSTEM,
-            onExpiry: APPROVAL_EXPIRY,
+            request: card.request,
+            version: card.version,
+            revisionId: target.revision_id,
+            title: card.title,
+            requestedBy: card.raisedBy,
+            onExpiry: card.onExpiry,
           },
         ]
       : []
-  )
+  })
+}
+
+/**
+ * The refusals an owner can do something about, by code. Anything else is a
+ * defect or a permission problem and throws.
+ */
+const REFUSED: Record<
+  string,
+  Exclude<DecisionOutcome, { recorded: true }>["reason"]
+> = {
+  "approval.expired": "expired",
+  "approval.target_mismatch": "replaced",
+  "approval.not_requested": "gone",
+  "approval.not_found": "gone",
+  "assignment.not_found": "gone",
 }
 
 async function activity(): Promise<ActivityItem[]> {
@@ -348,13 +364,27 @@ export const apiSource: OwnerDataSource = {
     return org ? { org, facts } : null
   },
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
-    const body = await post(
-      `/approvals/${encodeURIComponent(approvalId)}/decision`,
+    const path = `/approvals/${encodeURIComponent(approvalId)}/decision`
+    const response = await post(
+      path,
       { decision, revision_id: revisionId },
       // The same decision on the same revision is the same request, so a
       // retry replays the first answer instead of deciding twice.
       `decision:${approvalId}:${revisionId}:${decision}`
     )
-    ApprovalDecision.parse(body)
+    const body = await response.json().catch(() => null)
+    if (response.ok) {
+      ApprovalDecision.parse(body)
+      return { recorded: true }
+    }
+    const refusal = ErrorEnvelope.safeParse(body)
+    const reason =
+      (response.status === 404 || response.status === 409) && refusal.success
+        ? REFUSED[refusal.data.code]
+        : undefined
+    if (reason) {
+      return { recorded: false, reason }
+    }
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
   },
 }
