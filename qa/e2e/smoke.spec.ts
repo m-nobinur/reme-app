@@ -161,12 +161,13 @@ test("the approvals inbox has nothing to decide", async ({ page }) => {
   await expectNoFixtureContent(page)
 })
 
-test("a new owner's dashboard and profile say what comes next", async ({
+test("an owner with no business yet sees empty states and no one else's rows", async ({
   page,
 }) => {
-  // Both read `apps/api` now: attention from the workspace, activity from the
-  // event log, facts from the canonical store. A row on any of them for an
-  // account with no business is someone else's row.
+  // The suite's owner belongs to no org, so these screens return before they
+  // read `apps/api`. The reads themselves are covered by client.test.ts and by
+  // the owner workspace exit run; an owner with an org arrives with the golden
+  // path, which can clean up the tenant rows it writes.
   await visit(page, "/app")
   const waiting = page.locator("section", {
     has: page.getByRole("heading", { name: "Waiting on you", level: 2 }),
