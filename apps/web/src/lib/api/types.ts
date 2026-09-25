@@ -1,4 +1,8 @@
-import type { ApprovalRequest, FactRecord } from "@workspace/contracts"
+import type {
+  ApprovalRequest,
+  DecisionRequest,
+  FactRecord,
+} from "@workspace/contracts"
 
 /**
  * What the owner screens read, and the one interface behind them.
@@ -70,6 +74,8 @@ export type AttentionItem =
 /** An approval as the inbox renders it: the contract, plus who to name. */
 export type ApprovalItem = {
   request: ApprovalRequest
+  /** The version number of the revision the approval is bound to. */
+  version: number
   /** What the owner is being asked, in one line. */
   title: string
   /** Display name of the staff member who raised it. */
@@ -154,14 +160,15 @@ export type OwnerDataSource = {
   profile: (orgId: string) => Promise<BusinessProfile | null>
   activity: (orgId: string) => Promise<ActivityItem[]>
   /**
-   * Answer one approval. Takes the approval's own id and nothing derived from
-   * it, so a decision cannot be applied to a target other than the one it was
-   * granted for, and is safe to call twice (R5): deciding an approval that is
-   * already decided changes nothing.
+   * Answer one approval, bound to the revision the owner was shown: the
+   * orchestrator refuses a decision whose revision is not the one the review
+   * was opened for. Safe to call twice: the same decision on the same
+   * revision replays the first one's answer.
    */
   decideApproval: (
     orgId: string,
     approvalId: string,
-    decision: "approved" | "declined"
+    revisionId: string,
+    decision: DecisionRequest["decision"]
   ) => Promise<void>
 }

@@ -157,15 +157,22 @@ export const decideApproval = createServerFn({ method: "POST" })
     const data = record(input)
     return {
       approvalId: text(data.approvalId, 64),
-      decision: data.decision === "approved" ? "approved" : "declined",
+      // The revision the owner was shown, which the decision binds to.
+      revisionId: text(data.revisionId, 64),
+      decision: data.decision === "approved" ? "approved" : "rejected",
     } as const
   })
   .handler(async ({ data }): Promise<void> => {
     const org = await activeOrg()
-    if (!org || !data.approvalId) {
-      return
+    if (!org || !data.approvalId || !data.revisionId) {
+      throw new Error("no approval to decide")
     }
-    await source.decideApproval(org.id, data.approvalId, data.decision)
+    await source.decideApproval(
+      org.id,
+      data.approvalId,
+      data.revisionId,
+      data.decision
+    )
   })
 
 export const getPipeline = createServerFn({ method: "GET" }).handler(

@@ -42,7 +42,7 @@ function ApprovalTargetSummary({
 function describe(target: ApprovalTarget): { label: string; value: string } {
   switch (target.kind) {
     case "revision":
-      return { label: "Site revision", value: target.revision_id }
+      return { label: "Version", value: target.revision_id }
     case "domain":
       return { label: "Domain", value: target.hostname }
     case "spend":

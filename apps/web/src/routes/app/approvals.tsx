@@ -6,7 +6,9 @@ import { AttentionCard } from "@workspace/ui/components/attention-card"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
+import { useState } from "react"
 import { decideApproval, getApprovals } from "@/lib/api/server"
+import type { ApprovalItem } from "@/lib/api/types"
 import { validateListSearch } from "@/lib/search"
 
 export const Route = createFileRoute("/app/approvals")({
@@ -20,17 +22,34 @@ function Approvals() {
   const navigate = Route.useNavigate()
   const router = useRouter()
   const { approvals } = Route.useLoaderData()
+  const [pending, setPending] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
 
   /**
    * Nothing changes on screen until the server has answered. An approval is
    * the one place an optimistic update is wrong: showing it as approved before
    * the decision is recorded tells the owner something happened that may not
-   * have.
+   * have. The decision names the version on the card, so it cannot land on a
+   * newer one the owner has not seen.
    */
-  const decide = (approvalId: string, decision: "approved" | "declined") => {
+  const decide = (item: ApprovalItem, decision: "approved" | "rejected") => {
+    const { target, approval_id: approvalId } = item.request
+    if (target.kind !== "revision") {
+      return
+    }
+    setPending(approvalId)
+    setFailed(null)
     void (async () => {
-      await decideApproval({ data: { approvalId, decision } })
-      await router.invalidate()
+      try {
+        await decideApproval({
+          data: { approvalId, revisionId: target.revision_id, decision },
+        })
+        await router.invalidate()
+      } catch {
+        setFailed(approvalId)
+      } finally {
+        setPending(null)
+      }
     })()
   }
 
@@ -94,20 +113,26 @@ function Approvals() {
                     actions={
                       <>
                         <Button
-                          onClick={() =>
-                            decide(item.request.approval_id, "approved")
-                          }
+                          disabled={pending !== null}
+                          onClick={() => decide(item, "approved")}
                         >
-                          Approve
+                          Approve and publish v{item.version}
                         </Button>
                         <Button
-                          onClick={() =>
-                            decide(item.request.approval_id, "declined")
-                          }
+                          disabled={pending !== null}
+                          onClick={() => decide(item, "rejected")}
                           variant="outline"
                         >
                           Decline
                         </Button>
+                        {failed === item.request.approval_id ? (
+                          <p
+                            className="basis-full text-destructive text-sm"
+                            role="alert"
+                          >
+                            That did not go through. Try again.
+                          </p>
+                        ) : null}
                       </>
                     }
                     detail={item.request.rationale}

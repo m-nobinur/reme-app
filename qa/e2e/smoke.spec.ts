@@ -150,14 +150,38 @@ test("the approvals inbox has nothing to decide", async ({ page }) => {
     page.getByRole("heading", { name: "Approvals", exact: true, level: 1 })
   ).toBeVisible()
 
-  // No endpoint publishes approvals yet, so the honest screen is the empty one.
-  // An approval card here would be a decision this owner was never asked for,
-  // which is the §7.3 failure worth failing on rather than the absence of one.
+  // The approvals come from this owner's workspace, and an owner with no
+  // business has none. An approval card here would be a decision this owner was
+  // never asked for, which is the §7.3 failure worth failing on.
   await expect(page.getByText("Nothing waiting on you")).toBeVisible()
   await expect(
     page.getByRole("listitem").filter({ hasText: "Approve" })
   ).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0)
+  await expectNoFixtureContent(page)
+})
+
+test("a new owner's dashboard and profile say what comes next", async ({
+  page,
+}) => {
+  // Both read `apps/api` now: attention from the workspace, activity from the
+  // event log, facts from the canonical store. A row on any of them for an
+  // account with no business is someone else's row.
+  await visit(page, "/app")
+  const waiting = page.locator("section", {
+    has: page.getByRole("heading", { name: "Waiting on you", level: 2 }),
+  })
+  await expect(waiting.getByText("Nothing waiting on you")).toBeVisible()
+  await expect(waiting.locator("article")).toHaveCount(0)
+  const activity = page.locator("section", {
+    has: page.getByRole("heading", { name: "Recent activity", level: 2 }),
+  })
+  await expect(activity.getByText("No activity yet")).toBeVisible()
+  await expect(activity.getByRole("listitem")).toHaveCount(0)
+
+  await visit(page, "/app/profile")
+  await expect(page.getByText("Nothing recorded yet")).toBeVisible()
+  await expect(page.locator('[data-slot="card"]')).toHaveCount(0)
   await expectNoFixtureContent(page)
 })
 

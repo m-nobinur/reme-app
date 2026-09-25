@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node ../../scripts/floor.mjs web-unit -- vitest run",
     "size": "node scripts/size.mjs",
     "check:secrets": "node scripts/secret-scan.mjs"
   },
