@@ -2,12 +2,17 @@ import { resolveOrg, tenancy } from "@workspace/db"
 import { clearOwner } from "@workspace/db/fixtures/seed"
 import { afterAll, describe, expect, it } from "vitest"
 import {
-  DEV_OWNER,
+  appOn,
+  deleteOwner,
+  devOwner,
   ensureOwner,
+  membershipRefusal,
   removeOwner,
+  retireSession,
   STAGING_CLIENT_ID,
   sessionStatus,
   stagingRefusal,
+  startPlan,
   // @ts-expect-error plain ESM, deliberately runnable without a build
 } from "../scripts/dev-owner.mjs"
 import { createOrg, type Directory } from "../src/org.ts"
@@ -32,17 +37,22 @@ function fakeWorkos() {
   }[] = []
   const deletedOrgs: string[] = []
   const passwords: string[] = []
+  const createdWith: Record<string, unknown>[] = []
+  const revoked: string[] = []
   let next = 0
   return {
     users,
     memberships,
     deletedOrgs,
     passwords,
+    createdWith,
+    revoked,
     userManagement: {
       listUsers: async ({ email }: { email: string }) => ({
         data: [...users.values()].filter((u) => u.email === email),
       }),
       createUser: async (input: { email: string; password: string }) => {
+        createdWith.push(input)
         if ([...users.values()].some((u) => u.email === input.email)) {
           throw new Error("email already in use")
         }
@@ -61,6 +71,12 @@ function fakeWorkos() {
       listOrganizationMemberships: async ({ userId }: { userId: string }) => ({
         data: memberships.filter((m) => m.userId === userId),
       }),
+      revokeSession: async ({ sessionId }: { sessionId: string }) => {
+        if (revoked.includes(sessionId)) {
+          throw Object.assign(new Error("already revoked"), { status: 400 })
+        }
+        revoked.push(sessionId)
+      },
     },
     organizations: {
       deleteOrganization: async (id: string) => {
@@ -124,11 +140,27 @@ describe("the staging guard", () => {
   })
 })
 
+const owner = devOwner("someone@example.org")
+
 describe("the owner", () => {
+  it("is one per developer, named from their git address", () => {
+    expect(owner.email).toMatch(/^owner\+dev-[0-9a-f]{8}@example\.net$/)
+    expect(devOwner(" Someone@Example.org ")).toEqual(owner)
+    const other = devOwner("someone-else@example.org")
+    expect(other.email).not.toBe(owner.email)
+    expect(other.orgName).not.toBe(owner.orgName)
+    expect(owner.orgName).toContain("(fictional)")
+    expect(owner.orgName).toContain(owner.email.slice(10, 18))
+  })
+
+  it("needs a git address to be named from", () => {
+    expect(() => devOwner("")).toThrow("git config user.email")
+  })
+
   it("is one user after two runs, with a new password each time", async () => {
     const workos = fakeWorkos()
-    const first = await ensureOwner(workos, "one")
-    const second = await ensureOwner(workos, "two")
+    const first = await ensureOwner(workos, owner, "one")
+    const second = await ensureOwner(workos, owner, "two")
     expect(first.created).toBe(true)
     expect(second.created).toBe(false)
     expect(second.user.id).toBe(first.user.id)
@@ -136,14 +168,28 @@ describe("the owner", () => {
     expect(workos.passwords).toEqual(["one", "two"])
   })
 
+  it("is created verified, since the address receives no mail", async () => {
+    const workos = fakeWorkos()
+    await ensureOwner(workos, owner, "one")
+    expect(workos.createdWith).toEqual([
+      {
+        email: owner.email,
+        password: "one",
+        firstName: "Dev",
+        lastName: "Owner",
+        emailVerified: true,
+      },
+    ])
+  })
+
   it("is removed with its own org and not with another", async () => {
     const workos = fakeWorkos()
-    const { user } = await ensureOwner(workos, "one")
+    const { user } = await ensureOwner(workos, owner, "one")
     workos.memberships.push(
       {
         userId: user.id,
         organizationId: "org_dev",
-        organizationName: DEV_OWNER.orgName,
+        organizationName: owner.orgName,
       },
       {
         userId: user.id,
@@ -151,7 +197,7 @@ describe("the owner", () => {
         organizationName: "A real business",
       }
     )
-    expect(await removeOwner(workos)).toEqual({
+    expect(await removeOwner(workos, owner)).toEqual({
       userId: user.id,
       orgIds: ["org_dev"],
     })
@@ -161,10 +207,159 @@ describe("the owner", () => {
 
   it("is a no-op to remove twice, and comes back after", async () => {
     const workos = fakeWorkos()
-    await ensureOwner(workos, "one")
-    await removeOwner(workos)
-    expect(await removeOwner(workos)).toEqual({ userId: null, orgIds: [] })
-    expect((await ensureOwner(workos, "two")).created).toBe(true)
+    await ensureOwner(workos, owner, "one")
+    await removeOwner(workos, owner)
+    expect(await removeOwner(workos, owner)).toEqual({
+      userId: null,
+      orgIds: [],
+    })
+    expect((await ensureOwner(workos, owner, "two")).created).toBe(true)
+  })
+
+  it("is cleared locally before WorkOS is touched", async () => {
+    const workos = fakeWorkos()
+    await ensureOwner(workos, owner, "one")
+    const order: string[] = []
+    const gone = await deleteOwner(workos, owner, async () => {
+      order.push("local")
+      expect(workos.users.size).toBe(1)
+      return { orgs: 1, users: 1 }
+    })
+    expect(order).toEqual(["local"])
+    expect(gone.local).toEqual({ orgs: 1, users: 1 })
+    expect(workos.users.size).toBe(0)
+  })
+
+  it("stays in WorkOS when the local clear fails", async () => {
+    const workos = fakeWorkos()
+    await ensureOwner(workos, owner, "one")
+    await expect(
+      deleteOwner(workos, owner, async () => {
+        throw new Error("violates foreign key constraint")
+      })
+    ).rejects.toThrow("foreign key")
+    expect(workos.users.size).toBe(1)
+  })
+})
+
+describe("the owner's org", () => {
+  const named = (organizationName: string) => ({
+    organizationId: `org_${organizationName}`,
+    organizationName,
+  })
+
+  it("is fine with none yet, or with its own", () => {
+    expect(membershipRefusal([], owner)).toBeNull()
+    expect(membershipRefusal([named(owner.orgName)], owner)).toBeNull()
+  })
+
+  it("refuses two, which WorkOS answers with a choice to make", () => {
+    const refusal = membershipRefusal(
+      [named(owner.orgName), named("Another business")],
+      owner
+    )
+    expect(refusal).toContain("2 organizations")
+    expect(refusal).toContain("Another business")
+  })
+
+  it("refuses one it did not make, rather than adopting it", () => {
+    expect(membershipRefusal([named("A real business")], owner)).toContain(
+      "A real business"
+    )
+  })
+})
+
+describe("the previous session", () => {
+  it("is revoked when it belongs to this owner", async () => {
+    const workos = fakeWorkos()
+    const previous = { userId: "user_1", sessionId: "session_old" }
+    expect(await retireSession(workos, previous, "user_1")).toBe("revoked")
+    expect(workos.revoked).toEqual(["session_old"])
+  })
+
+  it("is left alone when it is someone else's, or there is none", async () => {
+    const workos = fakeWorkos()
+    const theirs = { userId: "user_2", sessionId: "session_theirs" }
+    expect(await retireSession(workos, theirs, "user_1")).toBe("none")
+    expect(await retireSession(workos, null, "user_1")).toBe("none")
+    expect(await retireSession(workos, { userId: "user_1" }, "user_1")).toBe(
+      "none"
+    )
+    expect(workos.revoked).toEqual([])
+  })
+
+  it("counts as gone when WorkOS already ended it", async () => {
+    const workos = fakeWorkos()
+    const previous = { userId: "user_1", sessionId: "session_old" }
+    await retireSession(workos, previous, "user_1")
+    expect(await retireSession(workos, previous, "user_1")).toBe("gone")
+  })
+})
+
+describe("the local servers", () => {
+  const root = "/work/reme"
+  const page = (html: string) =>
+    (async () => new Response(html, { status: 200 })) as typeof fetch
+  const json = (body: unknown, status = 200) =>
+    (async () => Response.json(body, { status })) as typeof fetch
+  const refused = (async () => {
+    throw new TypeError("fetch failed")
+  }) as typeof fetch
+  const healthy = {
+    status: "ok",
+    role: "reme_app",
+    bypasses_rls: false,
+    org_context: "x",
+    rows_for_absent_org: 0,
+  }
+
+  it("knows this checkout's web by the path Vite serves from", async () => {
+    const ours = `<title>Reme</title><link href="/@fs${root}/packages/ui/x.css">`
+    expect(await appOn("web", "http://w", root, page(ours))).toBe("ours")
+    const other = `<title>Reme</title><link href="/@fs/elsewhere/packages/ui/x.css">`
+    expect(await appOn("web", "http://w", root, page(other))).toBe("foreign")
+    expect(await appOn("web", "http://w", root, refused)).toBe("absent")
+  })
+
+  it("knows the api by its health report, and only a passing one", async () => {
+    expect(await appOn("api", "http://a", root, json(healthy))).toBe("ours")
+    expect(
+      await appOn(
+        "api",
+        "http://a",
+        root,
+        json({ ...healthy, status: "degraded" }, 503)
+      )
+    ).toBe("unhealthy")
+    expect(await appOn("api", "http://a", root, json({ ok: true }))).toBe(
+      "foreign"
+    )
+    expect(await appOn("api", "http://a", root, page("<html></html>"))).toBe(
+      "foreign"
+    )
+    expect(await appOn("api", "http://a", root, refused)).toBe("absent")
+  })
+
+  it("starts only what is not answering", () => {
+    expect(startPlan({ web: "absent", api: "absent" })).toEqual({
+      start: ["web", "api"],
+    })
+    expect(startPlan({ web: "ours", api: "absent" })).toEqual({
+      start: ["api"],
+    })
+    expect(startPlan({ web: "absent", api: "ours" })).toEqual({
+      start: ["web"],
+    })
+    expect(startPlan({ web: "ours", api: "ours" })).toEqual({ start: [] })
+  })
+
+  it("refuses a port held by something that is not ours", () => {
+    expect(startPlan({ web: "foreign", api: "absent" }).refusal).toContain(
+      "3000"
+    )
+    expect(startPlan({ web: "ours", api: "unhealthy" }).refusal).toContain(
+      "3001"
+    )
   })
 })
 
@@ -181,7 +376,15 @@ describe("the stored session", () => {
           clientId: "unused",
         }).userManagement.getSessionFromCookie(options)
       },
-      listSessions: async () => ({ data: [{ id: sid, status }] }),
+      // Two pages, the live one on the second: a read of `.data` alone would
+      // see only the first.
+      listSessions: async () => ({
+        data: [{ id: "session_other", status: "active" }],
+        autoPagination: async () => [
+          { id: "session_other", status: "active" },
+          { id: sid, status },
+        ],
+      }),
     },
   })
 
