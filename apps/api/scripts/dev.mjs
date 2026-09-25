@@ -34,9 +34,20 @@ if (!process.env[BINDING]) {
   process.env[BINDING] = process.env.DATABASE_URL
 }
 
+// Its own devtools port. `apps/web` runs workerd too, and both default to 9229:
+// Vite steps aside to 9230 when it loses the race, wrangler exits with
+// `Address already in use`. Which one wins depends on start order, so
+// `pnpm dev` worked or failed by timing. Past the two Vite Workers' fallbacks.
 const wrangler = spawn(
   "wrangler",
-  ["dev", "--port", "3001", ...process.argv.slice(2)],
+  [
+    "dev",
+    "--port",
+    "3001",
+    "--inspector-port",
+    "9329",
+    ...process.argv.slice(2),
+  ],
   { cwd: api, stdio: "inherit", env: process.env }
 )
 wrangler.on("exit", (code) => process.exit(code ?? 0))

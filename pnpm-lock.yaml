@@ -57,6 +57,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/starter-site
     devDependencies:
+      '@playwright/test':
+        specifier: ^1.62.1
+        version: 1.62.1
       '@types/node':
         specifier: ^22
         version: 22.19.19

@@ -5,6 +5,7 @@
   "scripts": {
     "bootstrap": "node scripts/bootstrap.mjs",
     "preflight": "node scripts/preflight.mjs",
+    "dev:session": "node apps/api/scripts/dev-session.mjs",
     "seed": "node scripts/seed.mjs",
     "workos:config": "node scripts/workos.mjs",
     "eval": "node --experimental-transform-types evals/run.mjs",

@@ -1,5 +1,6 @@
 // Diagnoses the usual local-setup breakages and names the command that fixes each.
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
+import { parseEnv as parseDotenv } from "node:util"
 import {
   bad,
   capture,
@@ -8,6 +9,7 @@ import {
   note,
   ok,
   repoRoot,
+  warn,
 } from "./lib.mjs"
 
 process.chdir(repoRoot)
@@ -88,6 +90,34 @@ if (process.env.NEON_OFFLINE === "1") {
     "offline postgres up, pgvector available",
     "offline postgres is not answering (NEON_OFFLINE=1)",
     "docker compose up -d --wait   (start Docker first if it is not running)"
+  )
+}
+
+// The development owner's browser session from `pnpm dev:session`. Having none
+// is fine. One that no longer works is worth saying, because the app answers it
+// as a signed-out visitor and nothing else says why.
+if (!existsSync(".dev-session.json")) {
+  warn("no local owner session. `pnpm dev:session` opens one")
+} else {
+  const { email, sealedSession } = JSON.parse(
+    readFileSync(".dev-session.json", "utf8")
+  )
+  const { client, sessionStatus } = await import(
+    "../apps/api/scripts/dev-owner.mjs"
+  )
+  const status = await (async () => {
+    const vars = parseDotenv(readFileSync("apps/web/.dev.vars", "utf8"))
+    return sessionStatus(
+      await client(vars),
+      sealedSession,
+      vars.WORKOS_COOKIE_PASSWORD
+    )
+  })().catch((error) => `unchecked (${error.message})`)
+  check(
+    status === "valid",
+    `local owner session for ${email} is present and valid`,
+    `local owner session for ${email} is ${status}`,
+    "pnpm dev:session"
   )
 }
 

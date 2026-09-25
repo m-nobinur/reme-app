@@ -41,7 +41,7 @@ git clone <repo> && cd reme
 pnpm bootstrap    # git hooks, .env.local, dependencies
 # put a DATABASE_URL in .env.local
 pnpm preflight    # names what is still missing and the command that fixes it
-pnpm dev
+pnpm dev          # or `pnpm dev:session` for a browser already signed in
 ```
 
 It is `preflight` rather than `doctor` because pnpm has a built-in `doctor` command that
@@ -61,6 +61,26 @@ and take the offline `DATABASE_URL` from the comment in `.env.example`, then run
 from the `DATABASE_URL` in `.env.local` so both reach the same database. Set the variable
 yourself and it wins. That is also the answer when something else already owns port 5432:
 publish the container somewhere else and move `DATABASE_URL` with it.
+
+### A signed-in browser
+
+```sh
+pnpm dev:session            # a window on /app/approvals, signed in; close it to stop
+pnpm dev:session --check    # headless: prove the page renders, then exit
+pnpm dev:session --delete   # remove the owner, its org and the stored session
+```
+
+It signs in as the development owner, `owner+dev@example.net`, an account in the WorkOS
+staging environment with an org called "Dev Owner Cleaning (fictional)" and the starting
+team. The first run creates both and every later run finds them, so there is only ever one.
+It starts `web` and `api` if nothing answers on ports 3000 and 3001, and stops what it
+started.
+
+The sign-in is real: a password that exists only for that run, then a session sealed with
+this checkout's `WORKOS_COOKIE_PASSWORD`. The session is kept in `.dev-session.json`, which
+is gitignored, and `pnpm preflight` says whether it still works. The command refuses to run
+unless `apps/web/.dev.vars` holds staging's client id and a key WorkOS confirms belongs to
+it.
 
 Secrets never enter a committed file. `.env.example` carries names and shapes,
 `.env.local` carries values and is gitignored, and `packages/config` validates both so a
