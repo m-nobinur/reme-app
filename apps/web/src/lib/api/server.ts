@@ -4,13 +4,15 @@ import {
   getRequestProtocol,
   setCookie,
 } from "@tanstack/react-start/server"
-import { record, text } from "@/lib/auth/input"
+import { waitingOnOwner } from "@/lib/attention"
+import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
   ActivityItem,
   ApprovalItem,
   AttentionItem,
   BusinessProfile,
+  DecisionOutcome,
   OrgNode,
   OrgSummary,
   PipelineItem,
@@ -103,10 +105,12 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
         counts: { staff: 0, waiting: 0, pipeline: 0 },
       }
     }
+    // One directory read, shared: the tile counts it and attention names from it.
+    const directory = source.staff(org.id)
     const [attention, activity, staff, pipeline] = await Promise.all([
-      source.attention(org.id),
+      source.attention(org.id, directory),
       source.activity(org.id),
-      source.staff(org.id),
+      directory,
       source.pipeline(org.id),
     ])
     return {
@@ -115,7 +119,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(
       activity,
       counts: {
         staff: staff.filter((member) => member.status === "active").length,
-        waiting: attention.length,
+        waiting: waitingOnOwner(attention),
         // "Needs action" is a follow-up date, not a stage: a completed lead
         // with nothing scheduled is not waiting on anyone.
         pipeline: pipeline.filter((item) => item.followUpAt !== null).length,
@@ -157,15 +161,22 @@ export const decideApproval = createServerFn({ method: "POST" })
     const data = record(input)
     return {
       approvalId: text(data.approvalId, 64),
-      decision: data.decision === "approved" ? "approved" : "declined",
-    } as const
-  })
-  .handler(async ({ data }): Promise<void> => {
-    const org = await activeOrg()
-    if (!org || !data.approvalId) {
-      return
+      // The revision the owner was shown, which the decision binds to.
+      revisionId: text(data.revisionId, 64),
+      decision: oneOf(data.decision, ["approved", "rejected"] as const),
     }
-    await source.decideApproval(org.id, data.approvalId, data.decision)
+  })
+  .handler(async ({ data }): Promise<DecisionOutcome> => {
+    const org = await activeOrg()
+    if (!org || !data.approvalId || !data.revisionId) {
+      throw new Error("no approval to decide")
+    }
+    return await source.decideApproval(
+      org.id,
+      data.approvalId,
+      data.revisionId,
+      data.decision
+    )
   })
 
 export const getPipeline = createServerFn({ method: "GET" }).handler(

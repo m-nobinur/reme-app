@@ -1,6 +1,26 @@
 import { getCookie } from "@tanstack/react-start/server"
-import { Org, StaffDirectory } from "@workspace/contracts"
-import type { OrgNode, OrgSummary, OwnerDataSource, StaffMember } from "./types"
+import {
+  ActivityFeed,
+  ApprovalDecision,
+  type AttentionItem as Attention,
+  ErrorEnvelope,
+  FactList,
+  Org,
+  StaffDirectory,
+  WorkspaceStatus,
+} from "@workspace/contracts"
+import { factLabel } from "../facts"
+import type {
+  ActivityItem,
+  ApprovalItem,
+  AttentionItem,
+  DecisionOutcome,
+  OrgNode,
+  OrgSummary,
+  OwnerDataSource,
+  StaffMember,
+  TransportedFact,
+} from "./types"
 
 /**
  * The owner screens, read from `apps/api` over the contracts.
@@ -11,9 +31,8 @@ import type { OrgNode, OrgSummary, OwnerDataSource, StaffMember } from "./types"
  * `orgId` is still a parameter of `OwnerDataSource` and is deliberately unused
  * below.
  *
- * Five of the nine reads have no endpoint yet. They answer empty rather than
- * inventing rows, which is the state every one of those screens already has to
- * render and is what an owner on their first day genuinely has. Nothing here
+ * The pipeline has no endpoint yet. It answers empty rather than inventing
+ * rows, which is what an owner on their first day genuinely has. Nothing here
  * falls back to a fixture: an empty inbox is true, and a fixture business on a
  * tenant's screen is not (exit gate 9, R8).
  */
@@ -58,7 +77,7 @@ async function get(path: string): Promise<unknown | null> {
     return null
   }
   const response = await fetch(new URL(path, apiUrl()), {
-    headers: { cookie: `${COOKIE}=${encodeURIComponent(session)}` },
+    headers: { cookie: sessionCookie(session) },
   })
   if (response.status === 401 || response.status === 403) {
     return null
@@ -67,6 +86,31 @@ async function get(path: string): Promise<unknown | null> {
     throw new Error(`apps/api answered ${response.status} for ${path}`)
   }
   return await response.json()
+}
+
+const sessionCookie = (session: string) =>
+  `${COOKIE}=${encodeURIComponent(session)}`
+
+/** One write. The caller reads the answer, since some refusals are the owner's to act on. */
+async function post(
+  path: string,
+  body: unknown,
+  idempotencyKey: string
+): Promise<Response> {
+  const session = getCookie(COOKIE)
+  if (!session) {
+    throw new Error(`no session to send ${path} with`)
+  }
+  const response = await fetch(new URL(path, apiUrl()), {
+    method: "POST",
+    headers: {
+      cookie: sessionCookie(session),
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  })
+  return response
 }
 
 /**
@@ -127,6 +171,181 @@ async function staffOf(): Promise<StaffMember[]> {
   }))
 }
 
+/** Reports and alerts come from the event log, not a staff member. */
+const SYSTEM = "Reme"
+
+type Logged = Extract<Attention, { kind: "report" | "alert" }>
+
+/** The headline and the line under it for a report or an alert. */
+function logged(item: Logged): { title: string; detail: string } {
+  if (item.kind === "report") {
+    return {
+      title: `Published v${item.revision.version}`,
+      detail: `Version ${item.revision.version} is live on your site.`,
+    }
+  }
+  switch (item.reason) {
+    case "build_failed":
+      return {
+        title: "A build failed",
+        detail: "It stopped before it had a version to show you.",
+      }
+    case "budget_parked":
+      return {
+        title: "A build paused at its spending limit",
+        detail: "It spends nothing more until it is picked up again.",
+      }
+    case "publish_rolled_back":
+      return {
+        title: "A publish was rolled back",
+        detail:
+          "The new version failed its checks once live, so your site went back to the one before.",
+      }
+  }
+}
+
+const APPROVAL_EXPIRY =
+  "Nothing is published without you. If it expires, the build waits until you decide."
+
+const approvalTitle = (version: number) =>
+  `Version ${version} is ready to publish`
+
+/**
+ * The workspace's attention list. An approval whose target is not a revision
+ * is left out: a decision names a revision, so it could only offer buttons
+ * that do nothing, and `/workspace` lists none today.
+ */
+async function workspaceAttention(): Promise<Attention[]> {
+  const body = await get("/workspace")
+  if (body === null) {
+    return []
+  }
+  return WorkspaceStatus.parse(body).attention.filter(
+    (item) =>
+      item.kind !== "approval" || item.request.target.kind === "revision"
+  )
+}
+
+const namesOf = (staff: StaffMember[]) =>
+  new Map(staff.map((member) => [member.id, member.displayName]))
+
+function toAttention(
+  item: Attention,
+  names: Map<string, string>
+): AttentionItem {
+  switch (item.kind) {
+    case "approval":
+      return {
+        kind: "approval",
+        request: item.request,
+        version: item.version,
+        id: item.request.approval_id,
+        title: approvalTitle(item.version),
+        detail: item.request.rationale,
+        raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedAt: item.request.requested_at,
+        expiresAt: item.request.expires_at,
+        onExpiry: APPROVAL_EXPIRY,
+      }
+    case "question":
+      return {
+        kind: "question",
+        id: item.request.request_id,
+        title: factLabel(item.request.field),
+        detail: item.request.why,
+        raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedAt: item.request.requested_at,
+        expiresAt: item.request.expires_at,
+        onExpiry: item.request.blocking
+          ? "The build waits on you until you answer."
+          : "The build carries on without it.",
+      }
+    default:
+      return {
+        kind: item.kind,
+        id: item.event_id,
+        ...logged(item),
+        raisedBy: SYSTEM,
+        raisedAt: item.at,
+        expiresAt: null,
+        onExpiry: "Nothing to decide.",
+      }
+  }
+}
+
+async function attention(
+  _orgId: string,
+  staff: Promise<StaffMember[]>
+): Promise<AttentionItem[]> {
+  const [items, members] = await Promise.all([workspaceAttention(), staff])
+  const names = namesOf(members)
+  return items.map((item) => toAttention(item, names))
+}
+
+/**
+ * `GET /approvals` was dropped: the workspace's attention list carries them.
+ * The directory is read only when there is an approval to name.
+ */
+async function approvals(): Promise<ApprovalItem[]> {
+  const found = (await workspaceAttention()).filter(
+    (item) => item.kind === "approval"
+  )
+  if (found.length === 0) {
+    return []
+  }
+  const names = namesOf(await staffOf())
+  return found.flatMap((item) => {
+    const card = toAttention(item, names)
+    const { target } = item.request
+    return card.kind === "approval" && target.kind === "revision"
+      ? [
+          {
+            request: card.request,
+            version: card.version,
+            revisionId: target.revision_id,
+            title: card.title,
+            requestedBy: card.raisedBy,
+            onExpiry: card.onExpiry,
+          },
+        ]
+      : []
+  })
+}
+
+/**
+ * The refusals an owner can do something about, by code. Anything else is a
+ * defect or a permission problem and throws.
+ */
+const REFUSED: Record<
+  string,
+  Exclude<DecisionOutcome, { recorded: true }>["reason"]
+> = {
+  "approval.expired": "expired",
+  "approval.target_mismatch": "replaced",
+  "approval.not_requested": "gone",
+  "approval.not_found": "gone",
+  "assignment.not_found": "gone",
+}
+
+async function activity(): Promise<ActivityItem[]> {
+  const body = await get("/activity")
+  if (body === null) {
+    return []
+  }
+  return ActivityFeed.parse(body).items.map((item) => ({
+    id: item.event_id,
+    summary: logged(item).title,
+    occurredAt: item.at,
+  }))
+}
+
+async function factsOf(): Promise<TransportedFact[]> {
+  const body = await get("/facts")
+  // Parsed first, so every field but `value` is the contract's; `value` is
+  // JSON because it arrived as JSON.
+  return body === null ? [] : (FactList.parse(body).facts as TransportedFact[])
+}
+
 export const apiSource: OwnerDataSource = {
   // The switcher's list. One organisation per session today, because that is
   // what a session's `org_id` claim resolves to and what signup creates.
@@ -136,19 +355,36 @@ export const apiSource: OwnerDataSource = {
   },
   staff: staffOf,
   orgTree: async () => treeOf(await staffOf()),
-  attention: async () => [],
-  approvals: async () => [],
+  attention,
+  approvals,
   pipeline: async () => [],
-  activity: async () => [],
+  activity,
   profile: async () => {
-    const org = await currentOrg()
-    return org ? { org, facts: [] } : null
+    const [org, facts] = await Promise.all([currentOrg(), factsOf()])
+    return org ? { org, facts } : null
   },
-  // Unreachable while `approvals` is empty: there is no card to decide from.
-  // It refuses rather than returning quietly, because the one thing worse than
-  // an approvals screen with nothing on it is one that accepts a decision and
-  // records it nowhere.
-  decideApproval: async () => {
-    throw new Error("no endpoint records an approval decision yet")
+  decideApproval: async (_orgId, approvalId, revisionId, decision) => {
+    const path = `/approvals/${encodeURIComponent(approvalId)}/decision`
+    const response = await post(
+      path,
+      { decision, revision_id: revisionId },
+      // The same decision on the same revision is the same request, so a
+      // retry replays the first answer instead of deciding twice.
+      `decision:${approvalId}:${revisionId}:${decision}`
+    )
+    const body = await response.json().catch(() => null)
+    if (response.ok) {
+      ApprovalDecision.parse(body)
+      return { recorded: true }
+    }
+    const refusal = ErrorEnvelope.safeParse(body)
+    const reason =
+      (response.status === 404 || response.status === 409) && refusal.success
+        ? REFUSED[refusal.data.code]
+        : undefined
+    if (reason) {
+      return { recorded: false, reason }
+    }
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
   },
 }

@@ -150,14 +150,39 @@ test("the approvals inbox has nothing to decide", async ({ page }) => {
     page.getByRole("heading", { name: "Approvals", exact: true, level: 1 })
   ).toBeVisible()
 
-  // No endpoint publishes approvals yet, so the honest screen is the empty one.
-  // An approval card here would be a decision this owner was never asked for,
-  // which is the §7.3 failure worth failing on rather than the absence of one.
+  // The approvals come from this owner's workspace, and an owner with no
+  // business has none. An approval card here would be a decision this owner was
+  // never asked for, which is the §7.3 failure worth failing on.
   await expect(page.getByText("Nothing waiting on you")).toBeVisible()
   await expect(
     page.getByRole("listitem").filter({ hasText: "Approve" })
   ).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0)
+  await expectNoFixtureContent(page)
+})
+
+test("an owner with no business yet sees empty states and no one else's rows", async ({
+  page,
+}) => {
+  // The suite's owner belongs to no org, so these screens return before they
+  // read `apps/api`. The reads themselves are covered by client.test.ts and by
+  // the owner workspace exit run; an owner with an org arrives with the golden
+  // path, which can clean up the tenant rows it writes.
+  await visit(page, "/app")
+  const waiting = page.locator("section", {
+    has: page.getByRole("heading", { name: "Waiting on you", level: 2 }),
+  })
+  await expect(waiting.getByText("Nothing waiting on you")).toBeVisible()
+  await expect(waiting.locator("article")).toHaveCount(0)
+  const activity = page.locator("section", {
+    has: page.getByRole("heading", { name: "Recent activity", level: 2 }),
+  })
+  await expect(activity.getByText("No activity yet")).toBeVisible()
+  await expect(activity.getByRole("listitem")).toHaveCount(0)
+
+  await visit(page, "/app/profile")
+  await expect(page.getByText("Nothing recorded yet")).toBeVisible()
+  await expect(page.locator('[data-slot="card"]')).toHaveCount(0)
   await expectNoFixtureContent(page)
 })
 
@@ -170,7 +195,13 @@ test("the approvals inbox has nothing to decide", async ({ page }) => {
  * runs the same WCAG 2.2 AA rule set against the assembled page under a real
  * session, which is the only place it is visible.
  */
-for (const path of ["/app", "/app/staff", "/app/approvals", "/app/pipeline"]) {
+for (const path of [
+  "/app",
+  "/app/staff",
+  "/app/approvals",
+  "/app/pipeline",
+  "/app/profile",
+]) {
   test(`${path} has no accessibility violations`, async ({ page }) => {
     await visit(page, path)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()

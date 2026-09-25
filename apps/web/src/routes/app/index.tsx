@@ -70,7 +70,10 @@ function Dashboard() {
                   raisedBy={item.raisedBy}
                   target={
                     item.kind === "approval" ? (
-                      <ApprovalTargetSummary target={item.request.target} />
+                      <ApprovalTargetSummary
+                        target={item.request.target}
+                        version={item.version}
+                      />
                     ) : null
                   }
                   title={item.title}

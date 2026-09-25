@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { digits, record, secret, text } from "./input"
+import { digits, oneOf, record, secret, text } from "./input"
 
 describe("reading a server function payload", () => {
   it("turns a non-string into empty rather than into its toString", () => {
@@ -86,5 +86,21 @@ describe("an organisation named by a request body", () => {
   it("leaves an ordinary payload alone", () => {
     const body = { email: "owner@example.com", page: 2, filters: { q: "ada" } }
     expect(record(body)).toEqual(body)
+  })
+})
+
+describe("choosing one of a fixed set", () => {
+  const DECISIONS = ["approved", "rejected"] as const
+
+  it("passes a listed value through", () => {
+    expect(oneOf("approved", DECISIONS)).toBe("approved")
+    expect(oneOf("rejected", DECISIONS)).toBe("rejected")
+  })
+
+  it("refuses anything else rather than picking a default", () => {
+    // A decision the owner did not send must never become one they did.
+    for (const value of ["declined", "", "Approved", null, undefined, 1, {}]) {
+      expect(() => oneOf(value, DECISIONS)).toThrow()
+    }
   })
 })

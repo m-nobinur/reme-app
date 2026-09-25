@@ -6,8 +6,22 @@ import { AttentionCard } from "@workspace/ui/components/attention-card"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
+import { useState } from "react"
 import { decideApproval, getApprovals } from "@/lib/api/server"
+import type { ApprovalItem, DecisionOutcome } from "@/lib/api/types"
 import { validateListSearch } from "@/lib/search"
+
+/** Why a decision was refused, in the owner's words. */
+const REFUSED: Record<
+  Exclude<DecisionOutcome, { recorded: true }>["reason"],
+  string
+> = {
+  expired:
+    "That review expired before your answer reached it, so nothing was published.",
+  replaced:
+    "A newer version replaced that one. Check the latest before you decide.",
+  gone: "That is no longer waiting on you. It was already decided, or the build stopped.",
+}
 
 export const Route = createFileRoute("/app/approvals")({
   validateSearch: validateListSearch,
@@ -20,17 +34,46 @@ function Approvals() {
   const navigate = Route.useNavigate()
   const router = useRouter()
   const { approvals } = Route.useLoaderData()
+  const [pending, setPending] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   /**
    * Nothing changes on screen until the server has answered. An approval is
    * the one place an optimistic update is wrong: showing it as approved before
    * the decision is recorded tells the owner something happened that may not
-   * have.
+   * have. The decision names the version on the card, so it cannot land on a
+   * newer one the owner has not seen.
    */
-  const decide = (approvalId: string, decision: "approved" | "declined") => {
+  const decide = (item: ApprovalItem, decision: "approved" | "rejected") => {
+    const approvalId = item.request.approval_id
+    setPending(approvalId)
+    setNotice(null)
     void (async () => {
-      await decideApproval({ data: { approvalId, decision } })
-      await router.invalidate()
+      let outcome: DecisionOutcome
+      try {
+        outcome = await decideApproval({
+          data: { approvalId, revisionId: item.revisionId, decision },
+        })
+      } catch {
+        setNotice("That did not go through. Try again.")
+        setPending(null)
+        return
+      }
+      if (!outcome.recorded) {
+        setNotice(REFUSED[outcome.reason])
+      }
+      // Recorded or refused, the card on screen is stale either way.
+      try {
+        await router.invalidate()
+      } catch {
+        if (outcome.recorded) {
+          setNotice(
+            "Your decision was recorded. Reload the page to see the latest."
+          )
+        }
+      } finally {
+        setPending(null)
+      }
     })()
   }
 
@@ -49,6 +92,12 @@ function Approvals() {
         description="Decisions Reme cannot take on its own. Each one shows what it changes and when it expires."
         title="Approvals"
       />
+
+      {notice ? (
+        <p className="mb-4 text-sm" role="alert">
+          {notice}
+        </p>
+      ) : null}
 
       {approvals.length === 0 ? (
         <EmptyState
@@ -94,16 +143,14 @@ function Approvals() {
                     actions={
                       <>
                         <Button
-                          onClick={() =>
-                            decide(item.request.approval_id, "approved")
-                          }
+                          disabled={pending !== null}
+                          onClick={() => decide(item, "approved")}
                         >
-                          Approve
+                          Approve and publish v{item.version}
                         </Button>
                         <Button
-                          onClick={() =>
-                            decide(item.request.approval_id, "declined")
-                          }
+                          disabled={pending !== null}
+                          onClick={() => decide(item, "rejected")}
                           variant="outline"
                         >
                           Decline
@@ -117,7 +164,10 @@ function Approvals() {
                     raisedAt={item.request.requested_at}
                     raisedBy={item.requestedBy}
                     target={
-                      <ApprovalTargetSummary target={item.request.target} />
+                      <ApprovalTargetSummary
+                        target={item.request.target}
+                        version={item.version}
+                      />
                     }
                     title={item.title}
                   />

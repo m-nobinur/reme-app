@@ -24,6 +24,17 @@ export function digits(value: unknown, max = 6): string {
   return typeof value === "string" ? value.replace(/\D/g, "").slice(0, max) : ""
 }
 
+/** One of a fixed set, or a refusal: never a default the sender did not pick. */
+export function oneOf<T extends string>(
+  value: unknown,
+  options: readonly T[]
+): T {
+  if (options.includes(value as T)) {
+    return value as T
+  }
+  throw new Error(`Expected one of ${options.join(", ")}.`)
+}
+
 /**
  * Keys a request body may not carry, in any spelling.
  *
