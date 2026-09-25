@@ -35,6 +35,10 @@ vi.mock("../src/publish.ts", () => ({
   readTarget: async () => ({}),
   redriveQueued: async () => [],
   requestReview: async () => {
+    if (script.reviewRefusal) {
+      const { TransitionError } = await import("../src/state.ts")
+      throw new TransitionError(script.reviewRefusal, "validation", "refused")
+    }
     script.reviews++
     return { request: { approval_id: "a" }, replayed: false }
   },
@@ -105,6 +109,7 @@ const script = {
   checkpoints: [] as boolean[],
   origin: "console" as "owner" | "console",
   reviews: 0,
+  reviewRefusal: null as string | null,
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -135,7 +140,12 @@ vi.mock("../src/sandbox.ts", () => ({
 const advanced: [string, string | undefined][] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
-    errorClass = "validation"
+    constructor(
+      readonly code = "",
+      readonly errorClass = "validation"
+    ) {
+      super(code)
+    }
   },
   advance: async (
     _kit: unknown,
@@ -337,6 +347,20 @@ describe("the assignment Workflow's step names", () => {
     expect(await reviews("owner", "preview_ready")).toBe(1)
     expect(await reviews("console", "preview_ready")).toBe(0)
     expect(await reviews("owner", "failed")).toBe(0)
+  })
+
+  it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
+    script.verdicts = ["preview_ready"]
+    script.origin = "owner"
+    // Superseded or cancelled between the gates and the review step.
+    script.reviewRefusal = "assignment.not_previewable"
+    const { names, run } = drive([completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(names).toEqual(expected["owner build"])
+    // Any other refusal is still final.
+    script.reviewRefusal = "revision.not_preview"
+    await expect(drive([completion]).run()).rejects.toThrow()
+    script.reviewRefusal = null
   })
 
   it("names every path the file lists", () => {

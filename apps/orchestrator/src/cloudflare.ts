@@ -23,7 +23,7 @@ import {
 } from "@workspace/facade"
 import { Hono } from "hono"
 import { Developer } from "./agents/developer.ts"
-import { type ConsoleEnv, ownerAuth, routes } from "./app.ts"
+import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
 import {
   type Brief,
   creationChoices,
@@ -94,10 +94,9 @@ export class RemeSandbox extends Sandbox<Env> {
 RemeSandbox.outbound = (request: Request) => fetch(request)
 
 /** The owner's route tree: the bridge routes alone, behind `ownerAuth`. */
-const ownerRoutes = new Hono<ConsoleEnv>({ strict: false }).route(
-  "/assignments",
-  routes(ownerAuth)
-)
+const ownerApp = new Hono<ConsoleEnv>({ strict: false })
+  .route("/assignments", ownerRoutes())
+  .notFound(noRoute)
 
 /**
  * The owner's way in (ADR-032 amendment): a named entrypoint that only a
@@ -107,7 +106,7 @@ const ownerRoutes = new Hono<ConsoleEnv>({ strict: false }).route(
  */
 export class OwnerApi extends WorkerEntrypoint<Env> {
   override fetch(request: Request) {
-    return ownerRoutes.fetch(request, this.env, this.ctx)
+    return ownerApp.fetch(request, this.env, this.ctx)
   }
 }
 
@@ -404,16 +403,30 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         })
         // An owner's build goes in front of the owner as soon as the preview
         // exists, so the 72 h clock starts then. `requestReview` answers a
-        // retry with the request it already holds. The console asks for its
-        // own review, so its builds stop at `preview_ready` as before.
+        // retry with the request it already holds. A build superseded or
+        // cancelled since the gates has nothing to review and ends as it is.
+        // The console asks for its own review, so its builds stop at
+        // `preview_ready` as before.
         if (
           verdict.outcome === "preview_ready" &&
           admitted.origin === "owner"
         ) {
-          await step.do("review", async () => {
-            const { request } = await run((kit) => requestReview(kit, ids))
-            return { approval_id: request.approval_id }
-          })
+          await step.do("review", () =>
+            run(async (kit) => {
+              try {
+                const { request } = await requestReview(kit, ids)
+                return { approval_id: request.approval_id }
+              } catch (error) {
+                if (
+                  error instanceof TransitionError &&
+                  error.code === "assignment.not_previewable"
+                ) {
+                  return { approval_id: null }
+                }
+                throw error
+              }
+            })
+          )
         }
         return { outcome: verdict.outcome }
       }

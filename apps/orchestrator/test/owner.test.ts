@@ -31,6 +31,11 @@ vi.mock("../src/sandbox.ts", () => ({
   sandboxFor: () => ({ destroy: async () => undefined }),
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
+// A steer dispatches to the Developer's Durable Object; here it only records.
+vi.mock("@workspace/facade", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@workspace/facade")>()),
+  init: () => ({ dispatch: async () => ({ submissionId: "s" }) }),
+}))
 
 const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
@@ -99,8 +104,32 @@ const created = (orgId: string, assignmentId: string) =>
     return row?.payload
   })
 
+const taintOf = (orgId: string, assignmentId: string, type: string) =>
+  kit.withOrg({ orgId }, async (db) => {
+    const [row] = await db
+      .select({ taint: events.taint })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${assignmentId} and ${events.type} = ${type}`
+      )
+    return row?.taint
+  })
+
 const live = describe.skipIf(!url)
 afterAll(() => kit.close())
+
+describe("the owner entrypoint", () => {
+  it("answers a console-only path with the typed 404 envelope", async () => {
+    for (const path of ["/facts", "/x/events", "/rollback", "/x/nothing"]) {
+      const res = await owner(crypto.randomUUID(), path)
+      expect(res.status, path).toBe(404)
+      expect(await res.json()).toMatchObject({
+        class: "resource",
+        code: "route.not_found",
+      })
+    }
+  })
+})
 
 live("an owner starting a build", () => {
   it("gets 201 on an org whose only staff are the starting team, as the owner", async () => {
@@ -119,6 +148,45 @@ live("an owner starting a build", () => {
       model: "A",
       withhold: [],
     })
+    // The goal is the owner's own words, so the log marks it untrusted.
+    expect(
+      await taintOf(orgId, row.assignment_id, "assignment.created")
+    ).toEqual(["untrusted_input"])
+  })
+
+  it("taints an owner's steer and leaves the console's alone", async () => {
+    const { orgId, slug } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    const steered = await owner(orgId, `/${ids.assignmentId}/steer`, {
+      message: "Make the header green",
+    })
+    expect(steered.status).toBe(202)
+    const res = await consoleApp.request(
+      `/assignments/${ids.assignmentId}/steer?org=${slug}`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test-token" },
+        body: JSON.stringify({ message: "Use the brand blue" }),
+      },
+      env
+    )
+    expect(res.status).toBe(202)
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ payload: events.payload, taint: events.taint })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.steered'`
+        )
+        .orderBy(events.eventId)
+    )
+    expect(rows).toEqual([
+      {
+        payload: { message: "Make the header green" },
+        taint: ["untrusted_input"],
+      },
+      { payload: { message: "Use the brand blue" }, taint: [] },
+    ])
   })
 
   it("acts on the header's org, whatever ?org= and the bearer say", async () => {
@@ -162,12 +230,27 @@ live("an owner starting a build", () => {
     })
   })
 
-  it("stops at 20 builds in 24 hours, after replaying a key it has seen", async () => {
+  it("stops the owner at 20 of their own builds in 24 hours, after replaying a key it has seen", async () => {
     const { orgId, slug } = await ownerOrg(kit)
-    for (let i = 0; i < 19; i++) await newAssignment(kit, orgId)
+    const byConsole = () =>
+      consoleApp.request(
+        `/assignments?org=${slug}`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-token",
+            "idempotency-key": crypto.randomUUID(),
+          },
+        },
+        env
+      )
+    // Console and harness builds on the same org use none of the allowance.
+    for (let i = 0; i < 5; i++) expect((await byConsole()).status).toBe(201)
+    for (let i = 0; i < 19; i++) {
+      expect((await owner(orgId, "/", {})).status).toBe(201)
+    }
     const key = { "idempotency-key": crypto.randomUUID() }
-    const twentieth = await owner(orgId, "/", {}, key)
-    expect(twentieth.status).toBe(201)
+    expect((await owner(orgId, "/", {}, key)).status).toBe(201)
     const past = await owner(orgId, "/", {})
     expect(past.status).toBe(429)
     expect(await past.json()).toMatchObject({
@@ -176,18 +259,7 @@ live("an owner starting a build", () => {
     })
     expect((await owner(orgId, "/", {}, key)).status).toBe(200)
     // The console is not the owner, and is not capped.
-    const console_ = await consoleApp.request(
-      `/assignments?org=${slug}`,
-      {
-        method: "POST",
-        headers: {
-          authorization: "Bearer test-token",
-          "idempotency-key": crypto.randomUUID(),
-        },
-      },
-      env
-    )
-    expect(console_.status).toBe(201)
+    expect((await byConsole()).status).toBe(201)
   })
 })
 
@@ -261,10 +333,11 @@ live("an owner answering a question", () => {
     for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501)]) {
       expect((await answer(bad)).status).toBe(400)
     }
-    expect((await answer("Street parking")).status).toBe(202)
-    expect((await current(orgId, "business.parking"))?.value).toBe(
-      "Street parking"
-    )
+    // Text that looks like JSON is still the text the owner typed.
+    for (const text of ["Street parking", "[1,2]", "123", "null"]) {
+      expect((await answer(text)).status).toBe(202)
+      expect((await current(orgId, "business.parking"))?.value).toBe(text)
+    }
   })
 })
 

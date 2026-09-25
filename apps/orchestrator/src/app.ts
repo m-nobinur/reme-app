@@ -36,6 +36,7 @@ import {
   type ErrorHandler,
   Hono,
   type MiddlewareHandler,
+  type NotFoundHandler,
 } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
@@ -330,7 +331,8 @@ const OWNER_DAILY_BUILDS = 20
  * The row, its `assignment.created` event and the instance, replayed by
  * idempotency key. A `site.revise` names the build whose revision the site
  * serves as `revision_of_assignment_id`, derived here and never sent, and
- * its goal is the owner's change request, tainted as untrusted input (§28.3).
+ * its goal is the owner's change request, tainted as untrusted input (§28.3),
+ * as is any goal an owner sends.
  * `origin` on the event is who asked, which decides whether the build opens
  * its own review at `preview_ready` (cloudflare.ts).
  */
@@ -345,9 +347,10 @@ async function createAssignment(
   }
 ) {
   const { kind, goal, model, withhold } = input
-  const taint: TaintLabel[] = kind === "site.revise" ? ["untrusted_input"] : []
   const orgId = c.get("orgId")
   const owner = byOwner(c)
+  const taint: TaintLabel[] =
+    owner || kind === "site.revise" ? ["untrusted_input"] : []
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [existing] = await db
       .select()
@@ -355,12 +358,20 @@ async function createAssignment(
       .where(eq(assignments.idempotencyKey, key))
     if (existing) return { row: existing, replayed: true }
     if (owner) {
-      // ponytail: count-then-insert, so two concurrent creates at 19 can both
-      // pass and overshoot by one. An advisory lock per org if that matters.
+      // The owner's own builds only, read off each recent row's created
+      // event, so console and harness builds on the org use none of it.
+      // ponytail: count-then-insert, so k concurrent creates at 19 can all
+      // pass and overshoot by k - 1. An advisory lock per org if that matters.
       const [today] = await db
         .select({ built: sql<number>`count(*)::int` })
         .from(assignments)
-        .where(sql`${assignments.createdAt} > now() - interval '24 hours'`)
+        .innerJoin(
+          events,
+          sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'assignment.created'`
+        )
+        .where(
+          sql`${assignments.createdAt} > now() - interval '24 hours' and ${events.payload}->>'origin' = 'owner'`
+        )
       if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
         return { capped: true as const }
       }
@@ -722,8 +733,8 @@ bridge.post("/:id/cancel", async (c) => {
  *
  * An owner's value is checked, never coerced: a `FactValue` key's answer must
  * parse as that key's value, anything else is a string of 1 to 500
- * characters (open item 70). The fact is verified by the org root, the
- * owner's own staff row.
+ * characters (open item 70). The fact is verified by the org's root owner,
+ * which is the caller only while an org has one member (open item 71).
  */
 bridge.post("/:id/answer", async (c) => {
   const id = c.req.param("id")
@@ -833,7 +844,10 @@ bridge.post("/:id/answer", async (c) => {
   return c.json(result.answer, 202)
 })
 
-/** A message into the running conversation; flue joins it at the next turn boundary. */
+/**
+ * A message into the running conversation; flue joins it at the next turn
+ * boundary. An owner's message is their own words, tainted as a goal is.
+ */
 bridge.post("/:id/steer", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
@@ -845,6 +859,15 @@ bridge.post("/:id/steer", async (c) => {
       code: "steer.empty",
       message: "A steer carries a message.",
       detail: {},
+    })
+  }
+  // A steer reaches the Developer's conversation like a goal does.
+  if (message.length > GOAL_MAX) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "steer.too_long",
+      message: `A steer is at most ${GOAL_MAX} characters.`,
+      detail: { length: message.length, max: GOAL_MAX },
     })
   }
   const row = await c.get("kit").withOrg({ orgId }, async (db) => {
@@ -859,6 +882,7 @@ bridge.post("/:id/steer", async (c) => {
       staffId: found.createdByStaffId,
       type: "assignment.steered",
       payload: { message },
+      taint: byOwner(c) ? ["untrusted_input"] : [],
     })
     return found
   })
@@ -1135,19 +1159,33 @@ function notFound(c: Context, id: string) {
   })
 }
 
-/**
- * The route tree for one caller. The console mounts every route; the owner
- * mounts the bridge alone, so anything else is not there to reach.
- */
-export function routes(auth: MiddlewareHandler<ConsoleEnv>) {
+/** A route tree behind one caller's middleware. */
+function tree(
+  auth: MiddlewareHandler<ConsoleEnv>,
+  ...parts: Hono<ConsoleEnv>[]
+) {
   const r = new Hono<ConsoleEnv>({ strict: false })
   r.use("*", openKit)
   r.use("*", auth)
-  r.route("/", bridge)
-  if (auth === consoleAuth) r.route("/", consoleOnly)
+  for (const part of parts) r.route("/", part)
   r.onError(onError)
   return r
 }
+
+/** Every route, behind the bearer and the slug. */
+export const consoleRoutes = () => tree(consoleAuth, bridge, consoleOnly)
+
+/** The bridge alone, so nothing else is there to reach. */
+export const ownerRoutes = () => tree(ownerAuth, bridge)
+
+/** §28.1 for a path nothing serves, on both callers' apps. */
+export const noRoute: NotFoundHandler = (c) =>
+  failure(c, 404, {
+    class: "resource",
+    code: "route.not_found",
+    message: "Nothing is served at this path.",
+    detail: {},
+  })
 
 const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
   // `bearerAuth` refuses with an exception that carries its own typed 401.
@@ -1168,6 +1206,7 @@ const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
 
 // The default export is the console's only: the custom domain, workers.dev
 // and version URLs all land here, and none of them can reach `ownerAuth`.
-app.route("/assignments", routes(consoleAuth))
+app.route("/assignments", consoleRoutes())
+app.notFound(noRoute)
 
 export default app

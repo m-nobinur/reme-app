@@ -28,7 +28,7 @@ vi.mock("../src/sandbox.ts", () => ({
 // dispatch to it stop at the bearer or the row in this suite.
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
-const { default: app, ownerAuth, routes } = await import("../src/app.ts")
+const { default: app, ownerRoutes } = await import("../src/app.ts")
 const { Hono } = await import("hono")
 
 /**
@@ -285,7 +285,7 @@ describe("owner mode", () => {
   // Mounted the way `OwnerApi` mounts it (cloudflare.ts), without workerd.
   const owner = new Hono<{ Bindings: Env }>({ strict: false }).route(
     "/assignments",
-    routes(ownerAuth)
+    ownerRoutes()
   )
   const ORG = "10000001-0000-4000-8000-000000000000"
   const identity = {
@@ -387,5 +387,57 @@ describe("owner mode", () => {
     )
     // Past the gate, into the database this suite does not have.
     expect(res.status).toBe(503)
+  })
+})
+
+describe("a steer", () => {
+  it("refuses a message longer than a goal, from either caller", async () => {
+    const body = JSON.stringify({ message: "x".repeat(4001) })
+    const console_ = await app.request(
+      "/assignments/x/steer?org=brightclean",
+      { method: "POST", headers: { authorization: "Bearer test-token" }, body },
+      env
+    )
+    const owner = await new Hono<{ Bindings: Env }>()
+      .route("/assignments", ownerRoutes())
+      .request(
+        "/assignments/x/steer",
+        {
+          method: "POST",
+          headers: {
+            "x-reme-org-id": "10000001-0000-4000-8000-000000000000",
+            "x-reme-workos-user-id": "user_1",
+            "x-reme-session-id": "session_1",
+          },
+          body,
+        },
+        env
+      )
+    for (const res of [console_, owner]) {
+      expect(res.status).toBe(400)
+      expect(await envelope(res)).toMatchObject({
+        class: "validation",
+        code: "steer.too_long",
+      })
+    }
+  })
+})
+
+describe("a path nothing serves", () => {
+  it("answers the typed 404 envelope, not plain text", async () => {
+    for (const [path, headers] of [
+      ["/nowhere", {}],
+      [
+        "/assignments/x/nothing?org=brightclean",
+        { authorization: "Bearer test-token" },
+      ],
+    ] as const) {
+      const res = await app.request(path, { headers }, env)
+      expect(res.status).toBe(404)
+      expect(await envelope(res)).toMatchObject({
+        class: "resource",
+        code: "route.not_found",
+      })
+    }
   })
 })
