@@ -2,11 +2,11 @@ import { sql } from "drizzle-orm"
 import {
   char,
   check,
+  customType,
   doublePrecision,
   foreignKey,
   index,
   integer,
-  jsonb,
   pgEnum,
   pgPolicy,
   pgTable,
@@ -16,6 +16,19 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
+
+/**
+ * `jsonb`, written the way drizzle's own is and read without a second parse.
+ * postgres.js already parses a jsonb column before drizzle sees it, and
+ * drizzle's `jsonb` then `JSON.parse`s any string it is handed, so a fact
+ * stated as "123" or "[1,2]" came back as a number or an array. The stored
+ * value was always right; only the read was wrong.
+ */
+const jsonb = customType<{ data: unknown; driverData: unknown }>({
+  dataType: () => "jsonb",
+  toDriver: (value) => JSON.stringify(value),
+  fromDriver: (value) => value,
+})
 
 /**
  * The core schema (§5.2 staff entity model, §10.1 stores 1 and 6).
