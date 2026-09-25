@@ -3,7 +3,10 @@ import {
   ActivityFeed,
   AttentionItem,
   FactValue,
+  FactValueKey,
   GOAL_MAX,
+  OWNER_BRIDGE_HEADERS,
+  OwnerAnswerText,
   OwnerChangeRequest,
   PreviewLink,
   SetFactsRequest,
@@ -234,5 +237,28 @@ describe("the requests around them", () => {
         screenshots: link.screenshots.slice(1),
       })
     ).toEqual(REFUSED)
+  })
+})
+
+describe("the bridge's building blocks", () => {
+  it("names every FactValue key and nothing else", () => {
+    expect(FactValueKey.options).toEqual(
+      FactValue.options.map((o) => o.shape.key.value)
+    )
+    expect(FactValueKey.safeParse("business.fax").success).toBe(false)
+  })
+
+  it("takes an answer with something in it, up to 500 characters", () => {
+    expect(OwnerAnswerText.safeParse("On the street").success).toBe(true)
+    expect(OwnerAnswerText.safeParse("x".repeat(500)).success).toBe(true)
+    for (const bad of ["", "   ", "x".repeat(501), 123]) {
+      expect(OwnerAnswerText.safeParse(bad).success).toBe(false)
+    }
+  })
+
+  it("names three distinct lowercase headers", () => {
+    const names = Object.values(OWNER_BRIDGE_HEADERS)
+    expect(new Set(names).size).toBe(3)
+    for (const n of names) expect(n).toMatch(/^x-reme-[a-z-]+$/)
   })
 })
