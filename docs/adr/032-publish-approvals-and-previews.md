@@ -134,3 +134,23 @@ the plain id list and the per-org fan-out: orgs past roughly 500, or a run's wal
 hour, at which point the selection moves to orgs with work due or to one instance per chunk.
 ADR-031 wrote "a daily sweep"; this ADR's hourly sweep is the one built, and ADR-031 reads as
 amended by it.
+
+## Amendment, 2026-09-26: the owner reaches the orchestrator over a binding
+
+`apps/api` reaches the orchestrator through a named `OwnerApi` WorkerEntrypoint over a service
+binding. It shares the console's route tree, takes the org, WorkOS user and session ids from
+headers that only a binding can deliver, and records decisions as `owner_session`. A preview's
+three screenshots also answer to a `?t=` claim whose `scope` is `screenshots`, which never opens
+a page. Staging keeps `CONSOLE_APPROVALS` for the eval harness by the owner's decision of
+2026-09-25, so the trigger "when `apps/api` gains the owner approval route" is withdrawn;
+production still never sets it.
+
+The owner's tree holds seven routes: create, answer, cancel, steer, preview, approve and reject.
+Every other console route answers 404 there. An owner's build asks for its own review when it
+reaches `preview_ready`, so the 72 hour clock starts when the preview exists; the console still
+asks with `POST /:id/review`.
+
+A staging spike on 2026-09-26 is the evidence that no public path reaches the entrypoint. A
+Worker bound to `reme-orchestrator#OwnerApi` got the entrypoint's answer. Forged `x-reme-*`
+headers on the custom domain, with and without a version override, got the console's 401, and
+the orchestrator serves no version URLs (`workers_dev: false`).
