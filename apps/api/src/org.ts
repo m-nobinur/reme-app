@@ -3,6 +3,7 @@ import {
   asc,
   eq,
   memberships,
+  type OrgScopedDb,
   orgs,
   resolveOrg,
   staff,
@@ -88,6 +89,62 @@ function slugFor(name: string, orgId: string): string {
 }
 
 /**
+ * The team every org starts with (§5.2): the owner as the human root, a Chief
+ * of Staff reporting to them and a Developer reporting to the Chief, so the
+ * first build has someone to run it. Names are the golden fixtures'.
+ *
+ * Safe to call again: an insert does nothing on a `staff_code` the org already
+ * holds, so a second call adds nobody. Each id is read back rather than
+ * returned, for the reason `createOrg` gives. `userId` is our `users.id`, and
+ * the owner needs a membership in this org first, because `staff_user_fk`
+ * points at it.
+ */
+export async function ensureStartingTeam(
+  db: OrgScopedDb,
+  team: { orgId: string; userId: string; ownerName: string }
+): Promise<void> {
+  const hire = async (row: typeof staff.$inferInsert) => {
+    await db
+      .insert(staff)
+      .values({ ...row, status: "active" })
+      .onConflictDoNothing({ target: [staff.orgId, staff.staffCode] })
+    const [hired] = await db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(eq(staff.staffCode, row.staffCode))
+      .limit(1)
+    if (!hired)
+      throw new Error(`${row.staffCode} was written and not read back`)
+    return hired.id
+  }
+  const { orgId } = team
+  const owner = await hire({
+    orgId,
+    staffCode: "OWN-001",
+    displayName: team.ownerName,
+    kind: "human",
+    userId: team.userId,
+    positionTitle: "Owner",
+  })
+  const chief = await hire({
+    orgId,
+    staffCode: "COS-001",
+    displayName: "Maya",
+    kind: "agent",
+    managerId: owner,
+    positionTitle: "Chief of Staff",
+  })
+  await hire({
+    orgId,
+    staffCode: "DEV-001",
+    displayName: "Alex",
+    kind: "agent",
+    managerId: chief,
+    positionTitle: "Developer",
+  })
+}
+
+/**
  * Creates the org: the WorkOS organization first, then ours.
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
@@ -115,10 +172,11 @@ function slugFor(name: string, orgId: string): string {
  * organisation per person. It is the signup writer, and a second business for
  * the same owner is a different story with a different shape.
  *
- * Our three inserts run in one `withOrg` under the id this function generated,
- * so no policy is widened for them: `orgs_org_isolation` passes because the
- * row's id is the context, `users_self_insert` because the context names the
- * person signing up, and `memberships_org_isolation` on the same org id. None
+ * Our inserts, the starting team's included, run in one `withOrg` under the
+ * id this function generated, so no policy is widened for them:
+ * `orgs_org_isolation` passes because the row's id is the context,
+ * `users_self_insert` because the context names the person signing up, and
+ * `memberships_org_isolation` and `staff_org_isolation` on the same org id. None
  * of them uses RETURNING, because the SELECT policy is applied to returned rows
  * and reports the refusal as an insert failure against the wrong policy.
  */
@@ -213,6 +271,11 @@ export async function createOrg(
           status: "active",
         })
         .onConflictDoNothing()
+      await ensureStartingTeam(db, {
+        orgId,
+        userId: person.id,
+        ownerName: input.displayName ?? input.email,
+      })
       return true
     }
   )

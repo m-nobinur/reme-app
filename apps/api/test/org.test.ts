@@ -1,11 +1,22 @@
 import { ErrorEnvelope, Org, StaffDirectory } from "@workspace/contracts"
-import { eq, memberships, orgs, resolveOrg, tenancy } from "@workspace/db"
+import {
+  asc,
+  eq,
+  memberships,
+  orgs,
+  resolveOrg,
+  sql,
+  staff,
+  tenancy,
+  users,
+} from "@workspace/db"
 import { brightclean, emptyco } from "@workspace/db/fixtures"
 import { afterAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
 import {
   createOrg,
   type Directory,
+  ensureStartingTeam,
   readOrg,
   readStaffDirectory,
 } from "../src/org.ts"
@@ -207,6 +218,11 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     })
     if (written) {
       await kit.withOrg({ orgId: written }, async (db) => {
+        // Reports before managers, and staff before the membership the owner
+        // row points at.
+        for (const code of ["DEV-001", "COS-001", "OWN-001"]) {
+          await db.delete(staff).where(eq(staff.staffCode, code))
+        }
         await db.delete(memberships).where(eq(memberships.orgId, written))
         await db.delete(orgs).where(eq(orgs.id, written))
       })
@@ -243,5 +259,95 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     // rely on the idempotency key to give the same one back, which WorkOS does
     // not do. The membership the owner already holds is what replays.
     expect(calls).toBe(1)
+  })
+
+  const writtenOrg = async () =>
+    (await resolveOrg(kit, {
+      workosUserId: WORKOS_USER,
+      workosOrganizationId: `${WORKOS_ORG}_1`,
+    })) as string
+
+  const team = (orgId: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db
+        .select({
+          id: staff.id,
+          code: staff.staffCode,
+          name: staff.displayName,
+          kind: staff.kind,
+          userId: staff.userId,
+          managerId: staff.managerId,
+          status: staff.status,
+        })
+        .from(staff)
+        .orderBy(asc(staff.staffCode))
+    )
+
+  it("gives the new org its owner, a Chief of Staff and a Developer", async () => {
+    const orgId = await writtenOrg()
+    const [person] = await kit.withOrg(
+      { orgId, workosUserId: WORKOS_USER },
+      (db) =>
+        db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.workosUserId, WORKOS_USER))
+    )
+    const rows = await team(orgId)
+    expect(rows.map((row) => row.code)).toEqual([
+      "COS-001",
+      "DEV-001",
+      "OWN-001",
+    ])
+    const [chief, developer, owner] = rows
+    expect(owner).toMatchObject({
+      name: input.displayName,
+      kind: "human",
+      userId: person?.id,
+      managerId: null,
+    })
+    expect(chief).toMatchObject({ name: "Maya", kind: "agent" })
+    expect(chief?.managerId).toBe(owner?.id)
+    expect(developer).toMatchObject({ name: "Alex", kind: "agent" })
+    expect(developer?.managerId).toBe(chief?.id)
+    for (const row of rows) expect(row.status).toBe("active")
+  })
+
+  it("is found by the lookup the orchestrator runs before a build", async () => {
+    // The where clause of `createAssignment` in apps/orchestrator/src/app.ts,
+    // copied because an app cannot import another. A build for this org would
+    // otherwise stop at 409 `staff.developer_missing`.
+    const orgId = await writtenOrg()
+    const codes = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ code: staff.staffCode })
+        .from(staff)
+        .where(sql`${staff.staffCode} in ('DEV-001', 'COS-001')`)
+    )
+    expect(codes.map((row) => row.code).sort()).toEqual(["COS-001", "DEV-001"])
+  })
+
+  it("adds nobody when the team is ensured again", async () => {
+    const orgId = await writtenOrg()
+    const before = await team(orgId)
+    const owner = before.find((row) => row.code === "OWN-001")
+    await kit.withOrg({ orgId }, (db) =>
+      ensureStartingTeam(db, {
+        orgId,
+        userId: owner?.userId as string,
+        ownerName: "Someone Else",
+      })
+    )
+    expect(await team(orgId)).toEqual(before)
+  })
+
+  it("leaves every other org's staff where it was", async () => {
+    const orgId = await writtenOrg()
+    const ours = new Set((await team(orgId)).map((row) => row.id))
+    const theirs = await readStaffDirectory(kit, brightclean.org.id as string)
+    expect(theirs.staff.length).toBe(brightclean.staff.length)
+    for (const member of theirs.staff) {
+      expect(ours.has(member.staff_id)).toBe(false)
+    }
   })
 })

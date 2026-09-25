@@ -2,6 +2,7 @@ import { WorkOS } from "@workos-inc/node"
 import { ErrorEnvelope } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
+import { readSession } from "../src/session.ts"
 import {
   CLIENT_ID,
   COOKIE_PASSWORD,
@@ -77,6 +78,26 @@ describe("the harness signs a cookie this SDK accepts", () => {
     expect(result.organizationId).toBe(OWNER.org_id)
     expect(result.user.id).toBe(OWNER.sub)
     expect(result.role).toBe("owner")
+  })
+})
+
+describe("what a session carries besides the person", () => {
+  const read = async (headers: Record<string, string>) =>
+    readSession(new Request("http://api.invalid/", { headers }), env(NOWHERE))
+
+  it("names the WorkOS session, from the token's sid", async () => {
+    const session = await read(await cookieHeader(OWNER))
+    expect(session?.sessionId).toBe(`session_${OWNER.sub}`)
+    expect(session?.impersonated).toBe(false)
+  })
+
+  it("says so when an admin is signed in as the owner", async () => {
+    const session = await read(
+      await cookieHeader(OWNER, {
+        impersonator: { email: "admin@fixture.invalid", reason: null },
+      })
+    )
+    expect(session?.impersonated).toBe(true)
   })
 })
 

@@ -27,6 +27,10 @@ export type Session = {
   workosUserId: string
   /** From the access token. Absent until an org has been selected. */
   workosOrganizationId?: string
+  /** The access token's `sid`, the WorkOS session this request belongs to. */
+  sessionId: string
+  /** A WorkOS admin is signed in as this person. */
+  impersonated: boolean
   email: string
   name: string | null
 } | null
@@ -87,10 +91,12 @@ export async function readSession(
   })
   const result = await session.authenticate()
   if (!result.authenticated) return null
-  const { user, organizationId } = result
+  const { user, organizationId, sessionId, impersonator } = result
   return {
     workosUserId: user.id,
     workosOrganizationId: organizationId,
+    sessionId,
+    impersonated: Boolean(impersonator),
     email: user.email,
     name:
       [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || null,

@@ -153,6 +153,8 @@ export type CookieOptions = {
   password?: string
   /** Sign with the key the JWKS does not carry. */
   forgeSignature?: boolean
+  /** Seal the field WorkOS writes when an admin signs in as the user. */
+  impersonator?: { email: string; reason: string | null }
 }
 
 /** The value of a `wos-session` cookie carrying these claims. */
@@ -178,6 +180,7 @@ export async function sessionCookie(
         emailVerified: true,
       },
       authenticationMethod: "Password",
+      impersonator: options.impersonator,
     },
     options.password ?? COOKIE_PASSWORD
   )
