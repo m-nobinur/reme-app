@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url"
 /**
  * The throwaway sign-in account the suite runs as.
  *
- * Staging WorkOS is kept at zero users by standing instruction, so this suite
+ * Staging WorkOS holds no users by standing instruction, with one exception:
+ * one development owner per developer, `owner+dev-*@example.net`, made by
+ * `pnpm dev:session` and removed with `pnpm dev:session --delete`. This suite
  * owns no permanent account. It creates one address per run and deletes it in
  * the teardown project. That is also what keeps the sign-in rate limiter out of
  * the way. The limiter is five attempts per address per sixty seconds, keyed on

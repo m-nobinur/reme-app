@@ -19,7 +19,7 @@ setup(
   "the app refuses an anonymous visitor and accepts a real sign-in",
   async ({ page }) => {
     // Housekeeping first, so a run that died between creating an account and
-    // deleting it does not leave staging above zero users forever. Only our own
+    // deleting it does not leave its account on staging forever. Only our own
     // prefix, and only accounts too old to belong to a run in flight.
     for (const id of await staleProbeUsers()) {
       await deleteProbeUser(id)

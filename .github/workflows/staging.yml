@@ -241,7 +241,8 @@ jobs:
       # through the form, the dashboard, the org tree, the chat replay and the
       # approvals inbox. It creates one throwaway WorkOS user per run on the
       # staging environment and asserts its own deletion, so staging goes back
-      # to zero users whether this passes or fails.
+      # to holding only the development owners (`qa/e2e/workos.ts`) whether
+      # this passes or fails.
       #
       # `WORKOS_API_KEY` is checked here rather than in the credentials step
       # above, because a missing smoke credential is not a reason to refuse to
