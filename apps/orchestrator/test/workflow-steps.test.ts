@@ -10,6 +10,7 @@ import steps from "./workflow-steps.json" with { type: "json" }
  */
 
 vi.mock("cloudflare:workers", () => ({
+  WorkerEntrypoint: class {},
   WorkflowEntrypoint: class {
     env: unknown
     constructor(_ctx: unknown, env: unknown) {
@@ -33,6 +34,10 @@ vi.mock("../src/publish.ts", () => ({
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
   redriveQueued: async () => [],
+  requestReview: async () => {
+    script.reviews++
+    return { request: { approval_id: "a" }, replayed: false }
+  },
   verifyArtifact: async () => ({ ok: true }),
   writePointer: async () => ({}),
 }))
@@ -83,7 +88,11 @@ vi.mock("@workspace/db", () => ({
   }),
 }))
 vi.mock("../src/brief.ts", () => ({
-  creationChoices: async () => ({ withhold: [], model: "A" }),
+  creationChoices: async () => ({
+    withhold: [],
+    model: "A",
+    origin: script.origin,
+  }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
 }))
@@ -94,6 +103,8 @@ const script = {
   provisions: [] as boolean[],
   verdicts: [] as string[],
   checkpoints: [] as boolean[],
+  origin: "console" as "owner" | "console",
+  reviews: 0,
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -223,9 +234,17 @@ type Setup = {
   verdicts?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
+  origin?: "owner"
 }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
+  // An owner's build opens its own review once the sandbox is gone.
+  [
+    "owner build",
+    [completion],
+    { origin: "owner" },
+    { outcome: "preview_ready" },
+  ],
   [
     "information round trip",
     [information, completion],
@@ -301,15 +320,30 @@ describe("the assignment Workflow's step names", () => {
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
+    script.origin = setup.origin ?? "console"
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
+  })
+
+  it("opens a review for an owner's preview only", async () => {
+    const reviews = async (origin: "owner" | "console", verdict: string) => {
+      script.reviews = 0
+      script.verdicts = [verdict]
+      script.origin = origin
+      await drive([completion]).run()
+      return script.reviews
+    }
+    expect(await reviews("owner", "preview_ready")).toBe(1)
+    expect(await reviews("console", "preview_ready")).toBe(0)
+    expect(await reviews("owner", "failed")).toBe(0)
   })
 
   it("names every path the file lists", () => {
     expect(Object.keys(expected).sort()).toEqual(
       [
         "build",
+        "owner build",
         "information round trip",
         "gate failure repaired",
         "gate failure ends failed",

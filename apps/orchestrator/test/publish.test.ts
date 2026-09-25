@@ -15,6 +15,7 @@ import steps from "./workflow-steps.json" with { type: "json" }
 // The Workflow base and its error come from workerd; here they are the two
 // lines the publisher needs from them.
 vi.mock("cloudflare:workers", () => ({
+  WorkerEntrypoint: class {},
   WorkflowEntrypoint: class {
     env: unknown
     constructor(_ctx: unknown, env: unknown) {

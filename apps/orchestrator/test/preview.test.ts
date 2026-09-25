@@ -109,15 +109,23 @@ live("minting a preview link, against a real database", () => {
     expect(body.revision_id).toBe(rev.id)
     const host = `preview-v3-${slug}${SUFFIX}`
     expect(new URL(body.url).host).toBe(host)
-    expect(body.screenshots).toEqual([
+    expect(body.screenshots.map((s) => s.split("?")[0])).toEqual([
       `https://${host}/screenshots/home-390.png`,
       `https://${host}/screenshots/home-768.png`,
       `https://${host}/screenshots/home-1440.png`,
     ])
     const token = new URL(body.url).searchParams.get("t") ?? ""
-    expect(await verifyPreview(token, KEY)).toMatchObject({
+    expect(await verifyPreview(token, KEY, "site")).toMatchObject({
       org_id: orgId,
       site_id: orgId,
+      revision_id: rev.id,
+      host,
+    })
+    // The screenshots carry their own claim, which opens no page.
+    const [shot = ""] = body.screenshots
+    const shots = new URL(shot).searchParams.get("t") ?? ""
+    expect(await verifyPreview(shots, KEY, "site")).toBeNull()
+    expect(await verifyPreview(shots, KEY, "screenshots")).toMatchObject({
       revision_id: rev.id,
       host,
     })

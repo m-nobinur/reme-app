@@ -48,23 +48,27 @@ async function signRaw(body: unknown): Promise<string> {
 describe("the preview token", () => {
   it("round-trips a claim signed with the key", async () => {
     const token = await signPreview(claim, KEY)
-    expect(await verifyPreview(token, KEY, NOW)).toEqual(claim)
+    expect(await verifyPreview(token, KEY, "site", NOW)).toEqual(claim)
   })
 
   it("refuses another key, a changed claim, an expired claim and junk", async () => {
     const token = await signPreview(claim, KEY)
-    expect(await verifyPreview(token, "another-key", NOW)).toBeNull()
+    expect(await verifyPreview(token, "another-key", "site", NOW)).toBeNull()
     const [, mac] = token.split(".")
     const forged = `${btoa(JSON.stringify({ ...claim, org_id: OTHER })).replace(/=+$/, "")}.${mac}`
-    expect(await verifyPreview(forged, KEY, NOW)).toBeNull()
-    expect(await verifyPreview(token, KEY, NOW + 2 * 3600 * 1000)).toBeNull()
+    expect(await verifyPreview(forged, KEY, "site", NOW)).toBeNull()
+    expect(
+      await verifyPreview(token, KEY, "site", NOW + 2 * 3600 * 1000)
+    ).toBeNull()
     // Exactly `exp` is already expired.
-    expect(await verifyPreview(token, KEY, claim.exp * 1000)).toBeNull()
-    expect(await verifyPreview(token, KEY, claim.exp * 1000 - 1)).toEqual(claim)
+    expect(await verifyPreview(token, KEY, "site", claim.exp * 1000)).toBeNull()
+    expect(
+      await verifyPreview(token, KEY, "site", claim.exp * 1000 - 1)
+    ).toEqual(claim)
     for (const junk of [undefined, "", "a", "a.b.c", "!!.!!"]) {
-      expect(await verifyPreview(junk, KEY, NOW)).toBeNull()
+      expect(await verifyPreview(junk, KEY, "site", NOW)).toBeNull()
     }
-    expect(await verifyPreview(token, "", NOW)).toBeNull()
+    expect(await verifyPreview(token, "", "site", NOW)).toBeNull()
   })
 
   it("refuses to sign or verify a claim the contract refuses", async () => {
@@ -92,16 +96,27 @@ describe("the preview token", () => {
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "")
-    expect(await verifyPreview(`${body}.${mac}`, KEY, NOW)).toBeNull()
+    expect(await verifyPreview(`${body}.${mac}`, KEY, "site", NOW)).toBeNull()
   })
 
   it("reads a claim signed before scope existed as a site claim", async () => {
     const { scope: _scope, ...unscoped } = claim
     const token = await signRaw(unscoped)
-    expect(await verifyPreview(token, KEY, NOW)).toEqual(claim)
+    expect(await verifyPreview(token, KEY, "site", NOW)).toEqual(claim)
+    expect(await verifyPreview(token, KEY, "screenshots", NOW)).toBeNull()
     const screenshots = await signRaw({ ...claim, scope: "screenshots" })
-    expect(await verifyPreview(screenshots, KEY, NOW)).toEqual({
+    expect(await verifyPreview(screenshots, KEY, "screenshots", NOW)).toEqual({
       ...claim,
+      scope: "screenshots",
+    })
+  })
+
+  it("answers only for the scope asked for", async () => {
+    const site = await signPreview(claim, KEY)
+    const shots = await signPreview({ ...claim, scope: "screenshots" }, KEY)
+    expect(await verifyPreview(site, KEY, "screenshots", NOW)).toBeNull()
+    expect(await verifyPreview(shots, KEY, "site", NOW)).toBeNull()
+    expect(await verifyPreview(shots, KEY, "screenshots", NOW)).toMatchObject({
       scope: "screenshots",
     })
   })

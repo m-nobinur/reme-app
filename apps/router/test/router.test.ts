@@ -583,6 +583,50 @@ describe("a preview host", () => {
   })
 })
 
+describe("a screenshot link", () => {
+  const SHOT = "/screenshots/home-390.png"
+  const shots = (overrides: Record<string, unknown> = {}) =>
+    claimFor({ scope: "screenshots", ...overrides })
+
+  it("loads a screenshot with ?t= and no cookie, while a page still answers 401", async () => {
+    const token = await shots()
+    const shot = await get(PREVIEW_HOST, `${SHOT}?t=${token}`)
+    expect(shot.status).toBe(200)
+    expect(shot.headers.get("content-type")).toBe("image/png")
+    expect(shot.headers.get("cache-control")).toBe("private, no-store")
+    expect((await get(PREVIEW_HOST, `/?t=${token}`)).status).toBe(401)
+    expect(
+      (await get(PREVIEW_HOST, "/", { headers: cookie(token) })).status
+    ).toBe(401)
+    const open = await get(PREVIEW_HOST, `/open?t=${token}`)
+    expect(open.status).toBe(401)
+    expect(open.headers.get("set-cookie")).toBeNull()
+  })
+
+  it("refuses a site claim, another host's claim, an expired one and junk on a screenshot path", async () => {
+    for (const token of [
+      await claimFor(),
+      await shots({ host: `preview-v2-other${SUFFIX}` }),
+      await shots({ exp: Math.floor(Date.now() / 1000) - 1 }),
+      "junk",
+    ]) {
+      expect((await get(PREVIEW_HOST, `${SHOT}?t=${token}`)).status).toBe(401)
+    }
+  })
+
+  it("takes ?t= on a preview host only", async () => {
+    pointers.set(`host:${SITE_HOST}`, {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 2,
+    })
+    const token = await shots({ host: SITE_HOST })
+    expect((await get(SITE_HOST, `${SHOT}?t=${token}`)).status).toBe(404)
+    pointers.delete(`host:${SITE_HOST}`)
+  })
+})
+
 describe("a published host", () => {
   const pointer = {
     org_id: ORG,

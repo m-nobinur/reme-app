@@ -52,14 +52,17 @@ export async function signPreview(
 }
 
 /**
- * The claim, or null for anything forged, malformed or expired. The MAC is
- * checked with `crypto.subtle.verify`, which compares in constant time, and
- * the body is checked against the contract, so a claim missing its host or
- * its site never verifies. A claim at exactly `exp` is already expired.
+ * The claim, or null for anything forged, malformed, expired or of another
+ * scope. The MAC is checked with `crypto.subtle.verify`, which compares in
+ * constant time, and the body is checked against the contract, so a claim
+ * missing its host or its site never verifies. A claim at exactly `exp` is
+ * already expired. A `screenshots` claim never opens a page, and a `site`
+ * claim never rides on a screenshot URL (ADR-032 amendment).
  */
 export async function verifyPreview(
   token: string | undefined,
   secret: string,
+  scope: PreviewClaim["scope"],
   now: number = Date.now()
 ): Promise<PreviewClaim | null> {
   if (!token || !secret) return null
@@ -85,7 +88,7 @@ export async function verifyPreview(
       ...JSON.parse(new TextDecoder().decode(fromB64url(body))),
     })
     if (!parsed.success || parsed.data.exp * 1000 <= now) return null
-    return parsed.data
+    return parsed.data.scope === scope ? parsed.data : null
   } catch {
     return null
   }

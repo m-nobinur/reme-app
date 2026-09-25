@@ -9,6 +9,7 @@ import {
 import { freshOrg, newAssignment } from "./fixture.ts"
 
 vi.mock("cloudflare:workers", () => ({
+  WorkerEntrypoint: class {},
   WorkflowEntrypoint: class {
     env: unknown
     constructor(_ctx: unknown, env: unknown) {

@@ -77,11 +77,19 @@ export async function takeSnapshot(
   return snapshot
 }
 
-/** The keys withheld and the model chosen at creation, from the `assignment.created` row. */
+/**
+ * The keys withheld, the model chosen and who asked, from the
+ * `assignment.created` row. A row written before `origin` existed was the
+ * console's.
+ */
 export async function creationChoices(
   db: OrgScopedDb,
   ids: Ids
-): Promise<{ withhold: string[]; model: ModelChoice }> {
+): Promise<{
+  withhold: string[]
+  model: ModelChoice
+  origin: "owner" | "console"
+}> {
   const [row] = await db
     .select({ payload: events.payload })
     .from(events)
@@ -93,7 +101,11 @@ export async function creationChoices(
   const withhold = Array.isArray(payload.withhold)
     ? payload.withhold.filter((k): k is string => typeof k === "string")
     : []
-  return { withhold, model: payload.model === "B" ? "B" : "A" }
+  return {
+    withhold,
+    model: payload.model === "B" ? "B" : "A",
+    origin: payload.origin === "owner" ? "owner" : "console",
+  }
 }
 
 /** What a fact value keeps across versions: its JSON type, and an object's keys. */

@@ -1,9 +1,11 @@
 import {
   type ErrorEnvelope,
+  FactValue,
   GOAL_MAX,
   InformationAnswer,
   PreviewClaim,
   type TaintLabel,
+  Uuid,
 } from "@workspace/contracts"
 import {
   assignments,
@@ -29,7 +31,12 @@ import {
   SCREENSHOTS,
   signPreview,
 } from "@workspace/gates/preview"
-import { type Context, Hono, type MiddlewareHandler } from "hono"
+import {
+  type Context,
+  type ErrorHandler,
+  Hono,
+  type MiddlewareHandler,
+} from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
@@ -37,6 +44,7 @@ import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import {
   activeDeployment,
+  type DecidedBy,
   decideApproval,
   rejectApproval,
   requestReview,
@@ -52,11 +60,13 @@ import {
 } from "./state.ts"
 
 /**
- * The console routes (M3 drives them). A bearer secret is the whole of the
- * auth for now; the owner screens reach these over a service binding later
- * and never with a session. Every business is addressed by its slug, resolved
- * server-side to an org id the way the api resolves a session (R3): nothing
- * here reads an org id from a request.
+ * One route tree, two callers (ADR-032 amendment). The console reaches it with
+ * a bearer and addresses a business by its slug, resolved here. The owner
+ * reaches it only through the `OwnerApi` entrypoint (cloudflare.ts), which a
+ * service binding delivers and no public route or domain can name; `apps/api`
+ * resolved the org from the sealed session and sends it as a header. Each
+ * caller's middleware sets `orgId` and `caller`, and nothing else here reads
+ * who is asking from the request.
  */
 
 /** R4: every failure leaves as the §28.1 envelope. */
@@ -67,7 +77,7 @@ const envelope = (body: Omit<ErrorEnvelope, "occurred_at">): ErrorEnvelope => ({
 
 const failure = (
   c: Context,
-  status: 400 | 401 | 403 | 404 | 409 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 429 | 503,
   body: Omit<ErrorEnvelope, "occurred_at">
 ) => c.json(envelope(body), status)
 
@@ -116,19 +126,20 @@ const namedRevision = async (
 }
 
 type Bindings = Env
-type Variables = { kit: Tenancy; orgId: string }
-type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
+type Variables = { kit: Tenancy; orgId: string; caller: DecidedBy }
+export type ConsoleEnv = { Bindings: Bindings; Variables: Variables }
 
 const app = new Hono<ConsoleEnv>()
 
 app.get("/health", (c) => c.json({ status: "ok" }))
 
-/** The console, mounted at `/assignments` below. */
-const console_ = new Hono<ConsoleEnv>({ strict: false })
-
-// `bearerAuth` compares in constant time. A Worker with no token configured
-// refuses everything rather than accepting everything: fail closed.
-console_.use("*", async (c, next) => {
+/**
+ * The console: a bearer, then `?org=<slug>` resolved here and nowhere else.
+ * `bearerAuth` compares in constant time and refuses by throwing its typed
+ * 401, before any query. A Worker with no token configured refuses
+ * everything rather than accepting everything: fail closed.
+ */
+export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
   if (!c.env.ORCHESTRATOR_TOKEN) {
     return failure(c, 503, {
       class: "resource",
@@ -145,11 +156,55 @@ console_.use("*", async (c, next) => {
     invalidAuthenticationHeaderMessage: unauthenticated,
     invalidTokenMessage: unauthenticated,
   }) as unknown as MiddlewareHandler<ConsoleEnv>
-  return guard(c, next)
-})
+  await guard(c, async () => undefined)
+  const slug = c.req.query("org")?.trim()
+  const orgId = slug ? await resolveOrgBySlug(c.get("kit"), slug) : null
+  if (!orgId) {
+    return failure(c, 404, {
+      class: "resource",
+      code: "org.unresolved",
+      message: "No business we hold answers to that slug.",
+      detail: {},
+    })
+  }
+  c.set("orgId", orgId)
+  c.set("caller", { kind: "console" })
+  await next()
+}
+
+/**
+ * The owner, over the service binding only: `apps/api` resolved the org from
+ * the sealed session and builds a new request for every call, so these
+ * headers are its and never a browser's. Never reads `?org=` or a bearer.
+ */
+export const ownerAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
+  const orgId = c.req.header("x-reme-org-id") ?? ""
+  const userId = c.req.header("x-reme-workos-user-id")?.trim()
+  const sessionId = c.req.header("x-reme-session-id")?.trim()
+  if (!Uuid.safeParse(orgId).success || !userId || !sessionId) {
+    return failure(c, 401, {
+      class: "permission",
+      code: "owner.unauthenticated",
+      message: "This request carries no owner identity we accept.",
+      detail: {},
+    })
+  }
+  c.set("orgId", orgId)
+  c.set("caller", {
+    kind: "owner_session",
+    user_id: userId,
+    session_id: sessionId,
+  })
+  await next()
+}
+
+const byOwner = (c: Context<ConsoleEnv>) =>
+  c.get("caller").kind === "owner_session"
 
 /** A tenancy kit per request, closed after the response (the api's shape). */
-console_.use("*", async (c, next) => {
+const openKit: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
+  // `postgres` connects on first query, so opening the kit before the
+  // caller's check costs nothing on a refusal.
   const kit = tenancy(c.env.HYPERDRIVE.connectionString)
   c.set("kit", kit)
   try {
@@ -165,23 +220,17 @@ console_.use("*", async (c, next) => {
     if (ctx) ctx.waitUntil(kit.close())
     else await kit.close()
   }
-})
+}
 
-/** `?org=<slug>` on every console call; resolved here and nowhere else. */
-console_.use("*", async (c, next) => {
-  const slug = c.req.query("org")?.trim()
-  const orgId = slug ? await resolveOrgBySlug(c.get("kit"), slug) : null
-  if (!orgId) {
-    return failure(c, 404, {
-      class: "resource",
-      code: "org.unresolved",
-      message: "No business we hold answers to that slug.",
-      detail: {},
-    })
-  }
-  c.set("orgId", orgId)
-  await next()
-})
+/**
+ * The seven routes that touch a Workflow, the sandbox or `PREVIEW_KEY`, which
+ * the owner reaches (architect ruling 3). Owner reads and fact writes run in
+ * `apps/api` under `withOrg`.
+ */
+const bridge = new Hono<ConsoleEnv>()
+
+/** Everything else: the console's alone, and 404 in owner mode. */
+const consoleOnly = new Hono<ConsoleEnv>()
 
 /**
  * The live sandbox probe the staging deploy runs, see sandbox.ts. Behind the
@@ -189,7 +238,7 @@ console_.use("*", async (c, next) => {
  * commands are a constant. The result is appended like any other execution,
  * so a probe leaves a trace.
  */
-console_.get("/sandbox/probe", async (c) => {
+consoleOnly.get("/sandbox/probe", async (c) => {
   const orgId = c.get("orgId")
   const result = await probe(c.env, orgId)
   await c.get("kit").withOrg({ orgId }, (db) =>
@@ -204,7 +253,7 @@ console_.get("/sandbox/probe", async (c) => {
   return c.json(result)
 })
 
-console_.get("/", async (c) => {
+consoleOnly.get("/", async (c) => {
   const rows = await c
     .get("kit")
     .withOrg({ orgId: c.get("orgId") }, (db) =>
@@ -222,7 +271,7 @@ console_.get("/", async (c) => {
  * made. `staff_id` is the org's Developer and `created_by_staff_id` its Chief
  * of Staff, by staff code, because that is who the console stands in for.
  */
-console_.post("/", async (c) => {
+bridge.post("/", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -232,14 +281,17 @@ console_.post("/", async (c) => {
     withhold?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
+  // Both are the console's test levers; an owner gets the defaults.
+  const owner = byOwner(c)
   // Which of the two coding defaults this assignment runs on (the plan's
   // `--model A|B`). Recorded on the log for the spec resolver to read (N2).
-  const model = body.model === "B" ? "B" : "A"
+  const model = !owner && body.model === "B" ? "B" : "A"
   // Fact keys left out of the snapshot, so a run has to ask for them. Driven
   // by `scripts/builder.mjs --withhold <key>` and the tier-2 golden builds.
-  const withhold = Array.isArray(body.withhold)
-    ? body.withhold.filter((k): k is string => typeof k === "string")
-    : []
+  const withhold =
+    !owner && Array.isArray(body.withhold)
+      ? body.withhold.filter((k): k is string => typeof k === "string")
+      : []
   if (!/^site\.(build|revise)$/.test(kind)) {
     return failure(c, 400, {
       class: "validation",
@@ -271,11 +323,16 @@ console_.post("/", async (c) => {
   return createAssignment(c, key, { kind, goal, model, withhold })
 })
 
+/** Builds an owner may start in 24 hours (open item 76: a guess until someone hits it). */
+const OWNER_DAILY_BUILDS = 20
+
 /**
  * The row, its `assignment.created` event and the instance, replayed by
  * idempotency key. A `site.revise` names the build whose revision the site
  * serves as `revision_of_assignment_id`, derived here and never sent, and
  * its goal is the owner's change request, tainted as untrusted input (§28.3).
+ * `origin` on the event is who asked, which decides whether the build opens
+ * its own review at `preview_ready` (cloudflare.ts).
  */
 async function createAssignment(
   c: Context<ConsoleEnv>,
@@ -290,12 +347,24 @@ async function createAssignment(
   const { kind, goal, model, withhold } = input
   const taint: TaintLabel[] = kind === "site.revise" ? ["untrusted_input"] : []
   const orgId = c.get("orgId")
+  const owner = byOwner(c)
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [existing] = await db
       .select()
       .from(assignments)
       .where(eq(assignments.idempotencyKey, key))
     if (existing) return { row: existing, replayed: true }
+    if (owner) {
+      // ponytail: count-then-insert, so two concurrent creates at 19 can both
+      // pass and overshoot by one. An advisory lock per org if that matters.
+      const [today] = await db
+        .select({ built: sql<number>`count(*)::int` })
+        .from(assignments)
+        .where(sql`${assignments.createdAt} > now() - interval '24 hours'`)
+      if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
+        return { capped: true as const }
+      }
+    }
     const source =
       kind === "site.revise" ? await publishedSource(db, orgId) : null
     if (kind === "site.revise" && !source) return { unpublished: true as const }
@@ -338,6 +407,7 @@ async function createAssignment(
         model,
         goal,
         withhold,
+        origin: owner ? "owner" : "console",
         ...(source ? { revises_revision_id: source.revision_id } : {}),
       },
       taint,
@@ -350,6 +420,14 @@ async function createAssignment(
       code: "site.not_published",
       message: "This site has no published revision to revise.",
       detail: {},
+    })
+  }
+  if ("capped" in result) {
+    return failure(c, 429, {
+      class: "budgetary",
+      code: "builds.daily_cap",
+      message: `A business starts at most ${OWNER_DAILY_BUILDS} builds in 24 hours.`,
+      detail: { max: OWNER_DAILY_BUILDS },
     })
   }
   if ("missing" in result) {
@@ -390,7 +468,7 @@ async function start(
     )
 }
 
-console_.post("/:id/start", async (c) => {
+consoleOnly.post("/:id/start", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
   const [row] = await c
@@ -407,7 +485,7 @@ console_.post("/:id/start", async (c) => {
 })
 
 /** The org's current facts, for the console to show and edit. Before `/:id`, which would take the path. */
-console_.get("/facts", async (c) => {
+consoleOnly.get("/facts", async (c) => {
   const rows = await c
     .get("kit")
     .withOrg({ orgId: c.get("orgId") }, (db) =>
@@ -438,7 +516,7 @@ const factNotFound = (c: Context, key: string) =>
  * The console restating facts the org holds (architect ruling on the
  * console). `updateFacts` owns the rules; this route owns the request's shape.
  */
-console_.post("/facts", async (c) => {
+consoleOnly.post("/facts", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { facts?: unknown }
@@ -487,7 +565,7 @@ console_.post("/facts", async (c) => {
 })
 
 /** What the site serves now, and what a rollback would restore (ADR-032). Before `/:id`, which would take the path. */
-console_.get("/site", async (c) => {
+consoleOnly.get("/site", async (c) => {
   const orgId = c.get("orgId")
   const found = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [org] = await db
@@ -529,7 +607,7 @@ console_.get("/site", async (c) => {
  * shorter list shows a fact again and an empty one shows them all, so there
  * is no second verb to undo. Before `/:id`, which would take the path.
  */
-console_.post("/site/hidden", async (c) => {
+consoleOnly.post("/site/hidden", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { fact_keys?: unknown }
@@ -559,7 +637,7 @@ console_.post("/site/hidden", async (c) => {
   return c.json({ hidden: result.hidden }, result.replayed ? 200 : 201)
 })
 
-console_.get("/:id", async (c) => {
+consoleOnly.get("/:id", async (c) => {
   const id = c.req.param("id")
   const found = await c
     .get("kit")
@@ -588,7 +666,7 @@ console_.get("/:id", async (c) => {
 })
 
 /** The stream, in append order (ULIDs sort by time), so a person can read it. */
-console_.get("/:id/events", async (c) => {
+consoleOnly.get("/:id/events", async (c) => {
   const id = c.req.param("id")
   const rows = await c
     .get("kit")
@@ -606,7 +684,7 @@ console_.get("/:id/events", async (c) => {
  * Cancel: the row first, then the instance. Terminating an instance that is
  * already finished or was never created is success, not an error (R5).
  */
-console_.post("/:id/cancel", async (c) => {
+bridge.post("/:id/cancel", async (c) => {
   const id = c.req.param("id")
   const ids = { orgId: c.get("orgId"), assignmentId: id }
   let state: string
@@ -641,8 +719,13 @@ console_.post("/:id/cancel", async (c) => {
  * `owner_stated` provenance, then an `information.answered` row, then the
  * Workflow is woken with the ids (architect ruling 8: fact, then event, then
  * signal). The Developer sees the fact record, never "the owner said".
+ *
+ * An owner's value is checked, never coerced: a `FactValue` key's answer must
+ * parse as that key's value, anything else is a string of 1 to 500
+ * characters (open item 70). The fact is verified by the org root, the
+ * owner's own staff row.
  */
-console_.post("/:id/answer", async (c) => {
+bridge.post("/:id/answer", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -658,7 +741,8 @@ console_.post("/:id/answer", async (c) => {
     })
   }
   const requestId = body.request_id
-  const value = parseValue(body.value)
+  const owner = byOwner(c)
+  const value = owner ? body.value : parseValue(body.value)
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [row] = await db
       .select()
@@ -677,6 +761,13 @@ console_.post("/:id/answer", async (c) => {
       .limit(1)
     const field = request?.payload.field
     if (typeof field !== "string") return { no_request: true as const }
+    if (owner && !answers(field, value)) return { invalid: field }
+    const [root] = owner
+      ? await db
+          .select({ id: staff.id })
+          .from(staff)
+          .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
+      : []
     const [existing] = await db
       .select({ factType: facts.factType })
       .from(facts)
@@ -689,7 +780,7 @@ console_.post("/:id/answer", async (c) => {
       provenance: {
         source: "owner_stated",
         confidence: 1,
-        verifiedByStaffId: row.createdByStaffId,
+        verifiedByStaffId: root?.id ?? row.createdByStaffId,
       },
     })
     const answer = InformationAnswer.parse({
@@ -718,6 +809,14 @@ console_.post("/:id/answer", async (c) => {
       detail: { request_id: requestId },
     })
   }
+  if ("invalid" in result) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "answer.invalid",
+      message: "That answer is not a value this question accepts.",
+      detail: { field: result.invalid },
+    })
+  }
   if ("state" in result) {
     return failure(c, 409, {
       class: "validation",
@@ -735,7 +834,7 @@ console_.post("/:id/answer", async (c) => {
 })
 
 /** A message into the running conversation; flue joins it at the next turn boundary. */
-console_.post("/:id/steer", async (c) => {
+bridge.post("/:id/steer", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
   const body = (await c.req.json().catch(() => ({}))) as { message?: unknown }
@@ -770,6 +869,18 @@ console_.post("/:id/steer", async (c) => {
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })
 
+const FACT_VALUE_KEYS = new Set<string>(
+  FactValue.options.map((o) => o.shape.key.value)
+)
+
+/** Whether an owner's value answers a question about `field`, as sent. */
+function answers(field: string, value: unknown): boolean {
+  if (FACT_VALUE_KEYS.has(field)) {
+    return FactValue.safeParse({ key: field, value }).success
+  }
+  return typeof value === "string" && value.trim() !== "" && value.length <= 500
+}
+
 /** A console value: JSON when it parses, the text itself otherwise. */
 function parseValue(value: unknown): unknown {
   if (typeof value !== "string") return value
@@ -786,7 +897,7 @@ function parseValue(value: unknown): unknown {
  * `preview-v{n}-{slug}` under this environment's suffix (ADR-030), good for
  * a day. A revision still `building` has no artifact to show and is refused.
  */
-console_.get("/:id/preview", async (c) => {
+bridge.get("/:id/preview", async (c) => {
   const id = c.req.param("id")
   if (!c.env.PREVIEW_KEY) {
     return failure(c, 503, {
@@ -832,22 +943,27 @@ console_.get("/:id/preview", async (c) => {
     c.env.SITE_HOST_SUFFIX
   )
   const exp = Math.floor(Date.now() / 1000) + PREVIEW_TTL_S
-  const token = await signPreview(
-    PreviewClaim.parse({
-      org_id: orgId,
-      site_id: found.revision.siteId,
-      revision_id: found.revision.id,
-      host,
-      scope: "site",
-      exp,
-    }),
-    c.env.PREVIEW_KEY
-  )
+  // Two claims over the same revision: `site` opens the preview, and
+  // `screenshots` rides on the three images so they show inline where no
+  // preview cookie exists. The router never lets the second open a page.
+  const sign = (scope: PreviewClaim["scope"]) =>
+    signPreview(
+      PreviewClaim.parse({
+        org_id: orgId,
+        site_id: found.revision.siteId,
+        revision_id: found.revision.id,
+        host,
+        scope,
+        exp,
+      }),
+      c.env.PREVIEW_KEY
+    )
+  const [token, shots] = await Promise.all([sign("site"), sign("screenshots")])
   const base = `https://${host}`
   return c.json({
     revision_id: found.revision.id,
     url: `${base}/open?t=${token}`,
-    screenshots: [...SCREENSHOTS].map((s) => `${base}/${s}`),
+    screenshots: [...SCREENSHOTS].map((s) => `${base}/${s}?t=${shots}`),
     expires_at: new Date(exp * 1000).toISOString(),
   })
 })
@@ -879,7 +995,7 @@ function refused(c: Context, error: unknown) {
  * request is recorded for the latest preview revision and expires in 72
  * hours; nothing publishes until someone decides.
  */
-console_.post("/:id/review", async (c) => {
+consoleOnly.post("/:id/review", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const ids = { orgId: c.get("orgId"), assignmentId: c.req.param("id") }
@@ -892,16 +1008,17 @@ console_.post("/:id/review", async (c) => {
 })
 
 /**
- * `POST /:id/approve` (ADR-032): the console deciding as the owner would,
- * which only a Worker with `CONSOLE_APPROVALS=allow` accepts. The revision
+ * `POST /:id/approve` (ADR-032): the owner deciding, recorded as their
+ * session, or the console deciding as the owner would, which only a Worker
+ * with `CONSOLE_APPROVALS=allow` accepts. The revision
  * named must be the one the review was requested for; the decision and the
  * move to `release_candidate` share a transaction, and the publish is its
  * own Workflow keyed by the approval id, so a second create is refused.
  */
-console_.post("/:id/approve", async (c) => {
+bridge.post("/:id/approve", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
-  if (c.env.CONSOLE_APPROVALS !== "allow") {
+  if (!byOwner(c) && c.env.CONSOLE_APPROVALS !== "allow") {
     return failure(c, 403, {
       class: "permission",
       code: "approval.console_forbidden",
@@ -917,7 +1034,7 @@ console_.post("/:id/approve", async (c) => {
   try {
     decision = await decideApproval(c.get("kit"), ids, {
       revisionId,
-      decidedBy: { kind: "console" },
+      decidedBy: c.get("caller"),
     })
   } catch (error) {
     const answer = refused(c, error)
@@ -945,7 +1062,7 @@ console_.post("/:id/approve", async (c) => {
  * enters the seven-day window. Same target check as approve; no console
  * gate, since nothing publishes.
  */
-console_.post("/:id/reject", async (c) => {
+bridge.post("/:id/reject", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const revisionId = await namedRevision(c, "A rejection")
@@ -954,7 +1071,7 @@ console_.post("/:id/reject", async (c) => {
   try {
     const { decision, replayed } = await rejectApproval(c.get("kit"), ids, {
       revisionId,
-      decidedBy: { kind: "console" },
+      decidedBy: c.get("caller"),
     })
     return c.json(decision, replayed ? 200 : 201)
   } catch (error) {
@@ -969,7 +1086,7 @@ console_.post("/:id/reject", async (c) => {
  * publisher, keyed by the idempotency key so a repeated request is one
  * rollback and not two, which would be a roll forward.
  */
-console_.post("/rollback", async (c) => {
+consoleOnly.post("/rollback", async (c) => {
   const key = idempotencyKey(c)
   if (!key) return keyMissing(c)
   const orgId = c.get("orgId")
@@ -1018,9 +1135,21 @@ function notFound(c: Context, id: string) {
   })
 }
 
-app.route("/assignments", console_)
+/**
+ * The route tree for one caller. The console mounts every route; the owner
+ * mounts the bridge alone, so anything else is not there to reach.
+ */
+export function routes(auth: MiddlewareHandler<ConsoleEnv>) {
+  const r = new Hono<ConsoleEnv>({ strict: false })
+  r.use("*", openKit)
+  r.use("*", auth)
+  r.route("/", bridge)
+  if (auth === consoleAuth) r.route("/", consoleOnly)
+  r.onError(onError)
+  return r
+}
 
-app.onError((error, c) => {
+const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
   // `bearerAuth` refuses with an exception that carries its own typed 401.
   if (error instanceof HTTPException) return error.getResponse()
   console.error(
@@ -1035,6 +1164,10 @@ app.onError((error, c) => {
     message: "The request could not be completed.",
     detail: {},
   })
-})
+}
+
+// The default export is the console's only: the custom domain, workers.dev
+// and version URLs all land here, and none of them can reach `ownerAuth`.
+app.route("/assignments", routes(consoleAuth))
 
 export default app
