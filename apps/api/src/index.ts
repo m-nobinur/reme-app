@@ -1,12 +1,14 @@
-import { CreateOrgRequest, type ErrorEnvelope } from "@workspace/contracts"
+import { CreateOrgRequest } from "@workspace/contracts"
 import { resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { checkTenantPath } from "./health.ts"
+import { failure, idempotencyKey } from "./http.ts"
 import {
   createOrg,
   type Directory,
   readOrg,
   readStaffDirectory,
 } from "./org.ts"
+import { OWNER_PATH, type Owner, ownerRoute } from "./owner.ts"
 import { readSession, type Session, workos } from "./session.ts"
 
 /**
@@ -20,18 +22,6 @@ import { readSession, type Session, workos } from "./session.ts"
  * never comes from client input is a property of this file rather than a check
  * somebody has to remember to write.
  */
-
-/** R4: every failure leaves as the §28.1 envelope, never a raw exception. */
-function failure(
-  status: number,
-  envelope: Omit<ErrorEnvelope, "occurred_at">
-): Response {
-  const body: ErrorEnvelope = {
-    ...envelope,
-    occurred_at: new Date().toISOString(),
-  }
-  return Response.json(body, { status })
-}
 
 const UNAUTHENTICATED = {
   class: "permission",
@@ -52,7 +42,7 @@ async function currentOrg(
   request: Request,
   env: Env,
   kit: Tenancy
-): Promise<{ orgId: string } | { response: Response }> {
+): Promise<Owner | { response: Response }> {
   const session = await readSession(request, env)
   if (!session) return { response: failure(401, UNAUTHENTICATED) }
   const orgId = session.workosOrganizationId
@@ -71,7 +61,7 @@ async function currentOrg(
       }),
     }
   }
-  return { orgId }
+  return { orgId, session }
 }
 
 /**
@@ -82,11 +72,6 @@ async function currentOrg(
  * keyed-results table is needed for this endpoint. The one that mutates rows a
  * tenant can see will need one.
  */
-function idempotencyKey(request: Request): string | null {
-  const key = request.headers.get("idempotency-key")?.trim()
-  return key && key.length <= 255 ? key : null
-}
-
 async function signup(
   request: Request,
   env: Env,
@@ -177,6 +162,13 @@ async function route(
           message: "That organisation no longer exists.",
           detail: {},
         })
+  }
+
+  if (OWNER_PATH.test(pathname)) {
+    const resolved = await currentOrg(request, env, kit)
+    if ("response" in resolved) return resolved.response
+    const answered = await ownerRoute(request, env, kit, resolved)
+    if (answered) return answered
   }
 
   return failure(404, {

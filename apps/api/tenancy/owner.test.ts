@@ -1,0 +1,182 @@
+import {
+  ErrorEnvelope,
+  FactList,
+  OWNER_BRIDGE_HEADERS,
+  WorkspaceStatus,
+} from "@workspace/contracts"
+import { tenancy } from "@workspace/db"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import {
+  type Owner,
+  owner,
+  seed,
+  stubOrchestrator,
+} from "../test/owner-fixture.ts"
+import { stubJwksFetch } from "../test/sealed-session.ts"
+
+/**
+ * Cross-org denial on the owner routes, and the bridge carrying the
+ * session's org and nothing a client sent. Part of the blocking tenancy
+ * gate, beside `cross-org.test.ts`.
+ *
+ * An id from another org has to be refused here, before the binding: the
+ * orchestrator would refuse it too, but a request that crossed the binding
+ * for another tenant's row is already a request this worker should not
+ * have sent. So every refusal below also asserts the stub saw nothing, and
+ * the same routes on the org's own ids are the control that the stub is
+ * reachable at all.
+ */
+
+const url = process.env.DATABASE_URL
+if (!url) {
+  throw new Error(
+    "DATABASE_URL is not set, so the owner-route gate has nothing to deny against. " +
+      "It is blocking and cannot be skipped: start Postgres, then rerun pnpm test:tenancy."
+  )
+}
+
+const kit = tenancy(url, { max: 2 })
+let realFetch: typeof fetch
+let mine: Owner
+let theirs: Owner
+const ids: Record<"mine" | "theirs", { build: string; approval: string }> = {
+  mine: { build: "", approval: "" },
+  theirs: { build: "", approval: "" },
+}
+
+beforeAll(async () => {
+  realFetch = globalThis.fetch
+  globalThis.fetch = stubJwksFetch()
+  mine = await owner(kit, url, "tenancy-mine")
+  theirs = await owner(kit, url, "tenancy-theirs")
+  for (const [name, who] of [
+    ["mine", mine],
+    ["theirs", theirs],
+  ] as const) {
+    const s = seed(kit, who)
+    const build = await s.assignment("awaiting_review")
+    const revision = await s.revision(build, 1)
+    ids[name] = { build, approval: await s.approval(build, revision, 72) }
+  }
+  await theirs.call(stubOrchestrator(), "/facts", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": crypto.randomUUID(),
+    },
+    body: JSON.stringify({
+      facts: [{ key: "business.name", value: { name: "Theirs (fixture)" } }],
+    }),
+  })
+}, 60_000)
+
+afterAll(async () => {
+  globalThis.fetch = realFetch
+  await kit.close()
+})
+
+const routes = (which: "mine" | "theirs"): [string, RequestInit][] => {
+  const { build, approval } = ids[which]
+  const post = (body: unknown) => ({
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": crypto.randomUUID(),
+    },
+    body: JSON.stringify(body),
+  })
+  return [
+    [
+      `/builds/${build}/answer`,
+      post({ request_id: crypto.randomUUID(), value: "x" }),
+    ],
+    [`/builds/${build}/cancel`, { method: "POST" }],
+    [`/builds/${build}/preview`, { method: "GET" }],
+    [
+      `/approvals/${approval}/decision`,
+      post({ decision: "approved", revision_id: crypto.randomUUID() }),
+    ],
+  ]
+}
+
+describe("another org's id is 404 and never reaches the binding", () => {
+  it.each([0, 1, 2, 3])("route %i", async (n) => {
+    const [path, init] = routes("theirs")[n] as [string, RequestInit]
+    const stub = stubOrchestrator()
+    const response = await mine.call(stub, path, init)
+    expect(response.status, path).toBe(404)
+    expect(ErrorEnvelope.parse(await response.json()).class).toBe("resource")
+    expect(stub.calls, path).toHaveLength(0)
+  })
+
+  it.each([0, 1, 2, 3])(
+    "control: the org's own id reaches it, route %i",
+    async (n) => {
+      const [path, init] = routes("mine")[n] as [string, RequestInit]
+      const stub = stubOrchestrator()
+      await mine.call(stub, path, init)
+      expect(stub.calls, path).toHaveLength(1)
+    }
+  )
+})
+
+describe("the owner's reads are the owner's org", () => {
+  it("lists only this org's builds and approvals in the workspace", async () => {
+    const body = WorkspaceStatus.parse(
+      await (await mine.call(stubOrchestrator(), "/workspace")).json()
+    )
+    expect(body.builds.map((b) => b.assignment_id)).toEqual([ids.mine.build])
+    const approvals = body.attention.flatMap((item) =>
+      item.kind === "approval" ? [item.request] : []
+    )
+    expect(approvals.map((a) => a.approval_id)).toEqual([ids.mine.approval])
+    for (const a of approvals) expect(a.org_id).toBe(mine.orgId)
+  })
+
+  it("lists none of another org's facts", async () => {
+    const { facts } = FactList.parse(
+      await (await mine.call(stubOrchestrator(), "/facts")).json()
+    )
+    expect(facts.filter((f) => f.org_id !== mine.orgId)).toEqual([])
+    const own = FactList.parse(
+      await (await theirs.call(stubOrchestrator(), "/facts")).json()
+    )
+    expect(own.facts.map((f) => f.key)).toEqual(["business.name"])
+  })
+})
+
+describe("the bridge carries the session and nothing the client sent", () => {
+  it("sends the session's ids, whatever headers the client forged", async () => {
+    const stub = stubOrchestrator()
+    await mine.call(stub, `/builds/${ids.mine.build}/cancel`, {
+      method: "POST",
+      headers: {
+        [OWNER_BRIDGE_HEADERS.orgId]: theirs.orgId,
+        [OWNER_BRIDGE_HEADERS.workosUserId]: theirs.workosUserId,
+        [OWNER_BRIDGE_HEADERS.sessionId]: "session_forged",
+        "cloudflare-workers-version-overrides":
+          'reme-orchestrator="00000000-0000-4000-8000-000000000000"',
+        "idempotency-key": "cancel-forged-1",
+        "x-reme-anything": "forged",
+      },
+    })
+    expect(stub.calls).toHaveLength(1)
+    const sent = stub.calls[0]?.request.headers as Headers
+    expect(sent.get(OWNER_BRIDGE_HEADERS.orgId)).toBe(mine.orgId)
+    expect(sent.get(OWNER_BRIDGE_HEADERS.workosUserId)).toBe(mine.workosUserId)
+    expect(sent.get(OWNER_BRIDGE_HEADERS.sessionId)).toBe(
+      `session_${mine.workosUserId}`
+    )
+    expect(sent.get("idempotency-key")).toBe("cancel-forged-1")
+    expect(sent.has("cloudflare-workers-version-overrides")).toBe(false)
+    expect(sent.has("cookie")).toBe(false)
+    expect([...sent.keys()].sort()).toEqual(
+      [
+        OWNER_BRIDGE_HEADERS.orgId,
+        OWNER_BRIDGE_HEADERS.sessionId,
+        OWNER_BRIDGE_HEADERS.workosUserId,
+        "idempotency-key",
+      ].sort()
+    )
+  })
+})
