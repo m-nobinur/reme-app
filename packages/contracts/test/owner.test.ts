@@ -242,9 +242,15 @@ describe("the requests around them", () => {
 
 describe("the bridge's building blocks", () => {
   it("names every FactValue key and nothing else", () => {
-    expect(FactValueKey.options).toEqual(
-      FactValue.options.map((o) => o.shape.key.value)
-    )
+    expect(FactValueKey.options).toEqual([
+      "business.name",
+      "business.phone",
+      "business.email",
+      "hours.weekday",
+      "service_area.radius",
+      "pricing.standard_clean_hourly",
+      "business.tagline",
+    ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })
 

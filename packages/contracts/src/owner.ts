@@ -17,8 +17,8 @@ export const GOAL_MAX = 4000
 
 /**
  * The identity `apps/api` sends over the ORCHESTRATOR binding to `OwnerApi`.
- * Only a binding can deliver these; the public default export never reads
- * them (ADR-032 amendment).
+ * Only the orchestrator's `OwnerApi` entrypoint reads them, and only a
+ * service binding reaches it; the public default export ignores them.
  */
 export const OWNER_BRIDGE_HEADERS = {
   orgId: "x-reme-org-id",
@@ -81,8 +81,9 @@ export const OwnerChangeRequest = z.strictObject({
 })
 
 /**
- * An answer to an `InformationRequest`. `value` is checked against
- * `FactValue` where the request's field is known, which is the orchestrator.
+ * An answer to an `InformationRequest`. The orchestrator, which knows the
+ * request's field, checks `value`: against `FactValue` when the field is a
+ * `FactValueKey`, otherwise as `OwnerAnswerText`.
  */
 export const AnswerRequest = z.strictObject({
   request_id: Uuid,
