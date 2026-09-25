@@ -1,8 +1,11 @@
 import {
   type ErrorEnvelope,
   FactValue,
+  FactValueKey,
   GOAL_MAX,
   InformationAnswer,
+  OWNER_BRIDGE_HEADERS,
+  OwnerAnswerText,
   PreviewClaim,
   type TaintLabel,
   Uuid,
@@ -179,9 +182,9 @@ export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
  * headers are its and never a browser's. Never reads `?org=` or a bearer.
  */
 export const ownerAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
-  const orgId = c.req.header("x-reme-org-id") ?? ""
-  const userId = c.req.header("x-reme-workos-user-id")?.trim()
-  const sessionId = c.req.header("x-reme-session-id")?.trim()
+  const orgId = c.req.header(OWNER_BRIDGE_HEADERS.orgId) ?? ""
+  const userId = c.req.header(OWNER_BRIDGE_HEADERS.workosUserId)?.trim()
+  const sessionId = c.req.header(OWNER_BRIDGE_HEADERS.sessionId)?.trim()
   if (!Uuid.safeParse(orgId).success || !userId || !sessionId) {
     return failure(c, 401, {
       class: "permission",
@@ -893,16 +896,12 @@ bridge.post("/:id/steer", async (c) => {
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })
 
-const FACT_VALUE_KEYS = new Set<string>(
-  FactValue.options.map((o) => o.shape.key.value)
-)
-
 /** Whether an owner's value answers a question about `field`, as sent. */
 function answers(field: string, value: unknown): boolean {
-  if (FACT_VALUE_KEYS.has(field)) {
+  if (FactValueKey.safeParse(field).success) {
     return FactValue.safeParse({ key: field, value }).success
   }
-  return typeof value === "string" && value.trim() !== "" && value.length <= 500
+  return OwnerAnswerText.safeParse(value).success
 }
 
 /** A console value: JSON when it parses, the text itself otherwise. */
