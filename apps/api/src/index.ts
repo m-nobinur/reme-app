@@ -1,7 +1,14 @@
 import { CreateOrgRequest } from "@workspace/contracts"
 import { resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { checkTenantPath } from "./health.ts"
-import { failure, idempotencyKey, invalid } from "./http.ts"
+import {
+  BodyTooLarge,
+  failure,
+  idempotencyKey,
+  invalid,
+  readBody,
+  tooLarge,
+} from "./http.ts"
 import {
   createOrg,
   type Directory,
@@ -89,8 +96,7 @@ async function signup(
   // Caught rather than left to the handler, which would answer a body that is
   // not JSON with a 503 and tell the caller to retry something that will never
   // work.
-  const body = await request.json().catch(() => null)
-  const parsed = CreateOrgRequest.safeParse(body)
+  const parsed = CreateOrgRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
   // The two halves of the SDK the writer needs. Organizations live on
   // `organizations` and memberships on `userManagement`, and `createOrg` takes
@@ -130,9 +136,9 @@ async function route(
   }
 
   const session = await readSession(request, env)
-  // An admin signed in as someone can look, never act: every write is a
-  // POST, and a decision above all is the owner's own (§7.3).
-  if (method === "POST" && session?.impersonated) {
+  // An admin signed in as someone can look, never act: anything but a read
+  // is refused, and a decision above all is the owner's own (§7.3).
+  if (method !== "GET" && method !== "HEAD" && session?.impersonated) {
     const decision = pathname.startsWith("/approvals/")
     return failure(403, {
       class: "permission",
@@ -194,6 +200,7 @@ export default {
     try {
       return await route(request, env, kit)
     } catch (error) {
+      if (error instanceof BodyTooLarge) return tooLarge()
       // The code and nothing else. A driver message can carry the connection
       // string it failed on, and this worker logs to an account-wide sink (R9).
       console.error(

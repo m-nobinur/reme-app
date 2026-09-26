@@ -1,5 +1,8 @@
 import {
   ActivityFeed,
+  Conversation,
+  ConversationHistory,
+  ConversationList,
   ErrorEnvelope,
   FactList,
   OWNER_BRIDGE_HEADERS,
@@ -7,6 +10,7 @@ import {
 } from "@workspace/contracts"
 import { tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { appendMessages } from "../src/conversations.ts"
 import {
   type Owner,
   owner,
@@ -209,5 +213,95 @@ describe("the bridge carries the session and nothing the client sent", () => {
         "idempotency-key",
       ].sort()
     )
+  })
+})
+
+describe("another org's conversation is 404 and never written to", () => {
+  const keyed = (
+    method: string,
+    body?: unknown,
+    key = crypto.randomUUID()
+  ) => ({
+    method,
+    headers: { "content-type": "application/json", "idempotency-key": key },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const create = async (who: Owner, key?: string) =>
+    Conversation.parse(
+      await (
+        await who.call(
+          stubOrchestrator(),
+          "/conversations",
+          keyed("POST", undefined, key)
+        )
+      ).json()
+    )
+  const history = async (who: Owner, id: string) =>
+    ConversationHistory.parse(
+      await (
+        await who.call(stubOrchestrator(), `/conversations/${id}/messages`)
+      ).json()
+    ).messages
+
+  it("refuses to read, rename or list it", async () => {
+    const theirConversation = await create(theirs)
+    for (const [path, init] of [
+      [`/conversations/${theirConversation.id}`, { method: "GET" }],
+      [`/conversations/${theirConversation.id}/messages`, { method: "GET" }],
+      [
+        `/conversations/${theirConversation.id}`,
+        keyed("PATCH", { title: "Taken over" }),
+      ],
+    ] as const) {
+      const response = await mine.call(stubOrchestrator(), path, init)
+      expect(response.status, `${init.method} ${path}`).toBe(404)
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "conversation.not_found"
+      )
+    }
+    const kept = Conversation.parse(
+      await (
+        await theirs.call(
+          stubOrchestrator(),
+          `/conversations/${theirConversation.id}`
+        )
+      ).json()
+    )
+    expect(kept.title).toBeNull()
+    const listed = ConversationList.parse(
+      await (await mine.call(stubOrchestrator(), "/conversations")).json()
+    )
+    expect(listed.conversations.map((c) => c.id)).not.toContain(
+      theirConversation.id
+    )
+  })
+
+  it("makes a new conversation for a key another org already used", async () => {
+    const key = `__LOCALID_${crypto.randomUUID()}`
+    const theirConversation = await create(theirs, key)
+    const mineConversation = await create(mine, key)
+    expect(mineConversation.id).not.toBe(theirConversation.id)
+  })
+
+  it("writes no message into it, whatever the ids", async () => {
+    const theirConversation = await create(theirs)
+    const message = {
+      id: "u_1",
+      parent_id: null,
+      format: "ai-sdk/v6",
+      content: { role: "user", parts: [{ type: "text", text: "x" }] },
+    } as const
+    await appendMessages(kit, theirs.orgId, theirConversation.id, [message])
+    const refused = (await appendMessages(
+      kit,
+      mine.orgId,
+      theirConversation.id,
+      [{ ...message, id: "u_2", parent_id: "u_1" }, message]
+    )) as Response
+    expect(refused.status).toBe(404)
+    expect(ErrorEnvelope.parse(await refused.json()).detail).toEqual({})
+    expect(
+      (await history(theirs, theirConversation.id)).map((m) => m.id)
+    ).toEqual(["u_1"])
   })
 })

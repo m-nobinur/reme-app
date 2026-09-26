@@ -38,3 +38,63 @@ export const invalid = (issues: { path: PropertyKey[] }[]) =>
     message: "The request body does not match the contract.",
     detail: { issues: issuePaths(issues) },
   })
+
+/** The largest request body any route reads: 64 KiB, far above any contract's. */
+export const BODY_MAX = 64 * 1024
+
+export const tooLarge = () =>
+  failure(413, {
+    class: "validation",
+    code: "request.too_large",
+    message: `A request body is at most ${BODY_MAX / 1024} KiB.`,
+    detail: { max_bytes: BODY_MAX },
+  })
+
+/** Thrown by `readBody` over the cap; `index.ts` answers it with 413. */
+export class BodyTooLarge extends Error {}
+
+/**
+ * A route's JSON body, read after the route has authenticated the caller and
+ * no further than `BODY_MAX`. Null for a body that is not JSON, so the
+ * contract parse refuses it; `BodyTooLarge` for one over the cap.
+ */
+export async function readBody(request: Request): Promise<unknown> {
+  const bytes = await boundedBody(request)
+  if (!bytes) throw new BodyTooLarge()
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The body, read no further than `BODY_MAX`, or null when it is longer. The
+ * declared length refuses early; the count refuses a body that declared none.
+ */
+export async function boundedBody(
+  request: Request
+): Promise<Uint8Array | null> {
+  if (Number(request.headers.get("content-length")) > BODY_MAX) return null
+  if (!request.body) return new Uint8Array()
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > BODY_MAX) {
+      await reader.cancel()
+      return null
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(size)
+  let at = 0
+  for (const chunk of chunks) {
+    body.set(chunk, at)
+    at += chunk.byteLength
+  }
+  return body
+}

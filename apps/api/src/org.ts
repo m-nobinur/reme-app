@@ -147,6 +147,34 @@ export async function ensureStartingTeam(
 }
 
 /**
+ * The owner's staff row, after making sure the org has its starting team: an
+ * org made before the team existed gets it here. Null only when the person is
+ * not mirrored, which the resolver that produced the org rules out. The
+ * transaction needs `workosUserId` in its context to read the person.
+ */
+export async function ownerStaffId(
+  db: OrgScopedDb,
+  owner: { orgId: string; workosUserId: string; ownerName: string }
+): Promise<string | null> {
+  const [person] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.workosUserId, owner.workosUserId))
+  if (person) {
+    await ensureStartingTeam(db, {
+      orgId: owner.orgId,
+      userId: person.id,
+      ownerName: owner.ownerName,
+    })
+  }
+  const [root] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
+  return root?.id ?? null
+}
+
+/**
  * Creates the org: the WorkOS organization first, then ours.
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
