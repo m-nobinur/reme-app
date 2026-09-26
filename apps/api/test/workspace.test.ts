@@ -287,6 +287,19 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention).toEqual([{ kind: "question", request: second }])
   })
 
+  it("still shows the question after a pause and resume, whose block names none", async () => {
+    const resumed = await owner(kit, url as string, "resumed")
+    const r = seed(kit, resumed)
+    const build = await r.assignment("blocked_on_information")
+    const asked = question(resumed, build)
+    await r.event(build, "information.requested", asked)
+    await r.blocked(build, asked.request_id, 3)
+    await r.transition(build, "blocked_on_information", "paused", 4)
+    await r.transition(build, "paused", "blocked_on_information", 5)
+    const body = WorkspaceStatus.parse(await (await workspace(resumed)).json())
+    expect(body.attention).toEqual([{ kind: "question", request: asked }])
+  })
+
   it("drops the question once it is answered, while the build still waits", async () => {
     const waiting = await owner(kit, url as string, "answered")
     const w = seed(kit, waiting)
@@ -840,6 +853,35 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const body = ErrorEnvelope.parse(await response.json())
       expect(body.class).toBe("integrity")
       expect(body.code).toBe("orchestrator.off_contract")
+    })
+
+    it("refuses an answer to a question the build no longer waits on", async () => {
+      const twice = await owner(kit, url as string, "stale")
+      const t = seed(kit, twice)
+      const build = await t.assignment("blocked_on_information")
+      const first = question(twice, build)
+      const second = question(twice, build)
+      await t.event(build, "information.requested", first)
+      await t.blocked(build, first.request_id, 3)
+      await t.event(build, "information.requested", second)
+      await t.blocked(build, second.request_id, 5)
+      const stub = stubOrchestrator()
+      const stale = await twice.call(
+        stub,
+        `/builds/${build}/answer`,
+        json({ request_id: first.request_id, value: "x" })
+      )
+      expect(stale.status).toBe(404)
+      expect(ErrorEnvelope.parse(await stale.json()).code).toBe(
+        "request.not_found"
+      )
+      expect(stub.calls).toHaveLength(0)
+      await twice.call(
+        stub,
+        `/builds/${build}/answer`,
+        json({ request_id: second.request_id, value: "x" })
+      )
+      expect(stub.calls).toHaveLength(1)
     })
 
     it("validates an answer before the binding, then relays it", async () => {
