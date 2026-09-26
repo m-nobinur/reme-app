@@ -4,11 +4,11 @@ import {
   getRequestProtocol,
   setCookie,
 } from "@tanstack/react-start/server"
+import { PANEL_COOKIE } from "@workspace/ui/components/workspace-shell"
 import { waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
-  ActivityItem,
   ApprovalItem,
   AttentionItem,
   BusinessProfile,
@@ -44,12 +44,30 @@ async function activeOrg(): Promise<OrgSummary | null> {
   return orgs.find((org) => org.slug === picked) ?? orgs[0] ?? null
 }
 
-/** What the layout needs: the switcher's options and the current selection. */
-export const getOrgContext = createServerFn({ method: "GET" }).handler(
-  async (): Promise<{ orgs: OrgSummary[]; active: OrgSummary | null }> => ({
-    orgs: await source.orgs(),
-    active: await activeOrg(),
-  })
+/**
+ * What the workspace frame needs on every /app page: the switcher's options
+ * and selection, whether the panel is open, and what is waiting on the owner.
+ * The panel state is read here, on the server, so the first paint already has
+ * the panel where the owner left it.
+ */
+export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{
+    orgs: OrgSummary[]
+    active: OrgSummary | null
+    panelOpen: boolean
+    waiting: AttentionItem[]
+  }> => {
+    const [orgs, active] = await Promise.all([source.orgs(), activeOrg()])
+    const attention = active
+      ? await source.attention(active.id, source.staff(active.id))
+      : []
+    return {
+      orgs,
+      active,
+      panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+      waiting: waitingOnOwner(attention),
+    }
+  }
 )
 
 /**
@@ -86,47 +104,6 @@ export const selectOrg = createServerFn({ method: "POST" })
     })
     return { slug: chosen.slug }
   })
-
-export type DashboardData = {
-  org: OrgSummary | null
-  attention: AttentionItem[]
-  activity: ActivityItem[]
-  counts: { staff: number; waiting: number; pipeline: number }
-}
-
-export const getDashboard = createServerFn({ method: "GET" }).handler(
-  async (): Promise<DashboardData> => {
-    const org = await activeOrg()
-    if (!org) {
-      return {
-        org,
-        attention: [],
-        activity: [],
-        counts: { staff: 0, waiting: 0, pipeline: 0 },
-      }
-    }
-    // One directory read, shared: the tile counts it and attention names from it.
-    const directory = source.staff(org.id)
-    const [attention, activity, staff, pipeline] = await Promise.all([
-      source.attention(org.id, directory),
-      source.activity(org.id),
-      directory,
-      source.pipeline(org.id),
-    ])
-    return {
-      org,
-      attention,
-      activity,
-      counts: {
-        staff: staff.filter((member) => member.status === "active").length,
-        waiting: waitingOnOwner(attention),
-        // "Needs action" is a follow-up date, not a stage: a completed lead
-        // with nothing scheduled is not waiting on anyone.
-        pipeline: pipeline.filter((item) => item.followUpAt !== null).length,
-      },
-    }
-  }
-)
 
 export const getStaffDirectory = createServerFn({ method: "GET" }).handler(
   async (): Promise<{

@@ -6,7 +6,6 @@ import {
 import { Alert } from "@workspace/ui/components/alert"
 import {
   AppNav,
-  AppShell,
   navLinkClass,
   PageHeader,
 } from "@workspace/ui/components/app-shell"
@@ -31,6 +30,7 @@ import type { PasswordVerdict } from "@workspace/ui/lib/password-policy"
 import type { ReactNode } from "react"
 import { assistantCatalog } from "./assistant-entries"
 import { productCatalog } from "./product-entries"
+import { workspaceCatalog } from "./workspace-entries"
 
 type CatalogEntry = {
   /** The exported component's own name. The drift test matches on it. */
@@ -334,8 +334,8 @@ const catalog: CatalogEntry[] = [
   {
     name: "AppNav",
     render: () => (
-      <div className="max-w-60 rounded-3xl bg-sidebar p-3">
-        <AppNav activeKey="/app" aria-label="Catalog">
+      <div className="max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
+        <AppNav aria-label="Catalog">
           {NAV.map((item) => (
             <li key={item.href}>
               <a
@@ -352,42 +352,7 @@ const catalog: CatalogEntry[] = [
       </div>
     ),
   },
-  {
-    name: "AppShell",
-    render: () => (
-      <AppShell
-        className="min-h-0 rounded-3xl border border-border"
-        sidebar={
-          <>
-            <OrgSwitcher orgs={FIXTURE_ORGS} />
-            <AppNav activeKey="/app" aria-label="Shell">
-              {NAV.map((item) => (
-                <li key={item.href}>
-                  <a
-                    aria-current={item.href === "/app" ? "page" : undefined}
-                    className={navLinkClass}
-                    href={item.href}
-                  >
-                    <item.icon aria-hidden />
-                    {item.label}
-                  </a>
-                </li>
-              ))}
-            </AppNav>
-          </>
-        }
-      >
-        <PageHeader
-          description="What Reme did, what it is waiting on you for, and what it wants to do next."
-          title="Dashboard"
-        />
-        <EmptyState
-          description="Nothing has run yet. Activity appears here once an organisation is connected."
-          title="No activity yet"
-        />
-      </AppShell>
-    ),
-  },
+  ...workspaceCatalog,
   ...productCatalog,
   ...assistantCatalog,
 ]

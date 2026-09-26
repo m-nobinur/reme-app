@@ -58,5 +58,7 @@ test("a sign-in clicked before hydration still signs in", async ({ page }) => {
   await page.click('button[type="submit"]')
 
   await expect(page).toHaveURL(/\/app$/)
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Waiting on you", level: 2 })
+  ).toBeVisible()
 })

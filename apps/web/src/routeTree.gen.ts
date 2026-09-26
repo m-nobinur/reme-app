@@ -28,6 +28,7 @@ import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as AppAccountRouteImport } from './routes/app/account'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
+import { Route as AppCIdRouteImport } from './routes/app/c.$id'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 
@@ -126,6 +127,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppCIdRoute = AppCIdRouteImport.update({
+  id: '/c/$id',
+  path: '/c/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   id: '/api/auth/social',
   path: '/api/auth/social',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/app/c/$id'
   id:
     | '__root__'
     | '/'
@@ -275,6 +286,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/app/c/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -429,6 +441,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/c/$id': {
+      id: '/app/c/$id'
+      path: '/c/$id'
+      fullPath: '/app/c/$id'
+      preLoaderRoute: typeof AppCIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/auth/social': {
       id: '/api/auth/social'
       path: '/api/auth/social'
@@ -454,6 +473,7 @@ interface AppRouteChildren {
   AppProfileRoute: typeof AppProfileRoute
   AppStaffRoute: typeof AppStaffRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppCIdRoute: typeof AppCIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -464,6 +484,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppProfileRoute: AppProfileRoute,
   AppStaffRoute: AppStaffRoute,
   AppIndexRoute: AppIndexRoute,
+  AppCIdRoute: AppCIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

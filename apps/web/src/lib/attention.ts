@@ -1,6 +1,5 @@
 import type { AttentionItem } from "./api/types"
 
-/** What the "Waiting on you" tile counts: reports and alerts are there to read, not answer. */
-export const waitingOnOwner = (items: AttentionItem[]): number =>
+/** What "Waiting on you" lists: reports and alerts are there to read, not answer. */
+export const waitingOnOwner = (items: AttentionItem[]): AttentionItem[] =>
   items.filter((item) => item.kind === "approval" || item.kind === "question")
-    .length
