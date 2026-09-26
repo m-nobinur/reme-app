@@ -1,6 +1,6 @@
 import { expect, it } from "vitest"
 import type { AttentionItem } from "./api/types"
-import { readWorkspace, waitingOnOwner } from "./attention"
+import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "./attention"
 
 const item = (kind: AttentionItem["kind"]) =>
   ({ kind, id: kind }) as unknown as AttentionItem
@@ -23,10 +23,9 @@ it("lists nothing when there are only reports and alerts", () => {
 
 it("reads what waits on the owner through the filter", async () => {
   const workspace = await readWorkspace(async () => ({
+    ...EMPTY_WORKSPACE,
     attention: [item("approval"), item("report")],
     live: 3,
-    building: false,
-    open: false,
   }))
   expect(workspace?.attention).toHaveLength(1)
   expect(workspace?.live).toBe(3)

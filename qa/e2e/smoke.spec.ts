@@ -55,17 +55,24 @@ function panel(page: Page) {
   return page.getByRole("complementary", { name: "Panel" })
 }
 
-test("the panel tells a new owner nothing is waiting on them", async ({
+test("the panel shows a new owner their first steps and nothing else", async ({
   page,
 }) => {
   await visit(page, "/app")
-  // This account has no organisation, so an item here is either a leak or a
-  // fixture, and both are defects.
+  // This account has no organisation, so a question, an approval or a build
+  // here is either a leak or a fixture, and both are defects.
   await expect(
-    panel(page).getByRole("heading", { name: "Waiting on you", level: 2 })
+    panel(page).getByRole("heading", { name: "First steps", level: 2 })
   ).toBeVisible()
-  await expect(panel(page).getByText("Nothing right now.")).toBeVisible()
-  await expect(panel(page).getByRole("listitem")).toHaveCount(0)
+  await expect(panel(page).getByRole("listitem")).toHaveText([
+    "To do: Build your first version",
+  ])
+  await expect(
+    panel(page).getByRole("heading", { name: "Waiting on you" })
+  ).toHaveCount(0)
+  await expect(
+    panel(page).getByRole("heading", { name: "Working on" })
+  ).toHaveCount(0)
   await expectNoFixtureContent(page)
 })
 
@@ -76,7 +83,10 @@ test("the panel is where the owner left it on the first paint", async ({
   // open panel is `lg:flex`, a closed one is not. Read from the response, not
   // the page, because after hydration the client could have fixed a wrong
   // first paint and this would pass on the shift it exists to prevent.
-  const panelClass = async (state: string) => {
+  //
+  // The conversation routes too: the chat itself is client only, and the
+  // frame and panel around it are still the server's.
+  const panelClass = async (path: string, state: string) => {
     await page.context().addCookies([
       {
         name: "reme-panel",
@@ -84,13 +94,23 @@ test("the panel is where the owner left it on the first paint", async ({
         url: test.info().project.use.baseURL ?? "",
       },
     ])
-    const html = await (await page.request.get("/app/approvals")).text()
+    const response = await page.request.get(path)
+    expect(response.status(), path).toBe(200)
+    const html = await response.text()
     return /<aside[^>]*id="workspace-panel"[^>]*>/.exec(html)?.[0] ?? ""
   }
-  const closed = await panelClass("closed")
-  expect(closed, "no panel in the server HTML").toContain("workspace-panel")
-  expect(closed).not.toContain("lg:flex")
-  expect(await panelClass("open")).toContain("lg:flex")
+  for (const path of [
+    "/app/approvals",
+    "/app",
+    "/app/c/00000000-0000-4000-8000-000000000000",
+  ]) {
+    const closed = await panelClass(path, "closed")
+    expect(closed, `no panel in the server HTML of ${path}`).toContain(
+      "workspace-panel"
+    )
+    expect(closed).not.toContain("lg:flex")
+    expect(await panelClass(path, "open"), path).toContain("lg:flex")
+  }
 })
 
 test("the staff directory tells a new owner it is empty", async ({ page }) => {

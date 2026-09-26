@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { EMPTY_WORKSPACE } from "../attention"
 import { apiSource, treeOf } from "./client"
 import type { StaffMember } from "./types"
 
@@ -386,12 +387,9 @@ it("answers empty for a session with no organisation", async () => {
     "fetch",
     vi.fn(async () => new Response(null, { status: 403 }))
   )
-  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toEqual({
-    attention: [],
-    live: null,
-    building: false,
-    open: false,
-  })
+  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toEqual(
+    EMPTY_WORKSPACE
+  )
   expect(await apiSource.approvals(ORG)).toEqual([])
   expect(await apiSource.activity(ORG)).toEqual([])
   expect(await apiSource.profile(ORG)).toBeNull()
@@ -464,4 +462,203 @@ it("names an item raised by someone outside the directory as Reme", async () => 
     attention: [card],
   } = await apiSource.workspace(ORG, Promise.resolve([alex]))
   expect(card?.raisedBy).toBe("Reme")
+})
+
+const CONVERSATION = "00000000-0000-4000-8000-00000000000a"
+const conversation = {
+  id: CONVERSATION,
+  kind: "assistant",
+  title: null,
+  archived_at: null,
+  created_at: AT,
+  updated_at: AT,
+}
+const building = {
+  assignment_id: ASSIGNMENT,
+  kind: "site.build",
+  state: "implementing",
+  goal: "Build my website",
+  revision: null,
+  created_at: AT,
+  updated_at: AT,
+}
+const headerOf = (call: Call | undefined, name: string) =>
+  new Headers(call?.init?.headers).get(name)
+
+it("polls with the last tag and keeps what it has on a 304", async () => {
+  answers["GET /workspace"] = new Response(null, { status: 304 })
+  expect(await apiSource.pollWorkspace(ORG, '"a1"')).toBe("unchanged")
+  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
+  expect(headerOf(calls[0], "if-none-match")).toBe('"a1"')
+})
+
+it("reads a changed workspace with its tag, builds and missing facts", async () => {
+  answers["GET /workspace"] = Response.json(
+    {
+      site: { host: "fictional.example.invalid", live: null },
+      builds: [building],
+      attention: [],
+      missing_facts: ["business.phone"],
+    },
+    { headers: { etag: '"b2"' } }
+  )
+  const read = await apiSource.pollWorkspace(ORG, '"a1"')
+  expect(read).toMatchObject({
+    etag: '"b2"',
+    building: true,
+    builds: [building],
+    host: "fictional.example.invalid",
+    missingFacts: ["business.phone"],
+  })
+  // Nothing to name, so the directory is not read.
+  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
+})
+
+it("names who asked when a changed workspace has a question", async () => {
+  answers["GET /workspace"] = { ...workspace, attention: [question] }
+  const read = await apiSource.pollWorkspace(ORG, null)
+  expect(calls.map((call) => call.path)).toEqual(["/workspace", "/staff"])
+  expect(headerOf(calls[0], "if-none-match")).toBeNull()
+  expect(read !== "unchanged" && read.attention[0]).toMatchObject({
+    kind: "question",
+    raisedBy: "Alex",
+    assignmentId: ASSIGNMENT,
+    answer: { kind: "fact", key: "hours.weekday" },
+  })
+})
+
+it("shows the question /workspace says the build waits on, and no other", async () => {
+  // Item 82: the api picks the question; the panel shows exactly that one.
+  const second = {
+    ...question,
+    request: {
+      ...question.request,
+      request_id: "00000000-0000-4000-8000-00000000000b",
+      field: "business.phone",
+    },
+  }
+  answers["GET /workspace"] = { ...workspace, attention: [second] }
+  const read = await apiSource.pollWorkspace(ORG, null)
+  expect(read !== "unchanged" && read.attention.map((item) => item.id)).toEqual(
+    [second.request.request_id]
+  )
+})
+
+it("sends an answer to the build it blocks, with the caller's key", async () => {
+  answers[`POST /builds/${ASSIGNMENT}/answer`] = Response.json(
+    {},
+    { status: 202 }
+  )
+  const value = { open: "08:00", close: "17:00" }
+  expect(
+    await apiSource.answer(ORG, ASSIGNMENT, REQUEST, value, "k-1")
+  ).toEqual({ done: true })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    request_id: REQUEST,
+    value,
+  })
+  expect(headerOf(calls[0], "idempotency-key")).toBe("k-1")
+})
+
+it("says why an answer was refused, and treats one already given as done", async () => {
+  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(400, "answer.invalid")
+  expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+    done: false,
+    reason: expect.stringContaining("does not fit the question"),
+  })
+  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(
+    409,
+    "answer.already_given"
+  )
+  expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+    done: true,
+  })
+  answers[`POST /builds/${ASSIGNMENT}/answer`] = new Response(null, {
+    status: 502,
+  })
+  await expect(
+    apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")
+  ).rejects.toThrow()
+})
+
+it("stops a build once, however often Stop is pressed", async () => {
+  answers[`POST /builds/${ASSIGNMENT}/cancel`] = {
+    assignment_id: ASSIGNMENT,
+    state: "cancelled",
+  }
+  expect(await apiSource.cancelBuild(ORG, ASSIGNMENT)).toEqual({ done: true })
+  expect(calls[0]?.init?.body).toBeUndefined()
+  expect(headerOf(calls[0], "idempotency-key")).toBe(`cancel:${ASSIGNMENT}`)
+})
+
+it("reads a build's preview and its three screenshots", async () => {
+  const link = {
+    revision_id: REVISION,
+    url: "https://preview.example.invalid/?t=a",
+    screenshots: [1, 2, 3].map(
+      (n) => `https://preview.example.invalid/screenshots/${n}.png?t=b`
+    ),
+    expires_at: EXPIRES,
+  }
+  answers[`GET /builds/${ASSIGNMENT}/preview`] = link
+  expect(await apiSource.preview(ORG, ASSIGNMENT)).toEqual({
+    url: link.url,
+    screenshots: link.screenshots,
+  })
+})
+
+it("sends a change in the owner's words, and says why one is refused", async () => {
+  answers["POST /changes"] = refusal(409, "change.question_open")
+  expect(await apiSource.requestChange(ORG, "Bigger logo", "k-2")).toEqual({
+    done: false,
+    reason: expect.stringContaining("Answer the question"),
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Bigger logo",
+  })
+})
+
+it("lists, fetches and creates conversations over the contract", async () => {
+  answers["GET /conversations"] = { conversations: [conversation] }
+  answers[`GET /conversations/${CONVERSATION}`] = conversation
+  answers["POST /conversations"] = conversation
+  expect(await apiSource.conversations(ORG)).toEqual([conversation])
+  expect(await apiSource.conversation(ORG, CONVERSATION)).toEqual(conversation)
+  expect(await apiSource.createConversation(ORG, "__LOCALID_abc")).toEqual(
+    conversation
+  )
+  const create = calls.at(-1)
+  // An empty body, keyed on the thread's local id.
+  expect(create?.init?.body).toBeUndefined()
+  expect(headerOf(create, "idempotency-key")).toBe("__LOCALID_abc")
+})
+
+it("answers null for a conversation that is not the owner's", async () => {
+  expect(await apiSource.conversation(ORG, CONVERSATION)).toBeNull()
+})
+
+it("renames and archives with a PATCH of one field", async () => {
+  answers[`PATCH /conversations/${CONVERSATION}`] = conversation
+  await apiSource.updateConversation(ORG, CONVERSATION, { archived: true }, "k")
+  expect(calls[0]?.init?.method).toBe("PATCH")
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ archived: true })
+})
+
+it("reads a conversation's messages, oldest first, as stored", async () => {
+  const message = {
+    id: "msg_1",
+    parent_id: null,
+    format: "ai-sdk/v6",
+    content: {
+      role: "user",
+      parts: [{ type: "text", text: "Hello" }],
+      metadata: { custom: { createdAt: AT } },
+    },
+  }
+  answers[`GET /conversations/${CONVERSATION}/messages`] = {
+    messages: [message],
+  }
+  expect(await apiSource.conversationMessages(ORG, CONVERSATION)).toEqual([
+    message,
+  ])
 })

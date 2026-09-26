@@ -40,6 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
+    "fast-check": "4.9.0",
     "typescript": "^6",
     "vite": "^8",
     "vitest": "^4.1.11",

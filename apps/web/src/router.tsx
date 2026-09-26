@@ -80,7 +80,10 @@ declare module "@tanstack/react-router" {
     router: ReturnType<typeof getRouter>
   }
   interface HistoryState {
-    /** Set fresh by "New chat", so a click on /app is a new navigation. */
+    /**
+     * Set fresh by "New chat", so a click on /app while already there still
+     * starts a new thread.
+     */
     chat?: string
   }
   interface StaticDataRouteOption {

@@ -1,12 +1,18 @@
 import {
   AssistantRuntimeProvider,
+  useRemoteThreadListRuntime,
   WebSpeechDictationAdapter,
 } from "@assistant-ui/react"
 import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk"
-import { getRouteApi, useLocation, useRouter } from "@tanstack/react-router"
+import {
+  getRouteApi,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   OWNER_QUICK_ACTIONS,
@@ -14,8 +20,10 @@ import {
   type ThreadMode,
 } from "@workspace/ui/components/assistant/thread"
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { briefingOf } from "@/lib/briefing"
+import { useLiveWorkspace } from "@/lib/workspace"
+import { conversationList, unstored } from "./conversations"
 
 const frame = getRouteApi("/app")
 
@@ -42,21 +50,14 @@ function storeMode(mode: ThreadMode) {
 }
 
 /**
- * The conversation, as `/app` and `/app/c/$id` both render it. Until
- * conversations are stored, an id names nothing and both start empty.
- *
- * Keyed on the navigation, so "New chat" and a move between conversations
- * start a fresh runtime instead of keeping the last thread on screen.
+ * The conversation at `/app` (a new one) and `/app/c/$id` (a stored one).
+ * The address is the thread: the runtime follows `id`, and when a new
+ * chat's first send stores it, the address follows the stored id.
  */
 export function ChatPage() {
-  const key = useLocation({
-    select: (location) => location.state.__TSR_key ?? location.href,
-  })
-  return <Conversation key={key} />
-}
-
-function Conversation() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const { id } = useParams({ strict: false })
+  const { refresh } = useLiveWorkspace()
   const { active, workspace } = frame.useLoaderData()
   const briefing = useMemo(
     () => briefingOf(active, workspace),
@@ -74,25 +75,54 @@ function Conversation() {
       ? new WebSpeechDictationAdapter({ language: "en-GB" })
       : undefined
   )
-  const runtime = useChatRuntime({
-    // The mode travels with every request, so the backend that enforces it
-    // (the onboarding script, then the Chief of Staff) reads what the owner
-    // picked. The replay ignores it.
-    transport: new AssistantChatTransport({ api: "/api/chat", body: { mode } }),
-    // An approval answer is a turn: once the owner has answered every pending
-    // one, the runtime sends the thread back and the recording continues.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    // A turn can change what is waiting on the owner, so the frame reads it
-    // again and the panel and its count are not left stale.
-    onFinish: () => {
-      void router.invalidate()
+  const useThreadRuntime = () =>
+    useChatRuntime({
+      // The mode travels with every request, so the backend that enforces it
+      // (the onboarding script, then the Chief of Staff) reads what the owner
+      // picked. The replay ignores it.
+      transport: new AssistantChatTransport({
+        api: "/api/chat",
+        body: { mode },
+      }),
+      // An approval answer is a turn: once the owner has answered every pending
+      // one, the runtime sends the thread back and the recording continues.
+      sendAutomaticallyWhen:
+        lastAssistantMessageIsCompleteWithApprovalResponses,
+      // A turn can change what is waiting on the owner, so the panel reads
+      // it again rather than waiting for its next poll.
+      onFinish: () => {
+        void refresh()
+      },
+      // The option, not `adapters.suggestion`: in @assistant-ui/react-ai-sdk 1.4.7
+      // the adapter runs only after an assistant turn ends and then replaces these,
+      // and the empty thread is the only place suggestions show.
+      suggestions: briefing.suggestions,
+      adapters: dictation ? { dictation } : {},
+    })
+  const runtime = useRemoteThreadListRuntime({
+    adapter: conversationList,
+    runtimeHook: useThreadRuntime,
+    threadId: id,
+    onThreadIdChange: (stored) => {
+      // A thread kept only in this tab has no address of its own.
+      if (stored && stored !== id && !unstored.has(stored)) {
+        void navigate({
+          to: "/app/c/$id",
+          params: { id: stored },
+          replace: true,
+        })
+      }
     },
-    // The option, not `adapters.suggestion`: in @assistant-ui/react-ai-sdk 1.4.7
-    // the adapter runs only after an assistant turn ends and then replaces these,
-    // and the empty thread is the only place suggestions show.
-    suggestions: briefing.suggestions,
-    adapters: dictation ? { dictation } : {},
   })
+
+  // "New chat" on /app itself: the address is the same, the state is new.
+  const fresh = useLocation({ select: (location) => location.state.chat })
+  const seen = useRef(fresh)
+  useEffect(() => {
+    if (fresh === seen.current) return
+    seen.current = fresh
+    void runtime.threads.switchToNewThread()
+  }, [fresh, runtime])
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
