@@ -57,7 +57,12 @@ export function stubOrchestrator(
 export type Stub = ReturnType<typeof stubOrchestrator>
 
 /** A signed-up org and a way to call the API as its owner. */
-export async function owner(kit: Tenancy, url: string, tag: string) {
+export async function owner(
+  kit: Tenancy,
+  url: string,
+  tag: string,
+  newId?: () => string
+) {
   const run = crypto.randomUUID().slice(0, 8)
   const workosUserId = `user_probe_${tag}_${run}`
   const workosOrganizationId = `org_probe_${tag}_${run}`
@@ -74,7 +79,8 @@ export async function owner(kit: Tenancy, url: string, tag: string) {
       workosUserId,
       email: `${tag}-${run}@owner-probe.invalid`,
       displayName: "Probe Owner",
-    }
+    },
+    newId
   )
   const orgId = org.org_id
   const [dev, chief] = await kit.withOrg({ orgId }, async (db) =>
@@ -114,6 +120,7 @@ export async function owner(kit: Tenancy, url: string, tag: string) {
   return {
     orgId,
     slug: org.slug,
+    name: org.name,
     workosUserId,
     devId: dev as string,
     chiefId: chief as string,

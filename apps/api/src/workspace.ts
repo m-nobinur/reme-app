@@ -262,7 +262,7 @@ export async function readSite(
 }
 
 /** Required facts the org does not hold yet, minus the ones it keeps off the site. */
-function missingFacts(current: FactRecord[]): FactValueKey[] {
+export function missingFacts(current: FactRecord[]): FactValueKey[] {
   const held = new Set(current.map((fact) => fact.key))
   return factsToAsk(FIELDS, current).ask.filter(
     (key): key is FactValueKey =>

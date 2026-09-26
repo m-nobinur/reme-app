@@ -21,6 +21,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^22",
+    "ai": "7.0.83",
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",
     "vitest": "^4.1.11",

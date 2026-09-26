@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 
 const api = fileURLToPath(new URL("..", import.meta.url))
+/** One of parse5's error codes: in the bundle only if parse5 is. */
+const PARSE5_MARKER = "abandoned-head-element-child"
 const kib = (bytes) => `${(bytes / 1024).toFixed(2)} KiB`
 
 function measure() {
@@ -57,6 +59,7 @@ function measure() {
     const bytes = modules.map((path) => readFileSync(path))
     const printed = /gzip:\s*([\d.]+)\s*KiB/.exec(stdout)
     return {
+      parse5: bytes.some((buffer) => buffer.includes(PARSE5_MARKER)),
       raw: bytes.reduce((total, buffer) => total + buffer.length, 0),
       gzip: gzipSync(Buffer.concat(bytes)).length,
       printed: printed ? Number(printed[1]) : null,
@@ -100,6 +103,16 @@ if (size.printed != null && Math.abs(size.gzip / 1024 - size.printed) > 0.02) {
   console.error(
     `size: measured ${(size.gzip / 1024).toFixed(2)} KiB but wrangler reported ${size.printed.toFixed(2)} KiB. ` +
       "The module set or its concatenation order no longer matches wrangler's, so this number is not what Cloudflare receives."
+  )
+  process.exit(1)
+}
+
+// The api reads site fields through `@workspace/gates/fields`. The package
+// root pulls in parse5 for the content gate, which this Worker never runs.
+if (size.parse5) {
+  console.error(
+    `size: the bundle carries parse5 (found "${PARSE5_MARKER}"). ` +
+      "Import @workspace/gates/fields, not the @workspace/gates root."
   )
   process.exit(1)
 }

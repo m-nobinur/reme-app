@@ -1,6 +1,8 @@
 import { ErrorEnvelope, Org, StaffDirectory } from "@workspace/contracts"
 import {
   asc,
+  conversationMessages,
+  conversations,
   eq,
   memberships,
   orgs,
@@ -215,12 +217,15 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   const admin = postgres(url as string, { max: 1 })
 
   /**
-   * An org this suite wrote, gone: staff leaves first, whatever the codes,
-   * then the membership an owner row points at, then the org. A run that
-   * failed halfway leaves nothing the next run trips on.
+   * An org this suite wrote, gone: its onboarding conversation first, then
+   * staff whatever the codes, then the membership an owner row points at,
+   * then the org. A run that failed halfway leaves nothing the next run
+   * trips on.
    */
   const drop = (dropped: string) =>
     kit.withOrg({ orgId: dropped }, async (db) => {
+      await db.delete(conversationMessages)
+      await db.delete(conversations)
       for (;;) {
         const gone = await db
           .delete(staff)
@@ -280,6 +285,36 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     // rely on the idempotency key to give the same one back, which WorkOS does
     // not do. The membership the owner already holds is what replays.
     expect(calls).toBe(1)
+  })
+
+  it("lands the owner in onboarding, asked for the business name", async () => {
+    const [held, rows] = await kit.withOrg({ orgId }, (db) =>
+      Promise.all([
+        db.select().from(conversations),
+        db.select().from(conversationMessages),
+      ])
+    )
+    // One of each, the replay above included.
+    expect(held.map((c) => c.kind)).toEqual(["onboarding"])
+    expect(rows).toHaveLength(1)
+    const [first] = rows
+    expect(first?.parentId).toBeNull()
+    expect(first?.content).toEqual({
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-ask_fact",
+          toolCallId: expect.any(String),
+          state: "input-available",
+          input: {
+            key: "business.name",
+            skippable: false,
+            prefill: { name: input.name },
+          },
+        },
+      ],
+    })
   })
 
   const person = async () => {

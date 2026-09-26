@@ -1,6 +1,8 @@
 import type { Org, StaffDirectory } from "@workspace/contracts"
 import {
   asc,
+  conversationMessages,
+  conversations,
   eq,
   memberships,
   type OrgScopedDb,
@@ -13,6 +15,7 @@ import {
   toStaffMember,
   users,
 } from "@workspace/db"
+import { firstMessage } from "./chat.ts"
 
 /**
  * The org read, the staff directory read and the write that gives them
@@ -219,7 +222,8 @@ export async function createOrg(
     workosUserId: string
     email: string
     displayName: string | null
-  }
+  },
+  newId: () => string = () => crypto.randomUUID()
 ): Promise<Org> {
   // The replay, and it has to be the first thing that happens: everything
   // after it either creates a vendor resource or writes a row.
@@ -305,6 +309,20 @@ export async function createOrg(
         orgId,
         userId: person.id,
         ownerName: input.displayName ?? input.email,
+      })
+      // The new owner lands in onboarding: its conversation, and the first
+      // question already asked. Ids made here, so nothing needs RETURNING.
+      const conversationId = crypto.randomUUID()
+      await db.insert(conversations).values({
+        id: conversationId,
+        orgId,
+        kind: "onboarding",
+        createdByStaffId: sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.kind} = 'human' and ${staff.managerId} is null)`,
+      })
+      await db.insert(conversationMessages).values({
+        conversationId,
+        orgId,
+        ...firstMessage(input.name, newId),
       })
       return true
     }

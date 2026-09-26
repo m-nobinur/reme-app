@@ -63,6 +63,9 @@ importers:
       '@types/node':
         specifier: ^22
         version: 22.19.19
+      ai:
+        specifier: 7.0.83
+        version: 7.0.83(zod@4.6.5)
       iron-webcrypto:
         specifier: 2.0.0
         version: 2.0.0
