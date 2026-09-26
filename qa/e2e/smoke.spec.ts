@@ -50,43 +50,47 @@ async function expectNoFixtureContent(page: Page) {
   }
 }
 
-/** The number on one dashboard tile, found by the label above it. */
-function statTile(page: Page, label: string) {
-  return page
-    .locator('[data-slot="card"]')
-    .filter({ has: page.getByText(label, { exact: true }) })
-    .locator('[data-slot="card-title"]')
+/** The panel beside the conversation, by its landmark name. */
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: "Panel" })
 }
 
-test("the dashboard counts agree with the staff directory", async ({
+test("the panel tells a new owner nothing is waiting on them", async ({
   page,
 }) => {
   await visit(page, "/app")
+  // This account has no organisation, so an item here is either a leak or a
+  // fixture, and both are defects.
   await expect(
-    page.getByRole("heading", { name: "Dashboard", exact: true, level: 1 })
+    panel(page).getByRole("heading", { name: "Waiting on you", level: 2 })
   ).toBeVisible()
-
-  const staffCount = Number(await statTile(page, "Staff").innerText())
-  const waiting = Number(await statTile(page, "Waiting on you").innerText())
-  const pipeline = Number(await statTile(page, "Pipeline").innerText())
-  for (const count of [staffCount, waiting, pipeline]) {
-    expect(Number.isInteger(count)).toBe(true)
-  }
-  // This account has no organisation, so every tile is a zero. A number here is
-  // either a leak or a fixture, and both are defects.
-  expect([staffCount, waiting, pipeline]).toEqual([0, 0, 0])
+  await expect(panel(page).getByText("Nothing right now.")).toBeVisible()
+  await expect(panel(page).getByRole("listitem")).toHaveCount(0)
   await expectNoFixtureContent(page)
+})
 
-  // The invariant, not a copy of the number: the tile says "active", so it has
-  // to be the count of people the directory shows as active. Two screens, one
-  // server, and a filter that only one of them implements. The directory draws
-  // no table at all when it is empty, which is the same answer as zero rows.
-  await visit(page, "/app/staff")
-  const active = page
-    .getByRole("table")
-    .getByRole("row")
-    .filter({ has: page.getByText("Active", { exact: true }) })
-  await expect(active).toHaveCount(staffCount)
+test("the panel is where the owner left it on the first paint", async ({
+  page,
+}) => {
+  // The server reads the cookie, so the HTML already carries the answer: an
+  // open panel is `lg:flex`, a closed one is not. Read from the response, not
+  // the page, because after hydration the client could have fixed a wrong
+  // first paint and this would pass on the shift it exists to prevent.
+  const panelClass = async (state: string) => {
+    await page.context().addCookies([
+      {
+        name: "reme-panel",
+        value: state,
+        url: test.info().project.use.baseURL ?? "",
+      },
+    ])
+    const html = await (await page.request.get("/app/approvals")).text()
+    return /<aside[^>]*id="workspace-panel"[^>]*>/.exec(html)?.[0] ?? ""
+  }
+  const closed = await panelClass("closed")
+  expect(closed, "no panel in the server HTML").toContain("workspace-panel")
+  expect(closed).not.toContain("lg:flex")
+  expect(await panelClass("open")).toContain("lg:flex")
 })
 
 test("the staff directory tells a new owner it is empty", async ({ page }) => {
@@ -109,8 +113,23 @@ test("the staff directory tells a new owner it is empty", async ({ page }) => {
   await expect(page.getByRole("combobox")).toContainText("No organisation")
 })
 
-test("the chat surface replays the recorded conversation", async ({ page }) => {
+test("the old chat address lands on the conversation", async ({ page }) => {
   await visit(page, "/app/chat")
+  await expect(page).toHaveURL(/\/app$/)
+  await expect(page.getByLabel("Message input")).toBeVisible()
+})
+
+test("the chat surface replays the recorded conversation", async ({ page }) => {
+  await visit(page, "/app")
+
+  // Server function calls after the send: the frame read the router makes
+  // again once the turn ends, so the panel and its count are not stale.
+  const reads: string[] = []
+  page.on("request", (request) => {
+    if (request.url().includes("/_serverFn/")) {
+      reads.push(request.url())
+    }
+  })
 
   await page.getByLabel("Message input").fill("How did this week go?")
   await page.getByLabel("Send message").click()
@@ -129,6 +148,11 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   await expect(approval).toContainText("rev_2f41c9")
   await expect(approval.getByRole("button", { name: "Approve" })).toBeVisible()
   await expect(approval.getByRole("button", { name: "Decline" })).toBeVisible()
+  await expect
+    .poll(() => reads.length, {
+      message: "the frame was not read again after the turn",
+    })
+    .toBeGreaterThan(0)
 
   // The hole this suite used to have: every other screen was scanned and this
   // one was not, so the recording named `Brightclean` to whoever was signed in
@@ -138,6 +162,44 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   // the opening turn and not the APPROVED and DENIED branches. Both are clean,
   // checked by hand; a test that answers the approval would cover them.
   await expectNoFixtureContent(page)
+})
+
+test("New chat starts an empty conversation", async ({ page }) => {
+  await visit(page, "/app")
+  await page.getByLabel("Message input").fill("How did this week go?")
+  await page.getByLabel("Send message").click()
+  await expect(page.getByText("How did this week go?")).toBeVisible()
+
+  await page.getByRole("link", { name: "New chat" }).click()
+  await expect(
+    page.getByRole("heading", { name: "What should I look at?" })
+  ).toBeVisible()
+  await expect(page.getByText("How did this week go?")).toHaveCount(0)
+})
+
+test("each page opens at the top, and Back returns to where the owner was", async ({
+  page,
+}) => {
+  const top = () => page.locator("main").evaluate((main) => main.scrollTop)
+  await visit(page, "/app/staff")
+  // An account with no business has no page tall enough to scroll, so main is
+  // given the height. The node sits outside React's tree and survives the
+  // navigation, which is what lets the reset be seen.
+  await page.locator("main").evaluate((main) => {
+    const spacer = document.createElement("div")
+    spacer.style.height = "4000px"
+    main.append(spacer)
+    main.scrollTop = 1200
+  })
+  await page.waitForTimeout(300)
+
+  await page.getByRole("link", { name: "Pipeline" }).click()
+  await expect(page).toHaveURL(/\/app\/pipeline/)
+  await expect.poll(top).toBe(0)
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/app\/staff/)
+  await expect.poll(top).toBe(1200)
 })
 
 test("the approvals inbox has nothing to decide", async ({ page }) => {
@@ -164,22 +226,10 @@ test("the approvals inbox has nothing to decide", async ({ page }) => {
 test("an owner with no business yet sees empty states and no one else's rows", async ({
   page,
 }) => {
-  // The suite's owner belongs to no org, so these screens return before they
-  // read `apps/api`. The reads themselves are covered by client.test.ts and by
+  // The suite's owner belongs to no org, so this screen returns before it
+  // reads `apps/api`. The reads themselves are covered by client.test.ts and by
   // the owner workspace exit run; an owner with an org arrives with the golden
   // path, which can clean up the tenant rows it writes.
-  await visit(page, "/app")
-  const waiting = page.locator("section", {
-    has: page.getByRole("heading", { name: "Waiting on you", level: 2 }),
-  })
-  await expect(waiting.getByText("Nothing waiting on you")).toBeVisible()
-  await expect(waiting.locator("article")).toHaveCount(0)
-  const activity = page.locator("section", {
-    has: page.getByRole("heading", { name: "Recent activity", level: 2 }),
-  })
-  await expect(activity.getByText("No activity yet")).toBeVisible()
-  await expect(activity.getByRole("listitem")).toHaveCount(0)
-
   await visit(page, "/app/profile")
   await expect(page.getByText("Nothing recorded yet")).toBeVisible()
   await expect(page.locator('[data-slot="card"]')).toHaveCount(0)

@@ -44,6 +44,9 @@ function Account() {
       </dl>
       <Link
         className={buttonVariants({ variant: "outline", className: "mt-6" })}
+        // Never preloaded: /sign-out signs out in its loader, so a preload on
+        // hover or focus would end the session.
+        preload={false}
         to="/sign-out"
       >
         Sign out

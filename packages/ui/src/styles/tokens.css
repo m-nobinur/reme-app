@@ -59,6 +59,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.63 0 0);
+  /* The owner workspace's second neutral, under the rail and the panel so the
+     conversation between them reads as the page. A trace of the primary's hue
+     and no more. Measured on it: the foreground 16.82:1, muted-foreground
+     4.92:1, primary as text 5.02:1, and the focus ring 3.26:1. */
+  --rail: oklch(0.975 0.004 186);
+  --rail-foreground: oklch(0.2 0.01 186);
 }
 
 .dark {
@@ -100,4 +106,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Between the background and the card. Measured on it: the foreground
+     15.32:1, muted-foreground 7.25:1, primary as text 7.75:1, and the focus
+     ring 3.97:1. */
+  --rail: oklch(0.18 0.004 186);
+  --rail-foreground: oklch(0.93 0.006 186);
 }
