@@ -395,9 +395,11 @@ export interface components {
         content: {
           /** @enum {string} */
           role: "user" | "assistant"
-          parts: {
+          parts: ({
+            type: string
+          } & {
             [key: string]: unknown
-          }[]
+          })[]
           metadata: {
             custom: {
               /** Format: date-time */
@@ -429,9 +431,11 @@ export interface components {
       content: {
         /** @enum {string} */
         role: "user" | "assistant"
-        parts: {
+        parts: ({
+          type: string
+        } & {
           [key: string]: unknown
-        }[]
+        })[]
         metadata: {
           custom: {
             /** Format: date-time */

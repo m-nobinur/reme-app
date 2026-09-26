@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   Conversation,
+  ConversationList,
   ConversationMessage,
   ConversationPatch,
 } from "../src/conversation.ts"
@@ -55,6 +56,29 @@ describe("Conversation", () => {
     expect(verdict("Conversation", Conversation, title(120))).toEqual(ACCEPTED)
     expect(verdict("Conversation", Conversation, title(121))).toEqual(REFUSED)
   })
+
+  it("refuses a kind it does not know", () => {
+    expect(
+      verdict("Conversation", Conversation, {
+        ...conversation,
+        kind: "support",
+      })
+    ).toEqual(REFUSED)
+  })
+})
+
+describe("ConversationList", () => {
+  it("takes 50 conversations and refuses 51", () => {
+    const list = (n: number) => ({
+      conversations: Array.from({ length: n }, () => conversation),
+    })
+    expect(verdict("ConversationList", ConversationList, list(50))).toEqual(
+      ACCEPTED
+    )
+    expect(verdict("ConversationList", ConversationList, list(51))).toEqual(
+      REFUSED
+    )
+  })
 })
 
 describe("ConversationMessage", () => {
@@ -65,6 +89,14 @@ describe("ConversationMessage", () => {
     ["an id with a space", { id: "msg 1" }],
     ["a message with no parts", { content: { ...message.content, parts: [] } }],
     ["another storage format", { format: "aui/v0" }],
+    [
+      "a part with no type",
+      { content: { ...message.content, parts: [{ text: "Hello" }] } },
+    ],
+    [
+      "a part with an empty type",
+      { content: { ...message.content, parts: [{ type: "", text: "Hello" }] } },
+    ],
   ])("refuses %s", (_name, change) => {
     expect(
       verdict("ConversationMessage", ConversationMessage, {

@@ -1421,9 +1421,13 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "propertyNames": {
-                          "type": "string"
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "minLength": 1
+                          }
                         },
+                        "required": ["type"],
                         "additionalProperties": {}
                       }
                     },
@@ -1564,9 +1568,13 @@
                 "type": "array",
                 "items": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    }
                   },
+                  "required": ["type"],
                   "additionalProperties": {}
                 }
               },

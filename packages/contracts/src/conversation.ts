@@ -1,8 +1,6 @@
 import { z } from "zod"
-import { JsonObject, Timestamp, Uuid } from "./common.ts"
-
-/** Text with something in it, as in `owner.ts`. */
-const Text = (max: number) => z.string().min(1).max(max).regex(/\S/)
+import { Timestamp, Uuid } from "./common.ts"
+import { Text } from "./text.ts"
 
 /**
  * A message id. The client's AI SDK makes user message ids with a
@@ -18,6 +16,10 @@ const MessageId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 export const Conversation = z.strictObject({
   id: Uuid,
   kind: z.enum(["onboarding", "assistant"]),
+  /**
+   * The owner's text. If it ever reaches a prompt, it goes in as quoted data,
+   * never as instructions.
+   */
   title: Text(120).nullable(),
   archived_at: Timestamp.nullable(),
   created_at: Timestamp,
@@ -39,7 +41,12 @@ export const ConversationPatch = z.union([
  * One stored message in assistant-ui's `MessageStorageEntry` shape. `format`
  * is `aiSDKV6FormatAdapter.format`, which still says v6 on AI SDK 7.
  * `metadata.custom.createdAt` is written on read from the row's `created_at`;
- * the stored content carries no metadata.
+ * the stored content carries no metadata. Each part names its `type`; the
+ * rest of a part is the AI SDK's and stays open.
+ *
+ * A response shape only, never a request body. A route that takes messages
+ * gets its own shape (role `user`, text parts only, capped); the server
+ * writes assistant rows and `createdAt`.
  */
 export const ConversationMessage = z.strictObject({
   id: MessageId,
@@ -47,14 +54,17 @@ export const ConversationMessage = z.strictObject({
   format: z.literal("ai-sdk/v6"),
   content: z.strictObject({
     role: z.enum(["user", "assistant"]),
-    parts: z.array(JsonObject).min(1),
+    parts: z.array(z.looseObject({ type: z.string().min(1) })).min(1),
     metadata: z.strictObject({
       custom: z.strictObject({ createdAt: Timestamp }),
     }),
   }),
 })
 
-/** `GET /conversations/:id/messages`: oldest first, the whole conversation. */
+/**
+ * `GET /conversations/:id/messages`: oldest first, the whole conversation.
+ * A response only, never a request body, as `ConversationMessage` says.
+ */
 export const ConversationHistory = z.strictObject({
   messages: z.array(ConversationMessage),
 })

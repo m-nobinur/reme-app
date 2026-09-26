@@ -7,6 +7,7 @@ import {
 } from "./assignment.ts"
 import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { FactRecord } from "./fact.ts"
+import { Text } from "./text.ts"
 
 /**
  * The longest goal a build takes, in characters. The orchestrator refuses a
@@ -27,8 +28,6 @@ export const OWNER_BRIDGE_HEADERS = {
 } as const
 
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-/** Text with something in it. A regex rather than `.trim()`, which the JSON Schema cannot say. */
-const Text = (max: number) => z.string().min(1).max(max).regex(/\S/)
 const fact = <K extends string, V extends z.ZodRawShape>(key: K, value: V) =>
   z.strictObject({ key: z.literal(key), value: z.strictObject(value) })
 
