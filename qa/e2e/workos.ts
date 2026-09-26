@@ -62,7 +62,16 @@ async function call(
     status: response.status,
     // A 204 and an error page both have no JSON body, and neither should throw
     // here, because the caller decides what a status means.
-    body: text ? (JSON.parse(text) as Record<string, unknown>) : {},
+    body: parsed(text),
+  }
+}
+
+/** A body as JSON, or empty: an organisation delete answers 202 "Accepted". */
+function parsed(text: string): Record<string, unknown> {
+  try {
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {}
+  } catch {
+    return {}
   }
 }
 
@@ -79,8 +88,8 @@ export type ProbeUser = { id: string; email: string; password: string }
  * persisted, and only so the teardown can delete an account whose creation
  * outlived the test that made it.
  */
-export async function createProbeUser(): Promise<ProbeUser> {
-  const email = `${PREFIX}${crypto.randomUUID()}@${DOMAIN}`
+export async function createProbeUser(label = ""): Promise<ProbeUser> {
+  const email = `${PREFIX}${label}${crypto.randomUUID()}@${DOMAIN}`
   // 32 hex characters. Long enough to clear any password policy without
   // encoding an assumption about which one the environment has.
   const password = `Qa${crypto.randomUUID().replaceAll("-", "")}!`
@@ -131,6 +140,25 @@ export async function deleteProbeUser(id: string): Promise<boolean> {
   await call(`/user_management/users/${id}`, { method: "DELETE" })
   const after = await call(`/user_management/users/${id}`)
   return after.status === 404
+}
+
+/**
+ * The WorkOS organisations an account belongs to, deleted. Its rows in our
+ * database stay: the app cannot delete tenant rows.
+ */
+export async function deleteProbeOrgs(userId: string): Promise<void> {
+  const listed = await call(
+    `/user_management/organization_memberships?user_id=${userId}`
+  )
+  const memberships = (listed.body.data ?? []) as { organization_id: string }[]
+  for (const { organization_id } of memberships) {
+    const deleted = await call(`/organizations/${organization_id}`, {
+      method: "DELETE",
+    })
+    if (deleted.status >= 300 && deleted.status !== 404) {
+      throw new Error(`WorkOS kept ${organization_id}: ${deleted.status}`)
+    }
+  }
 }
 
 /**

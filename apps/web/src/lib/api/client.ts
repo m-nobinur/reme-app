@@ -15,8 +15,8 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { factLabel } from "@workspace/ui/lib/facts"
 import { WORKING } from "../build-state"
-import { factLabel } from "../facts"
 import type {
   ActivityItem,
   ApprovalItem,
@@ -629,6 +629,7 @@ export const apiSource: OwnerDataSource = {
   createConversation,
   updateConversation,
   conversationMessages,
+  chat: (body) => call("/chat", { method: "POST", body }),
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

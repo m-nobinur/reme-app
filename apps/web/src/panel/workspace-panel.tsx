@@ -10,6 +10,7 @@ import {
   WorkingOn,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import { factLabel } from "@workspace/ui/lib/facts"
 import { useEffect, useState } from "react"
 import {
   answerQuestion,
@@ -21,7 +22,6 @@ import {
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
-import { factLabel } from "@/lib/facts"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**

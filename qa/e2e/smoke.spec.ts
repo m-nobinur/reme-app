@@ -139,7 +139,7 @@ test("the old chat address lands on the conversation", async ({ page }) => {
   await expect(page.getByLabel("Message input")).toBeVisible()
 })
 
-test("the chat surface replays the recorded conversation", async ({ page }) => {
+test("a chat turn sends only what the owner did", async ({ page }) => {
   await visit(page, "/app")
 
   // Server function calls after the send: the frame read the router makes
@@ -150,37 +150,33 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
       reads.push(request.url())
     }
   })
+  const sent = page.waitForRequest((request) =>
+    request.url().endsWith("/api/chat")
+  )
 
   await page.getByLabel("Message input").fill("How did this week go?")
   await page.getByLabel("Send message").click()
 
-  // The recording streams reasoning, a tool call, a report and then stops on an
-  // approval. The report is what proves text arrived; the approval card is what
-  // proves the tool and approval parts render rather than falling through to
-  // the raw tool fallback. Both wait longer than the default because the
-  // replay carries the inter-chunk delays a live model run would have had.
-  await expect(page.getByText("This is a preview of how I report")).toBeVisible(
-    { timeout: 30_000 }
-  )
+  // The turn and nothing else: no history, system prompt or tools leave the
+  // browser, because the server reads its own rows.
+  const body = (await sent).postDataJSON()
+  expect(Object.keys(body).sort()).toEqual(["conversation_id", "mode", "turn"])
+  expect(body.turn).toMatchObject({
+    kind: "message",
+    text: "How did this week go?",
+  })
 
-  const approval = page.locator('[data-slot="approval-request"]')
-  await expect(approval).toBeVisible({ timeout: 30_000 })
-  await expect(approval).toContainText("rev_2f41c9")
-  await expect(approval.getByRole("button", { name: "Approve" })).toBeVisible()
-  await expect(approval.getByRole("button", { name: "Decline" })).toBeVisible()
+  // The probe owner has no organisation, so apps/api refuses the turn. It
+  // reads as the api's own sentence, not as the JSON it came in, and it
+  // writes nothing anywhere.
+  const refusal = page.locator(".aui-message-error-message")
+  await expect(refusal).toHaveText(/organisation/)
+  await expect(refusal).not.toContainText("{")
   await expect
     .poll(() => reads.length, {
       message: "the frame was not read again after the turn",
     })
     .toBeGreaterThan(0)
-
-  // The hole this suite used to have: every other screen was scanned and this
-  // one was not, so the recording named `Brightclean` to whoever was signed in
-  // for as long as gate 9 was recorded as met. After the stream, because a scan
-  // of an empty thread passes without reading anything the replay produced.
-  // Narrower than it reads: this test never answers the approval, so it sees
-  // the opening turn and not the APPROVED and DENIED branches. Both are clean,
-  // checked by hand; a test that answers the approval would cover them.
   await expectNoFixtureContent(page)
 })
 

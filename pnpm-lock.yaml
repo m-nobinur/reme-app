@@ -167,6 +167,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-sdk/react':
+        specifier: 4.0.86
+        version: 4.0.86(react@19.2.6)(zod@4.6.5)
       '@assistant-ui/react':
         specifier: 0.15.16
         version: 0.15.16(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))

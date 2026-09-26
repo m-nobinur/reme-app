@@ -52,12 +52,14 @@ const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw))
 const pence = (raw: string) => Math.round(number(raw) * 100)
 
 /**
- * The inputs for each fact an owner can state. Every `FactValueKey` has a
- * row, so a key added to the contract without inputs here fails the build.
- * Prices are pounds: the owner is a UK sole trader.
+ * The question and the inputs for each fact an owner can state. Every
+ * `FactValueKey` has a row, so a key added to the contract without its
+ * question and inputs here fails the build. Prices are pounds: the owner is a
+ * UK sole trader.
  */
 export const FACT_INPUTS = {
   "business.name": {
+    ask: "What is your business called?",
     fields: [
       {
         name: "name",
@@ -69,6 +71,7 @@ export const FACT_INPUTS = {
     ],
   },
   "business.phone": {
+    ask: "What number should customers ring?",
     fields: [
       {
         name: "e164",
@@ -80,6 +83,7 @@ export const FACT_INPUTS = {
     ],
   },
   "business.email": {
+    ask: "Which email address should enquiries go to?",
     fields: [
       {
         name: "address",
@@ -91,12 +95,14 @@ export const FACT_INPUTS = {
     ],
   },
   "hours.weekday": {
+    ask: "What are your hours on weekdays?",
     fields: [
       { name: "open", label: "Opening time", type: "time" },
       { name: "close", label: "Closing time", type: "time" },
     ],
   },
   "service_area.radius": {
+    ask: "Where do you work from, and how far do you travel?",
     fields: [
       {
         name: "centre",
@@ -116,6 +122,7 @@ export const FACT_INPUTS = {
     ],
   },
   "pricing.standard_clean_hourly": {
+    ask: "What do you charge an hour for a standard clean?",
     fields: [
       {
         name: "amount_minor",
@@ -129,13 +136,19 @@ export const FACT_INPUTS = {
     fixed: { currency: "GBP" },
   },
   "business.tagline": {
+    ask: "How would you sum up your business in one line?",
     fields: [
       { name: "tagline", label: "Tagline", type: "text", maxLength: 120 },
     ],
   },
 } satisfies Record<
   FactValueKey,
-  { fields: readonly FactInput[]; fixed?: Record<string, unknown> }
+  {
+    /** How onboarding asks for it. */
+    ask: string
+    fields: readonly FactInput[]
+    fixed?: Record<string, unknown>
+  }
 >
 
 /** The spec for one `InformationRequest`, from its own fields. */

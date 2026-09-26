@@ -10,6 +10,7 @@ import {
   createFileRoute,
   Link,
   Outlet,
+  redirect,
   useMatches,
   useParams,
   useRouter,
@@ -33,6 +34,7 @@ import {
 import { formatDate } from "@workspace/ui/lib/format"
 import { getWorkspaceFrame, pollWorkspace, selectOrg } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
+import { onboardingFor } from "@/lib/onboarding"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import { WorkspacePanel } from "@/panel/workspace-panel"
@@ -44,7 +46,24 @@ export const Route = createFileRoute("/app")({
   // route is protected by where it lives rather than by remembering.
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
-    return { owner, ...(await getWorkspaceFrame()) }
+    const frame = await getWorkspaceFrame()
+    // A new owner lands in onboarding. Here rather than in the index route,
+    // which has no loader of its own (a second one on the same navigation
+    // races on a cold dev server). Only the bare address: "New chat" carries
+    // a state and still opens a new chat.
+    const onboarding = onboardingFor(frame.workspace, frame.conversations)
+    if (
+      onboarding &&
+      /^\/app\/?$/.test(location.pathname) &&
+      !location.state.chat
+    ) {
+      throw redirect({
+        to: "/app/c/$id",
+        params: { id: onboarding },
+        replace: true,
+      })
+    }
+    return { owner, ...frame }
   },
   component: AppLayout,
 })

@@ -360,18 +360,21 @@ function FactField({
   invalid,
   min,
   onChange,
+  defaultValue,
 }: {
   id: string
   input: FactInput
   invalid: boolean
   min?: string
   onChange?: (value: string) => void
+  defaultValue?: string
 }) {
   return (
     <Field
       aria-invalid={invalid || undefined}
       autoComplete={input.autoComplete}
       className="min-w-0"
+      defaultValue={defaultValue}
       id={`${id}-${input.name}`}
       inputMode={input.type === "number" ? "decimal" : undefined}
       label={input.label}
@@ -387,16 +390,23 @@ function FactField({
   )
 }
 
+/**
+ * The inputs that answer one question, named by field so `answerValue` can
+ * read them from the form. `prefill` starts a fact's text fields from a value
+ * the owner already gave (the business name at signup).
+ */
 function AnswerInputs({
   id,
   spec,
   title,
   invalid,
+  prefill = null,
 }: {
   id: string
   spec: AnswerSpec
   title: string
   invalid: boolean
+  prefill?: Record<string, unknown> | null
 }) {
   // `min` steers the closing time's picker. The form is `noValidate`, so it
   // blocks nothing: `answerValue` refuses a closing time that is not after
@@ -454,6 +464,13 @@ function AnswerInputs({
     >
       {fields.map((input: FactInput) => (
         <FactField
+          // Text only: a number field shows the owner's units, not the
+          // value's (pence), and only the business name is ever prefilled.
+          defaultValue={
+            typeof prefill?.[input.name] === "string"
+              ? (prefill[input.name] as string)
+              : undefined
+          }
           id={id}
           input={input}
           invalid={invalid}
@@ -812,6 +829,7 @@ function PanelBlank({
 
 export type { Preview }
 export {
+  AnswerInputs,
   ApprovalItem,
   approvalDecision,
   ComingUp,

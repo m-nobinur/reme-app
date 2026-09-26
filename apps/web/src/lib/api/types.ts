@@ -287,4 +287,9 @@ export type OwnerDataSource = {
     orgId: string,
     id: string
   ) => Promise<TransportedMessage[]>
+  /**
+   * One chat turn, as `apps/api` answers it: the stream on success, the
+   * refusal otherwise, passed back whole. Null when there is no session.
+   */
+  chat: (body: unknown) => Promise<Response | null>
 }

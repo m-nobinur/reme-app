@@ -3,8 +3,9 @@ import { defineConfig, devices } from "@playwright/test"
 import { STORAGE_STATE } from "./workos"
 
 /**
- * The owner smoke path: sign in, dashboard, org tree, the Chief of Staff chat
- * replay, the approvals inbox.
+ * The owner smoke path: sign in, dashboard, org tree, the chat, the approvals
+ * inbox. `@live` specs sign up an owner with an organisation and write rows,
+ * so the blocking smoke skips them (`--grep-invert @live`).
  *
  * It targets a base URL and nothing else. There is no dev server started here
  * and no environment named in the suite, so the same run answers for a local
@@ -36,14 +37,18 @@ if (existsSync(ENV_FILE)) {
 
 export default defineConfig({
   testDir: ".",
+  // `@live` writes tenant rows it cannot delete, so it runs only when asked
+  // for by name: `pnpm e2e --grep @live`.
+  grepInvert: process.argv.some((arg) => arg.includes("@live"))
+    ? undefined
+    : /@live/,
   forbidOnly: !!process.env.CI,
   // A flaky end-to-end test is a defect in the suite or in the app, and a retry
   // is how it stops being reported as either. Anything that fails here is meant
   // to be read, not re-run.
   retries: 0,
   reporter: process.env.CI ? "github" : "list",
-  // The chat surface replays a recorded conversation with real inter-chunk
-  // delays, so one test is deliberately several seconds of streaming.
+  // The onboarding walk-through is a dozen server round trips.
   timeout: 60_000,
   // Wider than Playwright's 5 s default because the target is a deployed
   // Worker. A cold isolate answered /health in 1.3 s on staging, and every

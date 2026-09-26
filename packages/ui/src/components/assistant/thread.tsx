@@ -18,7 +18,6 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import {
-  ArrowClockwiseIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   CaretDownIcon,
@@ -29,7 +28,6 @@ import {
   DotsThreeIcon,
   DownloadSimpleIcon,
   MicrophoneIcon,
-  PencilSimpleIcon,
   PlusIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
@@ -52,6 +50,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { OWNER_TOOLS } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentType,
@@ -131,14 +130,16 @@ const groupByType = groupPartByType({
 
 /**
  * Where each part sits in the transcript. Everything follows the registry's
- * grouping except a tool call that carries an approval, which stays ungrouped
- * for the whole of its life: an approval folded into a collapsed disclosure is
- * one the owner has to go looking for, and the answer has to stay as visible as
- * the question was.
+ * grouping except a tool call that carries an approval or has a card of its
+ * own, which stays ungrouped for the whole of its life: an approval folded
+ * into a collapsed disclosure is one the owner has to go looking for, and the
+ * answer has to stay as visible as the question was.
  */
 const groupThreadParts = (part: PartState, context?: GroupByContext) =>
   part.type === "tool-call" &&
-  (part.approval != null || part.status?.type === "requires-action")
+  (part.approval != null ||
+    part.status?.type === "requires-action" ||
+    OWNER_TOOLS.includes(part.toolName))
     ? UNGROUPED
     : groupByType(part, context)
 
@@ -277,18 +278,11 @@ const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext)
   const role = useAuiState((s) => s.message.role)
-  const isEditing = useAuiState((s) => s.message.composer.isEditing)
 
   return (
     <>
       <DateDivider />
-      {isEditing ? (
-        <EditComposer />
-      ) : role === "user" ? (
-        <UserMessage />
-      ) : (
-        <AssistantMessageComponent />
-      )}
+      {role === "user" ? <UserMessage /> : <AssistantMessageComponent />}
     </>
   )
 }
@@ -724,6 +718,11 @@ const AssistantMessage: FC = () => {
   )
 }
 
+/**
+ * Copy and More only. No Reload and no Edit: the server writes every turn and
+ * owns the history, so a regenerated or rewritten turn would only ever exist
+ * on this screen.
+ */
 const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
@@ -739,11 +738,6 @@ const AssistantActionBar: FC = () => {
           <CopyIcon />
         </AuiIf>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload
-        render={<TooltipIconButton tooltip="Refresh" />}
-      >
-        <ArrowClockwiseIcon />
-      </ActionBarPrimitive.Reload>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger
           render={
@@ -783,11 +777,8 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer wrap-break-word rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
+        <div className="aui-user-message-content wrap-break-word rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
           <MessagePrimitive.Parts />
-        </div>
-        <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
-          <UserActionBar />
         </div>
       </div>
 
@@ -795,50 +786,6 @@ const UserMessage: FC = () => {
         data-slot="aui_user-branch-picker"
         className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
       />
-    </MessagePrimitive.Root>
-  )
-}
-
-const UserActionBar: FC = () => {
-  return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      className="aui-user-action-bar-root flex flex-col items-end"
-    >
-      <ActionBarPrimitive.Edit
-        render={
-          <TooltipIconButton tooltip="Edit" className="aui-user-action-edit" />
-        }
-      >
-        <PencilSimpleIcon />
-      </ActionBarPrimitive.Edit>
-    </ActionBarPrimitive.Root>
-  )
-}
-
-const EditComposer: FC = () => {
-  return (
-    <MessagePrimitive.Root
-      data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-    >
-      <ComposerPrimitive.Root className="aui-edit-composer-root ms-auto flex w-full max-w-[85%] cursor-text flex-col rounded-(--composer-radius) border border-border bg-(--composer-bg) focus-within:border-ring focus-within:ring-3 focus-within:ring-ring">
-        <ComposerPrimitive.Input
-          className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base text-foreground outline-none"
-          autoFocus
-        />
-        <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
-          <ComposerPrimitive.Cancel
-            render={<Button variant="outline" size="sm" />}
-          >
-            Cancel
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send render={<Button size="sm" />}>
-            Update
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
     </MessagePrimitive.Root>
   )
 }

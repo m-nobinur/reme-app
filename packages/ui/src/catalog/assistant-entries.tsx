@@ -19,6 +19,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import {
   Tooltip,
   TooltipContent,
@@ -29,6 +30,7 @@ import {
   ConversationMenu,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { useState } from "react"
 
 /**
@@ -208,6 +210,215 @@ const approvalCall = (approved: boolean | undefined): ThreadMessageLike => ({
       ? { reason: "tool-calls", type: "requires-action" }
       : { reason: "stop", type: "complete" },
 })
+
+/**
+ * Onboarding's two tools in every state they reach. Brightclean is the
+ * fixture business; the number is in Ofcom's drama range.
+ */
+const CANCELLED_TEXT = "User cancelled tool call by sending a new message."
+const DONE = { reason: "stop", type: "complete" } as const
+const WAITING = { reason: "tool-calls", type: "requires-action" } as const
+
+const askFact = (
+  key: string,
+  extra: {
+    result?: unknown
+    isError?: boolean
+    skippable?: boolean
+    prefill?: unknown
+  } = {}
+) => ({
+  args: {
+    key,
+    prefill: (extra.prefill ?? null) as null,
+    skippable: extra.skippable ?? false,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `ask_${key}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_fact",
+  type: "tool-call" as const,
+})
+
+const stated = (key: string, value: object) => ({
+  result: { answer: "stated", fact: { key, value } },
+})
+
+const ASK_FACT_STATES: ThreadMessageLike[] = [
+  {
+    content: [
+      askFact(
+        "business.name",
+        stated("business.name", { name: "Brightclean" })
+      ),
+      askFact(
+        "business.phone",
+        stated("business.phone", { e164: "+447700900123" })
+      ),
+      askFact("pricing.standard_clean_hourly", {
+        result: { answer: "skipped" },
+        skippable: true,
+      }),
+      askFact("hours.weekday", {
+        isError: true,
+        result: { error: CANCELLED_TEXT },
+      }),
+      askFact("business.email", {
+        isError: true,
+        result: {
+          error: "This step did not come through. Reload the conversation.",
+        },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [askFact("business.name", { prefill: { name: "Brightclean" } })],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [askFact("pricing.standard_clean_hourly", { skippable: true })],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+const ONBOARDING_GOAL = "Build my website from the details I gave you."
+const BUILD_AT = "2026-09-27T10:00:00.000Z"
+
+const requestChange = (
+  id: string,
+  text: string,
+  extra: {
+    approved?: boolean
+    result?: unknown
+    isError?: boolean
+    approval?: false
+  } = {}
+): ThreadMessageLike => ({
+  content: [
+    {
+      ...(extra.approval === false
+        ? {}
+        : { approval: { approved: extra.approved, id: `approval_${id}` } }),
+      args: { text },
+      isError: extra.isError,
+      result: extra.result,
+      toolCallId: `call_${id}`,
+      toolName: "request_change",
+      type: "tool-call",
+    },
+  ],
+  role: "assistant",
+  status:
+    extra.result === undefined && !extra.isError
+      ? extra.approved === undefined
+        ? WAITING
+        : { type: "running" }
+      : DONE,
+})
+
+const build = (revision: object | null) => ({
+  outcome: "started",
+  build: {
+    assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+    created_at: BUILD_AT,
+    goal: ONBOARDING_GOAL,
+    kind: "site.build",
+    revision,
+    state: "queued",
+    updated_at: BUILD_AT,
+  },
+})
+
+const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
+  requestChange("requested", ONBOARDING_GOAL),
+  requestChange("responding", "Add Saturday hours, 9 to 1.", {
+    approved: true,
+  }),
+  requestChange("started", ONBOARDING_GOAL, {
+    approved: true,
+    result: build(null),
+  }),
+  requestChange("started_version", "Make the hero say we cover Leeds.", {
+    approved: true,
+    result: build({
+      revision_id: "9c3e1f2a-4b5d-4e6f-8a7b-1c2d3e4f5a6b",
+      version: 4,
+    }),
+  }),
+  requestChange("refused", "Change the phone number on the contact page.", {
+    approved: true,
+    result: {
+      error: {
+        class: "validation",
+        code: "change.question_open",
+        detail: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+        message: "A build is waiting on your answer. Answer it first.",
+      },
+      outcome: "refused",
+    },
+  }),
+  requestChange("denied", "Add Saturday hours, 9 to 1.", {
+    approved: false,
+    isError: true,
+    result: { error: "Tool approval denied" },
+  }),
+  requestChange("cancelled", "Swap the hero photo.", {
+    approval: false,
+    isError: true,
+    result: { error: CANCELLED_TEXT },
+  }),
+  requestChange("error", "Swap the hero photo.", {
+    approval: false,
+    isError: true,
+    result: {
+      error: "This step did not come through. Reload the conversation.",
+    },
+  }),
+]
+
+/** A new owner's onboarding, two answers in and waiting on the third. */
+const ONBOARDING: ThreadMessageLike[] = [
+  on("27T09:00:00.000", {
+    content: [
+      askFact(
+        "business.name",
+        stated("business.name", { name: "Brightclean" })
+      ),
+      askFact(
+        "business.phone",
+        stated("business.phone", { e164: "+447700900123" })
+      ),
+      askFact("hours.weekday", {}),
+    ],
+    role: "assistant",
+    status: WAITING,
+  }),
+]
+
+/** Every fact's native inputs, as a question and the transcript both use them. */
+function AnswerInputsSample() {
+  return (
+    <div className="grid max-w-md gap-6">
+      {FACT_KEYS.map((key) => (
+        <form key={key} noValidate>
+          <AnswerInputs
+            id={`sample-${key.replace(".", "-")}`}
+            invalid={false}
+            prefill={key === "business.name" ? { name: "Brightclean" } : null}
+            spec={{ kind: "fact", key }}
+            title={FACT_INPUTS[key].ask}
+          />
+        </form>
+      ))}
+    </div>
+  )
+}
+
+const FACT_KEYS = Object.keys(FACT_INPUTS) as (keyof typeof FACT_INPUTS)[]
 
 const REASONING_ONE: ThreadMessageLike[] = [
   ask("Anything blocked?"),
@@ -483,6 +694,23 @@ const assistantCatalog = [
         ]}
       />
     ),
+  },
+  {
+    name: "AskFact",
+    render: () => (
+      <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+    ),
+  },
+  {
+    name: "RequestChange",
+    render: () => (
+      <FixtureThread height="h-[92rem]" messages={REQUEST_CHANGE_STATES} />
+    ),
+  },
+  { name: "AnswerInputs", render: () => <AnswerInputsSample /> },
+  {
+    name: "Onboarding",
+    render: () => <OwnerThread height="h-[44rem]" messages={ONBOARDING} />,
   },
   {
     name: "Thread",
