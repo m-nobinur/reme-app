@@ -64,6 +64,11 @@ type AttentionBase = {
   detail: string
   /** Display name of the staff member who raised it. */
   raisedBy: string
+  /**
+   * The staff row that raised it, for a reader that holds the directory: a
+   * poll names no one, so the panel names the asker from the frame's read.
+   */
+  raisedById: string | null
   raisedAt: string
   /** Absent only where nothing expires. Every other item carries one (§13). */
   expiresAt: string | null
@@ -118,7 +123,11 @@ export type PreviewLinks = { url: string; screenshots: string[] }
  * What became of an owner's write. A refusal the owner can act on comes
  * back with the words to show; anything else throws.
  */
-export type WriteOutcome = { done: true } | { done: false; reason: string }
+export type WriteOutcome =
+  | { done: true }
+  // `gone`: what the owner acted on no longer waits on them (a different
+  // answer is on record, say), so the screen reads the workspace again.
+  | { done: false; reason: string; gone?: true }
 
 /**
  * A stored message on its way to the browser. Parts are the AI SDK's and
@@ -244,8 +253,11 @@ export type OwnerDataSource = {
     revisionId: string,
     decision: DecisionRequest["decision"]
   ) => Promise<DecisionOutcome>
-  /** `/workspace` again, or "unchanged" when it still matches `etag`. */
-  pollWorkspace: (orgId: string, etag: string | null) => Promise<WorkspacePoll>
+  /**
+   * `/workspace` again, or "unchanged" when it still matches `etag`. One
+   * request: the api reads the org from the session, and nothing is named.
+   */
+  pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
   answer: (
     orgId: string,
     assignmentId: string,

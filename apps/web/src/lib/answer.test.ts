@@ -138,3 +138,30 @@ it("has native inputs for every fact key", () => {
     [...FactValueKey.options].sort()
   )
 })
+
+it("refuses hours that close before, or when, they open", () => {
+  const hours: AnswerSpec = { kind: "fact", key: "hours.weekday" }
+  const refused = { error: "Closing time has to be after opening time." }
+  expect(answerValue(hours, form({ open: "17:00", close: "08:00" }))).toEqual(
+    refused
+  )
+  expect(answerValue(hours, form({ open: "09:00", close: "09:00" }))).toEqual(
+    refused
+  )
+  expect(answerValue(hours, form({ open: "09:00", close: "09:30" }))).toEqual({
+    value: { open: "09:00", close: "09:30" },
+  })
+})
+
+it("drops the UK trunk zero written after the country code", () => {
+  const phone: AnswerSpec = { kind: "fact", key: "business.phone" }
+  for (const typed of [
+    "+44 (0)7700 900123",
+    "+44(0)7700900123",
+    "0044 (0) 7700 900123",
+  ]) {
+    expect(answerValue(phone, form({ e164: typed })), typed).toEqual({
+      value: { e164: "+447700900123" },
+    })
+  }
+})

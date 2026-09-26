@@ -13,7 +13,9 @@ import type { TransportedMessage } from "../lib/api/types"
 import {
   type AISDKStorageFormat,
   conversationHistory,
+  missingConversations,
   STORAGE_FORMAT,
+  startsNewChat,
   toMetadata,
   toStorageEntry,
 } from "./history"
@@ -155,4 +157,24 @@ it("lists an archived conversation as archived, and an untitled one without a ti
   expect(
     toMetadata({ ...conversation, archived_at: null, title: "Prices" })
   ).toMatchObject({ status: "regular", title: "Prices" })
+})
+
+it("starts a new chat only for a new New chat press", () => {
+  expect(startsNewChat(undefined, "a")).toBe(true)
+  expect(startsNewChat("a", "b")).toBe(true)
+  // A replace navigation or a rail link carries no state: the first send of
+  // a new chat must survive it.
+  expect(startsNewChat("a", undefined)).toBe(false)
+  expect(startsNewChat("a", "a")).toBe(false)
+})
+
+it("remembers a conversation the owner cannot open, and says so", () => {
+  const seen: boolean[] = []
+  const stop = missingConversations.subscribe(() =>
+    seen.push(missingConversations.has("conv-9"))
+  )
+  expect(missingConversations.has("conv-9")).toBe(false)
+  missingConversations.add("conv-9")
+  expect(seen).toEqual([true])
+  stop()
 })

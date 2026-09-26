@@ -1,4 +1,5 @@
-import type { DecisionRequest } from "@workspace/contracts"
+import { getRouteApi } from "@tanstack/react-router"
+import type { BuildSummary, DecisionRequest } from "@workspace/contracts"
 import {
   ApprovalItem,
   ComingUp,
@@ -18,6 +19,7 @@ import {
   getPreview,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
+import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { factLabel } from "@/lib/facts"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -37,16 +39,22 @@ const TYPICAL_BUILD = { min: 115, max: 313 }
 
 const FAILED = "That did not go through. Try again."
 
+const frame = getRouteApi("/app")
+
 type Refresh = () => Promise<void>
 type Approval = Extract<AttentionItem, { kind: "approval" }>
 type Question = Extract<AttentionItem, { kind: "question" }>
 
+type Announce = (status: string) => void
+
 /**
  * One write's pending and error state. The write's own refusal is shown as
- * given; a throw is a generic retry. Pending lasts until the workspace has
- * been read again, so the row does not flash back to idle before it goes.
+ * given; a throw is a generic retry. A refusal that means the item is gone
+ * is announced at the panel, since the row goes with the next read. Pending
+ * lasts until the workspace has been read again, so the row does not flash
+ * back to idle before it goes.
  */
-function useWrite<Name extends string>(refresh: Refresh) {
+function useWrite<Name extends string>(refresh: Refresh, announce?: Announce) {
   const [pending, setPending] = useState<Name | null>(null)
   const [error, setError] = useState<string | null>(null)
   const run = async (name: Name, write: () => Promise<WriteOutcome>) => {
@@ -54,6 +62,11 @@ function useWrite<Name extends string>(refresh: Refresh) {
     setError(null)
     try {
       const outcome = await write()
+      if (!outcome.done && outcome.gone && announce) {
+        announce(outcome.reason)
+        await refresh()
+        return false
+      }
       if (!outcome.done) {
         setError(outcome.reason)
         return false
@@ -70,24 +83,43 @@ function useWrite<Name extends string>(refresh: Refresh) {
   return { pending, error, run }
 }
 
-function Answerable({ item, refresh }: { item: Question; refresh: Refresh }) {
-  const { pending, error, run } = useWrite<"answer">(refresh)
+/** Who raised an item: the frame's directory knows; a poll names no one. */
+function useAsker(item: AttentionItem): string {
+  const { names } = frame.useLoaderData()
+  return (item.raisedById && names[item.raisedById]) || item.raisedBy
+}
+
+function Answerable({
+  item,
+  refresh,
+  announce,
+}: {
+  item: Question
+  refresh: Refresh
+  announce: Announce
+}) {
+  const { pending, error, run } = useWrite<"answer">(refresh, announce)
+  // One key per answer until it lands: a retry after a timeout is the same
+  // request, and a changed answer is a new one.
+  const [keys] = useState(attemptKeys)
   return (
     <QuestionItem
-      askedBy={item.raisedBy}
+      askedBy={useAsker(item)}
       error={error}
       expiresAt={item.expiresAt}
       onAnswer={(value) =>
-        void run("answer", () =>
-          answerQuestion({
+        void run("answer", async () => {
+          const outcome = await answerQuestion({
             data: {
               assignmentId: item.assignmentId,
               requestId: item.id,
               value,
-              key: crypto.randomUUID(),
+              key: keys.key(value),
             },
           })
-        )
+          if (outcome.done) keys.done()
+          return outcome
+        })
       }
       onExpiry={item.onExpiry}
       pending={pending !== null}
@@ -122,17 +154,18 @@ function usePreview(
   return preview
 }
 
-function Decidable({
+export function Decidable({
   item,
   refresh,
   announce,
 }: {
   item: Approval
   refresh: Refresh
-  announce: (status: string) => void
+  announce: Announce
 }) {
   const { pending, error, run } = useWrite<"approve" | "change">(refresh)
   const preview = usePreview(item.request.assignment_id)
+  const [keys] = useState(attemptKeys)
 
   const approve = (decision: DecisionRequest) =>
     void run("approve", async () => {
@@ -153,9 +186,10 @@ function Decidable({
   const change = (text: string) =>
     void run("change", async () => {
       const outcome = await askForChanges({
-        data: { text, key: crypto.randomUUID() },
+        data: { text, key: keys.key(text) },
       })
       if (outcome.done) {
+        keys.done()
         announce(`Sent. A new version replaces v${item.version}.`)
       }
       return outcome
@@ -206,10 +240,44 @@ function comingUp(attention: AttentionItem[]) {
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
 }
 
+/**
+ * The build being worked on, with its own Stop state: keyed on the build, so
+ * a Stop error never outlives the build it was about.
+ */
+function Stoppable({
+  build,
+  queued,
+  refresh,
+}: {
+  build: BuildSummary
+  queued: string[]
+  refresh: Refresh
+}) {
+  const stop = useWrite<"stop">(refresh)
+  return (
+    <WorkingOn
+      build={{
+        goal: build.goal,
+        state: build.state,
+        version: build.revision?.version ?? null,
+        startedAt: build.created_at,
+      }}
+      error={stop.error}
+      onStop={() =>
+        void stop.run("stop", () =>
+          cancelBuild({ data: { assignmentId: build.assignment_id } })
+        )
+      }
+      queued={queued}
+      stopping={stop.pending !== null}
+      typical={TYPICAL_BUILD}
+    />
+  )
+}
+
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const [status, setStatus] = useState<string | null>(null)
-  const stop = useWrite<"stop">(refresh)
   const stale = failed
     ? "This panel did not refresh. It tries again in a minute."
     : null
@@ -219,7 +287,16 @@ export function WorkspacePanel() {
   }
   const { attention, builds, live, host } = workspace
   if (!live && builds.length === 0 && attention.length === 0) {
-    return <PanelBlank steps={firstSteps(workspace)} />
+    return (
+      <PanelBlank
+        description={
+          workspace.missingFacts.length
+            ? "Tell Reme about your business in the chat, then ask it to build your website."
+            : "Ask Reme in the chat to build your website."
+        }
+        steps={firstSteps(workspace)}
+      />
+    )
   }
 
   const current =
@@ -231,23 +308,11 @@ export function WorkspacePanel() {
   return (
     <>
       {current ? (
-        <WorkingOn
-          build={{
-            goal: current.goal,
-            state: current.state,
-            version: current.revision?.version ?? null,
-            startedAt: current.created_at,
-          }}
-          error={stop.error}
+        <Stoppable
+          build={current}
           key={current.assignment_id}
-          onStop={() =>
-            void stop.run("stop", () =>
-              cancelBuild({ data: { assignmentId: current.assignment_id } })
-            )
-          }
           queued={queued}
-          stopping={stop.pending !== null}
-          typical={TYPICAL_BUILD}
+          refresh={refresh}
         />
       ) : null}
       <WaitingOnYou error={stale} status={status}>
@@ -260,7 +325,12 @@ export function WorkspacePanel() {
               refresh={refresh}
             />
           ) : item.kind === "question" ? (
-            <Answerable item={item} key={item.id} refresh={refresh} />
+            <Answerable
+              announce={setStatus}
+              item={item}
+              key={item.id}
+              refresh={refresh}
+            />
           ) : null
         )}
       </WaitingOnYou>

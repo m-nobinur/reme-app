@@ -195,3 +195,35 @@ it("adopts a workspace a loader read, and polls at its pace", async () => {
   await wait(INTERVAL.building)
   expect(tags).toEqual(['"building"'])
 })
+
+it("ignores a poll that was under way when a newer read was adopted", async () => {
+  let release: (value: WorkspacePoll) => void = () => undefined
+  poller = startPolling({
+    initial: idle,
+    read: () =>
+      new Promise<WorkspacePoll>((resolve) => {
+        release = resolve
+      }),
+    onChange: (workspace, failed) => changes.push({ workspace, failed }),
+    page,
+  })
+  const stale = poller.refresh()
+  poller.adopt(building)
+  release({ ...idle, etag: '"older"' })
+  await stale
+  expect(changes).toEqual([])
+  // The adopted read sets the pace: a build is running.
+  answers = []
+  await wait(0)
+})
+
+it("counts polls against the build that is running, not the newest", async () => {
+  const queued: BuildSummary = {
+    ...BUILD,
+    assignment_id: "00000000-0000-4000-8000-000000000009",
+    state: "queued",
+  }
+  start({ ...building, builds: [queued, BUILD] })
+  await wait(INTERVAL.building)
+  expect(Object.keys(poller.stats)).toEqual([BUILD.assignment_id])
+})

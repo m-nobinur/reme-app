@@ -7,11 +7,14 @@ import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk"
+import { ChatsCircleIcon } from "@phosphor-icons/react"
 import {
   getRouteApi,
+  Link,
   useLocation,
   useNavigate,
   useParams,
+  useRouter,
 } from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
@@ -19,11 +22,20 @@ import {
   Thread,
   type ThreadMode,
 } from "@workspace/ui/components/assistant/thread"
+import { buttonVariants } from "@workspace/ui/components/button"
+import { EmptyState } from "@workspace/ui/components/empty-state"
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { briefingOf } from "@/lib/briefing"
-import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
+import { missingConversations, startsNewChat } from "./history"
 
 const frame = getRouteApi("/app")
 
@@ -57,7 +69,7 @@ function storeMode(mode: ThreadMode) {
 export function ChatPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
-  const { refresh } = useLiveWorkspace()
+  const router = useRouter()
   const { active, workspace } = frame.useLoaderData()
   const briefing = useMemo(
     () => briefingOf(active, workspace),
@@ -88,10 +100,11 @@ export function ChatPage() {
       // one, the runtime sends the thread back and the recording continues.
       sendAutomaticallyWhen:
         lastAssistantMessageIsCompleteWithApprovalResponses,
-      // A turn can change what is waiting on the owner, so the panel reads
-      // it again rather than waiting for its next poll.
+      // A turn can change what waits on the owner and the conversation's
+      // title, so the frame reads both again: the panel adopts the new
+      // workspace and the rail the new list.
       onFinish: () => {
-        void refresh()
+        void router.invalidate()
       },
       // The option, not `adapters.suggestion`: in @assistant-ui/react-ai-sdk 1.4.7
       // the adapter runs only after an assistant turn ends and then replaces these,
@@ -119,24 +132,49 @@ export function ChatPage() {
   const fresh = useLocation({ select: (location) => location.state.chat })
   const seen = useRef(fresh)
   useEffect(() => {
-    if (fresh === seen.current) return
+    const press = startsNewChat(seen.current, fresh)
     seen.current = fresh
-    void runtime.threads.switchToNewThread()
+    if (press) void runtime.threads.switchToNewThread()
   }, [fresh, runtime])
+
+  const missing = useSyncExternalStore(
+    missingConversations.subscribe,
+    () => (id ? missingConversations.has(id) : false),
+    () => false
+  )
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
-        <Thread
-          briefing={briefing.line}
-          components={{ ToolFallback: Approval }}
-          context={briefing.context}
-          mode={mode}
-          onModeChange={changeMode}
-          placeholder="Ask, or tell me what to change"
-          quickActions={OWNER_QUICK_ACTIONS}
-        />
+        {missing ? (
+          <div className="mx-auto max-w-xl px-4 pt-16">
+            <EmptyState
+              action={
+                <Link
+                  className={buttonVariants({ variant: "outline" })}
+                  state={() => ({ chat: crypto.randomUUID() })}
+                  to="/app"
+                >
+                  Start a new chat
+                </Link>
+              }
+              description="It belongs to another account, or the link is wrong."
+              icon={<ChatsCircleIcon />}
+              title="This conversation is not here"
+            />
+          </div>
+        ) : (
+          <Thread
+            briefing={briefing.line}
+            components={{ ToolFallback: Approval }}
+            context={briefing.context}
+            mode={mode}
+            onModeChange={changeMode}
+            placeholder="Ask, or tell me what to change"
+            quickActions={OWNER_QUICK_ACTIONS}
+          />
+        )}
       </div>
     </AssistantRuntimeProvider>
   )

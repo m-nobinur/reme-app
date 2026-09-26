@@ -487,7 +487,7 @@ const headerOf = (call: Call | undefined, name: string) =>
 
 it("polls with the last tag and keeps what it has on a 304", async () => {
   answers["GET /workspace"] = new Response(null, { status: 304 })
-  expect(await apiSource.pollWorkspace(ORG, '"a1"')).toBe("unchanged")
+  expect(await apiSource.pollWorkspace('"a1"')).toBe("unchanged")
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
   expect(headerOf(calls[0], "if-none-match")).toBe('"a1"')
 })
@@ -502,7 +502,7 @@ it("reads a changed workspace with its tag, builds and missing facts", async () 
     },
     { headers: { etag: '"b2"' } }
   )
-  const read = await apiSource.pollWorkspace(ORG, '"a1"')
+  const read = await apiSource.pollWorkspace('"a1"')
   expect(read).toMatchObject({
     etag: '"b2"',
     building: true,
@@ -514,17 +514,51 @@ it("reads a changed workspace with its tag, builds and missing facts", async () 
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
 })
 
-it("names who asked when a changed workspace has a question", async () => {
+it("polls in one request, naming the asker by id for the frame to resolve", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [question] }
-  const read = await apiSource.pollWorkspace(ORG, null)
-  expect(calls.map((call) => call.path)).toEqual(["/workspace", "/staff"])
+  const read = await apiSource.pollWorkspace(null)
+  // No /org and no /staff: the api reads the org from the session, and the
+  // frame already holds the names.
+  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
   expect(headerOf(calls[0], "if-none-match")).toBeNull()
   expect(read !== "unchanged" && read.attention[0]).toMatchObject({
     kind: "question",
-    raisedBy: "Alex",
+    raisedById: DEV,
     assignmentId: ASSIGNMENT,
     answer: { kind: "fact", key: "hours.weekday" },
   })
+})
+
+it("counts a queued build as open but not working", async () => {
+  answers["GET /workspace"] = {
+    ...workspace,
+    attention: [],
+    builds: [{ ...building, state: "queued" }],
+  }
+  expect(await apiSource.pollWorkspace(null)).toMatchObject({
+    building: false,
+    open: true,
+  })
+})
+
+it("refuses an id that is not a uuid before any request is made", async () => {
+  // `new URL` collapses dot segments, so ".." would reach another route.
+  await expect(apiSource.answer(ORG, "..", REQUEST, "x", "k")).rejects.toThrow()
+  await expect(apiSource.cancelBuild(ORG, "../changes")).rejects.toThrow()
+  await expect(apiSource.preview(ORG, ".")).rejects.toThrow()
+  await expect(apiSource.conversation(ORG, "..")).rejects.toThrow()
+  await expect(
+    apiSource.decideApproval(ORG, "..", REVISION, "approved")
+  ).rejects.toThrow()
+  await expect(
+    apiSource.updateConversation(ORG, "..", { archived: true }, "k")
+  ).rejects.toThrow()
+  await expect(apiSource.conversationMessages(ORG, "..")).rejects.toThrow()
+  expect(calls).toEqual([])
+})
+
+it("reads no history for a conversation that is not the owner's", async () => {
+  expect(await apiSource.conversationMessages(ORG, CONVERSATION)).toEqual([])
 })
 
 it("shows the question /workspace says the build waits on, and no other", async () => {
@@ -538,7 +572,7 @@ it("shows the question /workspace says the build waits on, and no other", async 
     },
   }
   answers["GET /workspace"] = { ...workspace, attention: [second] }
-  const read = await apiSource.pollWorkspace(ORG, null)
+  const read = await apiSource.pollWorkspace(null)
   expect(read !== "unchanged" && read.attention.map((item) => item.id)).toEqual(
     [second.request.request_id]
   )
@@ -560,7 +594,7 @@ it("sends an answer to the build it blocks, with the caller's key", async () => 
   expect(headerOf(calls[0], "idempotency-key")).toBe("k-1")
 })
 
-it("says why an answer was refused, and treats one already given as done", async () => {
+it("says why an answer was refused, including one already answered differently", async () => {
   answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(400, "answer.invalid")
   expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
     done: false,
@@ -570,8 +604,12 @@ it("says why an answer was refused, and treats one already given as done", async
     409,
     "answer.already_given"
   )
+  // A different answer is on record: this one was not, and the question is
+  // gone from the build.
   expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
-    done: true,
+    done: false,
+    gone: true,
+    reason: expect.stringContaining("already answered"),
   })
   answers[`POST /builds/${ASSIGNMENT}/answer`] = new Response(null, {
     status: 502,

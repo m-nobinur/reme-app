@@ -228,9 +228,12 @@ test("the top bar names a new chat and a stored one truthfully", async ({
   const title = page.locator('[data-slot="workspace-title"]')
   await visit(page, "/app")
   await expect(title).toHaveText("New chat")
-  // Until conversations are stored an id names nothing, so it is not "new".
+  // An address with an id is a stored conversation, so it is not "new".
   await visit(page, "/app/c/any-conversation")
   await expect(title).toHaveText("Conversation")
+  // An id the owner has no conversation under says so, rather than opening
+  // a thread nobody asked for.
+  await expect(page.getByText("This conversation is not here")).toBeVisible()
 })
 
 test("each page opens at the top, and Back returns to where the owner was", async ({

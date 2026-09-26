@@ -7,9 +7,10 @@ import {
   useState,
 } from "react"
 import type { Workspace, WorkspacePoll } from "./api/types"
+import { runningBuild } from "./build-state"
 
 /**
- * The panel polls `/workspace`, cheaply (open item 69 until C8 replaces it):
+ * The panel polls `/workspace`, cheaply, until a push channel replaces it:
  * every 3 s while a build runs, 30 s otherwise, 60 s after a failed read. A
  * hidden tab does not poll, and a tab coming back reads at once. An owner
  * action or the end of a chat turn reads at once too. Each poll sends the
@@ -18,9 +19,9 @@ import type { Workspace, WorkspacePoll } from "./api/types"
 export const INTERVAL = { building: 3_000, idle: 30_000, error: 60_000 }
 
 /**
- * Polls per build and how many were 304, for the S exit's numbers. Read from
- * the browser console as `__remeWorkspacePolls`; nothing on screen shows it.
- * `idle` counts the polls with no build running.
+ * Polls per build and how many were 304, to measure what a build costs in
+ * polls on staging. Read from the browser console as `__remeWorkspacePolls`;
+ * nothing on screen shows it. `idle` counts the polls with no build running.
  */
 export type PollStats = Record<
   string,
@@ -42,9 +43,9 @@ export type Poller = {
   stats: PollStats
 }
 
-/** The build a poll is counted against: the first one doing work. */
+/** The build a poll is counted against: the one doing work, if any. */
 const statsKey = (workspace: Workspace | null) =>
-  (workspace?.building && workspace.builds[0]?.assignment_id) || "idle"
+  runningBuild(workspace?.builds ?? [])?.assignment_id ?? "idle"
 
 export function startPolling({
   initial,
@@ -64,6 +65,9 @@ export function startPolling({
   let inFlight: Promise<void> | null = null
   let again = false
   let stopped = false
+  // Bumped by `adopt`: a read that began before it answers for an older
+  // workspace than the one adopted, so its answer is dropped.
+  let generation = 0
   const stats: PollStats = {}
 
   const schedule = () => {
@@ -91,10 +95,12 @@ export function startPolling({
       again = true
       return inFlight
     }
+    const began = generation
     inFlight = (async () => {
       count("polls")
       try {
         const next = await read(current?.etag ?? null)
+        if (began !== generation) return
         failed = false
         if (next === "unchanged") {
           count("unchanged")
@@ -103,6 +109,7 @@ export function startPolling({
           onChange(current, false)
         }
       } catch {
+        if (began !== generation) return
         count("failed")
         failed = true
         onChange(current, true)
@@ -132,6 +139,7 @@ export function startPolling({
   return {
     refresh: tick,
     adopt: (workspace) => {
+      generation++
       current = workspace
       failed = false
       schedule()

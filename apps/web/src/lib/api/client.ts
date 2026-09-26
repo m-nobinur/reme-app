@@ -2,7 +2,6 @@ import { getCookie } from "@tanstack/react-start/server"
 import {
   ActivityFeed,
   ApprovalDecision,
-  type AssignmentState,
   type AttentionItem as Attention,
   Conversation,
   ConversationHistory,
@@ -12,9 +11,11 @@ import {
   Org,
   PreviewLink,
   StaffDirectory,
+  Uuid,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { WORKING } from "../build-state"
 import { factLabel } from "../facts"
 import type {
   ActivityItem,
@@ -301,6 +302,7 @@ function toAttention(
         title: approvalTitle(item.version),
         detail: item.request.rationale,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedById: item.request.requested_by_staff_id,
         raisedAt: item.request.requested_at,
         expiresAt: item.request.expires_at,
         onExpiry: APPROVAL_EXPIRY,
@@ -314,6 +316,7 @@ function toAttention(
         title: factLabel(item.request.field),
         detail: item.request.why,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedById: item.request.requested_by_staff_id,
         raisedAt: item.request.requested_at,
         expiresAt: item.request.expires_at,
         onExpiry: item.request.blocking
@@ -326,24 +329,13 @@ function toAttention(
         id: item.event_id,
         ...logged(item),
         raisedBy: SYSTEM,
+        raisedById: null,
         raisedAt: item.at,
         expiresAt: null,
         onExpiry: "Nothing to decide.",
       }
   }
 }
-
-/** The states in which a build is doing work rather than waiting on someone. */
-const WORKING = new Set<AssignmentState>([
-  "queued",
-  "briefing",
-  "planning",
-  "implementing",
-  "validating",
-  "revising",
-  "repairing",
-  "release_candidate",
-])
 
 function workspaceOf(
   { status, etag }: { status: WorkspaceStatus; etag: string | null },
@@ -373,22 +365,12 @@ async function workspace(
 }
 
 /**
- * The panel's poll. Unchanged is the common answer and costs one request
- * with no body; the directory is read only when a changed workspace has
- * someone to name.
+ * The panel's poll: one request, and unchanged is the common answer, with no
+ * body. It names no one; the frame already read the directory.
  */
-async function pollWorkspace(
-  _orgId: string,
-  etag: string | null
-): Promise<WorkspacePoll> {
+async function pollWorkspace(etag: string | null): Promise<WorkspacePoll> {
   const read = await workspaceStatus(etag)
-  if (read === "unchanged") {
-    return read
-  }
-  const named = read.status.attention.some(
-    (item) => item.kind === "approval" || item.kind === "question"
-  )
-  return workspaceOf(read, namesOf(named ? await staffOf() : []))
+  return read === "unchanged" ? read : workspaceOf(read, new Map())
 }
 
 /**
@@ -443,6 +425,8 @@ const REFUSED: Record<
 const REFUSALS: Record<string, string> = {
   "answer.invalid":
     "That answer does not fit the question. Check it and send it again.",
+  "answer.already_given":
+    "That question was already answered, so this answer was not recorded.",
   "change.question_open":
     "Answer the question waiting on you first, then ask again.",
   "change.build_busy":
@@ -450,11 +434,13 @@ const REFUSALS: Record<string, string> = {
 }
 const STALE = "That has changed since this page loaded. Look again and retry."
 
-/** A write's answer as an outcome. `done` codes count as success: a retry. */
+/** Refusals that mean the item no longer waits on the owner. */
+const GONE = new Set(["answer.already_given"])
+
+/** A write's answer as an outcome. */
 async function outcome(
   response: Response,
-  path: string,
-  done: string[] = []
+  path: string
 ): Promise<WriteOutcome> {
   if (response.ok) {
     return { done: true }
@@ -463,16 +449,25 @@ async function outcome(
     await response.json().catch(() => null)
   )
   const code = refusal.success ? refusal.data.code : ""
-  if (done.includes(code)) {
-    return { done: true }
-  }
   if (response.status >= 400 && response.status < 500 && refusal.success) {
-    return { done: false, reason: REFUSALS[code] ?? STALE }
+    const reason = REFUSALS[code] ?? STALE
+    return GONE.has(code)
+      ? { done: false, reason, gone: true }
+      : { done: false, reason }
   }
   throw new Error(`apps/api answered ${response.status} for ${path}`)
 }
 
-const segment = (id: string) => encodeURIComponent(id)
+/**
+ * An id as a path segment. Only a UUID: `new URL` collapses `.` and `..`,
+ * so anything else could reach a different route.
+ */
+function segment(id: string): string {
+  if (!Uuid.safeParse(id).success) {
+    throw new Error("Expected a UUID for a path segment.")
+  }
+  return id
+}
 
 async function answer(
   _orgId: string,
@@ -483,9 +478,10 @@ async function answer(
 ): Promise<WriteOutcome> {
   const path = `/builds/${segment(assignmentId)}/answer`
   const response = await post(path, { request_id: requestId, value }, key)
-  // Answered already, from another tab or a retry: the question is gone
-  // either way, which is what the owner wanted.
-  return await outcome(response, path, ["answer.already_given"])
+  // The same answer again is a retry and gets its receipt (202). A 409
+  // `answer.already_given` means a different answer is on record, so this
+  // one was not recorded.
+  return await outcome(response, path)
 }
 
 async function cancelBuild(
@@ -572,12 +568,19 @@ async function conversationMessages(
   _orgId: string,
   id: string
 ): Promise<TransportedMessage[]> {
-  const body = await get(`/conversations/${segment(id)}/messages`)
+  const response = await call(`/conversations/${segment(id)}/messages`)
+  // Another org's id is a 404, the same as one that never existed: no
+  // history to show.
+  if (!response || [401, 403, 404].includes(response.status)) {
+    return []
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for a history`)
+  }
   // Parsed first, so every field is the contract's; parts are JSON because
   // they arrived as JSON.
-  return body === null
-    ? []
-    : (ConversationHistory.parse(body).messages as TransportedMessage[])
+  return ConversationHistory.parse(await response.json())
+    .messages as TransportedMessage[]
 }
 
 async function activity(): Promise<ActivityItem[]> {
@@ -627,7 +630,7 @@ export const apiSource: OwnerDataSource = {
   updateConversation,
   conversationMessages,
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
-    const path = `/approvals/${encodeURIComponent(approvalId)}/decision`
+    const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(
       path,
       { decision, revision_id: revisionId },

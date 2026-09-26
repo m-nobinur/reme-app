@@ -5,7 +5,7 @@ import {
   setCookie,
 } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
-import { GOAL_MAX } from "@workspace/contracts"
+import { GOAL_MAX, Uuid } from "@workspace/contracts"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
@@ -60,13 +60,21 @@ async function writingOrg(): Promise<OrgSummary> {
   return org
 }
 
-/** An id off the wire: bounded text, or a refusal. */
+/** An id off the wire: a UUID, or a refusal. */
 function id(value: unknown): string {
-  const read = text(value, 64)
-  if (!read) {
-    throw new Error("Expected an id.")
+  const read = Uuid.safeParse(value)
+  if (!read.success) {
+    throw new Error("Expected a UUID.")
   }
-  return read
+  return read.data
+}
+
+/** assistant-ui's local thread id, the key a first send is stored under. */
+function localId(value: unknown): string {
+  if (typeof value !== "string" || !/^[\w-]{1,64}$/.test(value)) {
+    throw new Error("Expected a thread id.")
+  }
+  return value
 }
 
 /** The caller's idempotency key, or a fresh one: a key is never empty. */
@@ -101,30 +109,45 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     workspace: Workspace | null
     /** The rail's conversations. Null when the read failed. */
     conversations: Conversation[] | null
+    /** Staff names by id, for naming who asked in a polled workspace. */
+    names: Record<string, string>
   }> => {
     const orgs = await source.orgs()
     const active = pickOrg(orgs)
-    const [workspace, conversations] = active
-      ? await Promise.all([
-          readWorkspace(() =>
-            source.workspace(active.id, source.staff(active.id))
-          ),
-          readConversations(active.id),
-        ])
-      : [EMPTY_WORKSPACE, []]
+    if (!active) {
+      return {
+        orgs,
+        active,
+        panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+        workspace: EMPTY_WORKSPACE,
+        conversations: [],
+        names: {},
+      }
+    }
+    const staff = source.staff(active.id)
+    const [workspace, conversations, members] = await Promise.all([
+      readWorkspace(() => source.workspace(active.id, staff)),
+      readConversations(active.id),
+      staff.catch(() => []),
+    ])
     return {
       orgs,
       active,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
       workspace,
       conversations,
+      names: Object.fromEntries(
+        members.map((member) => [member.id, member.displayName])
+      ),
     }
   }
 )
 
 /**
- * The panel's poll, with the tag it last saw. A failure throws, so the
- * poller backs off rather than rendering a workspace of nothing.
+ * The panel's poll, with the tag it last saw. One request: `apps/api`
+ * resolves the org from the session, and a session with none reads as an
+ * empty workspace. A failure throws, so the poller backs off rather than
+ * rendering a workspace of nothing.
  */
 export const pollWorkspace = createServerFn({ method: "GET" })
   .validator((input: unknown) => ({
@@ -136,11 +159,7 @@ export const pollWorkspace = createServerFn({ method: "GET" })
     }): Promise<
       { changed: false } | { changed: true; workspace: Workspace }
     > => {
-      const org = await activeOrg()
-      if (!org) {
-        return { changed: true, workspace: EMPTY_WORKSPACE }
-      }
-      const read = await source.pollWorkspace(org.id, data.etag)
+      const read = await source.pollWorkspace(data.etag)
       if (read === "unchanged") {
         return { changed: false }
       }
@@ -216,11 +235,15 @@ export const listConversations = createServerFn({ method: "GET" }).handler(
   }
 )
 
+/** Null for an id that is not one of the owner's, a UUID or not. */
 export const getConversation = createServerFn({ method: "GET" })
-  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .validator((input: unknown) => {
+    const read = Uuid.safeParse(record(input).id)
+    return { id: read.success ? read.data : null }
+  })
   .handler(async ({ data }): Promise<Conversation | null> => {
-    const org = await activeOrg()
-    return org ? await source.conversation(org.id, data.id) : null
+    const org = data.id ? await activeOrg() : null
+    return org && data.id ? await source.conversation(org.id, data.id) : null
   })
 
 /**
@@ -229,7 +252,7 @@ export const getConversation = createServerFn({ method: "GET" })
  * one; the thread then stays in the tab.
  */
 export const createConversation = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ key: id(record(input).localId) }))
+  .validator((input: unknown) => ({ key: localId(record(input).localId) }))
   .handler(async ({ data }): Promise<Conversation | null> => {
     const org = await activeOrg()
     return org ? await source.createConversation(org.id, data.key) : null

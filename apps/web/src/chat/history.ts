@@ -97,3 +97,36 @@ export function conversationHistory(
     },
   }
 }
+
+/**
+ * Whether a navigation is a new "New chat" press. Only a new, defined state
+ * is one: a replace navigation or a rail link carries none, and treating
+ * that as a press would wipe a new chat's first send.
+ */
+export const startsNewChat = (
+  previous: string | undefined,
+  next: string | undefined
+) => next !== undefined && next !== previous
+
+/**
+ * Conversations the owner opened by address and cannot have: another
+ * account's, or an id that was never stored. The chat shows an empty state
+ * for them rather than a thread nobody asked for.
+ */
+export const missingConversations = (() => {
+  const ids = new Set<string>()
+  const listeners = new Set<() => void>()
+  return {
+    has: (id: string) => ids.has(id),
+    add(id: string) {
+      ids.add(id)
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+})()
