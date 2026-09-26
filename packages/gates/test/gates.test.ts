@@ -16,6 +16,7 @@ import {
   parsePage,
   runGates,
 } from "../src/index.ts"
+import { contentClaimsIn } from "../src/text.ts"
 
 const ORG = "10000001-0000-4000-8000-000000000000"
 const AT = "2026-09-15T12:00:00.000Z"
@@ -135,31 +136,75 @@ describe("the content gate", () => {
     expect(checkContent(pages(), facts)).toEqual(checkContent(pages(), FACTS))
   })
 
-  // The head `astro build --site` writes, as on a staging run whose org slug
-  // carried a date: the date is part of the host, not a phone number.
+  // The head `astro build --site` writes. On a staging run the org slug
+  // carried a date, and the gate read the date as a phone number.
   const HOST = "brightclean-20260925-stg.remeai.co.uk"
-  const dated = (main?: string) =>
+  const sited = (main?: string, host = HOST, path = "/") =>
     home(main).replace(
       "</title>",
-      `</title><link rel="canonical" href="https://${HOST}/"><meta property="og:type" content="website"><meta property="og:url" content="https://${HOST}/">`
+      `</title><link rel="canonical" href="https://${host}${path}"><meta property="og:type" content="website"><meta property="og:url" content="https://${host}${path}">`
     )
 
-  it("passes a site whose own host name carries a date", () => {
-    const main = `<p>$35 an hour</p><p>Find us at ${HOST} or https://${HOST}/contact/</p>`
-    expect(checkContent(pages(dated(main)), FACTS)).toMatchObject({
-      passed: true,
-    })
+  it("passes the site's own host and URLs, whatever digits the slug or path carry", () => {
+    const main = `<p>$35 an hour</p><p>Find us at ${HOST}, BrightClean-20260925-STG.remeai.co.uk or https://${HOST}/blog/2026-09-25/?from=20260925.</p>`
+    const built = pages(sited(main, HOST, "/blog/2026-09-25/"))
+    expect(checkContent(built, FACTS, [HOST]).passed).toBe(true)
+    const numeric = "12345678.remeai.co.uk"
+    expect(
+      checkContent(pages(sited(undefined, numeric)), FACTS, [numeric]).passed
+    ).toBe(true)
   })
 
-  it("still fails a phone with no fact when it sits next to a host", () => {
-    for (const main of [
-      `<p>Call 0770 0900123 or visit https://${HOST}/</p>`,
-      `<p>Call 0770 0900123.${HOST}</p>`,
+  it("reads the site's host as copy when it is not told the host", () => {
+    const result = checkContent(pages(sited()), FACTS)
+    expect(result.passed).toBe(false)
+    expect(result.message).toContain("20260925")
+  })
+
+  it("still reads a phone in or beside any host that is not the site's own", () => {
+    for (const text of [
+      "Call x07700900123.example.com",
+      "call-us-07700900123.now",
+      "xn--07700900123-abc.com",
+      "brightclean.co.uk/call.us07700900123.html",
+      "https://wa.me/447700900123",
+      "07700900123.brightclean.co.uk",
+      `Call 0770 0900123 or visit https://${HOST}/`,
+      `Call 0770 0900123.${HOST}`,
+      `https://${HOST}.example.com/07700900123`,
     ]) {
-      const result = checkContent(pages(dated(main)), FACTS)
-      expect(result.passed, main).toBe(false)
-      expect(result.message, main).toContain("0770 0900123")
+      const phones = contentClaimsIn(text, [HOST]).filter(
+        (c) => c.kind === "phone"
+      )
+      expect(
+        phones.some((c) => c.key.endsWith("0900123")),
+        text
+      ).toBe(true)
     }
+  })
+
+  it("reads a host that only contains the site's own as copy", () => {
+    const host = "12345678.remeai.co"
+    for (const [text, phone] of [
+      ["Call 0712345678.remeai.co", "0712345678"],
+      ["12345678.remeai.com", "12345678"],
+      ["12345678.remeai.co-op.org", "12345678"],
+      ["12345678.remeai.co.uk", "12345678"],
+    ] as const) {
+      expect(
+        contentClaimsIn(text, [host]).map((c) => c.key),
+        text
+      ).toContain(phone)
+    }
+    expect(
+      contentClaimsIn(`Visit https://${host}/2026-09-25 or ${host}.`, [host])
+    ).toEqual([])
+  })
+
+  it("reads an email on the site's own host as an email", () => {
+    expect(contentClaimsIn(`hello@${HOST}`, [HOST])).toEqual([
+      { kind: "email", text: `hello@${HOST}`, key: `hello@${HOST}` },
+    ])
   })
 })
 

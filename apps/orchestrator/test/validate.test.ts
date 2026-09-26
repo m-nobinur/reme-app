@@ -4,6 +4,7 @@ import {
   assignments,
   eq,
   events,
+  orgs,
   siteRevisions,
   sql,
   supersedeFact,
@@ -181,6 +182,40 @@ live("the gates step", () => {
     expect((await validateRevision(kit, b.sites, b.ids, b.input)).outcome).toBe(
       "preview_ready"
     )
+  })
+
+  it("does not read the site's own host as a phone number, given the host suffix", async () => {
+    // The head `astro build --site` writes; the slug carries a date.
+    const dated = async () => {
+      const slug = `dated-20260925-${crypto.randomUUID().slice(0, 8)}`
+      const b = await built(
+        GOOD.replace(
+          "</title>",
+          `</title><meta property="og:url" content="https://${slug}-stg.remeai.co.uk/">`
+        )
+      )
+      await kit.withOrg({ orgId: b.orgId }, (db) =>
+        db.update(orgs).set({ slug }).where(eq(orgs.id, b.orgId))
+      )
+      return b
+    }
+    const told = await dated()
+    expect(
+      (
+        await validateRevision(
+          kit,
+          told.sites,
+          told.ids,
+          told.input,
+          "-stg.remeai.co.uk"
+        )
+      ).outcome
+    ).toBe("preview_ready")
+    const untold = await dated()
+    expect(
+      (await validateRevision(kit, untold.sites, untold.ids, untold.input))
+        .outcome
+    ).toBe("repairing")
   })
 
   it("writes the Developer's summary on the revision whether the gates pass or fail", async () => {

@@ -492,7 +492,7 @@ export async function probeHost(
     return { ok: false, reason: "blank page" }
   }
   if (facts) {
-    const content = checkContent([parsePage("index.html", html)], facts)
+    const content = checkContent([parsePage("index.html", html)], facts, [host])
     if (!content.passed) {
       return { ok: false, reason: content.message ?? "content gate failed" }
     }

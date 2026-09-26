@@ -23,7 +23,7 @@ const CURRENCY: Record<string, string> = {
   EUR: "EUR",
 }
 const EXTRACT: {
-  kind?: ContentKind
+  kind: ContentKind
   pattern: RegExp
   key: (m: RegExpMatchArray) => string | null
 }[] = [
@@ -31,14 +31,6 @@ const EXTRACT: {
     kind: "email",
     pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
     key: (m) => m[0].toLowerCase(),
-  },
-  // A host name, bare or in a URL, is blanked and read as nothing: the site's
-  // own host carries the org slug, which can carry a date. Every label starts
-  // with a lowercase letter, so a phone that runs into one ("0900123.x.co.uk")
-  // is still read as a phone.
-  {
-    pattern: /\b[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+\b/g,
-    key: () => null,
   },
   {
     kind: "price",
@@ -72,13 +64,35 @@ const EXTRACT: {
   },
 ]
 
-export function contentClaimsIn(text: string): ContentClaim[] {
+const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * The text with the site's own URLs blanked: each host exactly, in any case,
+ * with an optional scheme and whatever path and query follow. Every page
+ * names its own host (`og:url`, canonical), and a slug can carry a date. A
+ * host that only contains the site's, or an email on it, is left to be read.
+ * No hosts, nothing blanked.
+ */
+function withoutOwnUrls(text: string, hosts: readonly string[]): string {
+  if (!hosts.length) return text
+  const own = new RegExp(
+    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?![a-z0-9-]|\\.[a-z0-9])(?:[/?#][^\\s"'<>]*)?`,
+    "gi"
+  )
+  return text.replace(own, " ")
+}
+
+/** Every price, phone, email, time and postcode in the text, the site's own URLs aside. */
+export function contentClaimsIn(
+  text: string,
+  hosts: readonly string[] = []
+): ContentClaim[] {
   const claims: ContentClaim[] = []
-  let rest = text
+  let rest = withoutOwnUrls(text, hosts)
   for (const { kind, pattern, key } of EXTRACT) {
     for (const m of rest.matchAll(pattern)) {
       const k = key(m)
-      if (k && kind) claims.push({ kind, text: m[0], key: k })
+      if (k) claims.push({ kind, text: m[0], key: k })
     }
     // A matched claim is not read again as another kind (a price's digits are not a phone).
     rest = rest.replace(pattern, " ")
@@ -89,7 +103,9 @@ export function contentClaimsIn(text: string): ContentClaim[] {
 /**
  * The same text with everything the content gate owns blanked out, so the
  * claims gate never re-reads a price, a time, a phone number, an email or a
- * postcode as a number about the business.
+ * postcode as a number about the business. It takes no hosts: a long digit
+ * run in the site's own URL is blanked here as a phone, and a phone is not
+ * something the claims gate reports.
  */
 export function maskContentClaims(text: string): string {
   let rest = text

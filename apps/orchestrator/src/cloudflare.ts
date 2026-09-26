@@ -370,10 +370,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         )
         const verdict = await step.do(`gates ${round}`, () =>
           run((kit) =>
-            validateRevision(kit, this.env.SITES, ids, {
-              report_id: payload.report_id,
-              revision_id: payload.revision_id,
-            })
+            validateRevision(
+              kit,
+              this.env.SITES,
+              ids,
+              {
+                report_id: payload.report_id,
+                revision_id: payload.revision_id,
+              },
+              this.env.SITE_HOST_SUFFIX
+            )
           )
         )
         if (verdict.outcome === "repairing") {
