@@ -7,9 +7,12 @@ import {
 } from "@assistant-ui/react"
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
+import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
-import { useState } from "react"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn } from "./turn"
+import { useRef, useState } from "react"
+import { getConversationMessages } from "@/lib/api/server"
+import { toUIMessage } from "./history"
+import { cancelOvertaken, chatFetch, chatTurn, sendsOn, textOf } from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -47,13 +50,35 @@ export function useConversationRuntime({
         },
       })
   )
+  // A failed turn leaves the screen ahead of the stored row: the answer or
+  // the yes already shows, and nothing retries it. So the thread goes back
+  // to exactly what is stored, with the card open again and the error
+  // inline, and a typed message goes back into the composer. Through a ref,
+  // because the chat keeps the first `onError` it is given.
+  const restore = useRef<(error: Error) => void>(() => undefined)
   const chat = useChat({
     id,
     transport,
     sendAutomaticallyWhen: sendsOn,
     onFinish,
+    onError: (error) => restore.current(error),
   })
-  return useAISDKRuntime(
+  restore.current = (error) => {
+    const remoteId = aui.threadListItem.getState().remoteId
+    // A session that ended can read nothing back; the error offers sign-in.
+    if (!remoteId || error.message === SESSION_ENDED) return
+    const last = chat.messages.at(-1)
+    void getConversationMessages({ data: { id: remoteId } })
+      .then((rows) => {
+        const stored = rows.map(toUIMessage)
+        chat.setMessages(stored)
+        if (last?.role === "user" && !stored.some((m) => m.id === last.id)) {
+          runtime.thread.composer.setText(textOf(last))
+        }
+      })
+      .catch(() => undefined)
+  }
+  const runtime = useAISDKRuntime(
     {
       ...chat,
       sendMessage: (message, options) => {
@@ -67,4 +92,5 @@ export function useConversationRuntime({
       adapters: dictation ? { dictation } : {},
     }
   )
+  return runtime
 }

@@ -5,6 +5,7 @@ import {
   type FactValueKey,
   OwnerChangeRequest,
   RequestChangeOutput,
+  TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 
 /**
@@ -12,18 +13,6 @@ import {
  * the part the runtime hands a tool UI. One function per tool, so the card
  * never branches on raw part fields and a unit test covers every state.
  */
-
-/**
- * The tools with a card of their own. Each is part of the conversation, so
- * none is ever folded into a tool group.
- */
-export const OWNER_TOOLS: readonly string[] = ["ask_fact", "request_change"]
-
-/**
- * assistant-ui's words for a call a typed message overtook. `apps/api`
- * stores the same string, so a reload reads the same state as the live view.
- */
-export const CANCELLED = "User cancelled tool call by sending a new message."
 
 /** The fields of a tool-call part these views read. */
 export type ToolPartView = {
@@ -39,7 +28,11 @@ const errorOf = (result: unknown): string =>
     ? String((result as { error: unknown }).error)
     : ""
 
-const BROKEN = "This step did not come through. Reload the conversation."
+/** A turn's error when the session behind it has ended; the thread offers sign-in. */
+export const SESSION_ENDED =
+  "Your session has ended. Sign in again to carry on."
+
+export const BROKEN = "This step did not come through. Reload the conversation."
 
 export type AskFactView = { key: FactValueKey | null } & (
   | { state: "pending"; input: AskFactInput }
@@ -54,7 +47,7 @@ export function askFactView(part: ToolPartView): AskFactView {
   const key = input.success ? input.data.key : null
   if (part.isError) {
     const message = errorOf(part.result)
-    return message === CANCELLED
+    return message === TOOL_CALL_CANCELLED
       ? { key, state: "cancelled" }
       : { key, state: "error", message: message || BROKEN }
   }
@@ -93,7 +86,7 @@ export function requestChangeView(part: ToolPartView): RequestChangeView {
     // still carries the owner's answer. A cancel strips the approval.
     if (approved === false) return { state: "denied", text }
     const message = errorOf(part.result)
-    return message === CANCELLED
+    return message === TOOL_CALL_CANCELLED
       ? { state: "cancelled", text }
       : { state: "error", text, message: message || BROKEN }
   }

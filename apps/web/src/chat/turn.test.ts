@@ -1,5 +1,8 @@
-import { ChatRequest } from "@workspace/contracts"
-import { CANCELLED } from "@workspace/ui/lib/tool-state"
+import {
+  TOOL_CALL_CANCELLED as CANCELLED,
+  ChatRequest,
+} from "@workspace/contracts"
+import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import type { UIMessage } from "ai"
 import { afterEach, expect, it, vi } from "vitest"
 import { cancelOvertaken, chatFetch, chatTurn, sendsOn } from "./turn"
@@ -184,4 +187,29 @@ it("a refusal reads as the api's own words", async () => {
     vi.fn(async () => new Response("<html>", { status: 502 }))
   )
   await expect(chatFetch("/api/chat")).rejects.toThrow("(502)")
+})
+
+it("the route's own 401 says the session ended, and its 413 says why", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        { error: "This request carries no session we can read." },
+        { status: 401 }
+      )
+    )
+  )
+  await expect(chatFetch("/api/chat")).rejects.toThrow(SESSION_ENDED)
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        { error: "This message is too long to send." },
+        { status: 413 }
+      )
+    )
+  )
+  await expect(chatFetch("/api/chat")).rejects.toThrow(
+    "This message is too long to send."
+  )
 })

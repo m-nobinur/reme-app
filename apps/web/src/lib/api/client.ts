@@ -107,6 +107,8 @@ async function call(
     body?: unknown
     key?: string
     etag?: string | null
+    /** A body already serialised, sent as it is. */
+    raw?: string
   } = {}
 ): Promise<Response | null> {
   const session = getCookie(COOKIE)
@@ -114,13 +116,17 @@ async function call(
     return null
   }
   const headers: Record<string, string> = { cookie: sessionCookie(session) }
-  if (init.body !== undefined) headers["content-type"] = "application/json"
+  if (init.body !== undefined || init.raw !== undefined) {
+    headers["content-type"] = "application/json"
+  }
   if (init.key) headers["idempotency-key"] = init.key
   if (init.etag) headers["if-none-match"] = init.etag
   return await fetch(new URL(path, apiUrl()), {
     method: init.method ?? "GET",
     headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body:
+      init.raw ??
+      (init.body === undefined ? undefined : JSON.stringify(init.body)),
   })
 }
 
@@ -629,7 +635,7 @@ export const apiSource: OwnerDataSource = {
   createConversation,
   updateConversation,
   conversationMessages,
-  chat: (body) => call("/chat", { method: "POST", body }),
+  chat: (raw) => call("/chat", { method: "POST", raw }),
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

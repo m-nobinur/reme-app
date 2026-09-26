@@ -45,6 +45,14 @@ export function toStorageEntry(
   }
 }
 
+/**
+ * A stored row as the AI SDK chat holds it: what `aiSDKV6FormatAdapter`
+ * decodes it to on a history load, so a reload after a failed turn shows
+ * the same thread a fresh load would.
+ */
+export const toUIMessage = (message: TransportedMessage): UIMessage =>
+  ({ id: message.id, ...toStorageEntry(message).content }) as UIMessage
+
 type RemoteThreadMetadata = Awaited<
   ReturnType<RemoteThreadListAdapter["fetch"]>
 >

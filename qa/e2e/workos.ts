@@ -150,6 +150,11 @@ export async function deleteProbeOrgs(userId: string): Promise<void> {
   const listed = await call(
     `/user_management/organization_memberships?user_id=${userId}`
   )
+  if (listed.status !== 200) {
+    throw new Error(
+      `WorkOS did not list ${userId}'s organisations: ${listed.status} ${JSON.stringify(listed.body)}`
+    )
+  }
   const memberships = (listed.body.data ?? []) as { organization_id: string }[]
   for (const { organization_id } of memberships) {
     const deleted = await call(`/organizations/${organization_id}`, {

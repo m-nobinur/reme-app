@@ -127,15 +127,20 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
   )
 }
 
-/** The owner's own tools (`OWNER_TOOLS`), each with its card. */
-const CARDS: Record<string, ToolCallMessagePartComponent> = {
+/**
+ * The owner's own tools, each with its card. The thread keeps every one of
+ * them out of tool groups, reading this same map.
+ */
+export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_fact: AskFact,
   request_change: RequestChange,
 }
 
 const Approval: ToolCallMessagePartComponent = (props) => {
   const { approval, respondToApproval, toolName } = props
-  const Owned = CARDS[toolName]
+  const Owned = Object.hasOwn(OWNER_CARDS, toolName)
+    ? OWNER_CARDS[toolName]
+    : undefined
   if (Owned) return <Owned {...props} />
 
   // Only a real approval gate takes the card. A tool paused on an interrupt has

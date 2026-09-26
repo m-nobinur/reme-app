@@ -5,6 +5,7 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
+import { TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   OWNER_QUICK_ACTIONS,
@@ -31,6 +32,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { useState } from "react"
 
 /**
@@ -215,7 +217,6 @@ const approvalCall = (approved: boolean | undefined): ThreadMessageLike => ({
  * Onboarding's two tools in every state they reach. Brightclean is the
  * fixture business; the number is in Ofcom's drama range.
  */
-const CANCELLED_TEXT = "User cancelled tool call by sending a new message."
 const DONE = { reason: "stop", type: "complete" } as const
 const WAITING = { reason: "tool-calls", type: "requires-action" } as const
 
@@ -261,12 +262,12 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
       }),
       askFact("hours.weekday", {
         isError: true,
-        result: { error: CANCELLED_TEXT },
+        result: { error: TOOL_CALL_CANCELLED },
       }),
       askFact("business.email", {
         isError: true,
         result: {
-          error: "This step did not come through. Reload the conversation.",
+          error: BROKEN,
         },
       }),
     ],
@@ -369,13 +370,13 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
   requestChange("cancelled", "Swap the hero photo.", {
     approval: false,
     isError: true,
-    result: { error: CANCELLED_TEXT },
+    result: { error: TOOL_CALL_CANCELLED },
   }),
   requestChange("error", "Swap the hero photo.", {
     approval: false,
     isError: true,
     result: {
-      error: "This step did not come through. Reload the conversation.",
+      error: BROKEN,
     },
   }),
 ]

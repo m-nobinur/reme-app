@@ -1,11 +1,21 @@
-import { type ChatRequest, ErrorEnvelope } from "@workspace/contracts"
-import { CANCELLED } from "@workspace/ui/lib/tool-state"
+import {
+  type ChatRequest,
+  ErrorEnvelope,
+  TOOL_CALL_CANCELLED,
+} from "@workspace/contracts"
+import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import {
   isToolUIPart,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
   type UIMessage,
 } from "ai"
+
+/** What the owner typed in a message. */
+export const textOf = (message: UIMessage) =>
+  message.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
 
 /**
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
@@ -19,13 +29,10 @@ export function chatTurn(
 ): ChatRequest {
   const last = messages.at(-1)
   if (last?.role === "user") {
-    const text = last.parts
-      .flatMap((part) => (part.type === "text" ? [part.text] : []))
-      .join("\n")
     return {
       conversation_id: conversationId,
       mode,
-      turn: { kind: "message", message_id: last.id, text },
+      turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
   // The server opens a new step after every call it resolves, so the last
@@ -95,7 +102,7 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
     return {
       ...rest,
       state: "output-error",
-      errorText: CANCELLED,
+      errorText: TOOL_CALL_CANCELLED,
     } as UIMessage["parts"][number]
   })
   return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
@@ -107,8 +114,10 @@ export const sendsOn = ({ messages }: { messages: UIMessage[] }) =>
   lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
 
 /**
- * A refusal as the owner reads it: the envelope's own message, which the api
- * writes for them, rather than the JSON the AI SDK would otherwise show.
+ * A refusal as the owner reads it: the api's envelope message, which it
+ * writes for them, or the web route's own sentence, rather than the JSON the
+ * AI SDK would otherwise show. The route's 401 is a session that ended, and
+ * the thread offers sign-in for it.
  */
 export async function chatFetch(
   input: RequestInfo | URL,
@@ -116,12 +125,14 @@ export async function chatFetch(
 ): Promise<Response> {
   const response = await fetch(input, init)
   if (response.ok) return response
-  const envelope = ErrorEnvelope.safeParse(
-    await response.json().catch(() => null)
-  )
+  const body: unknown = await response.json().catch(() => null)
+  if (response.status === 401) throw new Error(SESSION_ENDED)
+  const envelope = ErrorEnvelope.safeParse(body)
+  if (envelope.success) throw new Error(envelope.data.message)
+  const own = (body as { error?: unknown } | null)?.error
   throw new Error(
-    envelope.success
-      ? envelope.data.message
+    typeof own === "string"
+      ? own
       : `The assistant did not answer (${response.status}). Try again.`
   )
 }

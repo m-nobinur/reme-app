@@ -3,7 +3,6 @@ import {
   ActionBarPrimitive,
   type AssistantState,
   AuiIf,
-  BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
   type GroupByContext,
@@ -21,8 +20,6 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CaretDownIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
   CheckIcon,
   CopyIcon,
   DotsThreeIcon,
@@ -31,6 +28,7 @@ import {
   PlusIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
+import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -50,7 +48,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import { OWNER_TOOLS } from "@workspace/ui/lib/tool-state"
+import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentType,
@@ -139,7 +137,7 @@ const groupThreadParts = (part: PartState, context?: GroupByContext) =>
   part.type === "tool-call" &&
   (part.approval != null ||
     part.status?.type === "requires-action" ||
-    OWNER_TOOLS.includes(part.toolName))
+    Object.hasOwn(OWNER_CARDS, part.toolName))
     ? UNGROUPED
     : groupByType(part, context)
 
@@ -637,10 +635,23 @@ const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
 }
 
 const MessageError: FC = () => {
+  const ended = useAuiState(
+    (s) =>
+      s.message.status?.type === "incomplete" &&
+      s.message.status.error === SESSION_ENDED
+  )
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
         <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+        {ended ? (
+          <a
+            className="mt-1 inline-block font-medium text-foreground underline underline-offset-4"
+            href={`/sign-in?returnTo=${encodeURIComponent(window.location.pathname)}`}
+          >
+            Sign in again
+          </a>
+        ) : null}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   )
@@ -711,7 +722,6 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
         <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
@@ -781,39 +791,6 @@ const UserMessage: FC = () => {
           <MessagePrimitive.Parts />
         </div>
       </div>
-
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
-      />
     </MessagePrimitive.Root>
-  )
-}
-
-const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
-  className,
-  ...rest
-}) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className={cn(
-        "aui-branch-picker-root -ms-2 me-2 inline-flex items-center text-muted-foreground text-xs",
-        className
-      )}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous
-        render={<TooltipIconButton tooltip="Previous" />}
-      >
-        <CaretLeftIcon />
-      </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-medium">
-        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next render={<TooltipIconButton tooltip="Next" />}>
-        <CaretRightIcon />
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
   )
 }

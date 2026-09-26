@@ -1,0 +1,1221 @@
+{
+  "recorded": "apps/api POST /chat and GET /conversations/:id/messages on local dev, 2026-09-27, one throwaway owner signing up as a fictional business",
+  "org": {
+    "org_id": "3c1f8a84-1fef-42ad-a9e8-46446b18fa31",
+    "slug": "fixture-cleaning-co-3c1f8a84",
+    "name": "Fixture Cleaning Co",
+    "created_at": "2026-09-26T19:31:07.484Z"
+  },
+  "list": {
+    "conversations": [
+      {
+        "id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "kind": "onboarding",
+        "title": null,
+        "archived_at": null,
+        "created_at": "2026-09-26T19:31:07.484Z",
+        "updated_at": "2026-09-26T19:31:07.484Z"
+      }
+    ]
+  },
+  "conversation": {
+    "id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+    "kind": "onboarding",
+    "title": null,
+    "archived_at": null,
+    "created_at": "2026-09-26T19:31:07.484Z",
+    "updated_at": "2026-09-26T19:31:07.484Z"
+  },
+  "histories": {
+    "start": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "input-available",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "typed": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "input-available",
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "name": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.name",
+                    "value": {
+                      "name": "Fixture Cleaning Co"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.phone",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "input-available",
+                "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pricing": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.name",
+                    "value": {
+                      "name": "Fixture Cleaning Co"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.phone",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.phone",
+                    "value": {
+                      "e164": "+447700900123"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.email",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.email",
+                    "value": {
+                      "address": "hello@example.net"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "hours.weekday",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "hours.weekday",
+                    "value": {
+                      "open": "08:00",
+                      "close": "18:00"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "service_area.radius",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "service_area.radius",
+                    "value": {
+                      "centre": "Leeds",
+                      "radius_km": 15
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "pricing.standard_clean_hourly",
+                  "prefill": null,
+                  "skippable": true
+                },
+                "state": "input-available",
+                "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "offered": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.name",
+                    "value": {
+                      "name": "Fixture Cleaning Co"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.phone",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.phone",
+                    "value": {
+                      "e164": "+447700900123"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.email",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.email",
+                    "value": {
+                      "address": "hello@example.net"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "hours.weekday",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "hours.weekday",
+                    "value": {
+                      "open": "08:00",
+                      "close": "18:00"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "service_area.radius",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "service_area.radius",
+                    "value": {
+                      "centre": "Leeds",
+                      "radius_km": 15
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "pricing.standard_clean_hourly",
+                  "prefill": null,
+                  "skippable": true
+                },
+                "state": "output-available",
+                "output": {
+                  "answer": "skipped"
+                },
+                "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-request_change",
+                "input": {
+                  "text": "Build my website from the details I gave you."
+                },
+                "state": "approval-requested",
+                "approval": {
+                  "id": "5488c5b4-43a2-4134-9f45-8901ab8404c0"
+                },
+                "toolCallId": "3999feec-aaa7-4850-9a8b-aa656d811079"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "denied": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.name",
+                    "value": {
+                      "name": "Fixture Cleaning Co"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.phone",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.phone",
+                    "value": {
+                      "e164": "+447700900123"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.email",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.email",
+                    "value": {
+                      "address": "hello@example.net"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "hours.weekday",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "hours.weekday",
+                    "value": {
+                      "open": "08:00",
+                      "close": "18:00"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "service_area.radius",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "service_area.radius",
+                    "value": {
+                      "centre": "Leeds",
+                      "radius_km": 15
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "pricing.standard_clean_hourly",
+                  "prefill": null,
+                  "skippable": true
+                },
+                "state": "output-available",
+                "output": {
+                  "answer": "skipped"
+                },
+                "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-request_change",
+                "input": {
+                  "text": "Build my website from the details I gave you."
+                },
+                "state": "output-denied",
+                "approval": {
+                  "id": "5488c5b4-43a2-4134-9f45-8901ab8404c0",
+                  "approved": false
+                },
+                "toolCallId": "3999feec-aaa7-4850-9a8b-aa656d811079"
+              },
+              {
+                "type": "step-start"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "change": {
+      "messages": [
+        {
+          "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "parent_id": null,
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-error",
+                "errorText": "User cancelled tool call by sending a new message.",
+                "toolCallId": "338c85a9-52ea-4983-8596-5749cc77fd71"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:07.484Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "3jFuFFiYDiKlFH9V",
+          "parent_id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "3jFuFFiYDiKlFH9V",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.name",
+                  "prefill": {
+                    "name": "Fixture Cleaning Co"
+                  },
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.name",
+                    "value": {
+                      "name": "Fixture Cleaning Co"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.phone",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.phone",
+                    "value": {
+                      "e164": "+447700900123"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "business.email",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "business.email",
+                    "value": {
+                      "address": "hello@example.net"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "hours.weekday",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "hours.weekday",
+                    "value": {
+                      "open": "08:00",
+                      "close": "18:00"
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "service_area.radius",
+                  "prefill": null,
+                  "skippable": false
+                },
+                "state": "output-available",
+                "output": {
+                  "fact": {
+                    "key": "service_area.radius",
+                    "value": {
+                      "centre": "Leeds",
+                      "radius_km": 15
+                    }
+                  },
+                  "answer": "stated"
+                },
+                "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-ask_fact",
+                "input": {
+                  "key": "pricing.standard_clean_hourly",
+                  "prefill": null,
+                  "skippable": true
+                },
+                "state": "output-available",
+                "output": {
+                  "answer": "skipped"
+                },
+                "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-request_change",
+                "input": {
+                  "text": "Build my website from the details I gave you."
+                },
+                "state": "output-denied",
+                "approval": {
+                  "id": "5488c5b4-43a2-4134-9f45-8901ab8404c0",
+                  "approved": false
+                },
+                "toolCallId": "3999feec-aaa7-4850-9a8b-aa656d811079"
+              },
+              {
+                "type": "step-start"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "nyJaqEdvLq3JuzpF",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Add Saturday hours, 9 to 1."
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:17.526Z"
+              }
+            }
+          }
+        },
+        {
+          "id": "5ff654f9-00ce-4e68-a649-643991d80c52",
+          "parent_id": "nyJaqEdvLq3JuzpF",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-request_change",
+                "input": {
+                  "text": "Add Saturday hours, 9 to 1."
+                },
+                "state": "approval-requested",
+                "approval": {
+                  "id": "0b97a809-e9f9-4ce8-9684-b75ce58a59d6"
+                },
+                "toolCallId": "bbace52d-d6d7-48d3-bb55-d422484590bd"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:17.526Z"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "streams": {
+    "typed": {
+      "request": {
+        "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "mode": "act",
+        "turn": {
+          "kind": "message",
+          "message_id": "3jFuFFiYDiKlFH9V",
+          "text": "Hello"
+        }
+      },
+      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"input\":{\"key\":\"business.name\",\"prefill\":{\"name\":\"Fixture Cleaning Co\"},\"skippable\":false},\"toolCallId\":\"24190632-9fdb-4b63-b42c-08df82bff496\",\"toolName\":\"ask_fact\",\"type\":\"tool-input-available\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+    },
+    "name": {
+      "request": {
+        "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "mode": "act",
+        "turn": {
+          "kind": "answer",
+          "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "tool_call_id": "24190632-9fdb-4b63-b42c-08df82bff496",
+          "output": {
+            "answer": "stated",
+            "fact": {
+              "key": "business.name",
+              "value": {
+                "name": "Fixture Cleaning Co"
+              }
+            }
+          }
+        }
+      },
+      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"stated\",\"fact\":{\"key\":\"business.name\",\"value\":{\"name\":\"Fixture Cleaning Co\"}}},\"toolCallId\":\"24190632-9fdb-4b63-b42c-08df82bff496\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"key\":\"business.phone\",\"prefill\":null,\"skippable\":false},\"toolCallId\":\"757d0820-4934-4faa-b188-2f4c6bff9282\",\"toolName\":\"ask_fact\",\"type\":\"tool-input-available\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+    },
+    "skip": {
+      "request": {
+        "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "mode": "act",
+        "turn": {
+          "kind": "answer",
+          "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "tool_call_id": "6decf863-fd2b-48dc-948e-e395299d91a8",
+          "output": {
+            "answer": "skipped"
+          }
+        }
+      },
+      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"skipped\"},\"toolCallId\":\"6decf863-fd2b-48dc-948e-e395299d91a8\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"text\":\"Build my website from the details I gave you.\"},\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"toolName\":\"request_change\",\"type\":\"tool-input-available\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-approval-request\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+    },
+    "deny": {
+      "request": {
+        "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "mode": "act",
+        "turn": {
+          "kind": "approval",
+          "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "approval_id": "5488c5b4-43a2-4134-9f45-8901ab8404c0",
+          "approved": false
+        }
+      },
+      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"approved\":false,\"type\":\"tool-approval-response\"}\n\ndata: {\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-output-denied\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+    },
+    "change": {
+      "request": {
+        "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
+        "mode": "act",
+        "turn": {
+          "kind": "message",
+          "message_id": "nyJaqEdvLq3JuzpF",
+          "text": "Add Saturday hours, 9 to 1."
+        }
+      },
+      "response": "data: {\"messageId\":\"5ff654f9-00ce-4e68-a649-643991d80c52\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"input\":{\"text\":\"Add Saturday hours, 9 to 1.\"},\"toolCallId\":\"bbace52d-d6d7-48d3-bb55-d422484590bd\",\"toolName\":\"request_change\",\"type\":\"tool-input-available\"}\n\ndata: {\"approvalId\":\"0b97a809-e9f9-4ce8-9684-b75ce58a59d6\",\"toolCallId\":\"bbace52d-d6d7-48d3-bb55-d422484590bd\",\"type\":\"tool-approval-request\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+    }
+  }
+}

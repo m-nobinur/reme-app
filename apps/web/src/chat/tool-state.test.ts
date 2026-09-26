@@ -1,8 +1,5 @@
-import {
-  askFactView,
-  CANCELLED,
-  requestChangeView,
-} from "@workspace/ui/lib/tool-state"
+import { TOOL_CALL_CANCELLED as CANCELLED } from "@workspace/contracts"
+import { askFactView, requestChangeView } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
 
 /**
