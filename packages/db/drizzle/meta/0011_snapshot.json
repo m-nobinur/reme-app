@@ -1,5 +1,5 @@
 {
-  "id": "def515c1-4a45-41c3-891e-26649ac03595",
+  "id": "def37b5c-ba6c-4c4c-b156-aeaa4601f0f3",
   "prevId": "da42279b-b912-45c3-8db6-ed4c1ae374ac",
   "version": "7",
   "dialect": "postgresql",
@@ -686,6 +686,23 @@
           "primaryKey": false,
           "notNull": true
         },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "conversation_messages_seq_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -695,8 +712,8 @@
         }
       },
       "indexes": {
-        "conversation_messages_conversation_created_idx": {
-          "name": "conversation_messages_conversation_created_idx",
+        "conversation_messages_conversation_seq_idx": {
+          "name": "conversation_messages_conversation_seq_idx",
           "columns": [
             {
               "expression": "conversation_id",
@@ -705,7 +722,7 @@
               "nulls": "last"
             },
             {
-              "expression": "created_at",
+              "expression": "seq",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -788,6 +805,10 @@
         "conversation_messages_ids_are_text_ids": {
           "name": "conversation_messages_ids_are_text_ids",
           "value": "id ~ '^[A-Za-z0-9_-]{1,64}$' and parent_id ~ '^[A-Za-z0-9_-]{1,64}$'"
+        },
+        "conversation_messages_not_own_parent": {
+          "name": "conversation_messages_not_own_parent",
+          "value": "parent_id <> id"
         }
       },
       "isRLSEnabled": false
@@ -884,14 +905,14 @@
             {
               "expression": "updated_at",
               "isExpression": false,
-              "asc": false,
-              "nulls": "first"
+              "asc": true,
+              "nulls": "last"
             },
             {
               "expression": "id",
               "isExpression": false,
-              "asc": false,
-              "nulls": "first"
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": false,
@@ -962,6 +983,10 @@
         }
       },
       "checkConstraints": {
+        "conversations_idempotency_key_length": {
+          "name": "conversations_idempotency_key_length",
+          "value": "char_length(idempotency_key) between 1 and 255"
+        },
         "conversations_title_text": {
           "name": "conversations_title_text",
           "value": "char_length(title) between 1 and 120 and title ~ '[^ \\t\\n\\v\\f\\r]'"

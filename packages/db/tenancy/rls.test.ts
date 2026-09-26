@@ -1246,11 +1246,12 @@ describe("conversations hold their shape", () => {
     tx: TransactionSql,
     org: string,
     id: string,
-    parent: string | null = null
+    parent: string | null = null,
+    into = CONVERSATION_A
   ) => tx`
     insert into conversation_messages (conversation_id, id, org_id, parent_id,
       format, content)
-    values (${CONVERSATION_A}, ${id}, ${org}, ${parent}, 'ai-sdk/v6',
+    values (${into}, ${id}, ${org}, ${parent}, 'ai-sdk/v6',
       '{"role":"user","parts":[{"type":"text","text":"x"}]}'::jsonb)`
 
   it("holds one onboarding conversation per org", async () => {
@@ -1266,6 +1267,20 @@ describe("conversations hold their shape", () => {
         await conversation(tx, ORG_A, { kind: "onboarding" })
       })
     ).toBe(UNIQUE)
+  })
+
+  it("takes an idempotency key of 1 to 255 characters", async () => {
+    expect(
+      await inTransaction((tx) =>
+        conversation(tx, ORG_A, { key: "k".repeat(255) })
+      )
+    ).toBeUndefined()
+    for (const key of ["", "k".repeat(256)]) {
+      expect(
+        await inTransaction((tx) => conversation(tx, ORG_A, { key })),
+        `${key.length} characters`
+      ).toBe(CHECK)
+    }
   })
 
   it("makes one conversation per idempotency key in an org", async () => {
@@ -1323,6 +1338,42 @@ describe("conversations hold their shape", () => {
         message(tx, ORG_A, "probe_user_2", "not_stored")
       )
     ).toBe(FOREIGN_KEY)
+  })
+
+  it("takes no parent from another conversation of the same org, nor itself", async () => {
+    expect(
+      await inTransaction(async (tx) => {
+        const [other] = await tx`
+          insert into conversations (org_id, kind, created_by_staff_id)
+          values (${ORG_A}, 'assistant', ${OWNER_A}) returning id`
+        // `probe_user_1` exists, in CONVERSATION_A.
+        await message(tx, ORG_A, "probe_user_2", "probe_user_1", other?.id)
+      })
+    ).toBe(FOREIGN_KEY)
+    expect(
+      await inTransaction((tx) => message(tx, ORG_A, "self_1", "self_1"))
+    ).toBe(CHECK)
+  })
+
+  it("reads a turn written in one transaction back in the order it was written", async () => {
+    const read: { id: string; created_at: Date }[] = []
+    await inTransaction(async (tx) => {
+      // now() is the transaction's start, so both rows carry one created_at.
+      await message(tx, ORG_A, "turn_user", "probe_assistant_1")
+      await message(tx, ORG_A, "turn_reply", "turn_user")
+      read.push(
+        ...(await tx<{ id: string; created_at: Date }[]>`
+          select id, created_at from conversation_messages
+          where conversation_id = ${CONVERSATION_A} order by seq`)
+      )
+    })
+    expect(read.map((r) => r.id)).toEqual([
+      "probe_user_1",
+      "probe_assistant_1",
+      "turn_user",
+      "turn_reply",
+    ])
+    expect(read[2]?.created_at).toEqual(read[3]?.created_at)
   })
 
   it("refuses a message id that is not a text id", async () => {

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm"
 import {
+  bigint,
   char,
   check,
   customType,
@@ -977,12 +978,12 @@ export const conversations = pgTable(
     uniqueIndex("conversations_one_onboarding_per_org")
       .on(t.orgId)
       .where(sql`kind = 'onboarding'`),
-    // The list, `order by updated_at desc, id desc`. NULLS FIRST is what a
-    // bare `desc` means, and an index only serves the order it was built in.
-    index("conversations_org_updated_idx").on(
-      t.orgId,
-      t.updatedAt.desc().nullsFirst(),
-      t.id.desc().nullsFirst()
+    // The list, `order by updated_at desc, id desc`, read by a backward scan.
+    index("conversations_org_updated_idx").on(t.orgId, t.updatedAt, t.id),
+    // A header past the btree's row limit would fail the index as a 500.
+    check(
+      "conversations_idempotency_key_length",
+      sql`char_length(idempotency_key) between 1 and 255`
     ),
     check(
       "conversations_title_text",
@@ -998,7 +999,9 @@ export const conversations = pgTable(
  * One message per row, in assistant-ui's `{id, parent_id, format, content}`
  * storage shape. Ids are the AI SDK's text ids, unique within a conversation,
  * so a retried write of the same message inserts nothing. `content` holds no
- * metadata: the api adds the date from `created_at` when it reads.
+ * metadata: the api adds the date from `created_at` when it reads. `seq` is
+ * the read order: `created_at` is the transaction's start, so a message and
+ * its reply written together share one.
  */
 export const conversationMessages = pgTable(
   "conversation_messages",
@@ -1011,6 +1014,7 @@ export const conversationMessages = pgTable(
     parentId: text("parent_id"),
     format: text("format").notNull(),
     content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity(),
     createdAt,
   },
   (t) => [
@@ -1029,14 +1033,16 @@ export const conversationMessages = pgTable(
       columns: [t.conversationId, t.parentId],
       foreignColumns: [t.conversationId, t.id],
     }),
-    index("conversation_messages_conversation_created_idx").on(
+    index("conversation_messages_conversation_seq_idx").on(
       t.conversationId,
-      t.createdAt
+      t.seq
     ),
     check(
       "conversation_messages_ids_are_text_ids",
       sql`id ~ '^[A-Za-z0-9_-]{1,64}$' and parent_id ~ '^[A-Za-z0-9_-]{1,64}$'`
     ),
+    // The self-reference would otherwise be satisfied by the row itself.
+    check("conversation_messages_not_own_parent", sql`parent_id <> id`),
     orgIsolation("conversation_messages"),
   ]
 )
