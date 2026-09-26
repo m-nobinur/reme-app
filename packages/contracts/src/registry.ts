@@ -5,6 +5,13 @@ import {
   InformationAnswer,
   InformationRequest,
 } from "./assignment.ts"
+import {
+  Conversation,
+  ConversationHistory,
+  ConversationList,
+  ConversationMessage,
+  ConversationPatch,
+} from "./conversation.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
@@ -50,6 +57,11 @@ export const contracts = {
   CapabilityCall,
   CompletionReport,
   ComponentManifest,
+  Conversation,
+  ConversationHistory,
+  ConversationList,
+  ConversationMessage,
+  ConversationPatch,
   CreateOrgRequest,
   DecisionRequest,
   DeploymentManifest,

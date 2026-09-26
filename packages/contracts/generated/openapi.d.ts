@@ -374,6 +374,83 @@ export interface components {
       /** @enum {string} */
       source: "generated" | "hand-written"
     }
+    Conversation: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: "onboarding" | "assistant"
+      title: string | null
+      archived_at: string | null
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
+    ConversationHistory: {
+      messages: {
+        id: string
+        parent_id: string | null
+        /** @constant */
+        format: "ai-sdk/v6"
+        content: {
+          /** @enum {string} */
+          role: "user" | "assistant"
+          parts: ({
+            type: string
+          } & {
+            [key: string]: unknown
+          })[]
+          metadata: {
+            custom: {
+              /** Format: date-time */
+              createdAt: string
+            }
+          }
+        }
+      }[]
+    }
+    ConversationList: {
+      conversations: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        kind: "onboarding" | "assistant"
+        title: string | null
+        archived_at: string | null
+        /** Format: date-time */
+        created_at: string
+        /** Format: date-time */
+        updated_at: string
+      }[]
+    }
+    ConversationMessage: {
+      id: string
+      parent_id: string | null
+      /** @constant */
+      format: "ai-sdk/v6"
+      content: {
+        /** @enum {string} */
+        role: "user" | "assistant"
+        parts: ({
+          type: string
+        } & {
+          [key: string]: unknown
+        })[]
+        metadata: {
+          custom: {
+            /** Format: date-time */
+            createdAt: string
+          }
+        }
+      }
+    }
+    ConversationPatch:
+      | {
+          title: string
+        }
+      | {
+          archived: boolean
+        }
     CreateOrgRequest: {
       name: string
     }
