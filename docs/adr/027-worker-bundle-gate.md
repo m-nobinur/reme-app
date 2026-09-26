@@ -1,6 +1,7 @@
 # ADR-027: What the web worker bundle gate measures
 
-Status: accepted, 2026-08-27. Applies to `apps/web`, `pnpm size` and the phase exit gate.
+Status: accepted, 2026-08-27. Amended 2026-09-26, see "Amendment: the chat surface leaves the
+worker" at the end. Applies to `apps/web`, `pnpm size` and the phase exit gate.
 
 Does not change DR-1. DR-1 already names the 128 MB isolate as the limit that breaks Workers apps
 and already records that its own superseded bundle trigger measured the wrong thing. The 1 MiB
@@ -132,3 +133,54 @@ Startup CPU passes 150 ms, which means the framework's entry shape changed and t
 is now ours to manage. Or the load suite lands and shows sustained isolate memory near DR-1's 90 MB
 trigger, at which point bytes become a proxy for something real and the byte line is worth
 re-deriving from that measurement rather than from the platform ceiling.
+
+## Amendment, 2026-09-26: the chat surface leaves the worker
+
+Two lines above no longer hold. "The chat surface stays server-rendered" is false on `main`: both
+chat routes, `/app/` and `/app/c/$id`, are `ssr: false`, and no ADR recorded the change. The
+rejection "`ssr: false` was already shown not to remove the bytes" is true of the flag alone. It is
+not true of the pattern below.
+
+*What was measured.* On `4ded99d`, in a clean clone, `pnpm size` after a fresh build of `web`:
+
+- `main` as it stands: 949.14 KiB gzip.
+- `component: import.meta.env.SSR ? () => null : ChatPage`: 754.77 KiB. Vite replaces
+  `import.meta.env.SSR` at build time and Rollup drops what only the dead branch used. The server's
+  split chunk still opens with a bare `import "./chat-page-*.js"`, because the chat modules run
+  code at the top level. That chunk is 193 KiB gzip of assistant-ui, mdast and micromark, and it
+  still uploads.
+- The same ternary with the client branch written as
+  `lazyRouteComponent(() => import("@/chat/chat-page"), "ChatPage")` and the static import
+  deleted: 558.49 KiB, 390.65 KiB below `main`. The server output has no chat chunk at all.
+- `wrangler check startup`, five runs each on a machine busy with other builds: 13.7 to 16.2 ms
+  for `main`, 16.4 to 50.2 ms for the lazy form. Both sit far under the 150 ms gate, and the spread
+  comes from the host, not the code.
+
+TanStack has no route option that keeps a component out of the server build. `ssr: false` and
+`ClientOnly` both leave the import in place. The Start compiler prunes only the bodies of
+`createServerFn`, `createServerOnlyFn`, `createClientOnlyFn` and `createIsomorphicFn`. The ternary
+relies on Vite's static replacement, not on TanStack.
+
+*Decision.* The conversation routes render on the client only and take their component through
+the lazy form above. The server still renders the layout, the rail and the panel, so the first
+paint carries the panel state from its cookie. Only the thread waits for the client. The baseline
+moves down in the PR that applies the pattern, to the number `pnpm size` prints there. The drift
+check guards it: a static `ChatPage` import in a route file brings roughly 390 KiB back and fails
+the gate.
+
+The original rejection weighed first paint against a smaller number that bought nothing. The
+number is now 41% of the upload. First paint was already spent when the routes went `ssr: false`,
+and the thread is empty until the owner types or history loads, so the server had nothing to put
+in it.
+
+*Rejected.* The ternary without the lazy import: it keeps half the bytes and runs the chat
+modules' top-level code on the server. `ClientOnly`: it keeps the import. `createIsomorphicFn`:
+the docs say its client body is pruned from the server build, but I did not measure it, and a Vite
+constant already does the job.
+
+*Cost.* On a first visit the client loads the route's split chunk, then the chat chunk, one more
+request than before. Not measured.
+
+*Change if* the conversation needs server-rendered content on first paint, such as history
+rendered on the server, which brings SSR and the bytes back together. Or a TanStack release adds a
+route option that keeps a component out of the server build, which would replace the ternary.
