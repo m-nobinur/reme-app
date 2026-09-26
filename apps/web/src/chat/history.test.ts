@@ -18,6 +18,7 @@ import {
   startsNewChat,
   toMetadata,
   toStorageEntry,
+  toUIMessage,
 } from "./history"
 
 /**
@@ -102,6 +103,13 @@ it("loads the open thread's rows through the runtime's own decode", async () => 
     },
     expect.objectContaining({ parentId: "msg_1" }),
   ])
+})
+
+it("reloads a row after a failed turn exactly as a history load decodes it", async () => {
+  const format = await installed()
+  for (const row of ROWS) {
+    expect(toUIMessage(row)).toEqual(format.decode(toStorageEntry(row)).message)
+  }
 })
 
 it("loads nothing for a thread that is not stored yet", async () => {

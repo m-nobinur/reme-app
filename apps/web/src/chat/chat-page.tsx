@@ -3,10 +3,6 @@ import {
   useRemoteThreadListRuntime,
   WebSpeechDictationAdapter,
 } from "@assistant-ui/react"
-import {
-  AssistantChatTransport,
-  useChatRuntime,
-} from "@assistant-ui/react-ai-sdk"
 import { ChatsCircleIcon } from "@phosphor-icons/react"
 import {
   getRouteApi,
@@ -24,7 +20,6 @@ import {
 } from "@workspace/ui/components/assistant/thread"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
 import {
   useCallback,
   useEffect,
@@ -36,6 +31,7 @@ import {
 import { briefingOf } from "@/lib/briefing"
 import { conversationList, unstored } from "./conversations"
 import { missingConversations, startsNewChat } from "./history"
+import { useConversationRuntime } from "./runtime"
 
 const frame = getRouteApi("/app")
 
@@ -87,30 +83,25 @@ export function ChatPage() {
       ? new WebSpeechDictationAdapter({ language: "en-GB" })
       : undefined
   )
+  // Read at send time, so a mode picked after the thread opened still goes.
+  const modeNow = useRef(mode)
+  modeNow.current = mode
   const useThreadRuntime = () =>
-    useChatRuntime({
-      // The mode travels with every request, so the backend that enforces it
-      // (the onboarding script, then the Chief of Staff) reads what the owner
-      // picked. The replay ignores it.
-      transport: new AssistantChatTransport({
-        api: "/api/chat",
-        body: { mode },
-      }),
-      // An approval answer is a turn: once the owner has answered every pending
-      // one, the runtime sends the thread back and the recording continues.
-      sendAutomaticallyWhen:
-        lastAssistantMessageIsCompleteWithApprovalResponses,
+    useConversationRuntime({
+      mode: () => modeNow.current,
       // A turn can change what waits on the owner and the conversation's
       // title, so the frame reads both again: the panel adopts the new
       // workspace and the rail the new list.
       onFinish: () => {
         void router.invalidate()
       },
-      // The option, not `adapters.suggestion`: in @assistant-ui/react-ai-sdk 1.4.7
-      // the adapter runs only after an assistant turn ends and then replaces these,
-      // and the empty thread is the only place suggestions show.
-      suggestions: briefing.suggestions,
-      adapters: dictation ? { dictation } : {},
+      // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.2
+      // the adapter runs only after an assistant turn ends and then replaces
+      // these, and the empty thread is the only place suggestions show.
+      // A stored conversation never offers them: one pressed while its
+      // history loaded started a second conversation.
+      suggestions: id ? [] : briefing.suggestions,
+      dictation,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -173,6 +164,7 @@ export function ChatPage() {
             onModeChange={changeMode}
             placeholder="Ask, or tell me what to change"
             quickActions={OWNER_QUICK_ACTIONS}
+            stored={Boolean(id)}
           />
         )}
       </div>

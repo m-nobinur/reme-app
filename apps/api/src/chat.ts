@@ -7,6 +7,7 @@ import {
   FactValue,
   type FactValueKey,
   RequestChangeOutput,
+  TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
   conversationMessages,
@@ -53,7 +54,7 @@ export const ASK_REPLY =
   "I can't answer questions yet. Switch to Act and tell me what to change on your site."
 
 /** assistant-ui's words when a new message cancels a pending call, so a reload matches. */
-export const CANCELLED = "User cancelled tool call by sending a new message."
+export const CANCELLED = TOOL_CALL_CANCELLED
 
 /** `format` on every row: `aiSDKV6FormatAdapter.format`, v6 even on ai 7. */
 const FORMAT = "ai-sdk/v6"

@@ -13,9 +13,9 @@ import {
   DefinitionList,
 } from "@workspace/ui/components/definition-list"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { factLabel, factText, humanise } from "@workspace/ui/lib/facts"
 import { formatDate } from "@workspace/ui/lib/format"
 import { getBusinessProfile } from "@/lib/api/server"
-import { factLabel, factText, humanise } from "@/lib/facts"
 
 export const Route = createFileRoute("/app/profile")({
   loader: async () => await getBusinessProfile(),

@@ -3,7 +3,6 @@ import {
   ActionBarPrimitive,
   type AssistantState,
   AuiIf,
-  BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
   type GroupByContext,
@@ -18,21 +17,18 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import {
-  ArrowClockwiseIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   CaretDownIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
   CheckIcon,
   CopyIcon,
   DotsThreeIcon,
   DownloadSimpleIcon,
   MicrophoneIcon,
-  PencilSimpleIcon,
   PlusIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
+import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -52,6 +48,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentType,
@@ -105,6 +102,11 @@ export type ThreadContext = { name: string; status: string; live: boolean }
 
 export type ThreadProps = {
   components?: ThreadComponents | undefined
+  /**
+   * A stored conversation, at its own address. It is never a new chat: while
+   * its history loads it shows a skeleton, never the welcome or suggestions.
+   */
+  stored?: boolean | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -131,14 +133,16 @@ const groupByType = groupPartByType({
 
 /**
  * Where each part sits in the transcript. Everything follows the registry's
- * grouping except a tool call that carries an approval, which stays ungrouped
- * for the whole of its life: an approval folded into a collapsed disclosure is
- * one the owner has to go looking for, and the answer has to stay as visible as
- * the question was.
+ * grouping except a tool call that carries an approval or has a card of its
+ * own, which stays ungrouped for the whole of its life: an approval folded
+ * into a collapsed disclosure is one the owner has to go looking for, and the
+ * answer has to stay as visible as the question was.
  */
 const groupThreadParts = (part: PartState, context?: GroupByContext) =>
   part.type === "tool-call" &&
-  (part.approval != null || part.status?.type === "requires-action")
+  (part.approval != null ||
+    part.status?.type === "requires-action" ||
+    Object.hasOwn(OWNER_CARDS, part.toolName))
     ? UNGROUPED
     : groupByType(part, context)
 
@@ -182,6 +186,7 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  stored = false,
   placeholder,
   briefing,
   context,
@@ -189,7 +194,7 @@ export const Thread: FC<ThreadProps> = ({
   onModeChange,
   quickActions,
 }) => {
-  const isEmpty = useAuiState(isNewChatView)
+  const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
     () => ({
       placeholder,
@@ -205,16 +210,17 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+        <ThreadRoot autoFocus={autoFocus} isEmpty={isEmpty} stored={stored} />
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
 }
 
-const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
-  isEmpty,
-  autoFocus,
-}) => {
+const ThreadRoot: FC<{
+  isEmpty: boolean
+  autoFocus: boolean
+  stored: boolean
+}> = ({ isEmpty, autoFocus, stored }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
 
   return (
@@ -238,10 +244,22 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             isEmpty && "justify-center"
           )}
         >
-          <AuiIf condition={isNewChatView}>
+          {isEmpty ? (
             <Welcome />
-          </AuiIf>
-          <AuiIf condition={isHistoryLoadingView}>
+          ) : (
+            // The welcome carries the page's heading; a conversation has
+            // its title in the top bar, and this names the page for a
+            // screen reader.
+            <h1 className="sr-only">Conversation</h1>
+          )}
+          <AuiIf
+            condition={(s) =>
+              stored
+                ? s.thread.messages.length === 0 &&
+                  (s.thread.isLoading || s.threads.isLoading)
+                : isHistoryLoadingView(s)
+            }
+          >
             <ThreadHistorySkeleton />
           </AuiIf>
 
@@ -263,7 +281,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           >
             <ThreadScrollToBottom />
             <Composer autoFocus={autoFocus} />
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+            <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
               <ThreadSuggestions />
             </AuiIf>
           </ThreadPrimitive.ViewportFooter>
@@ -277,18 +295,11 @@ const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext)
   const role = useAuiState((s) => s.message.role)
-  const isEditing = useAuiState((s) => s.message.composer.isEditing)
 
   return (
     <>
       <DateDivider />
-      {isEditing ? (
-        <EditComposer />
-      ) : role === "user" ? (
-        <UserMessage />
-      ) : (
-        <AssistantMessageComponent />
-      )}
+      {role === "user" ? <UserMessage /> : <AssistantMessageComponent />}
     </>
   )
 }
@@ -643,10 +654,23 @@ const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
 }
 
 const MessageError: FC = () => {
+  const ended = useAuiState(
+    (s) =>
+      s.message.status?.type === "incomplete" &&
+      s.message.status.error === SESSION_ENDED
+  )
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
         <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+        {ended ? (
+          <a
+            className="mt-1 inline-block font-medium text-foreground underline underline-offset-4"
+            href={`/sign-in?returnTo=${encodeURIComponent(window.location.pathname)}`}
+          >
+            Sign in again
+          </a>
+        ) : null}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   )
@@ -717,13 +741,24 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
-        <AssistantActionBar />
+        {/* Copy has nothing to copy under a message of cards alone. */}
+        <AuiIf
+          condition={(s) =>
+            s.message.parts.some((part) => part.type === "text")
+          }
+        >
+          <AssistantActionBar />
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   )
 }
 
+/**
+ * Copy and More only. No Reload and no Edit: the server writes every turn and
+ * owns the history, so a regenerated or rewritten turn would only ever exist
+ * on this screen.
+ */
 const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
@@ -739,11 +774,6 @@ const AssistantActionBar: FC = () => {
           <CopyIcon />
         </AuiIf>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload
-        render={<TooltipIconButton tooltip="Refresh" />}
-      >
-        <ArrowClockwiseIcon />
-      </ActionBarPrimitive.Reload>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger
           render={
@@ -783,90 +813,10 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer wrap-break-word rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
+        <div className="aui-user-message-content wrap-break-word rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
           <MessagePrimitive.Parts />
         </div>
-        <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
-          <UserActionBar />
-        </div>
       </div>
-
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
-      />
     </MessagePrimitive.Root>
-  )
-}
-
-const UserActionBar: FC = () => {
-  return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      className="aui-user-action-bar-root flex flex-col items-end"
-    >
-      <ActionBarPrimitive.Edit
-        render={
-          <TooltipIconButton tooltip="Edit" className="aui-user-action-edit" />
-        }
-      >
-        <PencilSimpleIcon />
-      </ActionBarPrimitive.Edit>
-    </ActionBarPrimitive.Root>
-  )
-}
-
-const EditComposer: FC = () => {
-  return (
-    <MessagePrimitive.Root
-      data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-    >
-      <ComposerPrimitive.Root className="aui-edit-composer-root ms-auto flex w-full max-w-[85%] cursor-text flex-col rounded-(--composer-radius) border border-border bg-(--composer-bg) focus-within:border-ring focus-within:ring-3 focus-within:ring-ring">
-        <ComposerPrimitive.Input
-          className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base text-foreground outline-none"
-          autoFocus
-        />
-        <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
-          <ComposerPrimitive.Cancel
-            render={<Button variant="outline" size="sm" />}
-          >
-            Cancel
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send render={<Button size="sm" />}>
-            Update
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
-    </MessagePrimitive.Root>
-  )
-}
-
-const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
-  className,
-  ...rest
-}) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className={cn(
-        "aui-branch-picker-root -ms-2 me-2 inline-flex items-center text-muted-foreground text-xs",
-        className
-      )}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous
-        render={<TooltipIconButton tooltip="Previous" />}
-      >
-        <CaretLeftIcon />
-      </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-medium">
-        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next render={<TooltipIconButton tooltip="Next" />}>
-        <CaretRightIcon />
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
   )
 }

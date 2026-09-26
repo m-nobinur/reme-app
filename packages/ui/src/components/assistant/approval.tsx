@@ -7,6 +7,8 @@ import {
   ProhibitIcon,
   SealQuestionIcon,
 } from "@phosphor-icons/react"
+import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
+import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -20,9 +22,10 @@ import { cn } from "@workspace/ui/lib/utils"
  * has recorded it, which is why the buttons read their state from the part
  * rather than from a local flag.
  *
- * This is the component the thread's tool-call slot renders. Any tool call the
- * runtime is waiting on a human for is an approval, whatever it is called, and
- * anything else falls through to `ToolFallback`.
+ * This is the component the thread's tool-call slot renders. `ask_fact` and
+ * `request_change` get their own cards. Any other tool call the runtime is
+ * waiting on a human for is an approval, whatever it is called, and anything
+ * else falls through to `ToolFallback`.
  */
 
 /** A tool call's input as the rows a person reads before deciding. */
@@ -124,8 +127,21 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
   )
 }
 
+/**
+ * The owner's own tools, each with its card. The thread keeps every one of
+ * them out of tool groups, reading this same map.
+ */
+export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
+  ask_fact: AskFact,
+  request_change: RequestChange,
+}
+
 const Approval: ToolCallMessagePartComponent = (props) => {
   const { approval, respondToApproval, toolName } = props
+  const Owned = Object.hasOwn(OWNER_CARDS, toolName)
+    ? OWNER_CARDS[toolName]
+    : undefined
+  if (Owned) return <Owned {...props} />
 
   // Only a real approval gate takes the card. A tool paused on an interrupt has
   // no approval to respond to, and `ToolFallback` already offers it a way out.

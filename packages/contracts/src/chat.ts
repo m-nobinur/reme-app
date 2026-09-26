@@ -10,6 +10,13 @@ const MessageId = ConversationMessage.shape.id
 const ToolCallId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 
+/**
+ * The error text of a call a typed message overtook: assistant-ui's own
+ * words, stored by the api and read by the web, so a reload matches.
+ */
+export const TOOL_CALL_CANCELLED =
+  "User cancelled tool call by sending a new message."
+
 /** Each `FactValue` option as its `ask_fact` input, so `prefill` keeps its key's type. */
 type Asks<T extends readonly unknown[]> = {
   [I in keyof T]: T[I] extends z.ZodObject<{

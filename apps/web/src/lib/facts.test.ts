@@ -1,6 +1,6 @@
 import { FactValue } from "@workspace/contracts"
+import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { expect, it } from "vitest"
-import { factLabel, factText } from "./facts"
 
 /**
  * Every value an owner can state, as the profile shows it. One sample per

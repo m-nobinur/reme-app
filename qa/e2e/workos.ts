@@ -27,6 +27,12 @@ const API = "https://api.workos.com"
  * user for one of ours, and vice versa.
  */
 const PREFIX = "qa-e2e-"
+
+/**
+ * The name every probe organisation starts with, so the reaper can find one
+ * a crashed `@live` run left behind. Its date follows.
+ */
+export const PROBE_ORG_PREFIX = "QA probe cleaning "
 const DOMAIN = "example.net"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -62,7 +68,16 @@ async function call(
     status: response.status,
     // A 204 and an error page both have no JSON body, and neither should throw
     // here, because the caller decides what a status means.
-    body: text ? (JSON.parse(text) as Record<string, unknown>) : {},
+    body: parsed(text),
+  }
+}
+
+/** A body as JSON, or empty: an organisation delete answers 202 "Accepted". */
+function parsed(text: string): Record<string, unknown> {
+  try {
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {}
+  } catch {
+    return {}
   }
 }
 
@@ -79,8 +94,8 @@ export type ProbeUser = { id: string; email: string; password: string }
  * persisted, and only so the teardown can delete an account whose creation
  * outlived the test that made it.
  */
-export async function createProbeUser(): Promise<ProbeUser> {
-  const email = `${PREFIX}${crypto.randomUUID()}@${DOMAIN}`
+export async function createProbeUser(label = ""): Promise<ProbeUser> {
+  const email = `${PREFIX}${label}${crypto.randomUUID()}@${DOMAIN}`
   // 32 hex characters. Long enough to clear any password policy without
   // encoding an assumption about which one the environment has.
   const password = `Qa${crypto.randomUUID().replaceAll("-", "")}!`
@@ -129,8 +144,50 @@ export function forgetIds(): void {
 /** True once the account is gone, checked rather than assumed. */
 export async function deleteProbeUser(id: string): Promise<boolean> {
   await call(`/user_management/users/${id}`, { method: "DELETE" })
-  const after = await call(`/user_management/users/${id}`)
-  return after.status === 404
+  // Read back a few times: a user read straight after its delete can still
+  // answer 200 for a moment.
+  for (let tries = 0; tries < 5; tries++) {
+    const after = await call(`/user_management/users/${id}`)
+    if (after.status === 404) return true
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  return false
+}
+
+/**
+ * The WorkOS organisations an account belongs to, deleted. Its rows in our
+ * database stay: the app cannot delete tenant rows.
+ */
+export async function deleteProbeOrgs(userId: string): Promise<void> {
+  const listed = await call(
+    `/user_management/organization_memberships?user_id=${userId}`
+  )
+  if (listed.status !== 200) {
+    throw new Error(
+      `WorkOS did not list ${userId}'s organisations: ${listed.status} ${JSON.stringify(listed.body)}`
+    )
+  }
+  const memberships = (listed.body.data ?? []) as { organization_id: string }[]
+  for (const { organization_id } of memberships) {
+    await deleteProbeOrg(organization_id)
+  }
+}
+
+/**
+ * One organisation deleted, read back until it is gone. WorkOS answers 202
+ * and finishes the delete later (about 9 s measured), so the answer alone
+ * proves nothing.
+ */
+async function deleteProbeOrg(id: string): Promise<void> {
+  const deleted = await call(`/organizations/${id}`, { method: "DELETE" })
+  if (deleted.status >= 300 && deleted.status !== 404) {
+    throw new Error(`WorkOS refused to delete ${id}: ${deleted.status}`)
+  }
+  for (let tries = 0; tries < 30; tries++) {
+    if ((await call(`/organizations/${id}`)).status === 404) return
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error(`WorkOS still holds ${id} 30 s after deleting it`)
 }
 
 /**
@@ -152,4 +209,33 @@ export async function staleProbeUsers(): Promise<string[]> {
     .filter((user) => user.email.startsWith(PREFIX))
     .filter((user) => Date.parse(user.created_at) < anHourAgo)
     .map((user) => user.id)
+}
+
+/**
+ * Organisations a crashed `@live` run left behind: its own `finally` never
+ * ran, so nothing deleted them. By name prefix and an hour's age, like the
+ * users above, and deleted. Their rows in our database stay.
+ */
+export async function reapProbeOrgs(): Promise<string[]> {
+  const listed = await call("/organizations?limit=100")
+  if (listed.status !== 200) {
+    throw new Error(
+      `WorkOS did not list organisations: ${listed.status} ${JSON.stringify(listed.body)}`
+    )
+  }
+  const orgs = (listed.body.data ?? []) as {
+    id: string
+    name: string
+    created_at: string
+  }[]
+  const anHourAgo = Date.now() - 60 * 60 * 1000
+  const stale = orgs.filter(
+    (org) =>
+      org.name.startsWith(PROBE_ORG_PREFIX) &&
+      Date.parse(org.created_at) < anHourAgo
+  )
+  for (const org of stale) {
+    await deleteProbeOrg(org.id)
+  }
+  return stale.map((org) => org.id)
 }

@@ -1,4 +1,6 @@
 import { getCookie } from "@tanstack/react-start/server"
+import { sessionEncryption } from "@workos/authkit-session"
+import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
 import {
   ActivityFeed,
   ApprovalDecision,
@@ -15,8 +17,8 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { factLabel } from "@workspace/ui/lib/facts"
 import { WORKING } from "../build-state"
-import { factLabel } from "../facts"
 import type {
   ActivityItem,
   ApprovalItem,
@@ -97,6 +99,42 @@ const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
 /**
+ * The session to forward: the one AuthKit resolved for this request, sealed
+ * again, and not the cookie the request arrived with. When the access token
+ * has expired (after about five idle minutes), the middleware refreshes it
+ * and sets the new cookie on the response, but the request still carries the
+ * old one, which `apps/api` refuses with 401 `session.absent`. Sealed once per
+ * request. With no AuthKit context (a unit test), the cookie as it came.
+ */
+const sealed = new WeakMap<Request, Promise<string>>()
+
+async function forwardedSession(): Promise<string | undefined> {
+  const context = getAuthKitContextOrNull()
+  if (!context) return getCookie(COOKIE)
+  const auth = context.auth()
+  if (!auth.user) return undefined
+  let seal = sealed.get(context.request)
+  if (!seal) {
+    const password = process.env.WORKOS_COOKIE_PASSWORD
+    if (!password) {
+      throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
+    }
+    // The fields `AuthKitCore.encryptSession` seals, from the same session.
+    seal = sessionEncryption.sealData(
+      {
+        accessToken: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        user: auth.user,
+        impersonator: auth.impersonator,
+      },
+      { password, ttl: 0 }
+    )
+    sealed.set(context.request, seal)
+  }
+  return await seal
+}
+
+/**
  * One request with the session forwarded, or null when there is no session.
  * A body goes as JSON; an empty one sends no body at all.
  */
@@ -107,20 +145,26 @@ async function call(
     body?: unknown
     key?: string
     etag?: string | null
+    /** A body already serialised, sent as it is. */
+    raw?: string
   } = {}
 ): Promise<Response | null> {
-  const session = getCookie(COOKIE)
+  const session = await forwardedSession()
   if (!session) {
     return null
   }
   const headers: Record<string, string> = { cookie: sessionCookie(session) }
-  if (init.body !== undefined) headers["content-type"] = "application/json"
+  if (init.body !== undefined || init.raw !== undefined) {
+    headers["content-type"] = "application/json"
+  }
   if (init.key) headers["idempotency-key"] = init.key
   if (init.etag) headers["if-none-match"] = init.etag
   return await fetch(new URL(path, apiUrl()), {
     method: init.method ?? "GET",
     headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body:
+      init.raw ??
+      (init.body === undefined ? undefined : JSON.stringify(init.body)),
   })
 }
 
@@ -629,6 +673,7 @@ export const apiSource: OwnerDataSource = {
   createConversation,
   updateConversation,
   conversationMessages,
+  chat: (raw) => call("/chat", { method: "POST", raw }),
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(
