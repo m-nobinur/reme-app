@@ -429,6 +429,464 @@
         ],
         "additionalProperties": false
       },
+      "AskFactInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.name"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.phone"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "e164": {
+                        "type": "string",
+                        "pattern": "^\\+[1-9]\\d{6,14}$"
+                      }
+                    },
+                    "required": ["e164"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.email"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "address": {
+                        "type": "string",
+                        "maxLength": 254,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      }
+                    },
+                    "required": ["address"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "hours.weekday"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "open": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                      },
+                      "close": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                      }
+                    },
+                    "required": ["open", "close"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "service_area.radius"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "centre": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "\\S"
+                      },
+                      "radius_km": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 200
+                      }
+                    },
+                    "required": ["centre", "radius_km"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "pricing.standard_clean_hourly"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "amount_minor": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": ["GBP", "USD", "EUR"]
+                      }
+                    },
+                    "required": ["amount_minor", "currency"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.tagline"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tagline": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": ["tagline"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "AskFactOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "stated"
+              },
+              "fact": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.name"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["name"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.phone"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "e164": {
+                            "type": "string",
+                            "pattern": "^\\+[1-9]\\d{6,14}$"
+                          }
+                        },
+                        "required": ["e164"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.email"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string",
+                            "maxLength": 254,
+                            "format": "email",
+                            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          }
+                        },
+                        "required": ["address"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "hours.weekday"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "open": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          },
+                          "close": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          }
+                        },
+                        "required": ["open", "close"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "service_area.radius"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "centre": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "radius_km": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 200
+                          }
+                        },
+                        "required": ["centre", "radius_km"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "pricing.standard_clean_hourly"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "amount_minor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "currency": {
+                            "type": "string",
+                            "enum": ["GBP", "USD", "EUR"]
+                          }
+                        },
+                        "required": ["amount_minor", "currency"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.tagline"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "tagline": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["tagline"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": ["answer", "fact"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "skipped"
+              }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "Assignment": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -1112,6 +1570,295 @@
           "audit_id",
           "requested_at"
         ],
+        "additionalProperties": false
+      },
+      "ChatRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["ask", "act"]
+          },
+          "turn": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "message"
+                  },
+                  "message_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": ["kind", "message_id", "text"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "answer"
+                  },
+                  "message_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "tool_call_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "output": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "answer": {
+                            "type": "string",
+                            "const": "stated"
+                          },
+                          "fact": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "business.name"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    "required": ["name"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "business.phone"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "e164": {
+                                        "type": "string",
+                                        "pattern": "^\\+[1-9]\\d{6,14}$"
+                                      }
+                                    },
+                                    "required": ["e164"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "business.email"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "address": {
+                                        "type": "string",
+                                        "maxLength": 254,
+                                        "format": "email",
+                                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                                      }
+                                    },
+                                    "required": ["address"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "hours.weekday"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "open": {
+                                        "type": "string",
+                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                      },
+                                      "close": {
+                                        "type": "string",
+                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                      }
+                                    },
+                                    "required": ["open", "close"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "service_area.radius"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "centre": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 80,
+                                        "pattern": "\\S"
+                                      },
+                                      "radius_km": {
+                                        "type": "number",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 200
+                                      }
+                                    },
+                                    "required": ["centre", "radius_km"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "pricing.standard_clean_hourly"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "amount_minor": {
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "currency": {
+                                        "type": "string",
+                                        "enum": ["GBP", "USD", "EUR"]
+                                      }
+                                    },
+                                    "required": ["amount_minor", "currency"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "const": "business.tagline"
+                                  },
+                                  "value": {
+                                    "type": "object",
+                                    "properties": {
+                                      "tagline": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    "required": ["tagline"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["key", "value"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["answer", "fact"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "answer": {
+                            "type": "string",
+                            "const": "skipped"
+                          }
+                        },
+                        "required": ["answer"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["kind", "message_id", "tool_call_id", "output"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "approval"
+                  },
+                  "message_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "approval_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  },
+                  "approved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["kind", "message_id", "approval_id", "approved"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": ["conversation_id", "mode", "turn"],
         "additionalProperties": false
       },
       "CompletionReport": {
@@ -2911,6 +3658,152 @@
         },
         "required": ["state", "phase", "metrics"],
         "additionalProperties": false
+      },
+      "RequestChangeOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "started"
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "assignment_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["site.build", "site.revise"]
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "briefing",
+                      "planning",
+                      "implementing",
+                      "validating",
+                      "preview_ready",
+                      "awaiting_review",
+                      "revising",
+                      "release_candidate",
+                      "published",
+                      "blocked_on_information",
+                      "blocked_on_approval",
+                      "repairing",
+                      "paused",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "goal": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "revision_id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["revision_id", "version"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": [
+                  "assignment_id",
+                  "kind",
+                  "state",
+                  "goal",
+                  "revision",
+                  "created_at",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["outcome", "build"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "detail": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["class", "code", "message", "detail"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["outcome", "error"],
+            "additionalProperties": false
+          }
+        ]
       },
       "RuntimeSpec": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

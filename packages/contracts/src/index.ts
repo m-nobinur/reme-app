@@ -1,4 +1,5 @@
 export * from "./assignment.ts"
+export * from "./chat.ts"
 export * from "./common.ts"
 export * from "./conversation.ts"
 export * from "./error.ts"

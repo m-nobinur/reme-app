@@ -6,6 +6,12 @@ import {
   InformationRequest,
 } from "./assignment.ts"
 import {
+  AskFactInput,
+  AskFactOutput,
+  ChatRequest,
+  RequestChangeOutput,
+} from "./chat.ts"
+import {
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -51,10 +57,13 @@ export const contracts = {
   AnswerRequest,
   ApprovalDecision,
   ApprovalRequest,
+  AskFactInput,
+  AskFactOutput,
   Assignment,
   AttentionItem,
   BuildSummary,
   CapabilityCall,
+  ChatRequest,
   CompletionReport,
   ComponentManifest,
   Conversation,
@@ -79,6 +88,7 @@ export const contracts = {
   PreviewClaim,
   PreviewLink,
   ProgressEvent,
+  RequestChangeOutput,
   RuntimeSpec,
   SetFactsRequest,
   SiteFields,

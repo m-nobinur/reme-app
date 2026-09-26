@@ -131,6 +131,132 @@ export interface components {
       /** Format: date-time */
       expires_at: string
     }
+    AskFactInput:
+      | {
+          /** @constant */
+          key: "business.name"
+          skippable: boolean
+          prefill: {
+            name: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.phone"
+          skippable: boolean
+          prefill: {
+            e164: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.email"
+          skippable: boolean
+          prefill: {
+            /** Format: email */
+            address: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "hours.weekday"
+          skippable: boolean
+          prefill: {
+            open: string
+            close: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "service_area.radius"
+          skippable: boolean
+          prefill: {
+            centre: string
+            radius_km: number
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "pricing.standard_clean_hourly"
+          skippable: boolean
+          prefill: {
+            amount_minor: number
+            /** @enum {string} */
+            currency: "GBP" | "USD" | "EUR"
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.tagline"
+          skippable: boolean
+          prefill: {
+            tagline: string
+          } | null
+        }
+    AskFactOutput:
+      | {
+          /** @constant */
+          answer: "stated"
+          fact:
+            | {
+                /** @constant */
+                key: "business.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.phone"
+                value: {
+                  e164: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.email"
+                value: {
+                  /** Format: email */
+                  address: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "hours.weekday"
+                value: {
+                  open: string
+                  close: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.radius"
+                value: {
+                  centre: string
+                  radius_km: number
+                }
+              }
+            | {
+                /** @constant */
+                key: "pricing.standard_clean_hourly"
+                value: {
+                  amount_minor: number
+                  /** @enum {string} */
+                  currency: "GBP" | "USD" | "EUR"
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.tagline"
+                value: {
+                  tagline: string
+                }
+              }
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
     Assignment: {
       /** Format: uuid */
       assignment_id: string
@@ -330,6 +456,96 @@ export interface components {
       audit_id: string
       /** Format: date-time */
       requested_at: string
+    }
+    ChatRequest: {
+      /** Format: uuid */
+      conversation_id: string
+      /** @enum {string} */
+      mode: "ask" | "act"
+      turn:
+        | {
+            /** @constant */
+            kind: "message"
+            message_id: string
+            text: string
+          }
+        | {
+            /** @constant */
+            kind: "answer"
+            message_id: string
+            tool_call_id: string
+            output:
+              | {
+                  /** @constant */
+                  answer: "stated"
+                  fact:
+                    | {
+                        /** @constant */
+                        key: "business.name"
+                        value: {
+                          name: string
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "business.phone"
+                        value: {
+                          e164: string
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "business.email"
+                        value: {
+                          /** Format: email */
+                          address: string
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "hours.weekday"
+                        value: {
+                          open: string
+                          close: string
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "service_area.radius"
+                        value: {
+                          centre: string
+                          radius_km: number
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "pricing.standard_clean_hourly"
+                        value: {
+                          amount_minor: number
+                          /** @enum {string} */
+                          currency: "GBP" | "USD" | "EUR"
+                        }
+                      }
+                    | {
+                        /** @constant */
+                        key: "business.tagline"
+                        value: {
+                          tagline: string
+                        }
+                      }
+                }
+              | {
+                  /** @constant */
+                  answer: "skipped"
+                }
+          }
+        | {
+            /** @constant */
+            kind: "approval"
+            message_id: string
+            approval_id: string
+            approved: boolean
+          }
     }
     CompletionReport: {
       /** Format: uuid */
@@ -781,6 +997,66 @@ export interface components {
         [key: string]: number
       }
     }
+    RequestChangeOutput:
+      | {
+          /** @constant */
+          outcome: "started"
+          build: {
+            /** Format: uuid */
+            assignment_id: string
+            /** @enum {string} */
+            kind: "site.build" | "site.revise"
+            /** @enum {string} */
+            state:
+              | "queued"
+              | "briefing"
+              | "planning"
+              | "implementing"
+              | "validating"
+              | "preview_ready"
+              | "awaiting_review"
+              | "revising"
+              | "release_candidate"
+              | "published"
+              | "blocked_on_information"
+              | "blocked_on_approval"
+              | "repairing"
+              | "paused"
+              | "failed"
+              | "cancelled"
+            goal: string
+            revision: {
+              /** Format: uuid */
+              revision_id: string
+              version: number
+            } | null
+            /** Format: date-time */
+            created_at: string
+            /** Format: date-time */
+            updated_at: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+            detail: {
+              [key: string]: unknown
+            }
+          }
+        }
     RuntimeSpec: {
       /** Format: uuid */
       spec_id: string

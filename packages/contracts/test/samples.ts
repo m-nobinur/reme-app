@@ -62,6 +62,15 @@ export const samples: Record<ContractName, unknown> = {
     requested_at: NOW,
     expires_at: LATER,
   },
+  AskFactInput: {
+    key: "business.name",
+    skippable: false,
+    prefill: { name: "Brightclean Cleaning Co. (fixture)" },
+  },
+  AskFactOutput: {
+    answer: "stated",
+    fact: { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
+  },
   Assignment: {
     assignment_id: ASSIGNMENT,
     org_id: ORG,
@@ -121,6 +130,16 @@ export const samples: Record<ContractName, unknown> = {
     idempotency_key: ULID,
     audit_id: "92a3b4c5-d6e7-42a3-8465-900112233445",
     requested_at: NOW,
+  },
+  ChatRequest: {
+    conversation_id: CONVERSATION,
+    mode: "act",
+    turn: {
+      kind: "answer",
+      message_id: "a_7Kd2Lm9Q",
+      tool_call_id: "call_5Hn2Wq8E",
+      output: { answer: "skipped" },
+    },
   },
   CompletionReport: {
     report_id: "d6e7f809-1a2b-46e7-a8a9-334455667788",
@@ -410,6 +429,18 @@ export const samples: Record<ContractName, unknown> = {
     state: "implementing",
     phase: "build",
     metrics: { files_changed: 2, build_seconds: 4.2 },
+  },
+  RequestChangeOutput: {
+    outcome: "started",
+    build: {
+      assignment_id: ASSIGNMENT,
+      kind: "site.build",
+      state: "queued",
+      goal: "Build my website.",
+      revision: null,
+      created_at: NOW,
+      updated_at: NOW,
+    },
   },
   RuntimeSpec: {
     spec_id: "c5d6e7f8-091a-45d6-9798-223344556677",
