@@ -7,6 +7,8 @@ import {
   DecisionRequest,
   ErrorEnvelope,
   FactList,
+  type FactRecord,
+  type FactValue,
   InformationAnswer,
   OWNER_BRIDGE_HEADERS,
   OwnerChangeRequest,
@@ -18,11 +20,13 @@ import {
   approvals,
   assignments,
   eq,
+  type OrgScopedDb,
   sql,
   supersedeFact,
   type Tenancy,
   toAssignment,
 } from "@workspace/db"
+import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import {
   failure,
@@ -58,7 +62,7 @@ export type Owner = { orgId: string; session: NonNullable<Session> }
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/messages)?)?)$/
+  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/messages)?)?|chat)$/
 
 type Bridged = { status: number; body: unknown }
 
@@ -256,6 +260,47 @@ const canon = (value: unknown) =>
       : value
   )
 
+/**
+ * Writes each stated fact as the owner's (`owner_stated`), inside a `withOrg`
+ * that carries the owner's WorkOS user. A repeat of what the owner already
+ * said writes nothing, which is what makes a retry safe (R5). The same value
+ * from another source is restated, so it becomes the owner's.
+ */
+export async function stateFacts(
+  db: OrgScopedDb,
+  owner: Owner,
+  stated: FactValue[],
+  current?: FactRecord[]
+) {
+  const { orgId, session } = owner
+  const held = current ?? (await readFacts(db))
+  const root = await ownerStaffId(db, {
+    orgId,
+    workosUserId: session.workosUserId,
+    ownerName: session.name ?? session.email,
+  })
+  for (const fact of stated) {
+    const was = held.find((f) => f.key === fact.key)
+    if (
+      was?.provenance.source === "owner_stated" &&
+      canon(was.value) === canon(fact.value)
+    ) {
+      continue
+    }
+    await supersedeFact(db, {
+      orgId,
+      key: fact.key,
+      factType: was?.fact_type ?? fact.key.split(".")[0] ?? "fact",
+      value: fact.value,
+      provenance: {
+        source: "owner_stated",
+        confidence: 1,
+        verifiedByStaffId: root,
+      },
+    })
+  }
+}
+
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
   const parsed = SetFactsRequest.safeParse(await readBody(request))
@@ -269,39 +314,10 @@ async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
       detail: { keys },
     })
   }
-  const { orgId, session } = owner
   const list = await kit.withOrg(
-    { orgId, workosUserId: session.workosUserId },
+    { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
     async (db) => {
-      const current = await readFacts(db)
-      const root = await ownerStaffId(db, {
-        orgId,
-        workosUserId: session.workosUserId,
-        ownerName: session.name ?? session.email,
-      })
-      for (const fact of parsed.data.facts) {
-        const held = current.find((f) => f.key === fact.key)
-        // A repeat of what the owner already said writes nothing, which is
-        // what makes a retry safe (R5). The same value from another source
-        // is restated, so it becomes the owner's.
-        if (
-          held?.provenance.source === "owner_stated" &&
-          canon(held.value) === canon(fact.value)
-        ) {
-          continue
-        }
-        await supersedeFact(db, {
-          orgId,
-          key: fact.key,
-          factType: held?.fact_type ?? fact.key.split(".")[0] ?? "fact",
-          value: fact.value,
-          provenance: {
-            source: "owner_stated",
-            confidence: 1,
-            verifiedByStaffId: root,
-          },
-        })
-      }
+      await stateFacts(db, owner, parsed.data.facts)
       return readFacts(db)
     }
   )
@@ -318,7 +334,21 @@ async function requestChange(
   if (!key) return keyMissing()
   const parsed = OwnerChangeRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  const text = parsed.data.text
+  return startChange(env, kit, owner, parsed.data.text, key)
+}
+
+/**
+ * An owner's change, routed and started: the build it made or steered, or
+ * the envelope saying why not. `key` makes a retry replay the build the
+ * first attempt made. `/changes` and the chat's approval both come here.
+ */
+export async function startChange(
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  text: string,
+  key: string
+): Promise<Response> {
   const { orgId, session } = owner
   const state = await kit.withOrg(
     { orgId, workosUserId: session.workosUserId },
@@ -582,6 +612,9 @@ export async function ownerRoute(
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)
+  }
+  if (pathname === "/chat" && method === "POST") {
+    return chat(request, env, kit, owner)
   }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))

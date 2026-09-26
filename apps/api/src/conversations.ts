@@ -34,7 +34,7 @@ import type { Owner } from "./owner.ts"
 /** The longest list the thread rail gets, newest first. */
 const LIST_MAX = 50
 
-const notFound = () =>
+export const notFound = () =>
   failure(404, {
     class: "resource",
     code: "conversation.not_found",
@@ -225,7 +225,7 @@ const messageInvalid = () =>
   })
 
 /** Whether a value holds NUL anywhere, keys included: Postgres refuses it. */
-const holdsNul = (value: unknown) => {
+export const holdsNul = (value: unknown) => {
   let nul = false
   JSON.stringify(value, (key, each) => {
     if (
