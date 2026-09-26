@@ -169,13 +169,25 @@ export async function deleteProbeOrgs(userId: string): Promise<void> {
   }
   const memberships = (listed.body.data ?? []) as { organization_id: string }[]
   for (const { organization_id } of memberships) {
-    const deleted = await call(`/organizations/${organization_id}`, {
-      method: "DELETE",
-    })
-    if (deleted.status >= 300 && deleted.status !== 404) {
-      throw new Error(`WorkOS kept ${organization_id}: ${deleted.status}`)
-    }
+    await deleteProbeOrg(organization_id)
   }
+}
+
+/**
+ * One organisation deleted, read back until it is gone. WorkOS answers 202
+ * and finishes the delete later (about 9 s measured), so the answer alone
+ * proves nothing.
+ */
+async function deleteProbeOrg(id: string): Promise<void> {
+  const deleted = await call(`/organizations/${id}`, { method: "DELETE" })
+  if (deleted.status >= 300 && deleted.status !== 404) {
+    throw new Error(`WorkOS refused to delete ${id}: ${deleted.status}`)
+  }
+  for (let tries = 0; tries < 30; tries++) {
+    if ((await call(`/organizations/${id}`)).status === 404) return
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error(`WorkOS still holds ${id} 30 s after deleting it`)
 }
 
 /**
@@ -223,10 +235,7 @@ export async function reapProbeOrgs(): Promise<string[]> {
       Date.parse(org.created_at) < anHourAgo
   )
   for (const org of stale) {
-    const deleted = await call(`/organizations/${org.id}`, { method: "DELETE" })
-    if (deleted.status >= 300 && deleted.status !== 404) {
-      throw new Error(`WorkOS kept ${org.id}: ${deleted.status}`)
-    }
+    await deleteProbeOrg(org.id)
   }
   return stale.map((org) => org.id)
 }
