@@ -25,6 +25,7 @@
     "@tanstack/react-start": "1.168.26",
     "@tanstack/router-plugin": "1.168.18",
     "@workos-inc/node": "10.11.0",
+    "@workos/authkit-session": "0.7.1",
     "@workos/authkit-tanstack-react-start": "0.11.0",
     "@workspace/contracts": "workspace:*",
     "@workspace/ui": "workspace:*",

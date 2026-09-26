@@ -1,4 +1,6 @@
 import { getCookie } from "@tanstack/react-start/server"
+import { sessionEncryption } from "@workos/authkit-session"
+import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
 import {
   ActivityFeed,
   ApprovalDecision,
@@ -97,6 +99,42 @@ const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
 /**
+ * The session to forward: the one AuthKit resolved for this request, sealed
+ * again, and not the cookie the request arrived with. When the access token
+ * has expired (after about five idle minutes), the middleware refreshes it
+ * and sets the new cookie on the response, but the request still carries the
+ * old one, which `apps/api` refuses with 401 `session.absent`. Sealed once per
+ * request. With no AuthKit context (a unit test), the cookie as it came.
+ */
+const sealed = new WeakMap<Request, Promise<string>>()
+
+async function forwardedSession(): Promise<string | undefined> {
+  const context = getAuthKitContextOrNull()
+  if (!context) return getCookie(COOKIE)
+  const auth = context.auth()
+  if (!auth.user) return undefined
+  let seal = sealed.get(context.request)
+  if (!seal) {
+    const password = process.env.WORKOS_COOKIE_PASSWORD
+    if (!password) {
+      throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
+    }
+    // The fields `AuthKitCore.encryptSession` seals, from the same session.
+    seal = sessionEncryption.sealData(
+      {
+        accessToken: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        user: auth.user,
+        impersonator: auth.impersonator,
+      },
+      { password, ttl: 0 }
+    )
+    sealed.set(context.request, seal)
+  }
+  return await seal
+}
+
+/**
  * One request with the session forwarded, or null when there is no session.
  * A body goes as JSON; an empty one sends no body at all.
  */
@@ -111,7 +149,7 @@ async function call(
     raw?: string
   } = {}
 ): Promise<Response | null> {
-  const session = getCookie(COOKIE)
+  const session = await forwardedSession()
   if (!session) {
     return null
   }

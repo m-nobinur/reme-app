@@ -102,6 +102,11 @@ export type ThreadContext = { name: string; status: string; live: boolean }
 
 export type ThreadProps = {
   components?: ThreadComponents | undefined
+  /**
+   * A stored conversation, at its own address. It is never a new chat: while
+   * its history loads it shows a skeleton, never the welcome or suggestions.
+   */
+  stored?: boolean | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -181,6 +186,7 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  stored = false,
   placeholder,
   briefing,
   context,
@@ -188,7 +194,7 @@ export const Thread: FC<ThreadProps> = ({
   onModeChange,
   quickActions,
 }) => {
-  const isEmpty = useAuiState(isNewChatView)
+  const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
     () => ({
       placeholder,
@@ -204,16 +210,17 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+        <ThreadRoot autoFocus={autoFocus} isEmpty={isEmpty} stored={stored} />
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
 }
 
-const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
-  isEmpty,
-  autoFocus,
-}) => {
+const ThreadRoot: FC<{
+  isEmpty: boolean
+  autoFocus: boolean
+  stored: boolean
+}> = ({ isEmpty, autoFocus, stored }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
 
   return (
@@ -237,10 +244,22 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             isEmpty && "justify-center"
           )}
         >
-          <AuiIf condition={isNewChatView}>
+          {isEmpty ? (
             <Welcome />
-          </AuiIf>
-          <AuiIf condition={isHistoryLoadingView}>
+          ) : (
+            // The welcome carries the page's heading; a conversation has
+            // its title in the top bar, and this names the page for a
+            // screen reader.
+            <h1 className="sr-only">Conversation</h1>
+          )}
+          <AuiIf
+            condition={(s) =>
+              stored
+                ? s.thread.messages.length === 0 &&
+                  (s.thread.isLoading || s.threads.isLoading)
+                : isHistoryLoadingView(s)
+            }
+          >
             <ThreadHistorySkeleton />
           </AuiIf>
 
@@ -262,7 +281,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           >
             <ThreadScrollToBottom />
             <Composer autoFocus={autoFocus} />
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+            <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
               <ThreadSuggestions />
             </AuiIf>
           </ThreadPrimitive.ViewportFooter>
@@ -722,7 +741,14 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <AssistantActionBar />
+        {/* Copy has nothing to copy under a message of cards alone. */}
+        <AuiIf
+          condition={(s) =>
+            s.message.parts.some((part) => part.type === "text")
+          }
+        >
+          <AssistantActionBar />
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   )

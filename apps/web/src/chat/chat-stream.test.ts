@@ -74,6 +74,8 @@ const ID = FIXTURE.conversation.id
 let stored: unknown
 let turns: (() => Promise<Response>)[] = []
 let sent: unknown[] = []
+/** Holds the api's reads until released, to see the thread while it loads. */
+let hold: Promise<void> | null = null
 
 const sse = (stream: Stream) => () =>
   Promise.resolve(
@@ -110,6 +112,7 @@ beforeEach(() => {
         return next()
       }
       const path = new URL(url).pathname
+      if (hold && path.startsWith("/conversations")) await hold
       if (path === "/org") return Response.json(FIXTURE.org)
       if (path === "/conversations") return Response.json(FIXTURE.list)
       if (path === `/conversations/${ID}`) {
@@ -148,7 +151,9 @@ const useThreadRuntime = () =>
   useConversationRuntime({
     mode: () => "act",
     onFinish: () => undefined,
-    suggestions: [],
+    // On offer, as the page offers them on a new chat; a stored
+    // conversation must never show one.
+    suggestions: [{ prompt: "Build my website" }],
     dictation: undefined,
   })
 
@@ -163,6 +168,7 @@ function Chat() {
     { runtime },
     createElement(Thread, {
       autoFocus: false,
+      stored: true,
       components: { ToolFallback: Approval },
     })
   )
@@ -242,6 +248,33 @@ async function matches(container: HTMLElement, history: unknown) {
     transcript(reloaded).filter((line) => line?.startsWith("folded:"))
   ).toEqual([])
 }
+
+it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
+  const release: { open?: () => void } = {}
+  hold = new Promise<void>((resolve) => {
+    release.open = resolve
+  })
+  stored = FIXTURE.histories.start
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="aui_thread-history-skeleton"]')
+    ).not.toBeNull()
+  )
+  expect(container.textContent).not.toContain("What should we do today?")
+  expect(container.textContent).not.toContain("Build my website")
+  hold = null
+  await act(async () => release.open?.())
+  await vi.waitFor(() =>
+    expect(transcript(container)).toEqual([
+      "What is your business called?Business nameSave",
+    ])
+  )
+})
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
   const chat = await open(FIXTURE.histories.typed)

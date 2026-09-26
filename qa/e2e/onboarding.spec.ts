@@ -1,9 +1,10 @@
-import { expect, type Page, test } from "@playwright/test"
+import { expect as baseExpect, type Page, test } from "@playwright/test"
 import { visit } from "./visit"
 import {
   createProbeUser,
   deleteProbeOrgs,
   deleteProbeUser,
+  PROBE_ORG_PREFIX,
   type ProbeUser,
 } from "./workos"
 
@@ -22,6 +23,11 @@ import {
 
 // Its own owner, not the smoke's session.
 test.use({ storageState: { cookies: [], origins: [] } })
+
+// A preview reads the staging database from wherever the run is: stored
+// history took 8 to 17 s to load, measured from Dhaka.
+const expect = baseExpect.configure({ timeout: 30_000 })
+test.setTimeout(240_000)
 
 /** `apps/api` beside the web under test, or `E2E_API_URL`. */
 function apiUrl(): string {
@@ -68,7 +74,7 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
 }) => {
   const day = new Date().toISOString().slice(0, 10)
   const user = await createProbeUser(`live-${day}-`)
-  const business = `Probe Cleaning ${day}`
+  const business = `${PROBE_ORG_PREFIX}${day}`
   try {
     await signIn(page, user)
 
@@ -109,7 +115,7 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
 
     // Six facts at most: one guard against a script that never ends.
     while (count < 7) {
-      await expect(pending.or(card).first()).toBeVisible({ timeout: 15_000 })
+      await expect(pending.or(card).first()).toBeVisible()
       if (await card.count()) break
       // The next question takes the focus, so Enter answers it rather
       // than sending the composer's text over it.

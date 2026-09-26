@@ -26,10 +26,14 @@ function OrgSwitcher({
         Organisation
       </label>
       <select
-        className="h-9 w-full rounded-2xl border border-border bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-60"
+        // Ellipsis rather than a name cut mid-letter under the arrow: a long
+        // business name is common, and the rail is 15rem.
+        className="h-9 w-full truncate rounded-2xl border border-border bg-background ps-2 pe-8 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-60"
         disabled={orgs.length < 2}
         id="org-switcher"
         name="org"
+        // The whole name, where the ellipsis cut it.
+        title={orgs.find((org) => org.id === props.value)?.name}
         {...props}
       >
         {orgs.length === 0 ? (

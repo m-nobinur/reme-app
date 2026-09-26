@@ -27,6 +27,12 @@ const API = "https://api.workos.com"
  * user for one of ours, and vice versa.
  */
 const PREFIX = "qa-e2e-"
+
+/**
+ * The name every probe organisation starts with, so the reaper can find one
+ * a crashed `@live` run left behind. Its date follows.
+ */
+export const PROBE_ORG_PREFIX = "QA probe cleaning "
 const DOMAIN = "example.net"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -138,8 +144,14 @@ export function forgetIds(): void {
 /** True once the account is gone, checked rather than assumed. */
 export async function deleteProbeUser(id: string): Promise<boolean> {
   await call(`/user_management/users/${id}`, { method: "DELETE" })
-  const after = await call(`/user_management/users/${id}`)
-  return after.status === 404
+  // Read back a few times: a user read straight after its delete can still
+  // answer 200 for a moment.
+  for (let tries = 0; tries < 5; tries++) {
+    const after = await call(`/user_management/users/${id}`)
+    if (after.status === 404) return true
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  return false
 }
 
 /**
@@ -185,4 +197,36 @@ export async function staleProbeUsers(): Promise<string[]> {
     .filter((user) => user.email.startsWith(PREFIX))
     .filter((user) => Date.parse(user.created_at) < anHourAgo)
     .map((user) => user.id)
+}
+
+/**
+ * Organisations a crashed `@live` run left behind: its own `finally` never
+ * ran, so nothing deleted them. By name prefix and an hour's age, like the
+ * users above, and deleted. Their rows in our database stay.
+ */
+export async function reapProbeOrgs(): Promise<string[]> {
+  const listed = await call("/organizations?limit=100")
+  if (listed.status !== 200) {
+    throw new Error(
+      `WorkOS did not list organisations: ${listed.status} ${JSON.stringify(listed.body)}`
+    )
+  }
+  const orgs = (listed.body.data ?? []) as {
+    id: string
+    name: string
+    created_at: string
+  }[]
+  const anHourAgo = Date.now() - 60 * 60 * 1000
+  const stale = orgs.filter(
+    (org) =>
+      org.name.startsWith(PROBE_ORG_PREFIX) &&
+      Date.parse(org.created_at) < anHourAgo
+  )
+  for (const org of stale) {
+    const deleted = await call(`/organizations/${org.id}`, { method: "DELETE" })
+    if (deleted.status >= 300 && deleted.status !== 404) {
+      throw new Error(`WorkOS kept ${org.id}: ${deleted.status}`)
+    }
+  }
+  return stale.map((org) => org.id)
 }

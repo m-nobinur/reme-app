@@ -98,7 +98,9 @@ export function ChatPage() {
       // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.2
       // the adapter runs only after an assistant turn ends and then replaces
       // these, and the empty thread is the only place suggestions show.
-      suggestions: briefing.suggestions,
+      // A stored conversation never offers them: one pressed while its
+      // history loaded started a second conversation.
+      suggestions: id ? [] : briefing.suggestions,
       dictation,
     })
   const runtime = useRemoteThreadListRuntime({
@@ -162,6 +164,7 @@ export function ChatPage() {
             onModeChange={changeMode}
             placeholder="Ask, or tell me what to change"
             quickActions={OWNER_QUICK_ACTIONS}
+            stored={Boolean(id)}
           />
         )}
       </div>

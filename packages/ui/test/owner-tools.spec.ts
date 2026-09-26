@@ -124,3 +124,20 @@ for (const theme of ["light", "dark"] as const) {
     }
   }
 }
+
+test("a message of cards alone has no copy row", async ({ page }) => {
+  await open(page, "Onboarding")
+  await expect(page.getByRole("button", { name: "Copy" })).toHaveCount(0)
+})
+
+for (const width of [390, 1440]) {
+  test(`a conversation has one h1 at ${width}`, async ({ page }) => {
+    // A thread with messages: the welcome and its heading are gone.
+    await open(page, "Thread", width)
+    await expect(page.locator("h1")).toHaveCount(1)
+    const results = await new AxeBuilder({ page })
+      .withRules(["page-has-heading-one"])
+      .analyze()
+    expect(results.violations.map((violation) => violation.id)).toEqual([])
+  })
+}
