@@ -1,6 +1,7 @@
 # ADR-027: What the web worker bundle gate measures
 
-Status: accepted, 2026-08-27. Applies to `apps/web`, `pnpm size` and the phase exit gate.
+Status: accepted, 2026-08-27. Amended 2026-09-26, see "Amendment, 2026-09-26: the chat surface
+leaves the worker" at the end. Applies to `apps/web`, `pnpm size` and the phase exit gate.
 
 Does not change DR-1. DR-1 already names the 128 MB isolate as the limit that breaks Workers apps
 and already records that its own superseded bundle trigger measured the wrong thing. The 1 MiB
@@ -34,7 +35,8 @@ marks the chat route `isDynamicEntry: true`, and the entry reaches the router, t
 So the three dependencies the budget conversation is about are all outside the startup path.
 The chat chunk is 415.21 KiB gzip, `@workos-inc/node` is 54.17 plus 22.78, its `jose` chunk is
 29.00, the AI SDK is 52.02. None is evaluated until a request needs it, and the chat chunk is
-evaluated only in an isolate that has served `/app/chat`.
+evaluated only in an isolate that has served the chat route, `/app/chat` then and `/app/` or
+`/app/c/$id` now.
 
 *Startup CPU, the limit that rejects a deploy.* `wrangler check startup` profiles the global scope
 locally and prints active CPU. Five runs: 7.5, 7.4, 7.6, 6.3, 6.3 ms, against a 1 second limit.
@@ -83,21 +85,25 @@ bytes bought.
 it to the load suite with a reversal trigger of sustained memory above roughly 90 MB. That suite
 does not exist yet. Until it does, this is a known unmeasured risk, not a gate.
 
-**The chat surface stays server-rendered.** It is not in the startup path, so it costs no startup
-CPU. Making it client-only would remove SSR from the surface where first paint matters most and
-put the C4 streaming seam through a client-only shell, in exchange for bytes that stay uploaded
-either way.
+**The chat surface stays server-rendered.** Overturned by the 2026-09-26 amendment below: the chat
+routes are client-only and their bytes leave the worker. It is not in the startup path, so it costs
+no startup CPU. Making it client-only would remove SSR from the surface where first paint matters
+most and put the chat streaming path, the browser's `fetch` to the `/api/chat` server route,
+through a client-only shell, in exchange for bytes that stay uploaded either way.
 
 ## What was rejected
 
 *Squeeze under 1 MiB by making the chat surface client-only.* Buys nothing measurable. `ssr: false`
-was already shown not to remove the bytes, because the route module is reachable from the generated
+was already shown not to remove the bytes (overturned by the 2026-09-26 amendment below, which
+removes them with `import.meta.env.SSR` and a lazy import), because the route module is reachable from the generated
 route tree and wrangler uploads it regardless. The startup closure would not move, because the chat
-chunk is not in it. It costs first paint on the chat surface and puts the C4 streaming seam through
+chunk is not in it. It costs first paint on the chat surface and puts the chat streaming path through
 a client-only shell, and it returns a smaller number.
 
-*`lazyRouteComponent` on the chat route.* It defers evaluation against the startup budget. The
-route is already deferred, and the startup budget is at 0.75%.
+*`lazyRouteComponent` on the chat route.* Retracted by the 2026-09-26 amendment below, which
+adopts it. The reason given here was startup evaluation, and that still holds. The amendment uses
+it for a different reason: behind an `import.meta.env.SSR` check it keeps the chat chunk out of
+the server build.
 
 *Remove `assistant-cloud`.* 1.2% of the chunk it sits in. Worth doing as dependency hygiene when
 someone is next in that file, not worth a story, and not a size measure.
@@ -132,3 +138,88 @@ Startup CPU passes 150 ms, which means the framework's entry shape changed and t
 is now ours to manage. Or the load suite lands and shows sustained isolate memory near DR-1's 90 MB
 trigger, at which point bytes become a proxy for something real and the byte line is worth
 re-deriving from that measurement rather than from the platform ceiling.
+
+## Amendment, 2026-09-26: the chat surface leaves the worker
+
+Two lines above no longer hold. "The chat surface stays server-rendered" is false on `main`: both
+chat routes, `/app/` and `/app/c/$id`, are `ssr: false`, and no ADR recorded the change. The
+rejection "`ssr: false` was already shown not to remove the bytes" is true of the flag alone. It is
+not true of the pattern below.
+
+*What was measured.* On `4ded99d`, in a clean clone, with each pattern applied to both chat routes
+and `pnpm size` run after a fresh build of `web`:
+
+- `main` as it stands: 949.14 KiB gzip.
+- `component: import.meta.env.SSR ? () => null : ChatPage`: 754.77 KiB. Vite replaces
+  `import.meta.env.SSR` at build time and Rollup drops what only the dead branch used. The server's
+  split chunk still opens with a bare `import "./chat-page-*.js"`, because the chat modules run
+  code at the top level. That chunk is 193 KiB gzip of assistant-ui, mdast and micromark, and it
+  still uploads.
+- The same ternary with the client branch written as
+  `lazyRouteComponent(() => import("@/chat/chat-page"), "ChatPage")` and the static import
+  deleted: 558.49 KiB, 390.65 KiB below `main`. The server output has no chat chunk at all.
+- `wrangler check startup`, both builds kept side by side and run in alternation, eight pairs:
+  `main` 7.3 to 11.3 ms, median 7.6; the lazy form 7.2 to 7.6 ms, median 7.45. The lazy form was
+  equal or faster in every pair, and the `main` median of 7.6 ms is where the measurement above
+put it, 6.3 to 7.6.
+  An earlier run of five `main` builds followed by five lazy ones, on a machine busy with other
+  builds, read 13.7 to 16.2 and 16.4 to 50.2 ms. That was host load moving between the two blocks,
+  and the paired run replaces it.
+
+Cloudflare rejects a deploy whose startup passes 1 second. Nothing in CI checks startup CPU. The
+`startupMs` gate the decision above describes was never built: `size-budget.json` has no such key,
+`pnpm size` does not run `wrangler check startup`, and issue #26 is still open. The numbers here
+come from running the command by hand.
+
+TanStack has no route option that keeps a component out of the server build. `ssr: false` and
+`ClientOnly` both leave the import in place. The Start compiler prunes only the bodies of
+`createServerFn`, `createServerOnlyFn`, `createClientOnlyFn` and `createIsomorphicFn`. The ternary
+relies on Vite's static replacement, not on TanStack.
+
+*Decision.* The conversation routes render on the client only and take their component through
+the lazy form above. The server still renders the layout, the rail and the panel, so the first
+paint carries the panel state from its cookie. Only the thread waits for the client. The baseline
+moves down in the PR that applies the pattern, to the number `pnpm size` prints there. The drift
+check guards it: a static `ChatPage` import in a route file brings roughly 390 KiB back and fails
+the gate.
+
+The original rejection weighed first paint against a smaller number that bought nothing. The
+number is now 41% of the upload. First paint was already spent when the routes went `ssr: false`,
+and the thread is empty until the owner types or history loads, so the server had nothing to put
+in it.
+
+The original's second cost was the streaming path running through a client-only shell. It does not
+change. The stream is a `fetch` from the browser to `/api/chat`, a server route this pattern does
+not touch, and server rendering never carried a token. Resume and reconnect do not exist in either
+shape: the transport sets no `resume` option and `/api/chat` has no handler to rejoin a stream, so
+a reload mid-turn loses the turn with or without SSR. What the lazy form does delay is the
+composer. The owner cannot send until the split chunk and then the chat chunk have loaded. Once a
+message is sent, the path to the first token is the same as on `main`.
+
+A stored conversation at `/app/c/$id` loads its history on the client, after the chat chunk has
+loaded and the thread has mounted, through the thread's history adapter. That is intended. The
+server renders nothing for the thread, so there is no server copy of the history to hydrate.
+
+*Rejected.* The ternary without the lazy import: it keeps half the bytes and runs the chat
+modules' top-level code on the server. `ClientOnly`: it keeps the import. `createIsomorphicFn`:
+the docs say its client body is pruned from the server build, but I did not measure it, and a Vite
+constant already does the job.
+
+*Cost.* The client downloads the same bytes. From the same two builds on `4ded99d`, `gzip -9` of
+each file in `dist/client/assets`: the chat chunk is 243.0 KiB in both. What
+changes is order. On `main`, Vite's preload list fetched the chat chunk alongside the route's split
+chunk. In the lazy form the route's split chunk, 502 bytes for `/app/` and 504 for `/app/c/$id` by
+the same method, has to arrive and run before the chat chunk
+request starts, so the composer is ready one round trip later. I did not time it, because `/app`
+needs a signed-in session. The frontend engineer measures it once on the preview of the PR that
+applies the pattern: cold cache, navigation to an enabled composer, `main` against the branch. If
+the branch is more than 100 ms slower, the fix is to start the chat chunk request early from a
+client-only preload, not to put the chunk back in the worker.
+
+*Change if* a stored conversation has to show its messages in the first HTML. Two cases would
+force that: a page that must render a conversation without JavaScript, such as a transcript link
+sent to someone outside the app, or a cold-cache measurement on a preview showing more than
+1.5 s from opening `/app/c/$id` to its last stored message on screen. Either brings SSR back with history
+read in the route loader, and the chat bytes come back into the worker with it. Or a TanStack
+release adds a route option that keeps a component out of the server build, which would replace
+the ternary.
