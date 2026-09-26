@@ -19,20 +19,20 @@ import {
   assignments,
   eq,
   sql,
-  staff,
   supersedeFact,
   type Tenancy,
   toAssignment,
-  users,
 } from "@workspace/db"
+import { conversationRoute } from "./conversations.ts"
 import {
   failure,
   idempotencyKey,
   invalid,
   issuePaths,
   keyMissing,
+  readBody,
 } from "./http.ts"
-import { ensureStartingTeam } from "./org.ts"
+import { ownerStaffId } from "./org.ts"
 import type { Session } from "./session.ts"
 import {
   etag,
@@ -58,7 +58,7 @@ export type Owner = { orgId: string; session: NonNullable<Session> }
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision)$/
+  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/messages)?)?)$/
 
 type Bridged = { status: number; body: unknown }
 
@@ -153,8 +153,6 @@ const summary = (body: unknown): BuildSummary => {
     updated_at: row.updated_at,
   }
 }
-
-const readBody = (request: Request) => request.json().catch(() => null)
 
 export type ChangeInput = {
   live: boolean
@@ -271,38 +269,42 @@ async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
       detail: { keys },
     })
   }
-  const { orgId } = owner
-  const list = await kit.withOrg({ orgId }, async (db) => {
-    const current = await readFacts(db)
-    const [root] = await db
-      .select({ id: staff.id })
-      .from(staff)
-      .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
-    for (const fact of parsed.data.facts) {
-      const held = current.find((f) => f.key === fact.key)
-      // A repeat of what the owner already said writes nothing, which is
-      // what makes a retry safe (R5). The same value from another source
-      // is restated, so it becomes the owner's.
-      if (
-        held?.provenance.source === "owner_stated" &&
-        canon(held.value) === canon(fact.value)
-      ) {
-        continue
-      }
-      await supersedeFact(db, {
+  const { orgId, session } = owner
+  const list = await kit.withOrg(
+    { orgId, workosUserId: session.workosUserId },
+    async (db) => {
+      const current = await readFacts(db)
+      const root = await ownerStaffId(db, {
         orgId,
-        key: fact.key,
-        factType: held?.fact_type ?? fact.key.split(".")[0] ?? "fact",
-        value: fact.value,
-        provenance: {
-          source: "owner_stated",
-          confidence: 1,
-          verifiedByStaffId: root?.id ?? null,
-        },
+        workosUserId: session.workosUserId,
+        ownerName: session.name ?? session.email,
       })
+      for (const fact of parsed.data.facts) {
+        const held = current.find((f) => f.key === fact.key)
+        // A repeat of what the owner already said writes nothing, which is
+        // what makes a retry safe (R5). The same value from another source
+        // is restated, so it becomes the owner's.
+        if (
+          held?.provenance.source === "owner_stated" &&
+          canon(held.value) === canon(fact.value)
+        ) {
+          continue
+        }
+        await supersedeFact(db, {
+          orgId,
+          key: fact.key,
+          factType: held?.fact_type ?? fact.key.split(".")[0] ?? "fact",
+          value: fact.value,
+          provenance: {
+            source: "owner_stated",
+            confidence: 1,
+            verifiedByStaffId: root,
+          },
+        })
+      }
+      return readFacts(db)
     }
-    return readFacts(db)
-  })
+  )
   return Response.json(FactList.parse({ facts: list }))
 }
 
@@ -323,17 +325,11 @@ async function requestChange(
     async (db) => {
       // An org made before the starting team existed gets it here, so its
       // first build has a Developer to run it (ruling 2).
-      const [person] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.workosUserId, session.workosUserId))
-      if (person) {
-        await ensureStartingTeam(db, {
-          orgId,
-          userId: person.id,
-          ownerName: session.name ?? session.email,
-        })
-      }
+      await ownerStaffId(db, {
+        orgId,
+        workosUserId: session.workosUserId,
+        ownerName: session.name ?? session.email,
+      })
       // The build this key already made: a retry replays it rather than
       // routing again against the state the first attempt changed.
       const [made] = await db
@@ -593,6 +589,9 @@ export async function ownerRoute(
   const [, noun, id = "", action = ""] = pathname.split("/")
   if (noun === "builds") {
     return buildAction(request, env, kit, owner, id, action)
+  }
+  if (noun === "conversations") {
+    return conversationRoute(request, kit, owner, id, action)
   }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)
