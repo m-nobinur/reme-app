@@ -4,7 +4,6 @@ import {
   BuildSummary,
   ChatRequest,
   ErrorEnvelope,
-  type FactRecord,
   FactValue,
   type FactValueKey,
   RequestChangeOutput,
@@ -94,22 +93,30 @@ const pending = (part: ToolPart) =>
 
 export type Script = {
   kind: "onboarding" | "assistant"
-  facts: FactRecord[]
-  /** `orgs.name`, the business name's prefill. */
+  /** The required facts the org does not hold, in asking order (`missingFacts`). */
+  missing: readonly FactValueKey[]
+  /** `orgs.name`, the business name's prefill. Read only when that is the ask. */
   orgName: string
   /** Keys the owner skipped in this conversation. */
   skipped: readonly FactValueKey[]
-  /** Whether this conversation has offered a `request_change` already. */
+  /** Whether the owner approved or refused an offer in this conversation. */
   offered: boolean
   /** A typed message, or null when a resolved call asks what comes next. */
   message: { mode: "ask" | "act"; text: string } | null
   newId: () => string
 }
 
-/** The next step's parts. Pure: the same input and ids give the same parts. */
+/** The key onboarding asks for next, if any. */
+export const nextKey = (s: Pick<Script, "missing" | "skipped">) =>
+  s.missing.find((k) => !s.skipped.includes(k))
+
+/**
+ * The next step's parts. Pure: the same input and ids give the same parts.
+ * An Ask message never becomes a change, onboarding included.
+ */
 export function nextStep(s: Script): Part[] {
   if (s.kind === "onboarding" && !s.offered) {
-    const key = missingFacts(s.facts).find((k) => !s.skipped.includes(k))
+    const key = nextKey(s)
     if (key) {
       const name = FactValue.safeParse({
         key: "business.name",
@@ -130,7 +137,9 @@ export function nextStep(s: Script): Part[] {
         },
       ]
     }
-    return [changeCall(s.message?.text ?? ONBOARDING_GOAL, s.newId)]
+    if (s.message?.mode !== "ask") {
+      return [changeCall(s.message?.text ?? ONBOARDING_GOAL, s.newId)]
+    }
   }
   if (!s.message) return []
   if (s.message.mode === "ask") {
@@ -263,53 +272,80 @@ const answerInvalid = () =>
   })
 
 type Row = typeof conversationMessages.$inferSelect
-type Read = {
-  kind: "onboarding" | "assistant"
-  rows: Row[]
-  tail: (Row & { content: Content }) | null
+type Tail = Row & { content: Content }
+type Read = { kind: "onboarding" | "assistant"; tail: Tail | null }
+
+/**
+ * The conversation under the session's org and its last row, the
+ * conversation locked for the rest of the turn so turns on it run one at a
+ * time. Null for one the org does not hold.
+ */
+async function read(db: OrgScopedDb, id: string): Promise<Read | null> {
+  const [conversation] = await db
+    .select({ kind: conversations.kind })
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .for("update")
+  if (!conversation) return null
+  return { kind: conversation.kind, tail: await readTail(db, id) }
 }
 
-/** The conversation under the session's org, locked for the turn, with its rows. */
-async function read(
-  db: OrgScopedDb,
-  id: string,
-  lock: boolean
-): Promise<Read | null> {
-  const query = db.select().from(conversations).where(eq(conversations.id, id))
-  const [conversation] = await (lock ? query.for("update") : query)
-  if (!conversation) return null
-  const rows = await db
+async function readTail(db: OrgScopedDb, id: string): Promise<Tail | null> {
+  const [tail] = await db
     .select()
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, id))
-    .orderBy(conversationMessages.seq)
-  const tail = rows.at(-1) ?? null
-  return {
-    kind: conversation.kind,
-    rows,
-    tail: tail as Read["tail"],
-  }
+    .orderBy(sql`${conversationMessages.seq} desc`)
+    .limit(1)
+  return (tail as Tail | undefined) ?? null
 }
 
-const partsOf = (rows: Row[]) =>
-  rows.flatMap((row) => (row.content as Content).parts)
+/**
+ * What the script reads from an onboarding conversation: the keys the owner
+ * skipped, and whether they approved or refused an offer. An offer talked
+ * over by a typed message was cancelled, not made, so it does not count.
+ */
+export async function readScript(
+  db: OrgScopedDb,
+  id: string
+): Promise<{ skipped: FactValueKey[]; offered: boolean }> {
+  const [found] = await db.execute<{
+    skipped: FactValueKey[]
+    offered: boolean
+  }>(
+    sql`select
+      coalesce(jsonb_agg(distinct p->'input'->>'key') filter (where p->>'type' = 'tool-ask_fact' and p->>'state' = 'output-available' and p->'output'->>'answer' = 'skipped'), '[]'::jsonb) as skipped,
+      coalesce(bool_or(p->>'type' = 'tool-request_change' and p->>'state' in ('output-available', 'output-denied')), false) as offered
+    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and m.content->>'role' = 'assistant'`
+  )
+  return { skipped: found?.skipped ?? [], offered: found?.offered ?? false }
+}
 
-/** What the script reads from the conversation itself. */
-function scriptOf(held: Read) {
-  const parts = partsOf(held.rows).filter(isTool)
-  return {
+/**
+ * The next step for this conversation, reading only what it needs: the
+ * script's state for onboarding, and the org's name only when the step asks
+ * for the business name.
+ */
+async function next(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  input: Pick<Script, "missing" | "message" | "newId">
+): Promise<Part[]> {
+  const { skipped, offered } =
+    held.kind === "onboarding"
+      ? await readScript(db, id)
+      : { skipped: [], offered: true }
+  const asking =
+    !offered && nextKey({ missing: input.missing, skipped }) === "business.name"
+  return nextStep({
+    ...input,
     kind: held.kind,
-    skipped: parts.flatMap((p) => {
-      const output = AskFactOutput.safeParse(p.output)
-      return p.type === "tool-ask_fact" &&
-        p.state === "output-available" &&
-        output.success &&
-        output.data.answer === "skipped"
-        ? [(p.input as AskFactInput).key]
-        : []
-    }),
-    offered: parts.some((p) => p.type === "tool-request_change"),
-  }
+    skipped,
+    offered,
+    orgName: asking ? await readOrgName(db) : "",
+  })
 }
 
 async function readOrgName(db: OrgScopedDb): Promise<string> {
@@ -362,11 +398,8 @@ export async function chat(
   const { conversation_id: id, mode, turn } = parsed.data
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   try {
-    if (turn.kind === "approval") {
-      return await approve(env, kit, owner, id, turn)
-    }
     return await kit.withOrg(scope, async (db) => {
-      const held = await read(db, id, true)
+      const held = await read(db, id)
       if (!held) return notFound()
       if (turn.kind === "message") {
         return typed(
@@ -379,7 +412,10 @@ export async function chat(
           newId
         )
       }
-      return answer(db, owner, held, id, turn, newId)
+      if (turn.kind === "answer") {
+        return answer(db, owner, held, id, turn, newId)
+      }
+      return approve(db, env, kit, owner, held, id, turn)
     })
   } catch (error) {
     if (error instanceof Refusal) return error.response
@@ -402,7 +438,13 @@ async function typed(
   newId: () => string
 ): Promise<Response> {
   // A message id is written once. A retried send is refused, never merged.
-  if (held.rows.some((row) => row.id === messageId)) {
+  const [taken] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      sql`${conversationMessages.conversationId} = ${id} and ${conversationMessages.id} = ${messageId}`
+    )
+  if (taken) {
     return failure(409, {
       class: "validation",
       code: "chat.message_exists",
@@ -424,10 +466,8 @@ async function typed(
       throw new Refusal(stale())
     }
   }
-  const step = nextStep({
-    ...scriptOf(held),
-    facts: await readFacts(db),
-    orgName: await readOrgName(db),
+  const step = await next(db, held, id, {
+    missing: missingFacts(await readFacts(db)),
     message,
     newId,
   })
@@ -460,15 +500,15 @@ async function typed(
   return stream(assistantId, step)
 }
 
-/** The tail's pending call this turn names, or a response saying why not. */
+/** The tail's call this turn names, or a response saying why not. */
 function callIn(
-  held: Read,
+  tail: Tail | null,
   messageId: string,
   match: (part: ToolPart) => boolean
-): { tail: Row & { content: Content }; call: ToolPart } | Response {
-  const { tail } = held
-  if (tail?.id !== messageId || tail.content.role !== "assistant")
+): { tail: Tail; call: ToolPart } | Response {
+  if (tail?.id !== messageId || tail.content.role !== "assistant") {
     return stale()
+  }
   const call = tail.content.parts.find(
     (p): p is ToolPart => isTool(p) && match(p)
   )
@@ -485,7 +525,7 @@ async function answer(
   newId: () => string
 ): Promise<Response> {
   const found = callIn(
-    held,
+    held.tail,
     turn.message_id,
     (p) => p.type === "tool-ask_fact" && p.toolCallId === turn.tool_call_id
   )
@@ -507,23 +547,18 @@ async function answer(
   ) {
     return answerInvalid()
   }
+  const current = await readFacts(db)
   if (turn.output.answer === "stated") {
-    await stateFacts(db, owner, [turn.output.fact])
+    await stateFacts(db, owner, [turn.output.fact], current)
   }
   const done: ToolPart = {
     ...call,
     state: "output-available",
     output: turn.output,
   }
-  const before = scriptOf(held)
-  const step = nextStep({
-    ...before,
-    skipped:
-      turn.output.answer === "skipped"
-        ? [...before.skipped, key]
-        : before.skipped,
-    facts: await readFacts(db),
-    orgName: await readOrgName(db),
+  const step = await next(db, held, id, {
+    // The key just answered is held now, or skipped.
+    missing: missingFacts(current).filter((k) => k !== key),
     message: null,
     newId,
   })
@@ -539,73 +574,84 @@ async function answer(
 }
 
 /**
- * The owner's yes or no on a `request_change`. A yes runs the change before
- * the write, keyed by the approval id, so a retry after a failed write
- * replays the build the first attempt made rather than starting another.
+ * The owner's yes or no on a `request_change`, inside the turn's lock, so a
+ * double click or a typed message waits for it rather than interleaving. A
+ * yes runs the change keyed by the approval id, so a retry after a failed
+ * write replays the build the first attempt made.
  */
 async function approve(
+  db: OrgScopedDb,
   env: Env,
   kit: Tenancy,
   owner: Owner,
+  held: Read,
   id: string,
   turn: Extract<ChatRequest["turn"], { kind: "approval" }>
 ): Promise<Response> {
-  const held = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    read(db, id, false)
-  )
-  if (!held) return notFound()
-  const found = callIn(
-    held,
-    turn.message_id,
-    (p) =>
-      p.type === "tool-request_change" && p.approval?.id === turn.approval_id
-  )
+  const matches = (p: ToolPart) =>
+    p.type === "tool-request_change" && p.approval?.id === turn.approval_id
+  const found = callIn(held.tail, turn.message_id, matches)
   if (found instanceof Response) return found
   const { tail, call } = found
-  if (!pending(call)) {
-    return call.approval?.approved === turn.approved
-      ? stream(tail.id, stepAfter(tail.content.parts, call), call)
+  // Resolved already: the same decision replays it, another is stale.
+  const replay = (at: Tail, decided: ToolPart) =>
+    decided.approval?.approved === turn.approved
+      ? stream(at.id, stepAfter(at.content.parts, decided), decided)
       : stale()
-  }
+  if (!pending(call)) return replay(tail, call)
   const approval = { id: turn.approval_id, approved: turn.approved }
-  const done: ToolPart = turn.approved
-    ? {
-        ...call,
-        state: "output-available",
-        approval,
-        output: await changed(
-          env,
-          kit,
-          owner,
-          (call.input as { text: string }).text,
-          turn.approval_id
-        ),
-      }
-    : { ...call, state: "output-denied", approval }
+  let done: ToolPart = { ...call, state: "output-denied", approval }
+  if (turn.approved) {
+    const text = (call.input as { text: string }).text
+    const output = await changed(env, kit, owner, text, turn.approval_id)
+    if (output instanceof Response) return output
+    done = { ...call, state: "output-available", approval, output }
+  }
   const parts = [
     ...tail.content.parts.map((p) => (p === call ? done : p)),
     { type: "step-start" } as const,
   ]
-  const swapped = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    swapTail(db, id, tail, { ...tail.content, parts })
-  )
-  return swapped ? stream(tail.id, [], done) : stale()
+  if (await swapTail(db, id, tail, { ...tail.content, parts })) {
+    return stream(tail.id, [], done)
+  }
+  // Written by something outside the lock meanwhile: this same decision is
+  // a replay, anything else is stale.
+  const moved = callIn(await readTail(db, id), turn.message_id, matches)
+  if (moved instanceof Response) return moved
+  return pending(moved.call) ? stale() : replay(moved.tail, moved.call)
 }
 
-/** The change, started as `/changes` would start it, as the tool's output. */
+/**
+ * Refusals kept as the card's answer, by class. `validation`
+ * (change.question_open, change.build_busy, staff.developer_missing, the
+ * orchestrator's state refusals), `permission` and `budgetary`
+ * (builds.daily_cap) say no to this change, and are stored as `refused`.
+ * Everything else (`integrity` such as orchestrator.off_contract at 502,
+ * `transient` such as request.failed at 503, `provider`, `resource`) is a
+ * failed request: answered as it is and not stored, so a retry runs the
+ * change again under the same key.
+ */
+const KEPT: readonly ErrorEnvelope["class"][] = [
+  "validation",
+  "permission",
+  "budgetary",
+]
+
+/** The change, started as `/changes` starts it, as the tool's output. */
 async function changed(
   env: Env,
   kit: Tenancy,
   owner: Owner,
   text: string,
   key: string
-): Promise<RequestChangeOutput> {
+): Promise<RequestChangeOutput | Response> {
   const response = await startChange(env, kit, owner, text, key)
-  const body: unknown = await response.json()
+  const body: unknown = await response.clone().json()
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }
   }
   const { occurred_at: _, ...error } = ErrorEnvelope.parse(body)
+  if (!KEPT.includes(error.class)) return response
   return RequestChangeOutput.parse({ outcome: "refused", error })
 }
 
@@ -617,7 +663,7 @@ async function changed(
 export function firstMessage(orgName: string, newId: () => string) {
   const step = nextStep({
     kind: "onboarding",
-    facts: [],
+    missing: missingFacts([]),
     orgName,
     skipped: [],
     offered: false,

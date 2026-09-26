@@ -5,10 +5,16 @@ import {
   ConversationList,
   ErrorEnvelope,
   FactList,
-  type FactRecord,
   type FactValue,
+  type FactValueKey,
 } from "@workspace/contracts"
-import { conversationMessages, eq, type Tenancy, tenancy } from "@workspace/db"
+import {
+  conversationMessages,
+  conversations,
+  eq,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -26,6 +32,7 @@ import {
   nextStep,
   ONBOARDING_GOAL,
   type Part,
+  readScript,
   type Script,
   STREAM_HEADERS,
   type ToolPart,
@@ -45,9 +52,19 @@ const counter = (prefix = "id") => {
   return () => `${prefix}${++n}`
 }
 
-const facts = (...keys: string[]) =>
-  keys.map((key) => ({ key })) as unknown as FactRecord[]
-const REQUIRED = [
+/**
+ * UUID-shaped ids, since the onboarding conversation's id comes from the same
+ * source. The namespace is this process's, so a parallel run elsewhere never
+ * collides; both script runs here share it, and the first is deleted before
+ * the second makes the same ids again.
+ */
+const NS = crypto.randomUUID().slice(0, 8)
+const uuids = () => {
+  let n = 0
+  return () => `${NS}-0000-4000-8000-${String(++n).padStart(12, "0")}`
+}
+
+const REQUIRED: FactValueKey[] = [
   "business.name",
   "business.phone",
   "business.email",
@@ -57,7 +74,7 @@ const REQUIRED = [
 ]
 const script = (over: Partial<Script> = {}): Script => ({
   kind: "onboarding",
-  facts: [],
+  missing: [...REQUIRED],
   orgName: "Brightclean (fixture)",
   skipped: [],
   offered: false,
@@ -89,8 +106,11 @@ describe("the onboarding script", () => {
 
   it("asks for the next missing key, and only pricing may be skipped", () => {
     const asked = (held: string[]) =>
-      (nextStep(script({ facts: facts(...held) }))[0] as ToolPart)
-        .input as AskFactInput
+      (
+        nextStep(
+          script({ missing: REQUIRED.filter((k) => !held.includes(k)) })
+        )[0] as ToolPart
+      ).input as AskFactInput
     expect(asked(["business.name"])).toEqual({
       key: "business.phone",
       skippable: false,
@@ -112,7 +132,7 @@ describe("the onboarding script", () => {
 
   it("offers the first build once every key is held or skipped", () => {
     const held = script({
-      facts: facts(...REQUIRED.slice(0, 5)),
+      missing: ["pricing.standard_clean_hourly"],
       skipped: ["pricing.standard_clean_hourly"],
     })
     expect(nextStep(held)).toEqual([
@@ -126,14 +146,22 @@ describe("the onboarding script", () => {
     ])
   })
 
-  it("offers the owner's own words when they type at the end", () => {
+  it("offers the owner's own words when they type at the end in Act", () => {
     const [offer] = nextStep(
       script({
-        facts: facts(...REQUIRED),
-        message: { mode: "ask", text: "Make it green" },
+        missing: [],
+        message: { mode: "act", text: "Make it green" },
       })
     ) as ToolPart[]
     expect(offer?.input).toEqual({ text: "Make it green" })
+  })
+
+  it("never makes an Ask message a change, onboarding included", () => {
+    expect(
+      nextStep(
+        script({ missing: [], message: { mode: "ask", text: "Make it green" } })
+      )
+    ).toEqual([{ type: "text", text: ASK_REPLY, state: "done" }])
   })
 
   it.each([
@@ -293,7 +321,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       email: "owner@chat-probe.invalid",
       name: "Probe Owner",
     }
-    const send = async (body: unknown, stub: Stub = stubOrchestrator()) => {
+    const send = async (
+      body: unknown,
+      stub: Stub = stubOrchestrator(),
+      using: Tenancy = kit
+    ) => {
       const response = await chat(
         new Request("http://api.invalid/chat", {
           method: "POST",
@@ -304,7 +336,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           ORCHESTRATOR: stub,
           SITE_HOST_SUFFIX: SUFFIX,
         } as unknown as Env,
-        kit,
+        using,
         { orgId: who.orgId, session },
         newId
       )
@@ -427,21 +459,28 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           )
         )
     )
-    return { who, me, id, hash, final: approved.after }
+    const listed = FactList.parse(
+      await (await who.call(stubOrchestrator(), "/facts")).json()
+    )
+    // Gone, so the next run can make the same ids.
+    await kit.withOrg({ orgId: who.orgId }, async (db) => {
+      await db
+        .delete(conversationMessages)
+        .where(eq(conversationMessages.conversationId, id))
+      await db.delete(conversations).where(eq(conversations.id, id))
+    })
+    return { id, hash, final: approved.after, facts: listed.facts }
   }
 
   it("runs the whole script to the same bytes twice", async () => {
-    const first = await onboard(counter("run_"))
-    const second = await onboard(counter("run_"))
+    const first = await onboard(uuids())
+    const second = await onboard(uuids())
     expect(second.hash).toBe(first.hash)
+    // The conversation's id came from the same source as every other.
+    expect(first.id).toBe(`${NS}-0000-4000-8000-000000000001`)
 
     // The facts are the owner's, as the profile page will show them.
-    const listed = FactList.parse(
-      await (await first.who.call(stubOrchestrator(), "/facts")).json()
-    )
-    expect(
-      listed.facts.map((f) => [f.key, f.provenance.source]).sort()
-    ).toEqual(
+    expect(first.facts.map((f) => [f.key, f.provenance.source]).sort()).toEqual(
       [
         "business.email",
         "business.name",
@@ -654,6 +693,43 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect((await me.rows(id))[0]?.parentId).toBeNull()
     })
 
+    it("counts an offer the owner talked over as never made", async () => {
+      const fresh = await owner(kit, url as string, "chat-offer")
+      const talk = talker(fresh)
+      const set = await fresh.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          facts: [
+            { key: "business.name", value: { name: "Offer (fixture)" } },
+            ...STATED,
+            {
+              key: "pricing.standard_clean_hourly",
+              value: { amount_minor: 3500, currency: "GBP" },
+            },
+          ],
+        }),
+      })
+      expect(set.status).toBe(200)
+      const id = await talk.onboarding()
+      const offered = () =>
+        kit.withOrg({ orgId: fresh.orgId }, (db) => readScript(db, id))
+      await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_go", text: "Build it" },
+      })
+      expect(pendingCall(await talk.tail(id)).type).toBe("tool-request_change")
+      const asked = await talk.turn(id, {
+        mode: "ask",
+        turn: { kind: "message", message_id: "u_wait", text: "Wait" },
+      })
+      expect(asked.after.parts.at(-1)).toEqual({
+        type: "text",
+        text: ASK_REPLY,
+        state: "done",
+      })
+      expect(await offered()).toEqual({ skipped: [], offered: false })
+    })
+
     it("refuses what a client may not send, and an unknown conversation", async () => {
       const id = await me.onboarding()
       const typedBody = {
@@ -756,6 +832,180 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       }
       expect(output.error).not.toHaveProperty("occurred_at")
     })
+
+    it("replays one build for a double-clicked yes", async () => {
+      const { me, id, body } = await carded("chat-double")
+      const stub = building()
+      const kits = [0, 1].map(() => tenancy(url as string, { max: 2 }))
+      try {
+        const [a, b] = await Promise.all(
+          kits.map((own) => me.send(body(true), stub, own))
+        )
+        expect([a?.response.status, b?.response.status]).toEqual([200, 200])
+        expect(b?.text).toBe(a?.text)
+        expect(stub.calls).toHaveLength(1)
+        expect(
+          (await me.tail(id)).parts.filter((p) => p.type === "step-start")
+        ).toHaveLength(2)
+      } finally {
+        await Promise.all(kits.map((own) => own.close()))
+      }
+    })
+
+    it("holds a typed message until the yes it raced is written", async () => {
+      const { me, id, body } = await carded("chat-interleave")
+      const own = tenancy(url as string, { max: 2 })
+      let typed: Promise<{ response: Response; text: string }> | undefined
+      const racing = stubOrchestrator(async (request) => {
+        typed = me.send(
+          {
+            conversation_id: id,
+            mode: "act",
+            turn: { kind: "message", message_id: "u_race", text: "Wait" },
+          },
+          stubOrchestrator(),
+          own
+        )
+        // Long enough for the typed turn to reach the row if nothing holds it.
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        return building().fetch(request)
+      })
+      try {
+        const yes = await me.send(body(true), racing)
+        expect(yes.response.status, yes.text).toBe(200)
+        expect((await typed)?.response.status).toBe(200)
+        const rows = await me.rows(id)
+        const card = (rows.at(-3)?.content as { parts: ToolPart[] } | undefined)
+          ?.parts
+        expect(card?.at(-2)).toMatchObject({
+          state: "output-available",
+          output: { outcome: "started" },
+        })
+        expect(rows.at(-2)?.id).toBe("u_race")
+      } finally {
+        await own.close()
+      }
+    })
+
+    it("replays when the row moved to this same yes while the change ran", async () => {
+      const { who, me, id, body } = await carded("chat-same")
+      const at = await me.tail(id)
+      const call = pendingCall(at)
+      const output = {
+        outcome: "started",
+        build: {
+          assignment_id: FIXED_BUILD,
+          kind: "site.build",
+          state: "queued",
+          goal: "Add Saturdays",
+          revision: null,
+          created_at: AT,
+          updated_at: AT,
+        },
+      }
+      const done = {
+        ...call,
+        state: "output-available",
+        approval: { id: call.approval?.id, approved: true },
+        output,
+      }
+      const moved = {
+        role: "assistant",
+        parts: [
+          ...at.parts.map((p) => (p === (call as unknown) ? done : p)),
+          { type: "step-start" },
+        ],
+      }
+      const racing = stubOrchestrator(async (request) => {
+        await kit.withOrg({ orgId: who.orgId }, (db) =>
+          db
+            .update(conversationMessages)
+            .set({ content: moved })
+            .where(eq(conversationMessages.id, at.id))
+        )
+        return building().fetch(request)
+      })
+      const { response, text } = await me.send(body(true), racing)
+      expect(response.status, text).toBe(200)
+      expect(chunksOf(text)).toContainEqual({
+        type: "tool-output-available",
+        toolCallId: call.toolCallId,
+        output,
+      })
+      expect((await me.rows(id)).at(-1)?.content).toEqual(moved)
+    })
+
+    // Which refusals are kept as the card's answer, and which are a failed
+    // request the owner can retry under the same key.
+    it.each([
+      [
+        "a validation refusal",
+        409,
+        { class: "validation", code: "change.build_busy" },
+        true,
+      ],
+      [
+        "the daily cap",
+        429,
+        { class: "budgetary", code: "builds.daily_cap" },
+        true,
+      ],
+      [
+        "a permission refusal",
+        403,
+        { class: "permission", code: "owner.forbidden" },
+        true,
+      ],
+      [
+        "a transient failure",
+        503,
+        { class: "transient", code: "request.failed" },
+        false,
+      ],
+      [
+        "a provider failure",
+        502,
+        { class: "provider", code: "sandbox.down" },
+        false,
+      ],
+      ["a body off the contract", 500, null, false],
+    ] as const)(
+      "handles %s (status %s)",
+      async (_name, status, envelope, kept) => {
+        const { me, id, body } = await carded(`chat-refusal-${status}`)
+        const refusing = stubOrchestrator(() =>
+          envelope
+            ? Response.json(
+                {
+                  ...envelope,
+                  message: "Refused.",
+                  detail: {},
+                  occurred_at: AT,
+                },
+                { status }
+              )
+            : new Response("not json", { status })
+        )
+        const before = await me.rows(id)
+        const first = await me.send(body(true), refusing)
+        if (kept) {
+          expect(first.response.status).toBe(200)
+          expect((await me.tail(id)).parts.at(-2)).toMatchObject({
+            output: { outcome: "refused", error: { code: envelope?.code } },
+          })
+          return
+        }
+        expect(first.response.status).toBeGreaterThanOrEqual(500)
+        expect(await me.rows(id)).toEqual(before)
+        // A retry runs the change again, under the same key.
+        const stub = building()
+        const retried = await me.send(body(true), stub)
+        expect(retried.response.status).toBe(200)
+        expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+          refusing.calls[0]?.request.headers.get("idempotency-key")
+        )
+      }
+    )
 
     it("answers 409 when the row moved while the change ran, and keeps the other write", async () => {
       const { who, me, id, body } = await carded("chat-race")

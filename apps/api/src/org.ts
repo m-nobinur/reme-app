@@ -170,6 +170,11 @@ export async function ownerStaffId(
       ownerName: owner.ownerName,
     })
   }
+  return rootStaffId(db)
+}
+
+/** The org's human root, the owner's staff row, or null before the team exists. */
+async function rootStaffId(db: OrgScopedDb): Promise<string | null> {
   const [root] = await db
     .select({ id: staff.id })
     .from(staff)
@@ -312,12 +317,12 @@ export async function createOrg(
       })
       // The new owner lands in onboarding: its conversation, and the first
       // question already asked. Ids made here, so nothing needs RETURNING.
-      const conversationId = crypto.randomUUID()
+      const conversationId = newId()
       await db.insert(conversations).values({
         id: conversationId,
         orgId,
         kind: "onboarding",
-        createdByStaffId: sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.kind} = 'human' and ${staff.managerId} is null)`,
+        createdByStaffId: (await rootStaffId(db)) as string,
       })
       await db.insert(conversationMessages).values({
         conversationId,

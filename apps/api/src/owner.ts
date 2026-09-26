@@ -7,6 +7,7 @@ import {
   DecisionRequest,
   ErrorEnvelope,
   FactList,
+  type FactRecord,
   type FactValue,
   InformationAnswer,
   OWNER_BRIDGE_HEADERS,
@@ -268,27 +269,28 @@ const canon = (value: unknown) =>
 export async function stateFacts(
   db: OrgScopedDb,
   owner: Owner,
-  stated: FactValue[]
+  stated: FactValue[],
+  current?: FactRecord[]
 ) {
   const { orgId, session } = owner
-  const current = await readFacts(db)
+  const held = current ?? (await readFacts(db))
   const root = await ownerStaffId(db, {
     orgId,
     workosUserId: session.workosUserId,
     ownerName: session.name ?? session.email,
   })
   for (const fact of stated) {
-    const held = current.find((f) => f.key === fact.key)
+    const was = held.find((f) => f.key === fact.key)
     if (
-      held?.provenance.source === "owner_stated" &&
-      canon(held.value) === canon(fact.value)
+      was?.provenance.source === "owner_stated" &&
+      canon(was.value) === canon(fact.value)
     ) {
       continue
     }
     await supersedeFact(db, {
       orgId,
       key: fact.key,
-      factType: held?.fact_type ?? fact.key.split(".")[0] ?? "fact",
+      factType: was?.fact_type ?? fact.key.split(".")[0] ?? "fact",
       value: fact.value,
       provenance: {
         source: "owner_stated",
