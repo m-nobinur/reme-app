@@ -287,6 +287,30 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention).toEqual([{ kind: "question", request: second }])
   })
 
+  it("drops the question once it is answered, while the build still waits", async () => {
+    const waiting = await owner(kit, url as string, "answered")
+    const w = seed(kit, waiting)
+    const build = await w.assignment("blocked_on_information")
+    const asked = question(waiting, build)
+    await w.event(build, "information.requested", asked)
+    await w.blocked(build, asked.request_id, 3)
+    const before = WorkspaceStatus.parse(
+      await (await workspace(waiting)).json()
+    )
+    expect(before.attention).toEqual([{ kind: "question", request: asked }])
+    // The Workflow has not woken yet, so the state is still the blocked one.
+    await w.event(build, "information.answered", {
+      answer_id: crypto.randomUUID(),
+      org_id: waiting.orgId,
+      assignment_id: build,
+      request_id: asked.request_id,
+      fact_id: crypto.randomUUID(),
+      answered_at: new Date().toISOString(),
+    })
+    const after = WorkspaceStatus.parse(await (await workspace(waiting)).json())
+    expect(after.attention).toEqual([])
+  })
+
   it("answers an unchanged poll with 304 and no body", async () => {
     const first = await workspace(busy)
     const tag = first.headers.get("etag") as string
