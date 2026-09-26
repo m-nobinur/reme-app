@@ -67,28 +67,34 @@ const EXTRACT: {
 const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 /**
- * The text with the site's own URLs blanked: each host exactly, in any case,
- * with an optional scheme and whatever path and query follow. Every page
- * names its own host (`og:url`, canonical), and a slug can carry a date. A
- * host that only contains the site's, or an email on it, is left to be read.
- * No hosts, nothing blanked.
+ * The text with the site's own host names blanked: each host exactly, in any
+ * case, with an optional scheme. Every page names its own host (`og:url`,
+ * canonical), and a slug can carry a date. The path, query and fragment after
+ * it are still read, as is a host that only contains the site's, or an email
+ * on it. No hosts, nothing blanked.
  */
-function withoutOwnUrls(text: string, hosts: readonly string[]): string {
+function withoutOwnHosts(text: string, hosts: readonly string[]): string {
   if (!hosts.length) return text
   const own = new RegExp(
-    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?![a-z0-9-]|\\.[a-z0-9])(?:[/?#][^\\s"'<>]*)?`,
+    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?![a-z0-9-]|\\.[a-z0-9])`,
     "gi"
   )
   return text.replace(own, " ")
 }
 
-/** Every price, phone, email, time and postcode in the text, the site's own URLs aside. */
+/**
+ * Characters that render blank but are not whitespace to a regular
+ * expression; read as spaces so they cannot split a phone or a price.
+ */
+const BLANKS = /[\u115f\u1160\u200b-\u200d\u2060\u2800\u3164\ufeff\uffa0]/g
+
+/** Every price, phone, email, time and postcode in the text, the site's own hosts aside. */
 export function contentClaimsIn(
   text: string,
   hosts: readonly string[] = []
 ): ContentClaim[] {
   const claims: ContentClaim[] = []
-  let rest = withoutOwnUrls(text, hosts)
+  let rest = withoutOwnHosts(text.replace(BLANKS, " "), hosts)
   for (const { kind, pattern, key } of EXTRACT) {
     for (const m of rest.matchAll(pattern)) {
       const k = key(m)

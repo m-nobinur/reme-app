@@ -146,8 +146,8 @@ describe("the content gate", () => {
     )
 
   it("passes the site's own host and URLs, whatever digits the slug or path carry", () => {
-    const main = `<p>$35 an hour</p><p>Find us at ${HOST}, BrightClean-20260925-STG.remeai.co.uk or https://${HOST}/blog/2026-09-25/?from=20260925.</p>`
-    const built = pages(sited(main, HOST, "/blog/2026-09-25/"))
+    const main = `<p>$35 an hour</p><p>Find us at ${HOST}, BrightClean-20260925-STG.remeai.co.uk or https://${HOST}/contact/?from=owner.</p>`
+    const built = pages(sited(main, HOST, "/contact/"))
     expect(checkContent(built, FACTS, [HOST]).passed).toBe(true)
     const numeric = "12345678.remeai.co.uk"
     expect(
@@ -197,8 +197,36 @@ describe("the content gate", () => {
       ).toContain(phone)
     }
     expect(
-      contentClaimsIn(`Visit https://${host}/2026-09-25 or ${host}.`, [host])
+      contentClaimsIn(`Visit https://${host}/contact/ or ${host}.`, [host])
     ).toEqual([])
+  })
+
+  it("reads the path, query and fragment after the site's own host", () => {
+    for (const [text, kind, key] of [
+      [`${HOST}/call-07700900123`, "phone", "07700900123"],
+      [`${HOST}#tel=07700-900123`, "phone", "07700900123"],
+      [`${HOST}/?price=£35`, "price", "GBP:35.00"],
+      [`(${HOST}/x)07700900123`, "phone", "07700900123"],
+      [
+        `${HOST}/call\u2800us\u2800on\u280007700\u2800900123`,
+        "phone",
+        "07700900123",
+      ],
+      [
+        `${HOST}/call\u3164us\u3164on\u316407700\u3164900123`,
+        "phone",
+        "07700900123",
+      ],
+      [
+        `${HOST}/call\u200bus\u200bon\u200b07700\u200b900123`,
+        "phone",
+        "07700900123",
+      ],
+    ] as const) {
+      expect(contentClaimsIn(text, [HOST]), text).toContainEqual(
+        expect.objectContaining({ kind, key })
+      )
+    }
   })
 
   it("reads an email on the site's own host as an email", () => {
