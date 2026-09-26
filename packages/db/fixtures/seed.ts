@@ -4,6 +4,8 @@ import {
   approvals,
   assignments,
   assignmentTransitions,
+  conversationMessages,
+  conversations,
   departments,
   deployments,
   events,
@@ -105,6 +107,11 @@ export async function clearOrgs(
   await tx
     .delete(assignmentTransitions)
     .where(inArray(assignmentTransitions.orgId, ids))
+  // A message cites its conversation, and a conversation its creator.
+  await tx
+    .delete(conversationMessages)
+    .where(inArray(conversationMessages.orgId, ids))
+  await tx.delete(conversations).where(inArray(conversations.orgId, ids))
   // A deployment cites an approval and revisions; an approval cites both.
   await tx.delete(deployments).where(inArray(deployments.orgId, ids))
   await tx.delete(approvals).where(inArray(approvals.orgId, ids))

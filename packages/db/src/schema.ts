@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm"
 import {
+  bigint,
   char,
   check,
   customType,
@@ -10,6 +11,7 @@ import {
   pgEnum,
   pgPolicy,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -934,5 +936,113 @@ export const deployments = pgTable(
     ),
     check("deployments_config_version_positive", sql`config_version > 0`),
     orgIsolation("deployments"),
+  ]
+)
+
+/** `Conversation.kind`. The onboarding row is the server's; owners make `assistant` ones. */
+export const conversationKind = pgEnum("conversation_kind", [
+  "onboarding",
+  "assistant",
+])
+
+/**
+ * An owner's conversation with the assistant. A create from the owner app
+ * carries the client's thread id as `idempotency_key`, so a retried create
+ * returns the same row; the server-made onboarding row carries none, and an org
+ * has at most one of those.
+ */
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    kind: conversationKind("kind").notNull(),
+    /** Owner text, 1 to 120 characters with something in them, or none yet. */
+    title: text("title"),
+    createdByStaffId: uuid("created_by_staff_id").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("conversations_id_org_key").on(t.id, t.orgId),
+    unique("conversations_org_idempotency_key").on(t.orgId, t.idempotencyKey),
+    foreignKey({
+      name: "conversations_created_by_fk",
+      columns: [t.createdByStaffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    uniqueIndex("conversations_one_onboarding_per_org")
+      .on(t.orgId)
+      .where(sql`kind = 'onboarding'`),
+    // The list, `order by updated_at desc, id desc`, read by a backward scan.
+    index("conversations_org_updated_idx").on(t.orgId, t.updatedAt, t.id),
+    // A header past the btree's row limit would fail the index as a 500.
+    check(
+      "conversations_idempotency_key_length",
+      sql`char_length(idempotency_key) between 1 and 255`
+    ),
+    check(
+      "conversations_title_text",
+      // ASCII whitespace only, spelled out: `[:space:]` follows the database
+      // locale, and this check must never refuse a title the contract takes.
+      sql`char_length(title) between 1 and 120 and title ~ '[^ \\t\\n\\v\\f\\r]'`
+    ),
+    orgIsolation("conversations"),
+  ]
+)
+
+/**
+ * One message per row, in assistant-ui's `{id, parent_id, format, content}`
+ * storage shape. Ids are the AI SDK's text ids, unique within a conversation,
+ * so a retried write of the same message inserts nothing. `content` holds no
+ * metadata: the api adds the date from `created_at` when it reads. `seq` is
+ * the read order: `created_at` is the transaction's start, so a message and
+ * its reply written together share one.
+ */
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    conversationId: uuid("conversation_id").notNull(),
+    id: text("id").notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    parentId: text("parent_id"),
+    format: text("format").notNull(),
+    content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity(),
+    createdAt,
+  },
+  (t) => [
+    primaryKey({
+      name: "conversation_messages_pkey",
+      columns: [t.conversationId, t.id],
+    }),
+    foreignKey({
+      name: "conversation_messages_conversation_fk",
+      columns: [t.conversationId, t.orgId],
+      foreignColumns: [conversations.id, conversations.orgId],
+    }),
+    // A parent is a message already in the same conversation.
+    foreignKey({
+      name: "conversation_messages_parent_fk",
+      columns: [t.conversationId, t.parentId],
+      foreignColumns: [t.conversationId, t.id],
+    }),
+    index("conversation_messages_conversation_seq_idx").on(
+      t.conversationId,
+      t.seq
+    ),
+    check(
+      "conversation_messages_ids_are_text_ids",
+      sql`id ~ '^[A-Za-z0-9_-]{1,64}$' and parent_id ~ '^[A-Za-z0-9_-]{1,64}$'`
+    ),
+    // The self-reference would otherwise be satisfied by the row itself.
+    check("conversation_messages_not_own_parent", sql`parent_id <> id`),
+    orgIsolation("conversation_messages"),
   ]
 )

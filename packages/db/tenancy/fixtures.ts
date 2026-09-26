@@ -5,6 +5,8 @@ import {
   approvals,
   assignments,
   assignmentTransitions,
+  conversationMessages,
+  conversations,
   departments,
   deployments,
   events,
@@ -267,6 +269,36 @@ export async function seedTwoOrgs() {
       kind: "publish",
       approvalId: per(tag, 13),
     })
+    // The owner's conversation, and a question and its answer in it.
+    await db.insert(conversations).values({
+      id: per(tag, 15),
+      orgId: org,
+      kind: "assistant",
+      title: "Tenancy probe",
+      createdByStaffId: per(tag, 4),
+      idempotencyKey: `__LOCALID_tenancy_${tag}`,
+    })
+    await db.insert(conversationMessages).values([
+      {
+        conversationId: per(tag, 15),
+        id: "probe_user_1",
+        orgId: org,
+        parentId: null,
+        format: "ai-sdk/v6",
+        content: { role: "user", parts: [{ type: "text", text: "Probe" }] },
+      },
+      {
+        conversationId: per(tag, 15),
+        id: "probe_assistant_1",
+        orgId: org,
+        parentId: "probe_user_1",
+        format: "ai-sdk/v6",
+        content: {
+          role: "assistant",
+          parts: [{ type: "text", text: "Probe" }],
+        },
+      },
+    ])
   }
   await sql.end()
 }
