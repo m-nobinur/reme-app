@@ -41,8 +41,10 @@ setup(
     // `returnTo` carried through the sign-in, so the person lands where they were
     // sent from rather than on a generic home page.
     await expect(page).toHaveURL(/\/app$/)
+    // The probe account has no organisation, so the panel opens on its
+    // first steps.
     await expect(
-      page.getByRole("heading", { name: "Waiting on you", level: 2 })
+      page.getByRole("heading", { name: "First steps", level: 2 })
     ).toBeVisible()
 
     await page.context().storageState({ path: STORAGE_STATE })
