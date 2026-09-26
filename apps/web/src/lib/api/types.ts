@@ -76,6 +76,15 @@ export type AttentionItem =
       version: number
     })
 
+/** The frame's one read of `/workspace`: what needs the owner, and where the site is. */
+export type Workspace = {
+  attention: AttentionItem[]
+  /** The version live on the site, or null before the first publish. */
+  live: number | null
+  /** A build is doing work now, rather than waiting on the owner or paused. */
+  building: boolean
+}
+
 /** An approval as the inbox renders it: the contract, plus who to name. */
 export type ApprovalItem = {
   request: ApprovalRequest
@@ -169,10 +178,10 @@ export type OwnerDataSource = {
   staff: (orgId: string) => Promise<StaffMember[]>
   orgTree: (orgId: string) => Promise<OrgNode[]>
   /** `staff` is the directory the caller has already read, for names. */
-  attention: (
+  workspace: (
     orgId: string,
     staff: Promise<StaffMember[]>
-  ) => Promise<AttentionItem[]>
+  ) => Promise<Workspace>
   approvals: (orgId: string) => Promise<ApprovalItem[]>
   pipeline: (orgId: string) => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `orgs()` empty. */

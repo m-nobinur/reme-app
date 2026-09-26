@@ -247,7 +247,10 @@ const domainApproval = {
 }
 
 it("reads attention from the workspace, in its order and the owner's words", async () => {
-  const items = await apiSource.attention(ORG, Promise.resolve([alex]))
+  const { attention: items } = await apiSource.workspace(
+    ORG,
+    Promise.resolve([alex])
+  )
   // Names come from the directory the caller already has, not a second read.
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
   expect(
@@ -293,6 +296,40 @@ it("reads attention from the workspace, in its order and the owner's words", asy
   expect(items[0]).toMatchObject({ request: approval.request, version: 4 })
 })
 
+const build = (state: string) => ({
+  assignment_id: ASSIGNMENT,
+  kind: "site.revise",
+  state,
+  goal: "Change the hero line",
+  revision: null,
+  created_at: AT,
+  updated_at: AT,
+})
+
+it("reads the live version, and a build only while it is working", async () => {
+  answers["GET /workspace"] = {
+    ...workspace,
+    site: {
+      host: "fictional.invalid",
+      live: { revision_id: REVISION, version: 3 },
+    },
+    builds: [build("awaiting_review")],
+  }
+  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
+    live: 3,
+    building: false,
+  })
+
+  answers["GET /workspace"] = {
+    ...workspace,
+    builds: [build("paused"), build("implementing")],
+  }
+  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
+    live: null,
+    building: true,
+  })
+})
+
 it("lists only the workspace's approvals, each with its version", async () => {
   const items = await apiSource.approvals(ORG)
   expect(items).toEqual([
@@ -322,7 +359,7 @@ it("leaves out an approval with no version to decide on", async () => {
   }
   const listed = await apiSource.approvals(ORG)
   expect(listed.map((item) => item.request.approval_id)).toEqual([APPROVAL])
-  const attention = await apiSource.attention(ORG, Promise.resolve([alex]))
+  const { attention } = await apiSource.workspace(ORG, Promise.resolve([alex]))
   expect(
     attention.filter((item) => item.kind === "approval").map((item) => item.id)
   ).toEqual([APPROVAL])
@@ -347,7 +384,11 @@ it("answers empty for a session with no organisation", async () => {
     "fetch",
     vi.fn(async () => new Response(null, { status: 403 }))
   )
-  expect(await apiSource.attention(ORG, Promise.resolve([]))).toEqual([])
+  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toEqual({
+    attention: [],
+    live: null,
+    building: false,
+  })
   expect(await apiSource.approvals(ORG)).toEqual([])
   expect(await apiSource.activity(ORG)).toEqual([])
   expect(await apiSource.profile(ORG)).toBeNull()
@@ -355,7 +396,7 @@ it("answers empty for a session with no organisation", async () => {
 
 it("refuses a workspace off contract rather than rendering it", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [{ kind: "memo" }] }
-  await expect(apiSource.attention(ORG, Promise.resolve([]))).rejects.toThrow()
+  await expect(apiSource.workspace(ORG, Promise.resolve([]))).rejects.toThrow()
 })
 
 it("posts a decision bound to the revision, with an idempotency key", async () => {
@@ -416,6 +457,8 @@ it("names an item raised by someone outside the directory as Reme", async () => 
   answers["GET /workspace"] = { ...workspace, attention: [unknown] }
   const [listed] = await apiSource.approvals(ORG)
   expect(listed?.requestedBy).toBe("Reme")
-  const [card] = await apiSource.attention(ORG, Promise.resolve([alex]))
+  const {
+    attention: [card],
+  } = await apiSource.workspace(ORG, Promise.resolve([alex]))
   expect(card?.raisedBy).toBe("Reme")
 })

@@ -5,18 +5,18 @@ import {
   setCookie,
 } from "@tanstack/react-start/server"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
-import { readWaiting } from "@/lib/attention"
+import { readWorkspace } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
   ApprovalItem,
-  AttentionItem,
   BusinessProfile,
   DecisionOutcome,
   OrgNode,
   OrgSummary,
   PipelineItem,
   StaffMember,
+  Workspace,
 } from "./types"
 
 /**
@@ -56,8 +56,11 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     orgs: OrgSummary[]
     active: OrgSummary | null
     panelOpen: boolean
-    /** Null when the read failed: the frame still renders, and says so. */
-    waiting: AttentionItem[] | null
+    /**
+     * What waits on the owner, and where the site is. Null when the read
+     * failed: the frame still renders, and says so.
+     */
+    workspace: Workspace | null
   }> => {
     const orgs = await source.orgs()
     const active = pickOrg(orgs)
@@ -65,11 +68,11 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       orgs,
       active,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
-      waiting: active
-        ? await readWaiting(() =>
-            source.attention(active.id, source.staff(active.id))
+      workspace: active
+        ? await readWorkspace(() =>
+            source.workspace(active.id, source.staff(active.id))
           )
-        : [],
+        : { attention: [], live: null, building: false },
     }
   }
 )

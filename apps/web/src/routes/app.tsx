@@ -1,6 +1,7 @@
 import {
   BuildingsIcon,
   CheckCircleIcon,
+  DotsThreeIcon,
   FlowArrowIcon,
   NotePencilIcon,
   UserCircleIcon,
@@ -52,7 +53,8 @@ const NAV = [
 ] as const
 
 function AppLayout() {
-  const { owner, orgs, active, panelOpen, waiting } = Route.useLoaderData()
+  const { owner, orgs, active, panelOpen, workspace } = Route.useLoaderData()
+  const waiting = workspace?.attention ?? null
   // The conversation owns its height and scroll; every other page is padded.
   const conversation = useMatches({
     select: (matches) => matches.some((match) => match.staticData.conversation),
@@ -62,8 +64,11 @@ function AppLayout() {
   return (
     <WorkspaceShell
       defaultPanelOpen={panelOpen}
+      menu={conversation ? <ConversationMenu /> : undefined}
       panel={<Waiting items={waiting} />}
       panelCount={waiting?.length ?? 0}
+      // Until conversations are stored, every one is a new chat.
+      title={conversation ? "New chat" : undefined}
       rail={
         <>
           <OrgSwitcher
@@ -143,6 +148,35 @@ function AppLayout() {
         </WorkspacePage>
       )}
     </WorkspaceShell>
+  )
+}
+
+/** The conversation's ··· menu. Rename and archive join it once conversations are stored. */
+function ConversationMenu() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Conversation actions"
+            size="icon-sm"
+            variant="ghost"
+          />
+        }
+      >
+        <DotsThreeIcon aria-hidden weight="bold" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuLinkItem
+          render={
+            <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
+          }
+        >
+          <NotePencilIcon aria-hidden />
+          New chat
+        </DropdownMenuLinkItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

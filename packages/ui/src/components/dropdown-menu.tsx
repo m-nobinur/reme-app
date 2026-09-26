@@ -1,8 +1,13 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
+import { CheckIcon } from "@phosphor-icons/react"
 import { cn } from "@workspace/ui/lib/utils"
 
 // shadcn's Base UI dropdown menu, cut to the parts in use, plus a link item on
-// Base UI's `Menu.LinkItem` so a menu entry that navigates is an `<a>`.
+// Base UI's `Menu.LinkItem` so a menu entry that navigates is an `<a>`. Every
+// item shares one row style, so a link, an action and a choice read the same.
+
+const ITEM =
+  "flex min-h-9 cursor-default select-none items-center gap-2 rounded-lg px-2.5 text-sm outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -48,10 +53,7 @@ function DropdownMenuLinkItem({
 }: MenuPrimitive.LinkItem.Props) {
   return (
     <MenuPrimitive.LinkItem
-      className={cn(
-        "flex min-h-9 cursor-default select-none items-center gap-2 rounded-lg px-2.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0",
-        className
-      )}
+      className={cn(ITEM, className)}
       closeOnClick={closeOnClick}
       data-slot="dropdown-menu-item"
       {...props}
@@ -59,9 +61,51 @@ function DropdownMenuLinkItem({
   )
 }
 
+function DropdownMenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
+  return (
+    <MenuPrimitive.Item
+      className={cn(ITEM, className)}
+      data-slot="dropdown-menu-item"
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuRadioGroup(props: MenuPrimitive.RadioGroup.Props) {
+  return (
+    <MenuPrimitive.RadioGroup
+      data-slot="dropdown-menu-radio-group"
+      {...props}
+    />
+  )
+}
+
+/** A choice of one. The check sits at the end, where the eye lands last. */
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: MenuPrimitive.RadioItem.Props) {
+  return (
+    <MenuPrimitive.RadioItem
+      className={cn(ITEM, "relative pr-8", className)}
+      data-slot="dropdown-menu-radio-item"
+      {...props}
+    >
+      {children}
+      <MenuPrimitive.RadioItemIndicator className="absolute right-2.5 flex">
+        <CheckIcon aria-hidden />
+      </MenuPrimitive.RadioItemIndicator>
+    </MenuPrimitive.RadioItem>
+  )
+}
+
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLinkItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 }

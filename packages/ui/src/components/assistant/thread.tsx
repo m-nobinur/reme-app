@@ -8,17 +8,20 @@ import {
   ErrorPrimitive,
   type GroupByContext,
   groupPartByType,
+  type ThreadMessage as MessageData,
   MessagePrimitive,
   type PartState,
   SuggestionPrimitive,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import {
   ArrowClockwiseIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
   CheckIcon,
@@ -27,6 +30,7 @@ import {
   DownloadSimpleIcon,
   MicrophoneIcon,
   PencilSimpleIcon,
+  PlusIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
@@ -38,14 +42,26 @@ import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
+import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { formatDate } from "@workspace/ui/lib/format"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentType,
   createContext,
   type FC,
   type PropsWithChildren,
+  type RefObject,
   useContext,
+  useRef,
 } from "react"
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
@@ -69,12 +85,32 @@ export type ThreadComponents = {
     | undefined
 }
 
+/** Ask answers and changes nothing; Act may start work once the owner says yes. */
+export type ThreadMode = "ask" | "act"
+
+/** A "+" entry: picking it puts `prompt` in the composer for the owner to finish. */
+export type ThreadQuickAction = { title: string; prompt: string }
+
+/** What the conversation is about: the business, and where its site stands. */
+export type ThreadContext = { name: string; status: string; live: boolean }
+
 export type ThreadProps = {
   components?: ThreadComponents | undefined
   autoFocus?: boolean | undefined
+  placeholder?: string | undefined
+  /** One line under the welcome heading, built from state rather than a model. */
+  briefing?: string | null | undefined
+  context?: ThreadContext | null | undefined
+  /** The mode chip renders only when both are given. */
+  mode?: ThreadMode | undefined
+  onModeChange?: ((mode: ThreadMode) => void) | undefined
+  quickActions?: readonly ThreadQuickAction[] | undefined
 }
 
+type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus">
+
 const EMPTY_COMPONENTS: ThreadComponents = {}
+const EMPTY_SETTINGS: ThreadSettings = {}
 
 const UNGROUPED = [] as const
 
@@ -99,6 +135,7 @@ const groupThreadParts = (part: PartState, context?: GroupByContext) =>
 
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS)
+const ThreadSettingsContext = createContext<ThreadSettings>(EMPTY_SETTINGS)
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -136,12 +173,15 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  ...settings
 }) => {
   const isEmpty = useAuiState(isNewChatView)
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      <ThreadSettingsContext.Provider value={settings}>
+        <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
 }
@@ -214,9 +254,46 @@ const ThreadMessage: FC = () => {
   const role = useAuiState((s) => s.message.role)
   const isEditing = useAuiState((s) => s.message.composer.isEditing)
 
-  if (isEditing) return <EditComposer />
-  if (role === "user") return <UserMessage />
-  return <AssistantMessageComponent />
+  return (
+    <>
+      <DateDivider />
+      {isEditing ? (
+        <EditComposer />
+      ) : role === "user" ? (
+        <UserMessage />
+      ) : (
+        <AssistantMessageComponent />
+      )}
+    </>
+  )
+}
+
+/** The day a stored message was written, from the `createdAt` the server puts in `metadata.custom`. */
+const createdAt = (message: MessageData | undefined): string | null => {
+  const at = message?.metadata.custom.createdAt
+  return typeof at === "string" ? at : null
+}
+
+/**
+ * A rule with the date, above the first message of each day. A message with
+ * no stored date draws none: the runtime's own `createdAt` is the time it was
+ * rendered, which would date every old message today.
+ */
+const DateDivider: FC = () => {
+  const at = useAuiState((s) => createdAt(s.message))
+  const day = formatDate(at)
+  const before = useAuiState((s) =>
+    formatDate(createdAt(s.thread.messages[s.message.index - 1]))
+  )
+  if (!at || !day || day === before) return null
+  return (
+    <div
+      data-slot="aui_date-divider"
+      className="flex items-center gap-3 text-[0.8125rem] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
+    >
+      <time dateTime={at}>{day}</time>
+    </div>
+  )
 }
 
 const ThreadScrollToBottom: FC = () => {
@@ -236,15 +313,23 @@ const ThreadScrollToBottom: FC = () => {
   )
 }
 
+// No entrance motion: the page loads into the task, not into a show.
 const ThreadWelcome: FC = () => {
+  const { briefing } = useContext(ThreadSettingsContext)
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-semibold text-2xl tracking-tight duration-200">
-        What should I look at?
+      <LogoMark className="mb-4 size-8 text-muted-foreground" />
+      <h1 className="aui-thread-welcome-message-inner font-semibold text-[1.75rem] leading-tight tracking-tight">
+        What should we do today?
       </h1>
-      <p className="mt-1 max-w-prose text-muted-foreground text-sm">
-        Ask about the business, or tell me what to change.
-      </p>
+      {briefing ? (
+        <p
+          data-slot="aui_thread-briefing"
+          className="mt-2 max-w-prose text-base text-muted-foreground"
+        >
+          {briefing}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -261,7 +346,7 @@ const ThreadSuggestions: FC = () => {
 
 const ThreadSuggestionItem: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
+    <div className="aui-thread-welcome-suggestion-display">
       <SuggestionPrimitive.Trigger
         send
         render={
@@ -279,29 +364,152 @@ const ThreadSuggestionItem: FC = () => {
 }
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+  const { placeholder = "Send a message", context } = useContext(
+    ThreadSettingsContext
+  )
+  const input = useRef<HTMLTextAreaElement>(null)
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+      {/* A one-pixel ring on top of the border: the composer holds focus
+          whenever the page is open, so a heavy ring would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring"
+        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
       >
+        {context ? <ContextChip {...context} /> : null}
         <ComposerPrimitive.Input
-          placeholder="Send a message..."
+          ref={input}
+          placeholder={placeholder}
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}
           enterKeyHint="send"
           aria-label="Message input"
         />
-        <ComposerAction />
+        <ComposerAction input={input} />
       </div>
     </ComposerPrimitive.Root>
   )
 }
 
-const ComposerAction: FC = () => {
+// A long business name gives way before the site's state does: the state is
+// the part that changes, so it is the part that must stay readable.
+const ContextChip: FC<ThreadContext> = ({ name, status, live }) => (
+  <p
+    data-slot="aui_composer-context"
+    className="flex min-w-0 max-w-full items-center self-start whitespace-nowrap rounded-full bg-muted px-2.5 py-0.5 text-[0.8125rem] text-muted-foreground"
+  >
+    <span
+      aria-hidden
+      className={cn(
+        "me-1.5 size-1.5 shrink-0 rounded-full",
+        live ? "bg-primary" : "bg-muted-foreground"
+      )}
+    />
+    <span className="min-w-0 truncate font-medium text-foreground">{name}</span>
+    <span className="shrink-0">, {status}</span>
+  </p>
+)
+
+const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
+  input,
+}) => {
+  const { quickActions } = useContext(ThreadSettingsContext)
+  const aui = useAui()
+  // Focus goes to the composer after a pick, so the owner can finish the
+  // sentence; Escape still hands it back to the button.
+  const after = useRef<HTMLElement | null>(null)
+  if (!quickActions?.length) return null
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-end">
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) after.current = null
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Quick actions"
+            className="aui-composer-quick-actions rounded-full text-muted-foreground hover:text-foreground"
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          />
+        }
+      >
+        <PlusIcon aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent finalFocus={() => after.current ?? true} side="top">
+        {quickActions.map((action) => (
+          <DropdownMenuItem
+            key={action.title}
+            onClick={() => {
+              after.current = input.current
+              aui.composer().setText(action.prompt)
+            }}
+          >
+            {action.title}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const MODES: Record<ThreadMode, { label: string; detail: string }> = {
+  ask: { label: "Ask", detail: "Answers questions and changes nothing" },
+  act: { label: "Act", detail: "Can start a change once you say yes" },
+}
+
+const ModeChip: FC = () => {
+  const { mode, onModeChange } = useContext(ThreadSettingsContext)
+  if (!mode || !onModeChange) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={`Mode, ${MODES[mode].label}`}
+            className="aui-composer-mode rounded-full px-2.5 text-muted-foreground hover:text-foreground"
+            size="sm"
+            type="button"
+            variant="ghost"
+          />
+        }
+      >
+        {MODES[mode].label}
+        <CaretDownIcon aria-hidden className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-64" side="top">
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => onModeChange(value as ThreadMode)}
+          value={mode}
+        >
+          {(Object.keys(MODES) as ThreadMode[]).map((value) => (
+            <DropdownMenuRadioItem closeOnClick key={value} value={value}>
+              <span className="flex flex-col py-1.5">
+                <span className="font-medium">{MODES[value].label}</span>
+                <span className="text-[0.8125rem] text-muted-foreground">
+                  {MODES[value].detail}
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
+  input,
+}) => {
+  return (
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
+      <div className="flex items-center gap-1">
+        <QuickActions input={input} />
+        <ModeChip />
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
@@ -313,7 +521,7 @@ const ComposerAction: FC = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="aui-composer-dictate size-7 rounded-full text-muted-foreground hover:text-foreground"
+                  className="aui-composer-dictate size-8 rounded-full text-muted-foreground hover:text-foreground"
                   aria-label="Start voice input"
                 />
               }
@@ -330,13 +538,13 @@ const ComposerAction: FC = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="aui-composer-stop-dictation size-7 rounded-full text-destructive"
+                  className="aui-composer-stop-dictation size-8 rounded-full text-destructive"
                   aria-label="Stop voice input"
                 />
               }
             >
               <SquareIcon
-                className="aui-composer-stop-dictation-icon size-3.5 animate-pulse"
+                className="aui-composer-stop-dictation-icon size-3.5 animate-pulse motion-reduce:animate-none"
                 weight="fill"
               />
             </ComposerPrimitive.StopDictation>
@@ -351,7 +559,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="default"
                 size="icon"
-                className="aui-composer-send size-7 rounded-full"
+                className="aui-composer-send size-8 rounded-full"
                 aria-label="Send message"
               />
             }
@@ -366,7 +574,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="default"
                 size="icon"
-                className="aui-composer-cancel size-7 rounded-full"
+                className="aui-composer-cancel size-8 rounded-full"
                 aria-label="Stop generating"
               />
             }

@@ -62,18 +62,24 @@ function useCloseAt(query: string, close: () => void) {
  * sheet from the right. Both toggles sit top right. `panelCount` is what the
  * panel is waiting on the owner for; the phone toggle shows it, because there
  * the panel is out of sight. The rail and the panel are slots, so this package
- * still imports no router.
+ * still imports no router. `title` and `menu` name the page in the top bar,
+ * which on a phone is the only place it is named above the fold.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelCount = 0,
   defaultPanelOpen = true,
+  title,
+  menu,
   children,
   className,
 }: {
   rail: ReactNode
   panel: ReactNode
+  title?: string | undefined
+  /** The page's ··· menu, drawn beside the title. */
+  menu?: ReactNode
   panelCount?: number
   defaultPanelOpen?: boolean
   children: ReactNode
@@ -131,7 +137,7 @@ function WorkspaceShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-end gap-1 px-2">
+        <header className="flex h-12 shrink-0 items-center gap-1 px-2">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -155,6 +161,18 @@ function WorkspaceShell({
               </div>
             </SheetContent>
           </Sheet>
+
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-2">
+            {title ? (
+              <p
+                className="truncate font-medium text-sm"
+                data-slot="workspace-title"
+              >
+                {title}
+              </p>
+            ) : null}
+            {menu}
+          </div>
 
           <Button
             aria-controls="workspace-panel"

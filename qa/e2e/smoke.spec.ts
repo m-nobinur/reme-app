@@ -172,7 +172,7 @@ test("New chat starts an empty conversation", async ({ page }) => {
 
   await page.getByRole("link", { name: "New chat" }).click()
   await expect(
-    page.getByRole("heading", { name: "What should I look at?" })
+    page.getByRole("heading", { name: "What should we do today?" })
   ).toBeVisible()
   await expect(page.getByText("How did this week go?")).toHaveCount(0)
 })

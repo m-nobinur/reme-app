@@ -20,6 +20,7 @@ import type {
   OwnerDataSource,
   StaffMember,
   TransportedFact,
+  Workspace,
 } from "./types"
 
 /**
@@ -211,19 +212,29 @@ const approvalTitle = (version: number) =>
   `Version ${version} is ready to publish`
 
 /**
- * The workspace's attention list. An approval whose target is not a revision
- * is left out: a decision names a revision, so it could only offer buttons
- * that do nothing, and `/workspace` lists none today.
+ * `/workspace`, with the attention list trimmed. An approval whose target is
+ * not a revision is left out: a decision names a revision, so it could only
+ * offer buttons that do nothing, and `/workspace` lists none today. A session
+ * with no organisation reads as a workspace with nothing in it.
  */
-async function workspaceAttention(): Promise<Attention[]> {
+async function workspaceStatus(): Promise<WorkspaceStatus> {
   const body = await get("/workspace")
   if (body === null) {
-    return []
+    return {
+      site: { host: null, live: null },
+      builds: [],
+      attention: [],
+      missing_facts: [],
+    }
   }
-  return WorkspaceStatus.parse(body).attention.filter(
-    (item) =>
-      item.kind !== "approval" || item.request.target.kind === "revision"
-  )
+  const status = WorkspaceStatus.parse(body)
+  return {
+    ...status,
+    attention: status.attention.filter(
+      (item) =>
+        item.kind !== "approval" || item.request.target.kind === "revision"
+    ),
+  }
 }
 
 const namesOf = (staff: StaffMember[]) =>
@@ -273,13 +284,29 @@ function toAttention(
   }
 }
 
-async function attention(
+/** The states in which a build is doing work rather than waiting on someone. */
+const WORKING = new Set<string>([
+  "queued",
+  "briefing",
+  "planning",
+  "implementing",
+  "validating",
+  "revising",
+  "repairing",
+  "release_candidate",
+])
+
+async function workspace(
   _orgId: string,
   staff: Promise<StaffMember[]>
-): Promise<AttentionItem[]> {
-  const [items, members] = await Promise.all([workspaceAttention(), staff])
+): Promise<Workspace> {
+  const [status, members] = await Promise.all([workspaceStatus(), staff])
   const names = namesOf(members)
-  return items.map((item) => toAttention(item, names))
+  return {
+    attention: status.attention.map((item) => toAttention(item, names)),
+    live: status.site.live?.version ?? null,
+    building: status.builds.some((build) => WORKING.has(build.state)),
+  }
 }
 
 /**
@@ -287,7 +314,7 @@ async function attention(
  * The directory is read only when there is an approval to name.
  */
 async function approvals(): Promise<ApprovalItem[]> {
-  const found = (await workspaceAttention()).filter(
+  const found = (await workspaceStatus()).attention.filter(
     (item) => item.kind === "approval"
   )
   if (found.length === 0) {
@@ -355,7 +382,7 @@ export const apiSource: OwnerDataSource = {
   },
   staff: staffOf,
   orgTree: async () => treeOf(await staffOf()),
-  attention,
+  workspace,
   approvals,
   pipeline: async () => [],
   activity,
