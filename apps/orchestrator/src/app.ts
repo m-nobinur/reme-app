@@ -1,11 +1,8 @@
 import {
   type ErrorEnvelope,
-  FactValue,
-  FactValueKey,
   GOAL_MAX,
   InformationAnswer,
   OWNER_BRIDGE_HEADERS,
-  OwnerAnswerText,
   PreviewClaim,
   type TaintLabel,
   Uuid,
@@ -53,6 +50,7 @@ import {
   rejectApproval,
   requestReview,
 } from "./publish.ts"
+import { answers } from "./question.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, probe } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
@@ -734,10 +732,11 @@ bridge.post("/:id/cancel", async (c) => {
  * Workflow is woken with the ids (architect ruling 8: fact, then event, then
  * signal). The Developer sees the fact record, never "the owner said".
  *
- * An owner's value is checked, never coerced: a `FactValue` key's answer must
- * parse as that key's value, anything else is a string of 1 to 500
- * characters (open item 70). The fact is verified by the org's root owner,
- * which is the caller only while an org has one member (open item 71).
+ * An owner's value is checked, never coerced, by `answers`: a `FactValue`
+ * key's value in that key's shape, anything else text that fits the
+ * question's schema and options (open item 70). The fact is verified by the
+ * org's root owner, which is the caller only while an org has one member
+ * (open item 71).
  */
 bridge.post("/:id/answer", async (c) => {
   const id = c.req.param("id")
@@ -756,7 +755,6 @@ bridge.post("/:id/answer", async (c) => {
   }
   const requestId = body.request_id
   const owner = byOwner(c)
-  const value = owner ? body.value : parseValue(body.value)
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [row] = await db
       .select()
@@ -775,7 +773,11 @@ bridge.post("/:id/answer", async (c) => {
       .limit(1)
     const field = request?.payload.field
     if (typeof field !== "string") return { no_request: true as const }
-    if (owner && !answers(field, value)) return { invalid: field }
+    // The console's text is read as JSON too, where that is what fits.
+    const question = { ...request?.payload, field }
+    const tried = owner ? [body.value] : [body.value, parseValue(body.value)]
+    const value = tried.find((v) => answers(question, v))
+    if (value === undefined) return { invalid: field }
     const [root] = owner
       ? await db
           .select({ id: staff.id })
@@ -904,14 +906,6 @@ bridge.post("/:id/steer", async (c) => {
   })
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })
-
-/** Whether an owner's value answers a question about `field`, as sent. */
-function answers(field: string, value: unknown): boolean {
-  if (FactValueKey.safeParse(field).success) {
-    return FactValue.safeParse({ key: field, value }).success
-  }
-  return OwnerAnswerText.safeParse(value).success
-}
 
 /** A console value: JSON when it parses, the text itself otherwise. */
 function parseValue(value: unknown): unknown {

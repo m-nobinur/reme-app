@@ -38,6 +38,12 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
+import {
+  ASK_CHIEF_DESCRIPTION,
+  AskChiefInput,
+  askedOptions,
+  refuseQuestion,
+} from "../question.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
@@ -421,21 +427,15 @@ Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
  * must take. Writes the request to the log, wakes the Workflow with its id,
  * and ends the turn; the answer arrives as the next message.
  */
-const askChief = (current: Session) =>
+export const askChief = (current: Session) =>
   defineTool({
     name: "ask_chief",
-    description:
-      "Ask the Chief of Staff for one canonical fact the site needs and does not have. Name the fact key (for example business.phone), why the site needs it, and the JSON Schema an answer must satisfy. This ends your turn; the answer comes back as a new message.",
-    input: toolInput(
-      InformationRequest.pick({
-        field: true,
-        why: true,
-        answer_schema: true,
-        options: true,
-        blocking: true,
-      })
-    ),
+    description: ASK_CHIEF_DESCRIPTION,
+    input: toolInput(AskChiefInput),
     async run({ data }) {
+      // Thrown, so the model reads why and asks again (open item 70).
+      const refusal = refuseQuestion(data)
+      if (refusal) throw new Error(refusal)
       const { spec } = current.runtime
       const request = InformationRequest.parse({
         request_id: crypto.randomUUID(),
@@ -445,7 +445,7 @@ const askChief = (current: Session) =>
         field: data.field,
         why: data.why,
         answer_schema: data.answer_schema,
-        options: data.options ?? null,
+        options: askedOptions(data),
         blocking: data.blocking,
         requested_at: new Date().toISOString(),
         expires_at: null,

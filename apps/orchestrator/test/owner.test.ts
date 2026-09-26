@@ -284,8 +284,8 @@ live("an owner starting a build", () => {
 })
 
 live("an owner answering a question", () => {
-  async function asked(field: string) {
-    const { orgId, ownerStaffId } = await ownerOrg(kit)
+  async function asked(field: string, question: Record<string, unknown> = {}) {
+    const { orgId, ownerStaffId, slug } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
     for (const to of [
       "briefing",
@@ -302,7 +302,7 @@ live("an owner answering a question", () => {
         assignmentId: ids.assignmentId,
         staffId: null,
         type: "information.requested",
-        payload: { request_id: requestId, field },
+        payload: { ...question, request_id: requestId, field },
       })
     )
     const answer = (value: unknown) =>
@@ -310,7 +310,20 @@ live("an owner answering a question", () => {
         request_id: requestId,
         value,
       })
-    return { orgId, ownerStaffId, answer }
+    const byConsole = (value: unknown) =>
+      consoleApp.request(
+        `/assignments/${ids.assignmentId}/answer?org=${slug}`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-token",
+            "idempotency-key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({ request_id: requestId, value }),
+        },
+        env
+      )
+    return { orgId, ownerStaffId, answer, byConsole }
   }
 
   const current = (orgId: string, key: string) =>
@@ -350,14 +363,65 @@ live("an owner answering a question", () => {
 
   it("takes any other key's value as 1 to 500 characters of text, uncoerced", async () => {
     const { orgId, answer } = await asked("business.parking")
-    for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501)]) {
+    for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501), "null"]) {
       expect((await answer(bad)).status).toBe(400)
     }
     // Text that looks like JSON is still the text the owner typed.
-    for (const text of ["Street parking", "[1,2]", "123", "null"]) {
+    for (const text of ["Street parking", "[1,2]", "123"]) {
       expect((await answer(text)).status).toBe(202)
       expect((await current(orgId, "business.parking"))?.value).toBe(text)
     }
+  })
+
+  it("holds the console to the same check, reading JSON only where it fits", async () => {
+    const { orgId, byConsole } = await asked("business.parking", {
+      answer_schema: { type: "string" },
+    })
+    for (const bad of ["null", "", "   "]) {
+      expect((await byConsole(bad)).status).toBe(400)
+    }
+    expect(await current(orgId, "business.parking")).toBeUndefined()
+    expect((await byConsole("123")).status).toBe(202)
+    expect((await current(orgId, "business.parking"))?.value).toBe("123")
+
+    const hours = await asked("hours.weekday")
+    expect((await hours.byConsole("null")).status).toBe(400)
+    expect(
+      (await hours.byConsole('{"open":"08:00","close":"18:00"}')).status
+    ).toBe(202)
+    expect(await current(hours.orgId, "hours.weekday")).toMatchObject({
+      value: { open: "08:00", close: "18:00" },
+    })
+  })
+
+  it("refuses a null answer to a question that offered null", async () => {
+    const { orgId, answer } = await asked("hours.saturday", {
+      answer_schema: { type: "object", required: ["open", "close"] },
+      options: ["null"],
+    })
+    const res = await answer("null")
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      class: "validation",
+      code: "answer.invalid",
+      detail: { field: "hours.saturday" },
+    })
+    expect(await current(orgId, "hours.saturday")).toBeUndefined()
+  })
+
+  it("holds a text question to its schema and its options", async () => {
+    const { orgId, answer } = await asked("business.bookings_email", {
+      answer_schema: { type: "string", format: "email" },
+      options: ["hello@brightclean.invalid", "book@brightclean.invalid"],
+    })
+    for (const bad of ["info@brightclean.invalid", "Decline", "null"]) {
+      expect((await answer(bad)).status).toBe(400)
+    }
+    expect(await current(orgId, "business.bookings_email")).toBeUndefined()
+    expect((await answer("book@brightclean.invalid")).status).toBe(202)
+    expect((await current(orgId, "business.bookings_email"))?.value).toBe(
+      "book@brightclean.invalid"
+    )
   })
 })
 

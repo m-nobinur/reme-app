@@ -89,6 +89,18 @@ const corpus: { name: string; zod: z.ZodType; inputs: unknown[] }[] = [
     ],
   },
   {
+    name: "capped list",
+    zod: z.strictObject({
+      options: z.array(z.string().min(1).max(3)).max(2).nullable(),
+    }),
+    inputs: [
+      { options: ["a", "b"] },
+      { options: ["a", "b", "c"] },
+      { options: ["abcd"] },
+      { options: null },
+    ],
+  },
+  {
     name: "edit",
     zod: BatchEdit,
     inputs: [
