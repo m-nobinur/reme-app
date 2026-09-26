@@ -39,8 +39,19 @@ const sheet = (page: Page) => page.locator('[data-slot="sheet-content"]')
 async function openSheet(page: Page, toggle: ReturnType<typeof railToggle>) {
   await toggle.click()
   await expect(sheet(page)).toBeVisible()
+  // Only animations that end: the panel's running step pulses for as long as
+  // the build runs, and waiting on it would wait forever.
   await page.evaluate(() =>
-    Promise.all(document.getAnimations().map((animation) => animation.finished))
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.effect?.getTiming().iterations !==
+            Number.POSITIVE_INFINITY
+        )
+        .map((animation) => animation.finished)
+    )
   )
 }
 
