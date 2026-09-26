@@ -304,4 +304,42 @@ describe("another org's conversation is 404 and never written to", () => {
       (await history(theirs, theirConversation.id)).map((m) => m.id)
     ).toEqual(["u_1"])
   })
+
+  it("takes no chat turn in it, of any kind", async () => {
+    const list = ConversationList.parse(
+      await (await theirs.call(stubOrchestrator(), "/conversations")).json()
+    )
+    const onboarding = list.conversations.find((c) => c.kind === "onboarding")
+    const theirId = onboarding?.id as string
+    const before = await history(theirs, theirId)
+    const tail = before.at(-1)
+    const call = tail?.content.parts[1] as { toolCallId: string }
+    for (const turn of [
+      { kind: "message", message_id: "u_cross", text: "Build it" },
+      {
+        kind: "answer",
+        message_id: tail?.id,
+        tool_call_id: call.toolCallId,
+        output: { answer: "skipped" },
+      },
+      {
+        kind: "approval",
+        message_id: tail?.id,
+        approval_id: call.toolCallId,
+        approved: true,
+      },
+    ]) {
+      const stub = stubOrchestrator()
+      const refused = await mine.call(stub, "/chat", {
+        method: "POST",
+        body: JSON.stringify({ conversation_id: theirId, mode: "act", turn }),
+      })
+      expect(refused.status, turn.kind).toBe(404)
+      expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
+        "conversation.not_found"
+      )
+      expect(stub.calls).toHaveLength(0)
+    }
+    expect(await history(theirs, theirId)).toEqual(before)
+  })
 })
