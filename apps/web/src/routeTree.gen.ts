@@ -20,17 +20,18 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppChatRouteImport } from './routes/app/chat'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as AppAccountRouteImport } from './routes/app/account'
+import { Route as AppConversationRouteImport } from './routes/app/_conversation'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
-import { Route as AppCIdRouteImport } from './routes/app/c.$id'
+import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
+import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -87,11 +88,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppStaffRoute = AppStaffRouteImport.update({
   id: '/staff',
   path: '/staff',
@@ -122,15 +118,19 @@ const AppAccountRoute = AppAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AppRoute,
 } as any)
+const AppConversationRoute = AppConversationRouteImport.update({
+  id: '/_conversation',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppCIdRoute = AppCIdRouteImport.update({
-  id: '/c/$id',
-  path: '/c/$id',
-  getParentRoute: () => AppRoute,
+const AppConversationIndexRoute = AppConversationIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppConversationRoute,
 } as any)
 const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   id: '/api/auth/social',
@@ -141,6 +141,11 @@ const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppConversationCIdRoute = AppConversationCIdRouteImport.update({
+  id: '/c/$id',
+  path: '/c/$id',
+  getParentRoute: () => AppConversationRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -162,13 +167,14 @@ export interface FileRoutesByFullPath {
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
-  '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/app/': typeof AppConversationIndexRoute
+  '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/app': typeof AppConversationIndexRoute
   '/choose-organisation': typeof ChooseOrganisationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
@@ -185,10 +191,9 @@ export interface FileRoutesByTo {
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
-  '/app': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -204,16 +209,17 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
+  '/app/_conversation': typeof AppConversationRouteWithChildren
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/chat': typeof AppChatRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
   '/app/staff': typeof AppStaffRoute
-  '/app/': typeof AppIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/app/_conversation/': typeof AppConversationIndexRoute
+  '/app/_conversation/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -236,13 +242,14 @@ export interface FileRouteTypes {
     | '/app/pipeline'
     | '/app/profile'
     | '/app/staff'
-    | '/app/'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/app/'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/app'
     | '/choose-organisation'
     | '/forgot-password'
     | '/mfa'
@@ -259,7 +266,6 @@ export interface FileRouteTypes {
     | '/app/pipeline'
     | '/app/profile'
     | '/app/staff'
-    | '/app'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/app/c/$id'
@@ -277,16 +283,17 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/verify-email'
     | '/api/chat'
+    | '/app/_conversation'
     | '/app/account'
     | '/app/approvals'
     | '/app/chat'
     | '/app/pipeline'
     | '/app/profile'
     | '/app/staff'
-    | '/app/'
     | '/api/auth/callback'
     | '/api/auth/social'
-    | '/app/c/$id'
+    | '/app/_conversation/'
+    | '/app/_conversation/c/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -385,13 +392,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/': {
-      id: '/app/'
-      path: '/'
-      fullPath: '/app/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/staff': {
       id: '/app/staff'
       path: '/staff'
@@ -434,6 +434,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/_conversation': {
+      id: '/app/_conversation'
+      path: ''
+      fullPath: '/app'
+      preLoaderRoute: typeof AppConversationRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -441,12 +448,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/c/$id': {
-      id: '/app/c/$id'
-      path: '/c/$id'
-      fullPath: '/app/c/$id'
-      preLoaderRoute: typeof AppCIdRouteImport
-      parentRoute: typeof AppRoute
+    '/app/_conversation/': {
+      id: '/app/_conversation/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppConversationIndexRouteImport
+      parentRoute: typeof AppConversationRoute
     }
     '/api/auth/social': {
       id: '/api/auth/social'
@@ -462,29 +469,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/_conversation/c/$id': {
+      id: '/app/_conversation/c/$id'
+      path: '/c/$id'
+      fullPath: '/app/c/$id'
+      preLoaderRoute: typeof AppConversationCIdRouteImport
+      parentRoute: typeof AppConversationRoute
+    }
   }
 }
 
+interface AppConversationRouteChildren {
+  AppConversationIndexRoute: typeof AppConversationIndexRoute
+  AppConversationCIdRoute: typeof AppConversationCIdRoute
+}
+
+const AppConversationRouteChildren: AppConversationRouteChildren = {
+  AppConversationIndexRoute: AppConversationIndexRoute,
+  AppConversationCIdRoute: AppConversationCIdRoute,
+}
+
+const AppConversationRouteWithChildren = AppConversationRoute._addFileChildren(
+  AppConversationRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppConversationRoute: typeof AppConversationRouteWithChildren
   AppAccountRoute: typeof AppAccountRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppChatRoute: typeof AppChatRoute
   AppPipelineRoute: typeof AppPipelineRoute
   AppProfileRoute: typeof AppProfileRoute
   AppStaffRoute: typeof AppStaffRoute
-  AppIndexRoute: typeof AppIndexRoute
-  AppCIdRoute: typeof AppCIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppConversationRoute: AppConversationRouteWithChildren,
   AppAccountRoute: AppAccountRoute,
   AppApprovalsRoute: AppApprovalsRoute,
   AppChatRoute: AppChatRoute,
   AppPipelineRoute: AppPipelineRoute,
   AppProfileRoute: AppProfileRoute,
   AppStaffRoute: AppStaffRoute,
-  AppIndexRoute: AppIndexRoute,
-  AppCIdRoute: AppCIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

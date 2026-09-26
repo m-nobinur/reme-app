@@ -2,14 +2,20 @@ import { getCookie } from "@tanstack/react-start/server"
 import {
   ActivityFeed,
   ApprovalDecision,
-  type AssignmentState,
   type AttentionItem as Attention,
+  Conversation,
+  ConversationHistory,
+  ConversationList,
   ErrorEnvelope,
   FactList,
   Org,
+  PreviewLink,
   StaffDirectory,
+  Uuid,
   WorkspaceStatus,
 } from "@workspace/contracts"
+import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { WORKING } from "../build-state"
 import { factLabel } from "../facts"
 import type {
   ActivityItem,
@@ -21,7 +27,10 @@ import type {
   OwnerDataSource,
   StaffMember,
   TransportedFact,
+  TransportedMessage,
   Workspace,
+  WorkspacePoll,
+  WriteOutcome,
 } from "./types"
 
 /**
@@ -74,14 +83,8 @@ function apiUrl(): string {
  * rather than a screen of zeros.
  */
 async function get(path: string): Promise<unknown | null> {
-  const session = getCookie(COOKIE)
-  if (!session) {
-    return null
-  }
-  const response = await fetch(new URL(path, apiUrl()), {
-    headers: { cookie: sessionCookie(session) },
-  })
-  if (response.status === 401 || response.status === 403) {
+  const response = await call(path)
+  if (!response || response.status === 401 || response.status === 403) {
     return null
   }
   if (!response.ok) {
@@ -93,25 +96,45 @@ async function get(path: string): Promise<unknown | null> {
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
+/**
+ * One request with the session forwarded, or null when there is no session.
+ * A body goes as JSON; an empty one sends no body at all.
+ */
+async function call(
+  path: string,
+  init: {
+    method?: string
+    body?: unknown
+    key?: string
+    etag?: string | null
+  } = {}
+): Promise<Response | null> {
+  const session = getCookie(COOKIE)
+  if (!session) {
+    return null
+  }
+  const headers: Record<string, string> = { cookie: sessionCookie(session) }
+  if (init.body !== undefined) headers["content-type"] = "application/json"
+  if (init.key) headers["idempotency-key"] = init.key
+  if (init.etag) headers["if-none-match"] = init.etag
+  return await fetch(new URL(path, apiUrl()), {
+    method: init.method ?? "GET",
+    headers,
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  })
+}
+
 /** One write. The caller reads the answer, since some refusals are the owner's to act on. */
 async function post(
   path: string,
   body: unknown,
-  idempotencyKey: string
+  idempotencyKey: string,
+  method = "POST"
 ): Promise<Response> {
-  const session = getCookie(COOKIE)
-  if (!session) {
+  const response = await call(path, { method, body, key: idempotencyKey })
+  if (!response) {
     throw new Error(`no session to send ${path} with`)
   }
-  const response = await fetch(new URL(path, apiUrl()), {
-    method: "POST",
-    headers: {
-      cookie: sessionCookie(session),
-      "content-type": "application/json",
-      "idempotency-key": idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  })
   return response
 }
 
@@ -218,24 +241,48 @@ const approvalTitle = (version: number) =>
  * offer buttons that do nothing, and `/workspace` lists none today. A session
  * with no organisation reads as a workspace with nothing in it.
  */
-async function workspaceStatus(): Promise<WorkspaceStatus> {
-  const body = await get("/workspace")
-  if (body === null) {
+async function workspaceStatus(
+  etag: string | null = null
+): Promise<{ status: WorkspaceStatus; etag: string | null } | "unchanged"> {
+  const response = await call("/workspace", { etag })
+  // 304 keeps what the caller has: nothing about the workspace changed.
+  if (response?.status === 304) {
+    return "unchanged"
+  }
+  if (!response || response.status === 401 || response.status === 403) {
     return {
-      site: { host: null, live: null },
-      builds: [],
-      attention: [],
-      missing_facts: [],
+      status: {
+        site: { host: null, live: null },
+        builds: [],
+        attention: [],
+        missing_facts: [],
+      },
+      etag: null,
     }
   }
-  const status = WorkspaceStatus.parse(body)
-  return {
-    ...status,
-    attention: status.attention.filter(
-      (item) =>
-        item.kind !== "approval" || item.request.target.kind === "revision"
-    ),
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /workspace`)
   }
+  const status = WorkspaceStatus.parse(await response.json())
+  return {
+    status: {
+      ...status,
+      attention: status.attention.filter(
+        (item) =>
+          item.kind !== "approval" || item.request.target.kind === "revision"
+      ),
+    },
+    etag: response.headers.get("etag"),
+  }
+}
+
+/** `workspaceStatus` for a caller with no tag, which always gets a body. */
+async function currentStatus(): Promise<WorkspaceStatus> {
+  const read = await workspaceStatus()
+  if (read === "unchanged") {
+    throw new Error("apps/api answered 304 to a read with no tag")
+  }
+  return read.status
 }
 
 const namesOf = (staff: StaffMember[]) =>
@@ -255,6 +302,7 @@ function toAttention(
         title: approvalTitle(item.version),
         detail: item.request.rationale,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedById: item.request.requested_by_staff_id,
         raisedAt: item.request.requested_at,
         expiresAt: item.request.expires_at,
         onExpiry: APPROVAL_EXPIRY,
@@ -262,10 +310,13 @@ function toAttention(
     case "question":
       return {
         kind: "question",
+        assignmentId: item.request.assignment_id,
+        answer: answerSpecOf(item.request),
         id: item.request.request_id,
         title: factLabel(item.request.field),
         detail: item.request.why,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
+        raisedById: item.request.requested_by_staff_id,
         raisedAt: item.request.requested_at,
         expiresAt: item.request.expires_at,
         onExpiry: item.request.blocking
@@ -278,6 +329,7 @@ function toAttention(
         id: item.event_id,
         ...logged(item),
         raisedBy: SYSTEM,
+        raisedById: null,
         raisedAt: item.at,
         expiresAt: null,
         onExpiry: "Nothing to decide.",
@@ -285,30 +337,40 @@ function toAttention(
   }
 }
 
-/** The states in which a build is doing work rather than waiting on someone. */
-const WORKING = new Set<AssignmentState>([
-  "queued",
-  "briefing",
-  "planning",
-  "implementing",
-  "validating",
-  "revising",
-  "repairing",
-  "release_candidate",
-])
-
-async function workspace(
-  _orgId: string,
-  staff: Promise<StaffMember[]>
-): Promise<Workspace> {
-  const [status, members] = await Promise.all([workspaceStatus(), staff])
-  const names = namesOf(members)
+function workspaceOf(
+  { status, etag }: { status: WorkspaceStatus; etag: string | null },
+  names: Map<string, string>
+): Workspace {
   return {
     attention: status.attention.map((item) => toAttention(item, names)),
     live: status.site.live?.version ?? null,
     building: status.builds.some((build) => WORKING.has(build.state)),
     open: status.builds.length > 0,
+    builds: status.builds,
+    host: status.site.host,
+    missingFacts: status.missing_facts,
+    etag,
   }
+}
+
+async function workspace(
+  _orgId: string,
+  staff: Promise<StaffMember[]>
+): Promise<Workspace> {
+  const [read, members] = await Promise.all([workspaceStatus(), staff])
+  if (read === "unchanged") {
+    throw new Error("apps/api answered 304 to a read with no tag")
+  }
+  return workspaceOf(read, namesOf(members))
+}
+
+/**
+ * The panel's poll: one request, and unchanged is the common answer, with no
+ * body. It names no one; the frame already read the directory.
+ */
+async function pollWorkspace(etag: string | null): Promise<WorkspacePoll> {
+  const read = await workspaceStatus(etag)
+  return read === "unchanged" ? read : workspaceOf(read, new Map())
 }
 
 /**
@@ -316,7 +378,7 @@ async function workspace(
  * The directory is read only when there is an approval to name.
  */
 async function approvals(): Promise<ApprovalItem[]> {
-  const found = (await workspaceStatus()).attention.filter(
+  const found = (await currentStatus()).attention.filter(
     (item) => item.kind === "approval"
   )
   if (found.length === 0) {
@@ -356,6 +418,171 @@ const REFUSED: Record<
   "assignment.not_found": "gone",
 }
 
+/**
+ * The refusals an owner can act on from the panel, in their words. Any other
+ * 4xx is a stale screen; a 5xx is a defect and throws.
+ */
+const REFUSALS: Record<string, string> = {
+  "answer.invalid":
+    "That answer does not fit the question. Check it and send it again.",
+  "answer.already_given":
+    "That question was already answered, so this answer was not recorded.",
+  "change.question_open":
+    "Answer the question waiting on you first, then ask again.",
+  "change.build_busy":
+    "A build is finishing. Ask again once it is ready for you.",
+}
+const STALE = "That has changed since this page loaded. Look again and retry."
+
+/** Refusals that mean the item no longer waits on the owner. */
+const GONE = new Set(["answer.already_given"])
+
+/** A write's answer as an outcome. */
+async function outcome(
+  response: Response,
+  path: string
+): Promise<WriteOutcome> {
+  if (response.ok) {
+    return { done: true }
+  }
+  const refusal = ErrorEnvelope.safeParse(
+    await response.json().catch(() => null)
+  )
+  const code = refusal.success ? refusal.data.code : ""
+  if (response.status >= 400 && response.status < 500 && refusal.success) {
+    const reason = REFUSALS[code] ?? STALE
+    return GONE.has(code)
+      ? { done: false, reason, gone: true }
+      : { done: false, reason }
+  }
+  throw new Error(`apps/api answered ${response.status} for ${path}`)
+}
+
+/**
+ * An id as a path segment. Only a UUID: `new URL` collapses `.` and `..`,
+ * so anything else could reach a different route.
+ */
+function segment(id: string): string {
+  if (!Uuid.safeParse(id).success) {
+    throw new Error("Expected a UUID for a path segment.")
+  }
+  return id
+}
+
+async function answer(
+  _orgId: string,
+  assignmentId: string,
+  requestId: string,
+  value: unknown,
+  key: string
+): Promise<WriteOutcome> {
+  const path = `/builds/${segment(assignmentId)}/answer`
+  const response = await post(path, { request_id: requestId, value }, key)
+  // The same answer again is a retry and gets its receipt (202). A 409
+  // `answer.already_given` means a different answer is on record, so this
+  // one was not recorded.
+  return await outcome(response, path)
+}
+
+async function cancelBuild(
+  _orgId: string,
+  assignmentId: string
+): Promise<WriteOutcome> {
+  const path = `/builds/${segment(assignmentId)}/cancel`
+  // One build is stopped once: a second press is the same request.
+  return await outcome(
+    await post(path, undefined, `cancel:${assignmentId}`),
+    path
+  )
+}
+
+async function preview(
+  _orgId: string,
+  assignmentId: string
+): Promise<{ url: string; screenshots: string[] } | null> {
+  const body = await get(`/builds/${segment(assignmentId)}/preview`)
+  if (body === null) {
+    return null
+  }
+  const link = PreviewLink.parse(body)
+  return { url: link.url, screenshots: link.screenshots }
+}
+
+async function requestChange(
+  _orgId: string,
+  text: string,
+  key: string
+): Promise<WriteOutcome> {
+  return await outcome(await post("/changes", { text }, key), "/changes")
+}
+
+async function conversations(): Promise<Conversation[]> {
+  const body = await get("/conversations")
+  return body === null ? [] : ConversationList.parse(body).conversations
+}
+
+async function conversation(
+  _orgId: string,
+  id: string
+): Promise<Conversation | null> {
+  const response = await call(`/conversations/${segment(id)}`)
+  // Another org's id is a 404, the same as one that never existed.
+  if (!response || [401, 403, 404].includes(response.status)) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for a conversation`)
+  }
+  return Conversation.parse(await response.json())
+}
+
+async function createConversation(
+  _orgId: string,
+  key: string
+): Promise<Conversation> {
+  const response = await post("/conversations", undefined, key)
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /conversations`)
+  }
+  return Conversation.parse(await response.json())
+}
+
+async function updateConversation(
+  _orgId: string,
+  id: string,
+  patch: { title: string } | { archived: boolean },
+  key: string
+): Promise<void> {
+  const response = await post(
+    `/conversations/${segment(id)}`,
+    patch,
+    key,
+    "PATCH"
+  )
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for a conversation`)
+  }
+}
+
+async function conversationMessages(
+  _orgId: string,
+  id: string
+): Promise<TransportedMessage[]> {
+  const response = await call(`/conversations/${segment(id)}/messages`)
+  // Another org's id is a 404, the same as one that never existed: no
+  // history to show.
+  if (!response || [401, 403, 404].includes(response.status)) {
+    return []
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for a history`)
+  }
+  // Parsed first, so every field is the contract's; parts are JSON because
+  // they arrived as JSON.
+  return ConversationHistory.parse(await response.json())
+    .messages as TransportedMessage[]
+}
+
 async function activity(): Promise<ActivityItem[]> {
   const body = await get("/activity")
   if (body === null) {
@@ -392,8 +619,18 @@ export const apiSource: OwnerDataSource = {
     const [org, facts] = await Promise.all([currentOrg(), factsOf()])
     return org ? { org, facts } : null
   },
+  pollWorkspace,
+  answer,
+  cancelBuild,
+  preview,
+  requestChange,
+  conversations,
+  conversation,
+  createConversation,
+  updateConversation,
+  conversationMessages,
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {
-    const path = `/approvals/${encodeURIComponent(approvalId)}/decision`
+    const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(
       path,
       { decision, revision_id: revisionId },

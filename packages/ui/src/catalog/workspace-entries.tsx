@@ -30,6 +30,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { type ReactNode, useState } from "react"
+import { SamplePanel } from "./panel-entries"
 
 /**
  * Catalog entries for the owner workspace frame. The shell renders at a fixed
@@ -95,37 +96,11 @@ function Rail() {
   )
 }
 
-function Panel() {
-  return (
-    <section aria-labelledby="catalog-panel-waiting">
-      <h2 className="mb-2 font-medium text-base" id="catalog-panel-waiting">
-        Waiting on you
-      </h2>
-      <ul className="flex flex-col divide-y divide-border">
-        <li className="py-2">
-          <a className="text-sm underline-offset-4 hover:underline" href="#v4">
-            Approve and publish version 4
-          </a>
-          <p className="text-[0.8125rem] text-muted-foreground">
-            Approval, expires 3 Oct 2026
-          </p>
-        </li>
-        <li className="py-2">
-          <p className="text-sm">What are your Saturday hours?</p>
-          <p className="text-[0.8125rem] text-muted-foreground">
-            Question, expires 4 Oct 2026
-          </p>
-        </li>
-      </ul>
-    </section>
-  )
-}
-
 function ShellSample() {
   return (
     <WorkspaceShell
       className="h-[40rem] border border-border"
-      panel={<Panel />}
+      panel={<SamplePanel />}
       panelCount={2}
       rail={<Rail />}
     >

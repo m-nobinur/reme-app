@@ -1,5 +1,6 @@
 import { expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
+import { EMPTY_WORKSPACE } from "./attention"
 import { briefingOf } from "./briefing"
 
 const ORG = { id: "org_a", slug: "fixture-clean", name: "Fixture Clean" }
@@ -10,10 +11,7 @@ const approval = (version: number) =>
   ({ kind: "approval", id: `v${version}`, version }) as unknown as AttentionItem
 
 const workspace = (over: Partial<Workspace> = {}): Workspace => ({
-  attention: [],
-  live: null,
-  building: false,
-  open: false,
+  ...EMPTY_WORKSPACE,
   ...over,
 })
 

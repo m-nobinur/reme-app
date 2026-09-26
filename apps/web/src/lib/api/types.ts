@@ -1,8 +1,14 @@
 import type {
   ApprovalRequest,
+  BuildSummary,
+  Conversation,
+  ConversationMessage,
+  ConversationPatch,
   DecisionRequest,
   FactRecord,
+  FactValueKey,
 } from "@workspace/contracts"
+import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
 /**
  * What the owner screens read, and the one interface behind them.
@@ -58,6 +64,11 @@ type AttentionBase = {
   detail: string
   /** Display name of the staff member who raised it. */
   raisedBy: string
+  /**
+   * The staff row that raised it, for a reader that holds the directory: a
+   * poll names no one, so the panel names the asker from the frame's read.
+   */
+  raisedById: string | null
   raisedAt: string
   /** Absent only where nothing expires. Every other item carries one (§13). */
   expiresAt: string | null
@@ -66,7 +77,14 @@ type AttentionBase = {
 }
 
 export type AttentionItem =
-  | (AttentionBase & { kind: "question" | "report" | "alert" })
+  | (AttentionBase & { kind: "report" | "alert" })
+  // A question carries what answering it needs: the build it blocks, and the
+  // inputs, derived on the server so the raw `answer_schema` never travels.
+  | (AttentionBase & {
+      kind: "question"
+      assignmentId: string
+      answer: AnswerSpec
+    })
   // The approval carries its contract, because the immutable target is drawn
   // from it and a loosened copy could name a different one.
   | (AttentionBase & {
@@ -85,6 +103,40 @@ export type Workspace = {
   building: boolean
   /** Any build is unfinished, working or not: another must not be offered. */
   open: boolean
+  /** Unfinished builds, newest first, as `/workspace` lists them. */
+  builds: BuildSummary[]
+  /** The site's host, once it has one. */
+  host: string | null
+  /** The required facts still to ask for. */
+  missingFacts: FactValueKey[]
+  /** `/workspace`'s tag, sent back on the next poll; null when nothing was read. */
+  etag: string | null
+}
+
+/** A poll's answer: the workspace, or that it has not changed since `etag`. */
+export type WorkspacePoll = Workspace | "unchanged"
+
+/** A signed preview of one revision: the page and its three screenshots. */
+export type PreviewLinks = { url: string; screenshots: string[] }
+
+/**
+ * What became of an owner's write. A refusal the owner can act on comes
+ * back with the words to show; anything else throws.
+ */
+export type WriteOutcome =
+  | { done: true }
+  // `gone`: what the owner acted on no longer waits on them (a different
+  // answer is on record, say), so the screen reads the workspace again.
+  | { done: false; reason: string; gone?: true }
+
+/**
+ * A stored message on its way to the browser. Parts are the AI SDK's and
+ * open-ended, so they travel as JSON, the way `TransportedFact` does.
+ */
+export type TransportedMessage = Omit<ConversationMessage, "content"> & {
+  content: Omit<ConversationMessage["content"], "parts"> & {
+    parts: ({ type: string } & { [key: string]: Json })[]
+  }
 }
 
 /** An approval as the inbox renders it: the contract, plus who to name. */
@@ -201,4 +253,38 @@ export type OwnerDataSource = {
     revisionId: string,
     decision: DecisionRequest["decision"]
   ) => Promise<DecisionOutcome>
+  /**
+   * `/workspace` again, or "unchanged" when it still matches `etag`. One
+   * request: the api reads the org from the session, and nothing is named.
+   */
+  pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
+  answer: (
+    orgId: string,
+    assignmentId: string,
+    requestId: string,
+    value: unknown,
+    key: string
+  ) => Promise<WriteOutcome>
+  cancelBuild: (orgId: string, assignmentId: string) => Promise<WriteOutcome>
+  preview: (orgId: string, assignmentId: string) => Promise<PreviewLinks | null>
+  /** What the owner wants changed, in their words; the api routes it. */
+  requestChange: (
+    orgId: string,
+    text: string,
+    key: string
+  ) => Promise<WriteOutcome>
+  conversations: (orgId: string) => Promise<Conversation[]>
+  conversation: (orgId: string, id: string) => Promise<Conversation | null>
+  /** Idempotent on `key`, the thread's local id: a retry returns the same row. */
+  createConversation: (orgId: string, key: string) => Promise<Conversation>
+  updateConversation: (
+    orgId: string,
+    id: string,
+    patch: ConversationPatch,
+    key: string
+  ) => Promise<void>
+  conversationMessages: (
+    orgId: string,
+    id: string
+  ) => Promise<TransportedMessage[]>
 }

@@ -36,7 +36,7 @@ function ApprovalTargetSummary({
       )}
       {...props}
     >
-      <span className="uppercase tracking-wide">{label}</span>
+      <span>{label}</span>
       <p
         className={cn(
           "mt-0.5 break-words text-foreground text-sm",

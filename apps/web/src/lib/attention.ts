@@ -1,5 +1,17 @@
 import type { AttentionItem, Workspace } from "./api/types"
 
+/** The workspace of a session with no organisation: nothing, and no tag. */
+export const EMPTY_WORKSPACE: Workspace = {
+  attention: [],
+  live: null,
+  building: false,
+  open: false,
+  builds: [],
+  host: null,
+  missingFacts: [],
+  etag: null,
+}
+
 /** What "Waiting on you" lists: reports and alerts are there to read, not answer. */
 export const waitingOnOwner = (items: AttentionItem[]): AttentionItem[] =>
   items.filter((item) => item.kind === "approval" || item.kind === "question")

@@ -9,19 +9,8 @@ import { ListFilter } from "@workspace/ui/components/list-filter"
 import { useState } from "react"
 import { decideApproval, getApprovals } from "@/lib/api/server"
 import type { ApprovalItem, DecisionOutcome } from "@/lib/api/types"
+import { DECISION_REFUSED } from "@/lib/decision"
 import { validateListSearch } from "@/lib/search"
-
-/** Why a decision was refused, in the owner's words. */
-const REFUSED: Record<
-  Exclude<DecisionOutcome, { recorded: true }>["reason"],
-  string
-> = {
-  expired:
-    "That review expired before your answer reached it, so nothing was published.",
-  replaced:
-    "A newer version replaced that one. Check the latest before you decide.",
-  gone: "That is no longer waiting on you. It was already decided, or the build stopped.",
-}
 
 export const Route = createFileRoute("/app/approvals")({
   validateSearch: validateListSearch,
@@ -60,7 +49,7 @@ function Approvals() {
         return
       }
       if (!outcome.recorded) {
-        setNotice(REFUSED[outcome.reason])
+        setNotice(DECISION_REFUSED[outcome.reason])
       }
       // Recorded or refused, the card on screen is stale either way.
       try {
