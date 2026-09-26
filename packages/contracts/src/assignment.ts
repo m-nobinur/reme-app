@@ -63,8 +63,18 @@ export const InformationRequest = z.strictObject({
   /** The canonical fact key this request would fill. */
   field: z.string().min(1),
   why: z.string().min(1),
-  /** JSON Schema the answer must satisfy, so answers validate before storage. */
+  /**
+   * JSON Schema the answer must satisfy, so answers validate before storage.
+   * For a `FactValueKey` field the answer is checked against `FactValue`;
+   * for any other field the Developer sends a `TextAnswerSchema`. Kept a
+   * `JsonObject` so requests raised before that rule still parse.
+   */
   answer_schema: JsonObject,
+  /**
+   * A closed list: literal values the owner picks exactly as written, never
+   * instructions to the owner. Null unless the answer is a choice among
+   * known values, and always null for a `FactValueKey` field.
+   */
   options: z.array(z.string().min(1)).nullable(),
   blocking: z.boolean(),
   requested_at: Timestamp,

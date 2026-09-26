@@ -20,6 +20,7 @@ import {
   OwnerChangeRequest,
   PreviewLink,
   SetFactsRequest,
+  TextAnswerSchema,
   WorkspaceStatus,
 } from "./owner.ts"
 import { CompletionReport, ProgressEvent, ValidationReport } from "./report.ts"
@@ -73,6 +74,7 @@ export const contracts = {
   SiteRevision,
   StaffDirectory,
   StaffMember,
+  TextAnswerSchema,
   ValidationReport,
   WorkspaceStatus,
 } as const

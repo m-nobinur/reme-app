@@ -10,6 +10,7 @@ import {
   OwnerChangeRequest,
   PreviewLink,
   SetFactsRequest,
+  TextAnswerSchema,
   WorkspaceStatus,
 } from "../src/owner.ts"
 import { ajv, generated } from "./json-schema.ts"
@@ -259,6 +260,32 @@ describe("the bridge's building blocks", () => {
     expect(OwnerAnswerText.safeParse("x".repeat(500)).success).toBe(true)
     for (const bad of ["", "   ", "x".repeat(501), 123]) {
       expect(OwnerAnswerText.safeParse(bad).success).toBe(false)
+    }
+  })
+
+  it("takes a text answer schema of type, length and email format only", () => {
+    const check = (value: unknown) =>
+      verdict("TextAnswerSchema", TextAnswerSchema, value)
+    for (const good of [
+      { type: "string" },
+      { type: "string", maxLength: 1 },
+      { type: "string", maxLength: 500, format: "email" },
+    ]) {
+      expect(check(good)).toEqual(ACCEPTED)
+    }
+    for (const bad of [
+      {},
+      { type: "object", properties: { email: { type: "string" } } },
+      { type: "string", maxLength: 0 },
+      { type: "string", maxLength: 501 },
+      { type: "string", maxLength: 1.5 },
+      { type: "string", format: "uri" },
+      // A model-written regex is a ReDoS risk; options cover enums.
+      { type: "string", pattern: "^(a+)+$" },
+      { type: "string", enum: ["Yes", "No"] },
+      { type: "string", minLength: 1 },
+    ]) {
+      expect(check(bad)).toEqual(REFUSED)
     }
   })
 

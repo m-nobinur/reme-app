@@ -489,6 +489,7 @@ export const samples: Record<ContractName, unknown> = {
     ],
     missing_facts: ["business.email"],
   },
+  TextAnswerSchema: { type: "string", maxLength: 254, format: "email" },
   ValidationReport: {
     report_id: "f8091a2b-3c4d-4809-8acb-556677889900",
     org_id: ORG,
