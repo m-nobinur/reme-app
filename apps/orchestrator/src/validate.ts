@@ -108,16 +108,16 @@ export type Verdict =
  * from the log, so re-running gives the same answer. A pass moves the
  * assignment to `preview_ready`; a failure moves it through `repairing` back to
  * `implementing` for the Developer to fix, and once the repair budget is spent
- * the failure ends in `failed`. Each outcome is one transaction. With the
- * environment's host suffix, the site's own host is not read as copy; without
- * it, it is.
+ * the failure ends in `failed`. Each outcome is one transaction. The site's
+ * own host, from the org's slug and the environment's host suffix, is not
+ * read as copy; a suffix that is missing or malformed throws.
  */
 export async function validateRevision(
   kit: Tenancy,
   sites: Artifacts,
   ids: Ids,
   input: { report_id: string; revision_id: string },
-  hostSuffix?: string
+  hostSuffix: string
 ): Promise<Verdict> {
   const loaded = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [row] = await db
@@ -181,7 +181,7 @@ export async function validateRevision(
     },
     report,
     facts: factsUsed,
-    hosts: slug && hostSuffix ? [siteHost(slug, hostSuffix)] : [],
+    hosts: [siteHost(slug ?? "", hostSuffix)],
   })
 
   const gates: GateResult[] = []
