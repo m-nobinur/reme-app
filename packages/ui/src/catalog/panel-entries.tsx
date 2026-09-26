@@ -133,6 +133,14 @@ const panelCatalog: Entry[] = [
       }),
   },
   {
+    name: "WorkingOn confirming",
+    render: () => working("implementing", { defaultConfirming: true }),
+  },
+  {
+    name: "WorkingOn stopping",
+    render: () => working("implementing", { stopping: true }),
+  },
+  {
     name: "WorkingOn error",
     render: () =>
       working("implementing", {
@@ -195,6 +203,14 @@ const panelCatalog: Entry[] = [
     render: () => approval({ pending: "approve" }),
   },
   {
+    name: "ApprovalItem asking",
+    render: () => approval({ defaultAsking: true }),
+  },
+  {
+    name: "ApprovalItem change pending",
+    render: () => approval({ pending: "change" }),
+  },
+  {
     name: "ApprovalItem error",
     render: () =>
       approval({
@@ -254,6 +270,7 @@ const panelCatalog: Entry[] = [
     name: "PanelBlank",
     render: () => (
       <PanelBlank
+        description="Tell Reme about your business in the chat, then ask it to build your website."
         steps={[
           { label: "Business name", done: true },
           { label: "Phone number", done: false },

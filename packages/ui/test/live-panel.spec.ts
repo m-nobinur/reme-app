@@ -170,3 +170,33 @@ test.describe("with reduced motion", () => {
     ).toBe("none")
   })
 })
+
+test("hours that close before they open are refused in place", async ({
+  page,
+}) => {
+  await open(page, "QuestionItem")
+  await page.getByLabel("Opening time").fill("17:00")
+  await page.getByLabel("Closing time").fill("08:00")
+  await page.getByRole("button", { name: "Send answer" }).click()
+  await expect(page.getByRole("alert")).toHaveText(
+    "Closing time has to be after opening time."
+  )
+})
+
+test("a Stop in flight keeps the question up, with its buttons disabled", async ({
+  page,
+}) => {
+  await open(page, "WorkingOn stopping", 400)
+  await expect(page.getByRole("button", { name: "Stopping" })).toBeDisabled()
+  await expect(
+    page.getByRole("button", { name: "Keep building" })
+  ).toBeDisabled()
+})
+
+test("a change in flight keeps its note up", async ({ page }) => {
+  await open(page, "ApprovalItem change pending", 400)
+  await expect(page.getByLabel("What should change?")).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Sending" })).toBeDisabled()
+  // Nothing on the page took focus on its own.
+  await expect(page.locator("body")).toBeFocused()
+})

@@ -114,6 +114,9 @@ for (const theme of ["light", "dark"] as const) {
   test(`catalog has no accessibility violations in ${theme}`, async ({
     page,
   }) => {
+    // One axe run per entry: with the live panel's states the catalog took
+    // 25 to 30 s on a loaded machine, against the 30 s default.
+    test.setTimeout(90_000)
     await page.goto(`/?theme=${theme}`)
 
     for (const name of await entryNames(page)) {

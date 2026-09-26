@@ -164,6 +164,7 @@ function WorkingOn({
   onStop,
   stopping = false,
   error = null,
+  defaultConfirming = false,
 }: {
   build: {
     goal: string
@@ -179,19 +180,26 @@ function WorkingOn({
   onStop?: () => void
   stopping?: boolean
   error?: string | null
+  /** Open on the Stop question, for the catalog. */
+  defaultConfirming?: boolean
 }) {
   const stage = STAGE[build.state]
   const elapsed = useElapsed(build.startedAt, now)
   // "asking" once Stop is pressed, "kept" once the owner keeps building.
-  const [ask, setStop] = useState<"idle" | "asking" | "kept">("idle")
+  // A Stop in flight keeps the question on screen, with its buttons
+  // disabled, until the build is read again.
+  const [asked, setAsked] = useState(defaultConfirming)
+  const confirming = asked || stopping
   const keep = useRef<HTMLButtonElement>(null)
   const stop = useRef<HTMLButtonElement>(null)
-  // Focus follows the question: to "Keep building" when it is asked, and
-  // back to Stop when the owner keeps building, never on first render.
+  // Focus follows the owner's press: to "Keep building" when Stop asks, and
+  // back to Stop when they keep building. Never on a render nobody caused.
+  const moveFocus = useRef<"keep" | "stop" | null>(null)
   useEffect(() => {
-    if (ask === "asking") keep.current?.focus()
-    if (ask === "kept") stop.current?.focus()
-  }, [ask])
+    if (asked && moveFocus.current === "keep") keep.current?.focus()
+    if (!asked && moveFocus.current === "stop") stop.current?.focus()
+    moveFocus.current = null
+  }, [asked])
 
   const long = elapsed !== null && elapsed > typical.max * 1000
   const usually = `Builds usually take ${Math.round(typical.min / 60)} to ${Math.round(typical.max / 60)} minutes.`
@@ -244,7 +252,7 @@ function WorkingOn({
           {long ? "This one is taking longer than usual." : usually}
         </p>
         {onStop && STOPPABLE(build.state) ? (
-          ask === "asking" ? (
+          confirming ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={stopping}
@@ -256,7 +264,10 @@ function WorkingOn({
               </Button>
               <Button
                 disabled={stopping}
-                onClick={() => setStop("kept")}
+                onClick={() => {
+                  moveFocus.current = "stop"
+                  setAsked(false)
+                }}
                 ref={keep}
                 size="sm"
                 variant="ghost"
@@ -267,7 +278,10 @@ function WorkingOn({
           ) : (
             <Button
               className="self-start"
-              onClick={() => setStop("asking")}
+              onClick={() => {
+                moveFocus.current = "keep"
+                setAsked(true)
+              }}
               ref={stop}
               size="sm"
               variant="outline"
@@ -384,8 +398,9 @@ function AnswerInputs({
   title: string
   invalid: boolean
 }) {
-  // The closing time cannot be before the opening one; `FactValue` leaves
-  // that to this input's `min`.
+  // `min` steers the closing time's picker. The form is `noValidate`, so it
+  // blocks nothing: `answerValue` refuses a closing time that is not after
+  // the opening one, and the error shows in place.
   const [opens, setOpens] = useState<string | undefined>(undefined)
 
   if (spec.kind === "choice") {
@@ -598,6 +613,7 @@ function ApprovalItem({
   onAskForChanges,
   pending: busy = null,
   error = null,
+  defaultAsking = false,
 }: {
   target: ApprovalTarget
   version: number
@@ -609,14 +625,21 @@ function ApprovalItem({
   onAskForChanges: (text: string) => void
   pending?: "approve" | "change" | null
   error?: string | null
+  /** Open on the change note, for the catalog. */
+  defaultAsking?: boolean
 }) {
   const id = useId()
   const decision = approvalDecision(target, "approved")
-  const [asking, setAsking] = useState(false)
+  const [opened, setOpened] = useState(defaultAsking)
+  // A change in flight keeps its note on screen until the build is read
+  // again.
+  const asking = opened || busy === "change"
   const note = useRef<HTMLTextAreaElement>(null)
+  const pressed = useRef(false)
   useEffect(() => {
-    if (asking) note.current?.focus()
-  }, [asking])
+    if (opened && pressed.current) note.current?.focus()
+    pressed.current = false
+  }, [opened])
 
   const send = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -663,7 +686,10 @@ function ApprovalItem({
         <Button
           aria-expanded={asking}
           disabled={busy !== null}
-          onClick={() => setAsking(!asking)}
+          onClick={() => {
+            pressed.current = true
+            setOpened(!opened)
+          }}
           size="sm"
           variant="outline"
         >
@@ -749,13 +775,17 @@ function YourWebsite({
  * and the build it leads to. Each step is ticked from the workspace, never
  * from what the owner has clicked.
  */
-function PanelBlank({ steps }: { steps: { label: string; done: boolean }[] }) {
+function PanelBlank({
+  steps,
+  description,
+}: {
+  steps: { label: string; done: boolean }[]
+  /** What to do next, in the words of the steps below it. */
+  description: string
+}) {
   return (
     <PanelSection title="First steps">
-      <p className={META}>
-        Tell Reme about your business in the chat, then ask it to build your
-        website.
-      </p>
+      <p className={META}>{description}</p>
       <ul className="flex flex-col gap-1">
         {steps.map((step) => (
           <li className="flex items-center gap-2 text-sm" key={step.label}>

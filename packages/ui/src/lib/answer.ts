@@ -35,7 +35,11 @@ export type FactInput = {
  * recognise goes through unchanged, and `FactValue` refuses it.
  */
 function toE164(raw: string): string {
-  const digits = raw.replace(/[\s().-]/g, "")
+  // "+44 (0)7700 900123": the bracketed trunk zero is dropped after a
+  // country code, or it would land inside the number.
+  const digits = raw
+    .replace(/^(\s*(?:\+|00)\d{1,3})\s*\(0\)/, "$1")
+    .replace(/[\s().-]/g, "")
   if (digits.startsWith("+")) return digits
   if (digits.startsWith("00")) return `+${digits.slice(2)}`
   if (digits.startsWith("0")) return `+44${digits.slice(1)}`
@@ -195,6 +199,15 @@ export function answerValue(
     ...("fixed" in rest ? rest.fixed : {}),
   }
   const parsed = FactValue.safeParse({ key: spec.key, value })
+  // `FactValue` leaves the order of the hours to the form. `HH:MM` compares
+  // as text.
+  if (
+    parsed.success &&
+    parsed.data.key === "hours.weekday" &&
+    parsed.data.value.close <= parsed.data.value.open
+  ) {
+    return { error: "Closing time has to be after opening time." }
+  }
   if (parsed.success) return { value }
   const name = parsed.error.issues[0]?.path[1]
   const field = fields.find((each: FactInput) => each.name === name)
