@@ -1,5 +1,16 @@
-import { ListIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
+import {
+  DotsThreeIcon,
+  ListIcon,
+  NotePencilIcon,
+  SidebarSimpleIcon,
+} from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLinkItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -11,6 +22,7 @@ import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   type MouseEvent,
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -62,18 +74,24 @@ function useCloseAt(query: string, close: () => void) {
  * sheet from the right. Both toggles sit top right. `panelCount` is what the
  * panel is waiting on the owner for; the phone toggle shows it, because there
  * the panel is out of sight. The rail and the panel are slots, so this package
- * still imports no router.
+ * still imports no router. `title` and `menu` name the page in the top bar,
+ * which on a phone is the only place it is named above the fold.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelCount = 0,
   defaultPanelOpen = true,
+  title,
+  menu,
   children,
   className,
 }: {
   rail: ReactNode
   panel: ReactNode
+  title?: string | undefined
+  /** The page's ··· menu, drawn beside the title. */
+  menu?: ReactNode
   panelCount?: number
   defaultPanelOpen?: boolean
   children: ReactNode
@@ -131,7 +149,7 @@ function WorkspaceShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-end gap-1 px-2">
+        <header className="flex h-12 shrink-0 items-center gap-1 px-2">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -155,6 +173,18 @@ function WorkspaceShell({
               </div>
             </SheetContent>
           </Sheet>
+
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-2">
+            {title ? (
+              <p
+                className="truncate font-medium text-sm"
+                data-slot="workspace-title"
+              >
+                {title}
+              </p>
+            ) : null}
+            {menu}
+          </div>
 
           <Button
             aria-controls="workspace-panel"
@@ -245,4 +275,34 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-export { WorkspacePage, WorkspaceShell }
+/**
+ * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
+ * link element to render the entry as, so the app passes its router's link
+ * and this package still imports no router. Rename and archive join it once
+ * conversations are stored.
+ */
+function ConversationMenu({ newChat }: { newChat: ReactElement }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Conversation actions"
+            size="icon-sm"
+            variant="ghost"
+          />
+        }
+      >
+        <DotsThreeIcon aria-hidden weight="bold" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuLinkItem render={newChat}>
+          <NotePencilIcon aria-hidden />
+          New chat
+        </DropdownMenuLinkItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export { ConversationMenu, WorkspacePage, WorkspaceShell }

@@ -84,7 +84,10 @@ declare module "@tanstack/react-router" {
     chat?: string
   }
   interface StaticDataRouteOption {
-    /** The route is the conversation, which takes the full height. */
-    conversation?: boolean
+    /**
+     * The route is the conversation, which takes the full height; the value is
+     * the top bar's title for it.
+     */
+    conversation?: string
   }
 }

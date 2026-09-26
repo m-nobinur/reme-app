@@ -24,6 +24,7 @@ import {
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
+  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -52,18 +53,32 @@ const NAV = [
 ] as const
 
 function AppLayout() {
-  const { owner, orgs, active, panelOpen, waiting } = Route.useLoaderData()
+  const { owner, orgs, active, panelOpen, workspace } = Route.useLoaderData()
+  const waiting = workspace?.attention ?? null
   // The conversation owns its height and scroll; every other page is padded.
+  // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
-    select: (matches) => matches.some((match) => match.staticData.conversation),
+    select: (matches) =>
+      matches.find((match) => match.staticData.conversation)?.staticData
+        .conversation,
   })
   const router = useRouter()
 
   return (
     <WorkspaceShell
       defaultPanelOpen={panelOpen}
+      menu={
+        conversation ? (
+          <ConversationMenu
+            newChat={
+              <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
+            }
+          />
+        ) : undefined
+      }
       panel={<Waiting items={waiting} />}
       panelCount={waiting?.length ?? 0}
+      title={conversation}
       rail={
         <>
           <OrgSwitcher

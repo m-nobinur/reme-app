@@ -1,11 +1,17 @@
 import {
   AssistantRuntimeProvider,
   type ThreadMessageLike,
+  type ThreadSuggestion,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
 import { Approval } from "@workspace/ui/components/assistant/approval"
-import { Thread } from "@workspace/ui/components/assistant/thread"
+import {
+  OWNER_QUICK_ACTIONS,
+  Thread,
+  type ThreadMode,
+  type ThreadProps,
+} from "@workspace/ui/components/assistant/thread"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -19,6 +25,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
+import {
+  ConversationMenu,
+  WorkspaceShell,
+} from "@workspace/ui/components/workspace-shell"
 import { useState } from "react"
 
 /**
@@ -49,27 +59,86 @@ import { useState } from "react"
 function FixtureThread({
   height = "h-[48rem]",
   messages,
+  settings,
+  suggestions,
+  isDisabled = true,
+  isRunning = false,
+  isLoading = false,
+  bare = false,
 }: {
   height?: string
+  /** No box of its own, for a thread that sits in the workspace frame. */
+  bare?: boolean
   messages: ThreadMessageLike[]
+  settings?: Omit<ThreadProps, "components" | "autoFocus">
+  suggestions?: ThreadSuggestion[]
+  isDisabled?: boolean
+  isRunning?: boolean
+  isLoading?: boolean
 }) {
   const runtime = useExternalStoreRuntime({
     convertMessage: (message: ThreadMessageLike) => message,
-    isDisabled: true,
+    isDisabled,
+    isLoading,
+    isRunning,
     messages,
     onNew: noop,
+    suggestions,
   })
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div
-        className={`${height} overflow-hidden rounded-3xl border border-border`}
+        className={
+          bare
+            ? height
+            : `${height} overflow-hidden rounded-3xl border border-border`
+        }
       >
-        <Thread autoFocus={false} components={{ ToolFallback: Approval }} />
+        <Thread
+          autoFocus={false}
+          components={{ ToolFallback: Approval }}
+          {...settings}
+        />
       </div>
     </AssistantRuntimeProvider>
   )
 }
+
+/**
+ * The composer's surroundings as the owner app sets them: the business on the
+ * chip, the mode, and the "+" starters. Brightclean is a fixture business.
+ */
+const CONTEXT = { name: "Brightclean", status: "site live on v3", live: true }
+const SUGGESTIONS: ThreadSuggestion[] = [
+  { prompt: "What changed in version 4?" },
+  { prompt: "What do you need from me?" },
+  { prompt: "What is on my website now?" },
+]
+
+/** A thread whose mode chip works, the way the app holds it. */
+function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
+  const [mode, setMode] = useState<ThreadMode>("act")
+  return (
+    <FixtureThread
+      {...props}
+      settings={{
+        context: CONTEXT,
+        mode,
+        onModeChange: setMode,
+        placeholder: "Ask, or tell me what to change",
+        quickActions: OWNER_QUICK_ACTIONS,
+        ...props.settings,
+      }}
+    />
+  )
+}
+
+/** Stored messages carry the day they were written; the runtime's own date is render time. */
+const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
+  ...message,
+  metadata: { custom: { createdAt: `2026-09-${at}Z` } },
+})
 
 const noop = async () => undefined
 
@@ -229,8 +298,16 @@ Set with \`revision: rev_2f41c9\`.
 ]
 
 const CONVERSATION: ThreadMessageLike[] = [
-  ask("How did last week go?"),
-  {
+  on("24T09:30:00", ask("Is the Saturday change live?")),
+  on("24T09:31:00", {
+    content: [
+      { text: "Yes. Version 3 is live with the new hours.", type: "text" },
+    ],
+    role: "assistant",
+    status: { reason: "stop", type: "complete" },
+  }),
+  on("25T23:30:00", ask("How did last week go?")),
+  on("26T08:00:00", {
     content: [
       {
         text: "Three assignments closed and one is blocked on a decision.",
@@ -260,8 +337,62 @@ const CONVERSATION: ThreadMessageLike[] = [
     ],
     role: "assistant",
     status: { reason: "tool-calls", type: "requires-action" },
+  }),
+]
+
+const RUNNING: ThreadMessageLike[] = [
+  ask("What is waiting on me?"),
+  {
+    content: [{ text: "Version 4 is ready for you to", type: "text" }],
+    role: "assistant",
+    status: { type: "running" },
   },
 ]
+
+const FAILED: ThreadMessageLike[] = [
+  ask("What is waiting on me?"),
+  {
+    content: [],
+    role: "assistant",
+    status: {
+      error: "The workspace did not answer. Try again in a moment.",
+      reason: "error",
+      type: "incomplete",
+    },
+  },
+]
+
+/**
+ * The conversation in its frame, as `/app` renders it: the title and ··· in
+ * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
+ * alone at phone and desktop widths.
+ */
+function ConversationSample() {
+  return (
+    <WorkspaceShell
+      className="h-[48rem] border border-border"
+      menu={<ConversationMenu newChat={<a href="#new" />} />}
+      panel={
+        <p className="text-muted-foreground text-sm">
+          Nothing right now. Questions and approvals from your team land here.
+        </p>
+      }
+      rail={<p className="text-sm">Brightclean</p>}
+      title="New chat"
+    >
+      <OwnerThread
+        bare
+        height="h-full"
+        isDisabled={false}
+        messages={[]}
+        settings={{
+          briefing: "v3 is live. Version 4 is ready for you to approve.",
+        }}
+        suggestions={SUGGESTIONS}
+      />
+    </WorkspaceShell>
+  )
+}
 
 function CollapsibleSample() {
   const [open, setOpen] = useState(true)
@@ -353,7 +484,67 @@ const assistantCatalog = [
       />
     ),
   },
-  { name: "Thread", render: () => <FixtureThread messages={CONVERSATION} /> },
+  {
+    name: "Thread",
+    render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
+  },
+  {
+    name: "ThreadEmpty",
+    render: () => (
+      <OwnerThread
+        height="h-[40rem]"
+        isDisabled={false}
+        messages={[]}
+        settings={{
+          briefing: "v3 is live. Version 4 is ready for you to approve.",
+        }}
+        suggestions={SUGGESTIONS}
+      />
+    ),
+  },
+  {
+    // A new owner, or a workspace that could not be read: no line, no chip.
+    name: "ThreadEmptyUnread",
+    render: () => (
+      <OwnerThread
+        height="h-[32rem]"
+        isDisabled={false}
+        messages={[]}
+        settings={{ context: null }}
+      />
+    ),
+  },
+  {
+    name: "ThreadLoading",
+    render: () => (
+      <OwnerThread
+        height="h-[32rem]"
+        isDisabled={false}
+        isLoading
+        messages={[]}
+      />
+    ),
+  },
+  {
+    name: "ThreadRunning",
+    render: () => (
+      <OwnerThread
+        height="h-[28rem]"
+        isDisabled={false}
+        isRunning
+        messages={RUNNING}
+      />
+    ),
+  },
+  { name: "Conversation", render: () => <ConversationSample /> },
+  {
+    name: "ConversationMenu",
+    render: () => <ConversationMenu newChat={<a href="#new" />} />,
+  },
+  {
+    name: "ThreadError",
+    render: () => <OwnerThread height="h-[28rem]" messages={FAILED} />,
+  },
 ]
 
 export { assistantCatalog }

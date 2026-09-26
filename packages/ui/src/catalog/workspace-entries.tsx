@@ -10,7 +10,10 @@ import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLinkItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
@@ -26,7 +29,7 @@ import {
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 
 /**
  * Catalog entries for the owner workspace frame. The shell renders at a fixed
@@ -162,6 +165,28 @@ function MenuSample() {
   )
 }
 
+/**
+ * A menu of actions and a choice of one. Closed here, like the account menu;
+ * `thread.spec.ts` opens the same rows in the composer and scans them.
+ */
+function ChoiceMenuSample() {
+  const [mode, setMode] = useState("act")
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" />}>
+        Mode
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-64">
+        <DropdownMenuItem>Change my website</DropdownMenuItem>
+        <DropdownMenuRadioGroup onValueChange={setMode} value={mode}>
+          <DropdownMenuRadioItem value="ask">Ask</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="act">Act</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 const workspaceCatalog: Entry[] = [
   { name: "WorkspaceShell", render: () => <ShellSample /> },
   {
@@ -182,6 +207,9 @@ const workspaceCatalog: Entry[] = [
   { name: "DropdownMenuTrigger", render: () => <MenuSample /> },
   { name: "DropdownMenuContent", render: () => <MenuSample /> },
   { name: "DropdownMenuLinkItem", render: () => <MenuSample /> },
+  { name: "DropdownMenuItem", render: () => <ChoiceMenuSample /> },
+  { name: "DropdownMenuRadioGroup", render: () => <ChoiceMenuSample /> },
+  { name: "DropdownMenuRadioItem", render: () => <ChoiceMenuSample /> },
 ]
 
 export { workspaceCatalog }

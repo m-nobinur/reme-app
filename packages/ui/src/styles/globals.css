@@ -97,3 +97,13 @@
     cursor: pointer;
   }
 }
+
+/* The streaming dot from react-markdown's dot.css pulses forever; it holds
+   still for anyone who asked for less motion. Its selectors are all `:where`,
+   so these win on specificity alone. */
+@media (prefers-reduced-motion: reduce) {
+  .aui-md[data-status="running"]::after,
+  .aui-md[data-status="running"] *::after {
+    animation: none;
+  }
+}
