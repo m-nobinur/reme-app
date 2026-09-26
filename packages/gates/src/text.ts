@@ -64,9 +64,37 @@ const EXTRACT: {
   },
 ]
 
-export function contentClaimsIn(text: string): ContentClaim[] {
+const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * The text with the site's own host names blanked: each host exactly, in any
+ * case, with an optional scheme. Every page names its own host (`og:url`,
+ * canonical), and a slug can carry a date. The path, query and fragment after
+ * it are still read, as is a host that only contains the site's, or an email
+ * on it. No hosts, nothing blanked.
+ */
+function withoutOwnHosts(text: string, hosts: readonly string[]): string {
+  if (!hosts.length) return text
+  const own = new RegExp(
+    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?![a-z0-9-]|\\.[a-z0-9])`,
+    "gi"
+  )
+  return text.replace(own, " ")
+}
+
+/**
+ * Characters that render blank but are not whitespace to a regular
+ * expression; read as spaces so they cannot split a phone or a price.
+ */
+const BLANKS = /[\u115f\u1160\u200b-\u200d\u2060\u2800\u3164\ufeff\uffa0]/g
+
+/** Every price, phone, email, time and postcode in the text, the site's own hosts aside. */
+export function contentClaimsIn(
+  text: string,
+  hosts: readonly string[] = []
+): ContentClaim[] {
   const claims: ContentClaim[] = []
-  let rest = text
+  let rest = withoutOwnHosts(text.replace(BLANKS, " "), hosts)
   for (const { kind, pattern, key } of EXTRACT) {
     for (const m of rest.matchAll(pattern)) {
       const k = key(m)
@@ -81,7 +109,9 @@ export function contentClaimsIn(text: string): ContentClaim[] {
 /**
  * The same text with everything the content gate owns blanked out, so the
  * claims gate never re-reads a price, a time, a phone number, an email or a
- * postcode as a number about the business.
+ * postcode as a number about the business. It takes no hosts: a long digit
+ * run in the site's own URL is blanked here as a phone, and a phone is not
+ * something the claims gate reports.
  */
 export function maskContentClaims(text: string): string {
   let rest = text

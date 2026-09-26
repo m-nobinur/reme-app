@@ -4,6 +4,7 @@ import {
   assignments,
   eq,
   events,
+  orgs,
   siteRevisions,
   sql,
   supersedeFact,
@@ -39,6 +40,7 @@ const FACTS = [
   ],
 ] as const
 
+const SUFFIX = "-stg.remeai.co.uk"
 const page = (main: string) =>
   `<!doctype html><html lang="en"><head><title>BrightClean</title></head><body><main><h1>BrightClean</h1>${main}<a href="/">Home</a></main></body></html>`
 const GOOD = page(
@@ -152,7 +154,7 @@ async function built(html: string, withhold: string[] = []) {
 live("the gates step", () => {
   it("moves a site whose every claim traces to a fact to preview_ready, with its report and evidence", async () => {
     const b = await built(GOOD)
-    const verdict = await validateRevision(kit, b.sites, b.ids, b.input)
+    const verdict = await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)
     expect(verdict.outcome).toBe("preview_ready")
     expect(await b.state()).toBe("preview_ready")
     expect(b.objects.has(`${b.prefix}gates/content.json`)).toBe(true)
@@ -178,9 +180,33 @@ live("the gates step", () => {
       )
     ).toBe(true)
     // A retried step answers with what it decided instead of failing.
-    expect((await validateRevision(kit, b.sites, b.ids, b.input)).outcome).toBe(
-      "preview_ready"
-    )
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
+    ).toBe("preview_ready")
+  })
+
+  it("does not read the site's own host as a phone number, and throws without a host suffix", async () => {
+    // The head `astro build --site` writes; the slug carries a date.
+    const dated = async () => {
+      const slug = `dated-20260925-${crypto.randomUUID().slice(0, 8)}`
+      const b = await built(
+        GOOD.replace(
+          "</title>",
+          `</title><meta property="og:url" content="https://${slug}${SUFFIX}/">`
+        )
+      )
+      await kit.withOrg({ orgId: b.orgId }, (db) =>
+        db.update(orgs).set({ slug }).where(eq(orgs.id, b.orgId))
+      )
+      return b
+    }
+    const b = await dated()
+    await expect(
+      validateRevision(kit, b.sites, b.ids, b.input, "")
+    ).rejects.toThrow("not a host suffix")
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
+    ).toBe("preview_ready")
   })
 
   it("writes the Developer's summary on the revision whether the gates pass or fail", async () => {
@@ -194,16 +220,16 @@ live("the gates step", () => {
       return revision?.summary
     }
     const passed = await built(GOOD)
-    await validateRevision(kit, passed.sites, passed.ids, passed.input)
+    await validateRevision(kit, passed.sites, passed.ids, passed.input, SUFFIX)
     expect(await summary(passed)).toBe("Filled from facts")
     const failed = await built(page("<p>$49 an hour</p>"))
-    await validateRevision(kit, failed.sites, failed.ids, failed.input)
+    await validateRevision(kit, failed.sites, failed.ids, failed.input, SUFFIX)
     expect(await summary(failed)).toBe("Filled from facts")
   })
 
   it("sends a fabricated price back through repairing, naming the node", async () => {
     const b = await built(page("<p>$49 an hour</p>"))
-    const verdict = await validateRevision(kit, b.sites, b.ids, b.input)
+    const verdict = await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)
     expect(verdict.outcome).toBe("repairing")
     expect(await b.state()).toBe("implementing")
     if (verdict.outcome !== "repairing") throw new Error("unreachable")
@@ -215,13 +241,13 @@ live("the gates step", () => {
     const b = await built(page("<p>$49 an hour</p>"))
     for (let i = 0; i < 3; i++) {
       expect(
-        (await validateRevision(kit, b.sites, b.ids, b.input)).outcome
+        (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
       ).toBe("repairing")
       await advance(kit, b.ids, "validating")
     }
-    expect((await validateRevision(kit, b.sites, b.ids, b.input)).outcome).toBe(
-      "failed"
-    )
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
+    ).toBe("failed")
     expect(await b.state()).toBe("failed")
   })
 
@@ -243,8 +269,8 @@ live("the gates step", () => {
         }),
       })
     )
-    expect((await validateRevision(kit, b.sites, b.ids, b.input)).outcome).toBe(
-      "preview_ready"
-    )
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
+    ).toBe("preview_ready")
   })
 })

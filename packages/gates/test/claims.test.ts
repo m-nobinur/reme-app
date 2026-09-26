@@ -71,6 +71,15 @@ const verdict = (main: string, facts: readonly FactRecord[], ld?: string) =>
   checkClaims([page(main, ld)], facts)
 
 describe("the claims gate", () => {
+  it("reads a claim that runs into the next word without a space", () => {
+    for (const [main, facts, claim] of [
+      ["<p>We are the best.call now</p>", PLAIN, "best"],
+      ["<p>500 customers.join them</p>", MARKETING, "500 customers"],
+    ] as const) {
+      expect(verdict(main, facts).message, main).toContain(`"${claim}"`)
+    }
+  })
+
   it("passes a number a fact carries and fails the same number invented", () => {
     for (const main of [
       "<p>Rated 4.9 by 200+ customers</p>",

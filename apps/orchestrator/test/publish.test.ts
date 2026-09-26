@@ -359,6 +359,19 @@ describe("the artifact check and the probe", () => {
     expect(
       await probeHost("x", null, answer(200, GOOD_HTML.replace("$35", "$49")))
     ).toEqual({ ok: true })
+    // The live page names its own host, and a slug can carry a date.
+    const host = "dated-20260925-stg.remeai.co.uk"
+    const named = GOOD_HTML.replace(
+      "</title>",
+      `</title><meta property="og:url" content="https://${host}/">`
+    )
+    expect(await probeHost(host, facts, answer(200, named))).toEqual({
+      ok: true,
+    })
+    expect(await probeHost("x", facts, answer(200, named))).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("20260925"),
+    })
     expect(
       await probeHost("x", facts, (async () => {
         throw new Error("down")

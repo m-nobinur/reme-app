@@ -270,10 +270,13 @@ const FACT_BEARING = new Set([
   "priceRange",
 ])
 
-function locatedClaims(page: Page): (ContentClaim & { node: string })[] {
+function locatedClaims(
+  page: Page,
+  hosts: readonly string[]
+): (ContentClaim & { node: string })[] {
   const found: (ContentClaim & { node: string })[] = []
   const add = (value: string, node: string) =>
-    found.push(...contentClaimsIn(value).map((c) => ({ ...c, node })))
+    found.push(...contentClaimsIn(value, hosts).map((c) => ({ ...c, node })))
   for (const t of page.texts) add(t.value, t.node)
   for (const l of page.links) {
     const m = l.value.match(/^(mailto|tel):(.*)$/i)
@@ -321,14 +324,18 @@ export type ContentFinding = {
   claim: string
 }
 
-/** Every claim on the built site that no fact supports, with the node it sits in. */
+/**
+ * Every claim on the built site that no fact supports, with the node it sits
+ * in. `hosts` are the site's own host names, whose URLs are not read.
+ */
 export function contentFindings(
   pages: readonly Page[],
-  facts: readonly FactRecord[]
+  facts: readonly FactRecord[],
+  hosts: readonly string[] = []
 ): ContentFinding[] {
   const allowed = supported(facts)
   return pages.flatMap((page) =>
-    locatedClaims(page)
+    locatedClaims(page, hosts)
       .filter((c) => !allowed.has(`${c.kind}:${c.key}`))
       .map((c) => ({
         file: page.file,
@@ -342,9 +349,10 @@ export function contentFindings(
 /** The content gate v0: prices, phones, emails, times and postcodes, each traced to a fact (§8.5). */
 export function checkContent(
   pages: readonly Page[],
-  facts: readonly FactRecord[]
+  facts: readonly FactRecord[],
+  hosts: readonly string[] = []
 ): GateResult {
-  const findings = contentFindings(pages, facts)
+  const findings = contentFindings(pages, facts, hosts)
   const first = findings[0]
   if (!first)
     return pass(
@@ -383,6 +391,8 @@ export async function runGates(input: {
   read: (file: string) => Promise<Uint8Array | null>
   report: Pick<CompletionReport, "checks">
   facts: readonly FactRecord[]
+  /** The site's own host names, as `astro build --site` wrote them. */
+  hosts?: readonly string[]
 }): Promise<GateResult[]> {
   const build = await checkBuild(input.manifest, input.read)
   const types = checkTypes(input.report)
@@ -412,7 +422,7 @@ export async function runGates(input: {
     types,
     checkLinks(pages, parsed.data.files),
     checkStructuredData(pages),
-    checkContent(pages, input.facts),
+    checkContent(pages, input.facts, input.hosts),
     checkClaims(pages, input.facts),
   ]
 }

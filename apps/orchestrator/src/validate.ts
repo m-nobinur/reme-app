@@ -11,12 +11,14 @@ import {
   eq,
   events,
   facts,
+  orgs,
   siteRevisions,
   sql,
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
+import { siteHost } from "./seed.ts"
 import { appendEvent, type Ids, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
@@ -106,13 +108,16 @@ export type Verdict =
  * from the log, so re-running gives the same answer. A pass moves the
  * assignment to `preview_ready`; a failure moves it through `repairing` back to
  * `implementing` for the Developer to fix, and once the repair budget is spent
- * the failure ends in `failed`. Each outcome is one transaction.
+ * the failure ends in `failed`. Each outcome is one transaction. The site's
+ * own host, from the org's slug and the environment's host suffix, is not
+ * read as copy; a suffix that is missing or malformed throws.
  */
 export async function validateRevision(
   kit: Tenancy,
   sites: Artifacts,
   ids: Ids,
-  input: { report_id: string; revision_id: string }
+  input: { report_id: string; revision_id: string },
+  hostSuffix: string
 ): Promise<Verdict> {
   const loaded = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [row] = await db
@@ -124,6 +129,10 @@ export async function validateRevision(
       .from(siteRevisions)
       .where(eq(siteRevisions.id, input.revision_id))
     if (!row || !revision) return null
+    const [org] = await db
+      .select({ slug: orgs.slug })
+      .from(orgs)
+      .where(eq(orgs.id, ids.orgId))
     const logged = await db
       .select({ type: events.type, payload: events.payload })
       .from(events)
@@ -131,7 +140,7 @@ export async function validateRevision(
         sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('facts.snapshot_taken', 'information.answered', 'assignment.completion_reported', 'assignment.validation_reported')`
       )
       .orderBy(events.eventId)
-    return { row, revision, logged }
+    return { row, revision, logged, slug: org?.slug }
   })
   if (!loaded)
     throw new TransitionError(
@@ -139,7 +148,7 @@ export async function validateRevision(
       "resource",
       "no assignment or revision to validate"
     )
-  const { row, revision, logged } = loaded
+  const { row, revision, logged, slug } = loaded
 
   // A retried step after its transaction committed: answer with what it decided.
   if (row.state !== "validating")
@@ -172,6 +181,7 @@ export async function validateRevision(
     },
     report,
     facts: factsUsed,
+    hosts: [siteHost(slug ?? "", hostSuffix)],
   })
 
   const gates: GateResult[] = []
