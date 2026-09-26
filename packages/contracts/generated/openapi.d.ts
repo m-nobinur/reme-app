@@ -920,6 +920,13 @@ export interface components {
       /** Format: date-time */
       updated_at: string
     }
+    TextAnswerSchema: {
+      /** @constant */
+      type: "string"
+      maxLength?: number
+      /** @constant */
+      format?: "email"
+    }
     ValidationReport: {
       /** Format: uuid */
       report_id: string

@@ -67,6 +67,18 @@ export const FactValueKey = z.enum(
 /** An owner's answer to a question whose field is not a FactValue key (open item 70). */
 export const OwnerAnswerText = Text(500)
 
+/**
+ * The `answer_schema` the Developer may send for a field that is not a
+ * `FactValueKey`: text, at most `maxLength` characters, optionally an email
+ * address. No `pattern`, since a model-written regex is a ReDoS risk on a
+ * Worker, and no `enum`, since `options` is the closed list.
+ */
+export const TextAnswerSchema = z.strictObject({
+  type: z.literal("string"),
+  maxLength: z.int().min(1).max(500).optional(),
+  format: z.literal("email").optional(),
+})
+
 /** `POST /facts`. Distinct keys are `apps/api`'s check, not the schema's. */
 export const SetFactsRequest = z.strictObject({
   facts: z.array(FactValue).min(1).max(FactValue.options.length),
@@ -83,7 +95,8 @@ export const OwnerChangeRequest = z.strictObject({
 /**
  * An answer to an `InformationRequest`. The orchestrator, which knows the
  * request's field, checks `value`: against `FactValue` when the field is a
- * `FactValueKey`, otherwise as `OwnerAnswerText`.
+ * `FactValueKey`; otherwise against the request's `TextAnswerSchema` and its
+ * `options`, or as `OwnerAnswerText` when the schema predates that rule.
  */
 export const AnswerRequest = z.strictObject({
   request_id: Uuid,
