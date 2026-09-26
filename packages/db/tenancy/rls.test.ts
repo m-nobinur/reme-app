@@ -1,3 +1,4 @@
+import { Conversation } from "@workspace/contracts"
 import { type SQL, sql } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
 import type { TransactionSql } from "postgres"
@@ -1059,32 +1060,35 @@ describe("a handle does not outlive its transaction", () => {
   })
 })
 
-describe("deployments and approvals hold their shape", () => {
-  /**
-   * ADR-032's rules for the two publish tables, driven as the migrator so the
-   * constraint, not the role, is what refuses. Each case runs in a transaction
-   * that never commits, so nothing here outlives its case.
-   */
-  const CHECK = "23514"
-  const UNIQUE = "23505"
-  const ROLLED_BACK = "rolled back"
+const CHECK = "23514"
+const UNIQUE = "23505"
+const FOREIGN_KEY = "23503"
+const ROLLED_BACK = "rolled back"
 
-  async function inTransaction(run: (tx: TransactionSql) => Promise<unknown>) {
-    const { sql: raw } = connect()
-    try {
-      await raw.begin(async (tx) => {
-        await run(tx)
-        throw new Error(ROLLED_BACK)
-      })
-    } catch (error) {
-      return error instanceof Error && error.message === ROLLED_BACK
-        ? undefined
-        : errorCode(error)
-    } finally {
-      await raw.end()
-    }
-    return undefined
+/**
+ * Runs as the migrator in a transaction that never commits, so the constraint,
+ * not the role, is what refuses, and nothing outlives the case. The error
+ * code, or undefined when every statement was taken.
+ */
+async function inTransaction(run: (tx: TransactionSql) => Promise<unknown>) {
+  const { sql: raw } = connect()
+  try {
+    await raw.begin(async (tx) => {
+      await run(tx)
+      throw new Error(ROLLED_BACK)
+    })
+  } catch (error) {
+    return error instanceof Error && error.message === ROLLED_BACK
+      ? undefined
+      : errorCode(error)
+  } finally {
+    await raw.end()
   }
+  return undefined
+}
+
+describe("deployments and approvals hold their shape", () => {
+  /** ADR-032's rules for the two publish tables. */
 
   async function ids() {
     const { sql: raw } = connect()
@@ -1217,5 +1221,115 @@ describe("deployments and approvals hold their shape", () => {
         await request(tx, revision, assignment)
       })
     ).toBeUndefined()
+  })
+})
+
+describe("conversations hold their shape", () => {
+  /** Org A's owner, conversation and first message, from `fixtures.ts`. */
+  const OWNER_A = "00000000-0000-4000-a000-000000000004"
+  const OWNER_B = "00000000-0000-4000-b000-000000000004"
+  const CONVERSATION_A = "00000000-0000-4000-a000-000000000015"
+  const KEY_A = "__LOCALID_tenancy_a"
+
+  const conversation = (
+    tx: TransactionSql,
+    org: string,
+    options: { kind?: string; key?: string | null; title?: string; by?: string }
+  ) => tx`
+    insert into conversations (org_id, kind, title, created_by_staff_id,
+      idempotency_key)
+    values (${org}, ${options.kind ?? "assistant"}, ${options.title ?? null},
+      ${options.by ?? (org === ORG_A ? OWNER_A : OWNER_B)},
+      ${options.key ?? null})`
+
+  const message = (
+    tx: TransactionSql,
+    org: string,
+    id: string,
+    parent: string | null = null
+  ) => tx`
+    insert into conversation_messages (conversation_id, id, org_id, parent_id,
+      format, content)
+    values (${CONVERSATION_A}, ${id}, ${org}, ${parent}, 'ai-sdk/v6',
+      '{"role":"user","parts":[{"type":"text","text":"x"}]}'::jsonb)`
+
+  it("holds one onboarding conversation per org", async () => {
+    expect(
+      await inTransaction(async (tx) => {
+        await conversation(tx, ORG_A, { kind: "onboarding" })
+        await conversation(tx, ORG_B, { kind: "onboarding" })
+      })
+    ).toBeUndefined()
+    expect(
+      await inTransaction(async (tx) => {
+        await conversation(tx, ORG_A, { kind: "onboarding" })
+        await conversation(tx, ORG_A, { kind: "onboarding" })
+      })
+    ).toBe(UNIQUE)
+  })
+
+  it("makes one conversation per idempotency key in an org", async () => {
+    expect(
+      await inTransaction((tx) => conversation(tx, ORG_A, { key: KEY_A }))
+    ).toBe(UNIQUE)
+    expect(
+      await inTransaction((tx) => conversation(tx, ORG_B, { key: KEY_A }))
+    ).toBeUndefined()
+  })
+
+  it("takes a title of 1 to 120 characters with something in them", async () => {
+    // Never stricter than the contract: U+0085 is not whitespace to it.
+    for (const title of ["a".repeat(120), "\u0085"]) {
+      expect(Conversation.shape.title.safeParse(title).success).toBe(true)
+      expect(
+        await inTransaction((tx) => conversation(tx, ORG_A, { title })),
+        JSON.stringify(title)
+      ).toBeUndefined()
+    }
+    for (const title of ["", "   ", " \t\n\v\f\r", "a".repeat(121)]) {
+      expect(
+        await inTransaction((tx) => conversation(tx, ORG_A, { title })),
+        JSON.stringify(title)
+      ).toBe(CHECK)
+    }
+  })
+
+  it("refuses a creator from another org", async () => {
+    expect(
+      await inTransaction((tx) => conversation(tx, ORG_A, { by: OWNER_B }))
+    ).toBe(FOREIGN_KEY)
+  })
+
+  it("keeps a message in its conversation's org", async () => {
+    expect(
+      await inTransaction((tx) => message(tx, ORG_B, "probe_user_2"))
+    ).toBe(FOREIGN_KEY)
+  })
+
+  it("stores a message id once per conversation", async () => {
+    expect(
+      await inTransaction((tx) => message(tx, ORG_A, "probe_user_1"))
+    ).toBe(UNIQUE)
+  })
+
+  it("takes a parent only from the same conversation", async () => {
+    expect(
+      await inTransaction((tx) =>
+        message(tx, ORG_A, "probe_user_2", "probe_assistant_1")
+      )
+    ).toBeUndefined()
+    expect(
+      await inTransaction((tx) =>
+        message(tx, ORG_A, "probe_user_2", "not_stored")
+      )
+    ).toBe(FOREIGN_KEY)
+  })
+
+  it("refuses a message id that is not a text id", async () => {
+    for (const id of ["has space", "a".repeat(65)]) {
+      expect(await inTransaction((tx) => message(tx, ORG_A, id)), id).toBe(
+        CHECK
+      )
+    }
   })
 })

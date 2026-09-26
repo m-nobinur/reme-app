@@ -2,6 +2,7 @@ import {
   ApprovalDecision,
   Assignment,
   AssignmentState,
+  Conversation,
   EventEnvelope,
   FactProvenance,
   FactRecord,
@@ -31,6 +32,7 @@ import {
   approvalDecision,
   assignmentPriority,
   assignmentState,
+  conversationKind,
   factSource,
   siteRevisionStatus,
   staffKind,
@@ -83,6 +85,10 @@ describe("enums match the contract", () => {
     expect(siteRevisionStatus.enumValues).toEqual(
       SiteRevision.shape.status.options
     )
+  })
+
+  it("conversation kinds", () => {
+    expect(conversationKind.enumValues).toEqual(Conversation.shape.kind.options)
   })
 })
 
