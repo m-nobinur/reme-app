@@ -26,6 +26,7 @@ it("reads what waits on the owner through the filter", async () => {
     attention: [item("approval"), item("report")],
     live: 3,
     building: false,
+    open: false,
   }))
   expect(workspace?.attention).toHaveLength(1)
   expect(workspace?.live).toBe(3)

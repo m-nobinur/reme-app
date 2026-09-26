@@ -52,7 +52,6 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import { formatDate } from "@workspace/ui/lib/format"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentType,
@@ -61,6 +60,7 @@ import {
   type PropsWithChildren,
   type RefObject,
   useContext,
+  useMemo,
   useRef,
 } from "react"
 
@@ -90,6 +90,15 @@ export type ThreadMode = "ask" | "act"
 
 /** A "+" entry: picking it puts `prompt` in the composer for the owner to finish. */
 export type ThreadQuickAction = { title: string; prompt: string }
+
+/**
+ * What "+" offers the owner: sentences they finish, never a send on their
+ * behalf. One list, so the app and the catalog cannot drift apart.
+ */
+export const OWNER_QUICK_ACTIONS: readonly ThreadQuickAction[] = [
+  { title: "Change my website", prompt: "On my website, please change " },
+  { title: "Check what needs me", prompt: "What is waiting on me?" },
+]
 
 /** What the conversation is about: the business, and where its site stands. */
 export type ThreadContext = { name: string; status: string; live: boolean }
@@ -153,7 +162,7 @@ const ThreadHistorySkeleton: FC = () => (
   <div
     data-slot="aui_thread-history-skeleton"
     role="status"
-    className="fade-in flex animate-in flex-col gap-y-6 fill-mode-both [animation-delay:150ms] [animation-duration:200ms]"
+    className="fade-in flex animate-in flex-col gap-y-6 fill-mode-both [animation-delay:150ms] [animation-duration:200ms] motion-reduce:animate-none"
   >
     <span className="sr-only">Loading conversation</span>
     <Skeleton className="ml-auto h-9 w-2/5 rounded-3xl motion-reduce:animate-none" />
@@ -173,9 +182,25 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
-  ...settings
+  placeholder,
+  briefing,
+  context,
+  mode,
+  onModeChange,
+  quickActions,
 }) => {
   const isEmpty = useAuiState(isNewChatView)
+  const settings = useMemo(
+    () => ({
+      placeholder,
+      briefing,
+      context,
+      mode,
+      onModeChange,
+      quickActions,
+    }),
+    [placeholder, briefing, context, mode, onModeChange, quickActions]
+  )
 
   return (
     <ThreadComponentsContext.Provider value={components}>
@@ -280,20 +305,41 @@ const createdAt = (message: MessageData | undefined): string | null => {
  * rendered, which would date every old message today.
  */
 const DateDivider: FC = () => {
+  // The selectors return the stored strings as they are, so a streaming
+  // update to another message costs a comparison, not a date parse.
   const at = useAuiState((s) => createdAt(s.message))
-  const day = formatDate(at)
   const before = useAuiState((s) =>
-    formatDate(createdAt(s.thread.messages[s.message.index - 1]))
+    createdAt(s.thread.messages[s.message.index - 1])
   )
-  if (!at || !day || day === before) return null
+  const day = localDay(at)
+  if (day === null || day === localDay(before)) return null
   return (
     <div
       data-slot="aui_date-divider"
       className="flex items-center gap-3 text-[0.8125rem] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
     >
-      <time dateTime={at}>{day}</time>
+      <time dateTime={at ?? undefined}>{LOCAL_DAY.format(new Date(day))}</time>
     </div>
   )
+}
+
+/**
+ * The owner's own calendar day, not UTC's: a message at 23:30Z in summer is
+ * already tomorrow in the UK. The thread renders only in the browser, so the
+ * reader's zone is the owner's zone and nothing has to match a server render.
+ */
+const LOCAL_DAY = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+})
+
+/** Local midnight of the message's day, as a number to compare; null without a date. */
+const localDay = (at: string | null): number | null => {
+  if (!at) return null
+  const date = new Date(at)
+  if (Number.isNaN(date.getTime())) return null
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 }
 
 const ThreadScrollToBottom: FC = () => {
@@ -445,7 +491,11 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
             key={action.title}
             onClick={() => {
               after.current = input.current
-              aui.composer().setText(action.prompt)
+              // A draft is the owner's words: add to it, never replace it.
+              const draft = aui.composer().getState().text.trimEnd()
+              aui
+                .composer()
+                .setText(draft ? `${draft}\n${action.prompt}` : action.prompt)
             }}
           >
             {action.title}
@@ -457,8 +507,10 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
 }
 
 const MODES: Record<ThreadMode, { label: string; detail: string }> = {
-  ask: { label: "Ask", detail: "Answers questions and changes nothing" },
-  act: { label: "Act", detail: "Can start a change once you say yes" },
+  // Intent, not a guarantee: the chat sends the mode, and the backend that
+  // enforces it comes later. The copy promises no more than that.
+  ask: { label: "Ask", detail: "Questions only" },
+  act: { label: "Act", detail: "Questions and changes" },
 }
 
 const ModeChip: FC = () => {
@@ -615,7 +667,7 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="fade-in slide-in-from-bottom-1 relative -mb-7.5 animate-in pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="relative -mb-7.5 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -644,7 +696,10 @@ const AssistantMessage: FC = () => {
                     data-slot="aui_assistant-message-indicator"
                     role="status"
                   >
-                    <span aria-hidden className="animate-pulse font-sans">
+                    <span
+                      aria-hidden
+                      className="animate-pulse font-sans motion-reduce:animate-none"
+                    >
                       {"\u25cf"}
                     </span>
                     <span className="sr-only">Working</span>
@@ -674,14 +729,14 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-assistant-action-bar-root fade-in col-start-3 row-start-2 -ms-1 flex animate-in gap-1 text-muted-foreground duration-200"
+      className="aui-assistant-action-bar-root col-start-3 row-start-2 -ms-1 flex gap-1 text-muted-foreground"
     >
       <ActionBarPrimitive.Copy render={<TooltipIconButton tooltip="Copy" />}>
         <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="zoom-in-50 fade-in animate-in duration-200 ease-out" />
+          <CheckIcon className="zoom-in-50 fade-in animate-in duration-200 ease-out motion-reduce:animate-none" />
         </AuiIf>
         <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon className="zoom-in-75 fade-in animate-in duration-150" />
+          <CopyIcon />
         </AuiIf>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload
@@ -704,7 +759,7 @@ const AssistantActionBar: FC = () => {
           side="bottom"
           align="start"
           sideOffset={6}
-          className="aui-action-bar-more-content data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground data-[state=closed]:animate-out data-[state=open]:animate-in"
+          className="aui-action-bar-more-content data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none"
         >
           <ActionBarPrimitive.ExportMarkdown
             render={
@@ -724,7 +779,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="fade-in slide-in-from-bottom-1 grid animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">

@@ -1,7 +1,6 @@
 import {
   BuildingsIcon,
   CheckCircleIcon,
-  DotsThreeIcon,
   FlowArrowIcon,
   NotePencilIcon,
   UserCircleIcon,
@@ -25,6 +24,7 @@ import {
 import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
+  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -56,19 +56,29 @@ function AppLayout() {
   const { owner, orgs, active, panelOpen, workspace } = Route.useLoaderData()
   const waiting = workspace?.attention ?? null
   // The conversation owns its height and scroll; every other page is padded.
+  // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
-    select: (matches) => matches.some((match) => match.staticData.conversation),
+    select: (matches) =>
+      matches.find((match) => match.staticData.conversation)?.staticData
+        .conversation,
   })
   const router = useRouter()
 
   return (
     <WorkspaceShell
       defaultPanelOpen={panelOpen}
-      menu={conversation ? <ConversationMenu /> : undefined}
+      menu={
+        conversation ? (
+          <ConversationMenu
+            newChat={
+              <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
+            }
+          />
+        ) : undefined
+      }
       panel={<Waiting items={waiting} />}
       panelCount={waiting?.length ?? 0}
-      // Until conversations are stored, every one is a new chat.
-      title={conversation ? "New chat" : undefined}
+      title={conversation}
       rail={
         <>
           <OrgSwitcher
@@ -148,35 +158,6 @@ function AppLayout() {
         </WorkspacePage>
       )}
     </WorkspaceShell>
-  )
-}
-
-/** The conversation's ··· menu. Rename and archive join it once conversations are stored. */
-function ConversationMenu() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label="Conversation actions"
-            size="icon-sm"
-            variant="ghost"
-          />
-        }
-      >
-        <DotsThreeIcon aria-hidden weight="bold" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLinkItem
-          render={
-            <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
-          }
-        >
-          <NotePencilIcon aria-hidden />
-          New chat
-        </DropdownMenuLinkItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 

@@ -72,7 +72,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
         ? await readWorkspace(() =>
             source.workspace(active.id, source.staff(active.id))
           )
-        : { attention: [], live: null, building: false },
+        : { attention: [], live: null, building: false, open: false },
     }
   }
 )

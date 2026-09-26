@@ -83,6 +83,8 @@ export type Workspace = {
   live: number | null
   /** A build is doing work now, rather than waiting on the owner or paused. */
   building: boolean
+  /** Any build is unfinished, working or not: another must not be offered. */
+  open: boolean
 }
 
 /** An approval as the inbox renders it: the contract, plus who to name. */

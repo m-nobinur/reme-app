@@ -21,7 +21,7 @@ export function briefingOf(
   if (!org || !workspace) {
     return NOTHING
   }
-  const { live, building, attention } = workspace
+  const { live, building, open, attention } = workspace
   const approval = attention.find((item) => item.kind === "approval")
   const approvals = attention.filter((item) => item.kind === "approval").length
   const questions = attention.filter((item) => item.kind === "question")
@@ -30,7 +30,9 @@ export function briefingOf(
     ? `v${live} is live.`
     : building
       ? "Your first version is being built."
-      : "You have no website yet."
+      : open
+        ? "Your first version is under way."
+        : "You have no website yet."
 
   let next: string | null = null
   if (approval) {
@@ -58,7 +60,8 @@ export function briefingOf(
   }
   if (live) {
     suggestions.push("What is on my website now?")
-  } else if (!building && !approval) {
+  } else if (!open && !approval) {
+    // Only with no build at all: a paused or waiting one would be superseded.
     suggestions.push("Build my website")
   }
 
@@ -70,7 +73,9 @@ export function briefingOf(
         ? `site live on v${live}`
         : building
           ? "first version building"
-          : "no site yet",
+          : open
+            ? "first version under way"
+            : "no site yet",
       live: live !== null,
     },
     suggestions: suggestions.slice(0, 3).map((prompt) => ({ prompt })),

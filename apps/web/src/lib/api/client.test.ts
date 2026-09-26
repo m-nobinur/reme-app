@@ -318,6 +318,7 @@ it("reads the live version, and a build only while it is working", async () => {
   expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
     live: 3,
     building: false,
+    open: true,
   })
 
   answers["GET /workspace"] = {
@@ -327,6 +328,7 @@ it("reads the live version, and a build only while it is working", async () => {
   expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
     live: null,
     building: true,
+    open: true,
   })
 })
 
@@ -388,6 +390,7 @@ it("answers empty for a session with no organisation", async () => {
     attention: [],
     live: null,
     building: false,
+    open: false,
   })
   expect(await apiSource.approvals(ORG)).toEqual([])
   expect(await apiSource.activity(ORG)).toEqual([])

@@ -2,6 +2,7 @@ import { getCookie } from "@tanstack/react-start/server"
 import {
   ActivityFeed,
   ApprovalDecision,
+  type AssignmentState,
   type AttentionItem as Attention,
   ErrorEnvelope,
   FactList,
@@ -285,7 +286,7 @@ function toAttention(
 }
 
 /** The states in which a build is doing work rather than waiting on someone. */
-const WORKING = new Set<string>([
+const WORKING = new Set<AssignmentState>([
   "queued",
   "briefing",
   "planning",
@@ -306,6 +307,7 @@ async function workspace(
     attention: status.attention.map((item) => toAttention(item, names)),
     live: status.site.live?.version ?? null,
     building: status.builds.some((build) => WORKING.has(build.state)),
+    open: status.builds.length > 0,
   }
 }
 

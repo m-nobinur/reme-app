@@ -177,6 +177,42 @@ test("New chat starts an empty conversation", async ({ page }) => {
   await expect(page.getByText("How did this week go?")).toHaveCount(0)
 })
 
+test("every chat request carries the mode, and a new chat keeps it", async ({
+  page,
+}) => {
+  await visit(page, "/app")
+  const sent = () =>
+    page
+      .waitForRequest((request) => request.url().endsWith("/api/chat"))
+      .then((request) => request.postDataJSON()?.mode)
+
+  let mode = sent()
+  await page.getByLabel("Message input").fill("How did this week go?")
+  await page.getByLabel("Send message").click()
+  expect(await mode).toBe("act")
+
+  await page.getByRole("button", { name: "Mode, Act" }).click()
+  await page.getByRole("menuitemradio", { name: /^Ask/ }).click()
+  await page.getByRole("link", { name: "New chat" }).click()
+  await expect(page.getByRole("button", { name: "Mode, Ask" })).toBeVisible()
+
+  mode = sent()
+  await page.getByLabel("Message input").fill("What is waiting on me?")
+  await page.getByLabel("Send message").click()
+  expect(await mode).toBe("ask")
+})
+
+test("the top bar names a new chat and a stored one truthfully", async ({
+  page,
+}) => {
+  const title = page.locator('[data-slot="workspace-title"]')
+  await visit(page, "/app")
+  await expect(title).toHaveText("New chat")
+  // Until conversations are stored an id names nothing, so it is not "new".
+  await visit(page, "/app/c/any-conversation")
+  await expect(title).toHaveText("Conversation")
+})
+
 test("each page opens at the top, and Back returns to where the owner was", async ({
   page,
 }) => {

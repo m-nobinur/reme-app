@@ -1,5 +1,16 @@
-import { ListIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
+import {
+  DotsThreeIcon,
+  ListIcon,
+  NotePencilIcon,
+  SidebarSimpleIcon,
+} from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLinkItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -11,6 +22,7 @@ import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   type MouseEvent,
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -263,4 +275,34 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-export { WorkspacePage, WorkspaceShell }
+/**
+ * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
+ * link element to render the entry as, so the app passes its router's link
+ * and this package still imports no router. Rename and archive join it once
+ * conversations are stored.
+ */
+function ConversationMenu({ newChat }: { newChat: ReactElement }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Conversation actions"
+            size="icon-sm"
+            variant="ghost"
+          />
+        }
+      >
+        <DotsThreeIcon aria-hidden weight="bold" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuLinkItem render={newChat}>
+          <NotePencilIcon aria-hidden />
+          New chat
+        </DropdownMenuLinkItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export { ConversationMenu, WorkspacePage, WorkspaceShell }

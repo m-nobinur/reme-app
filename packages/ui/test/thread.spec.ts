@@ -62,6 +62,44 @@ test("the empty state loads without entrance motion", async ({ page }) => {
   expect(moving).toEqual([])
 })
 
+/** The animations running on anything inside one catalog entry. */
+const animationsIn = (page: Page, entry: string) =>
+  page.locator(`[data-entry="${entry}"]`).evaluate((root) =>
+    document
+      .getAnimations()
+      .map((animation) => (animation.effect as KeyframeEffect | null)?.target)
+      .filter((target) => target instanceof Element && root.contains(target))
+      .map(
+        (target) =>
+          (target as Element).getAttribute("data-slot") ??
+          (target as Element).className
+      )
+  )
+
+test("stored messages arrive still, not animated in", async ({ page }) => {
+  // Once history loads, every old message would otherwise play an entrance:
+  // page-load choreography by another route.
+  await open(page, "Thread")
+  expect(await animationsIn(page, "Thread")).toEqual([])
+})
+
+test.describe("with reduced motion", () => {
+  test.use({ contextOptions: { reducedMotion: "reduce" } })
+
+  for (const entry of [
+    "Thread",
+    "ThreadEmpty",
+    "ThreadRunning",
+    "ThreadLoading",
+    "ThreadError",
+  ]) {
+    test(`${entry} runs no animation`, async ({ page }) => {
+      await open(page, entry)
+      expect(await animationsIn(page, entry)).toEqual([])
+    })
+  }
+})
+
 test("the empty state opens on the briefing, the business and what to ask", async ({
   page,
 }) => {
@@ -108,6 +146,19 @@ test("a quick action puts its sentence in the composer, focused", async ({
   await expect(input(page)).toBeFocused()
 })
 
+test("a quick action keeps the owner's draft and adds to it", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmpty")
+  await input(page).fill("The Saturday hours are wrong.")
+  await openMenu(page, "Quick actions")
+  await menu(page).getByRole("menuitem", { name: "Change my website" }).click()
+  await expect(input(page)).toHaveValue(
+    "The Saturday hours are wrong.\nOn my website, please change "
+  )
+  await expect(input(page)).toBeFocused()
+})
+
 test("Escape from quick actions hands focus back to the button", async ({
   page,
 }) => {
@@ -127,6 +178,10 @@ test("the mode chip switches between Act and Ask", async ({ page }) => {
   await expect(
     menu(page).getByRole("menuitemradio", { name: /^Act/ })
   ).toHaveAttribute("aria-checked", "true")
+  // Nothing enforces the mode yet, so the copy states intent, not a guarantee.
+  await expect(
+    menu(page).getByRole("menuitemradio", { name: /^Ask/ })
+  ).toContainText("Questions only")
   await menu(page).getByRole("menuitemradio", { name: /^Ask/ }).click()
   await expect(menu(page)).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Mode, Ask" })).toBeVisible()
@@ -142,12 +197,19 @@ test("the composer's focus ring is one pixel, not a halo", async ({ page }) => {
   expect(shadow).not.toMatch(/0px 0px 0px 3px/)
 })
 
-test("each day of the conversation opens with its date", async ({ page }) => {
-  await open(page, "Thread")
-  await expect(page.locator('[data-slot="aui_date-divider"] time')).toHaveText([
-    /^24 Sept? 2026$/,
-    /^26 Sept? 2026$/,
-  ])
+test.describe("in London in summer time", () => {
+  test.use({ timezoneId: "Europe/London" })
+
+  test("each day of the conversation opens with its local date", async ({
+    page,
+  }) => {
+    // The fixture's second question is at 23:30Z on the 25th, which is 00:30
+    // on the 26th here: one rule for the 26th, not one for the 25th as well.
+    await open(page, "Thread")
+    await expect(
+      page.locator('[data-slot="aui_date-divider"] time')
+    ).toHaveText([/^24 Sept? 2026$/, /^26 Sept? 2026$/])
+  })
 })
 
 test("the owner's messages sit right and the replies left, with copy", async ({

@@ -4,9 +4,10 @@ import {
   type ThreadSuggestion,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
-import { CopyIcon, DotsThreeIcon, NotePencilIcon } from "@phosphor-icons/react"
+import { CopyIcon } from "@phosphor-icons/react"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
+  OWNER_QUICK_ACTIONS,
   Thread,
   type ThreadMode,
   type ThreadProps,
@@ -19,18 +20,15 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLinkItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu"
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
-import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
+import {
+  ConversationMenu,
+  WorkspaceShell,
+} from "@workspace/ui/components/workspace-shell"
 import { useState } from "react"
 
 /**
@@ -112,10 +110,6 @@ function FixtureThread({
  * chip, the mode, and the "+" starters. Brightclean is a fixture business.
  */
 const CONTEXT = { name: "Brightclean", status: "site live on v3", live: true }
-const QUICK_ACTIONS = [
-  { title: "Change my website", prompt: "On my website, please change " },
-  { title: "Check what needs me", prompt: "What is waiting on me?" },
-]
 const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What changed in version 4?" },
   { prompt: "What do you need from me?" },
@@ -133,7 +127,7 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
         mode,
         onModeChange: setMode,
         placeholder: "Ask, or tell me what to change",
-        quickActions: QUICK_ACTIONS,
+        quickActions: OWNER_QUICK_ACTIONS,
         ...props.settings,
       }}
     />
@@ -141,9 +135,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
 }
 
 /** Stored messages carry the day they were written; the runtime's own date is render time. */
-const on = (day: string, message: ThreadMessageLike): ThreadMessageLike => ({
+const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
   ...message,
-  metadata: { custom: { createdAt: `2026-09-${day}T09:30:00Z` } },
+  metadata: { custom: { createdAt: `2026-09-${at}Z` } },
 })
 
 const noop = async () => undefined
@@ -304,16 +298,16 @@ Set with \`revision: rev_2f41c9\`.
 ]
 
 const CONVERSATION: ThreadMessageLike[] = [
-  on("24", ask("Is the Saturday change live?")),
-  on("24", {
+  on("24T09:30:00", ask("Is the Saturday change live?")),
+  on("24T09:31:00", {
     content: [
       { text: "Yes. Version 3 is live with the new hours.", type: "text" },
     ],
     role: "assistant",
     status: { reason: "stop", type: "complete" },
   }),
-  on("26", ask("How did last week go?")),
-  on("26", {
+  on("25T23:30:00", ask("How did last week go?")),
+  on("26T08:00:00", {
     content: [
       {
         text: "Three assignments closed and one is blocked on a decision.",
@@ -377,27 +371,7 @@ function ConversationSample() {
   return (
     <WorkspaceShell
       className="h-[48rem] border border-border"
-      menu={
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label="Conversation actions"
-                size="icon-sm"
-                variant="ghost"
-              />
-            }
-          >
-            <DotsThreeIcon aria-hidden weight="bold" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLinkItem href="#new">
-              <NotePencilIcon aria-hidden />
-              New chat
-            </DropdownMenuLinkItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
+      menu={<ConversationMenu newChat={<a href="#new" />} />}
       panel={
         <p className="text-muted-foreground text-sm">
           Nothing right now. Questions and approvals from your team land here.
@@ -563,6 +537,10 @@ const assistantCatalog = [
     ),
   },
   { name: "Conversation", render: () => <ConversationSample /> },
+  {
+    name: "ConversationMenu",
+    render: () => <ConversationMenu newChat={<a href="#new" />} />,
+  },
   {
     name: "ThreadError",
     render: () => <OwnerThread height="h-[28rem]" messages={FAILED} />,
