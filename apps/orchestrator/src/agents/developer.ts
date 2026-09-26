@@ -38,6 +38,7 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
+import { ASK_CHIEF_DESCRIPTION, refuseQuestion } from "../question.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
@@ -424,8 +425,7 @@ Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
 const askChief = (current: Session) =>
   defineTool({
     name: "ask_chief",
-    description:
-      "Ask the Chief of Staff for one canonical fact the site needs and does not have. Name the fact key (for example business.phone), why the site needs it, and the JSON Schema an answer must satisfy. This ends your turn; the answer comes back as a new message.",
+    description: ASK_CHIEF_DESCRIPTION,
     input: toolInput(
       InformationRequest.pick({
         field: true,
@@ -436,6 +436,9 @@ const askChief = (current: Session) =>
       })
     ),
     async run({ data }) {
+      // Thrown, so the model reads why and asks again (open item 70).
+      const refusal = refuseQuestion(data)
+      if (refusal) throw new Error(refusal)
       const { spec } = current.runtime
       const request = InformationRequest.parse({
         request_id: crypto.randomUUID(),

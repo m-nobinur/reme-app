@@ -284,7 +284,7 @@ live("an owner starting a build", () => {
 })
 
 live("an owner answering a question", () => {
-  async function asked(field: string) {
+  async function asked(field: string, question: Record<string, unknown> = {}) {
     const { orgId, ownerStaffId } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
     for (const to of [
@@ -302,7 +302,7 @@ live("an owner answering a question", () => {
         assignmentId: ids.assignmentId,
         staffId: null,
         type: "information.requested",
-        payload: { request_id: requestId, field },
+        payload: { ...question, request_id: requestId, field },
       })
     )
     const answer = (value: unknown) =>
@@ -350,14 +350,44 @@ live("an owner answering a question", () => {
 
   it("takes any other key's value as 1 to 500 characters of text, uncoerced", async () => {
     const { orgId, answer } = await asked("business.parking")
-    for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501)]) {
+    for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501), "null"]) {
       expect((await answer(bad)).status).toBe(400)
     }
     // Text that looks like JSON is still the text the owner typed.
-    for (const text of ["Street parking", "[1,2]", "123", "null"]) {
+    for (const text of ["Street parking", "[1,2]", "123"]) {
       expect((await answer(text)).status).toBe(202)
       expect((await current(orgId, "business.parking"))?.value).toBe(text)
     }
+  })
+
+  it("refuses a null answer to the R exit's question", async () => {
+    const { orgId, answer } = await asked("hours.saturday", {
+      answer_schema: { type: "object", required: ["open", "close"] },
+      options: ["null"],
+    })
+    const res = await answer("null")
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      class: "validation",
+      code: "answer.invalid",
+      detail: { field: "hours.saturday" },
+    })
+    expect(await current(orgId, "hours.saturday")).toBeUndefined()
+  })
+
+  it("holds a text question to its schema and its options", async () => {
+    const { orgId, answer } = await asked("business.bookings_email", {
+      answer_schema: { type: "string", format: "email" },
+      options: ["hello@brightclean.invalid", "book@brightclean.invalid"],
+    })
+    for (const bad of ["info@brightclean.invalid", "Decline", "null"]) {
+      expect((await answer(bad)).status).toBe(400)
+    }
+    expect(await current(orgId, "business.bookings_email")).toBeUndefined()
+    expect((await answer("book@brightclean.invalid")).status).toBe(202)
+    expect((await current(orgId, "business.bookings_email"))?.value).toBe(
+      "book@brightclean.invalid"
+    )
   })
 })
 
