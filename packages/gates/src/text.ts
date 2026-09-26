@@ -23,7 +23,7 @@ const CURRENCY: Record<string, string> = {
   EUR: "EUR",
 }
 const EXTRACT: {
-  kind: ContentKind
+  kind?: ContentKind
   pattern: RegExp
   key: (m: RegExpMatchArray) => string | null
 }[] = [
@@ -31,6 +31,14 @@ const EXTRACT: {
     kind: "email",
     pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
     key: (m) => m[0].toLowerCase(),
+  },
+  // A host name, bare or in a URL, is blanked and read as nothing: the site's
+  // own host carries the org slug, which can carry a date. Every label starts
+  // with a lowercase letter, so a phone that runs into one ("0900123.x.co.uk")
+  // is still read as a phone.
+  {
+    pattern: /\b[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+\b/g,
+    key: () => null,
   },
   {
     kind: "price",
@@ -70,7 +78,7 @@ export function contentClaimsIn(text: string): ContentClaim[] {
   for (const { kind, pattern, key } of EXTRACT) {
     for (const m of rest.matchAll(pattern)) {
       const k = key(m)
-      if (k) claims.push({ kind, text: m[0], key: k })
+      if (k && kind) claims.push({ kind, text: m[0], key: k })
     }
     // A matched claim is not read again as another kind (a price's digits are not a phone).
     rest = rest.replace(pattern, " ")

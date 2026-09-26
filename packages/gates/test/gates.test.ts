@@ -134,6 +134,33 @@ describe("the content gate", () => {
     expect(checkContent(noPrice, facts).passed).toBe(true)
     expect(checkContent(pages(), facts)).toEqual(checkContent(pages(), FACTS))
   })
+
+  // The head `astro build --site` writes, as on a staging run whose org slug
+  // carried a date: the date is part of the host, not a phone number.
+  const HOST = "brightclean-20260925-stg.remeai.co.uk"
+  const dated = (main?: string) =>
+    home(main).replace(
+      "</title>",
+      `</title><link rel="canonical" href="https://${HOST}/"><meta property="og:type" content="website"><meta property="og:url" content="https://${HOST}/">`
+    )
+
+  it("passes a site whose own host name carries a date", () => {
+    const main = `<p>$35 an hour</p><p>Find us at ${HOST} or https://${HOST}/contact/</p>`
+    expect(checkContent(pages(dated(main)), FACTS)).toMatchObject({
+      passed: true,
+    })
+  })
+
+  it("still fails a phone with no fact when it sits next to a host", () => {
+    for (const main of [
+      `<p>Call 0770 0900123 or visit https://${HOST}/</p>`,
+      `<p>Call 0770 0900123.${HOST}</p>`,
+    ]) {
+      const result = checkContent(pages(dated(main)), FACTS)
+      expect(result.passed, main).toBe(false)
+      expect(result.message, main).toContain("0770 0900123")
+    }
+  })
 })
 
 describe("the structured data gate", () => {
