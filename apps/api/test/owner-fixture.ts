@@ -2,6 +2,7 @@ import type { AssignmentState } from "@workspace/contracts"
 import {
   approvals,
   assignments,
+  assignmentTransitions,
   deployments,
   eq,
   events,
@@ -244,6 +245,33 @@ export function seed(kit: Tenancy, who: Owner) {
           payload,
         })
         return eventId
+      }),
+    /** A move to `blocked_on_information` on `requestId`, as `advance` logs it. */
+    blocked: (assignmentId: string, requestId: string, version: number) =>
+      kit.withOrg({ orgId }, async (db) => {
+        const eventId = ulid()
+        await db.insert(events).values({
+          eventId,
+          orgId,
+          assignmentId,
+          type: "assignment.state_changed",
+          occurredAt: new Date(),
+          idempotencyKey: ulid(),
+          payload: {
+            from: "implementing",
+            to: "blocked_on_information",
+            version,
+            request_id: requestId,
+          },
+        })
+        await db.insert(assignmentTransitions).values({
+          orgId,
+          assignmentId,
+          fromState: "implementing",
+          toState: "blocked_on_information",
+          version,
+          eventId,
+        })
       }),
   }
 }

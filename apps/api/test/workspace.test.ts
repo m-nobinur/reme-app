@@ -162,6 +162,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await a.event(asking, "information.requested", request)
     const answered = question(asker, asking, "business.email")
     await a.event(asking, "information.requested", answered)
+    await a.blocked(asking, request.request_id, 4)
     const fact = await kit.withOrg({ orgId: asker.orgId }, (db) =>
       supersedeFact(db, {
         orgId: asker.orgId,
@@ -267,6 +268,23 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         request: expect.objectContaining({ request_id: askIds.request }),
       }),
     ])
+  })
+
+  it("shows one question per build, the one it last blocked on", async () => {
+    const twice = await owner(kit, url as string, "twice")
+    const t = seed(kit, twice)
+    const build = await t.assignment("blocked_on_information")
+    const first = question(twice, build)
+    const second = question(twice, build)
+    for (const [asked, version] of [
+      [first, 3],
+      [second, 5],
+    ] as const) {
+      await t.event(build, "information.requested", asked)
+      await t.blocked(build, asked.request_id, version)
+    }
+    const body = WorkspaceStatus.parse(await (await workspace(twice)).json())
+    expect(body.attention).toEqual([{ kind: "question", request: second }])
   })
 
   it("answers an unchanged poll with 304 and no body", async () => {

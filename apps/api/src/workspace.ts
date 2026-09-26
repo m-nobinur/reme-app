@@ -12,6 +12,7 @@ import {
 import {
   approvals,
   assignments,
+  assignmentTransitions,
   eq,
   events,
   facts,
@@ -118,16 +119,24 @@ export async function readApprovals(
   }))
 }
 
-/** Questions a waiting build asked and nobody has answered, oldest first. */
+/**
+ * The question each waiting build is blocked on, oldest first: the one named
+ * by the event of its latest transition to `blocked_on_information`, while it
+ * has no answer. A build that asked twice waits on its second question, not
+ * its first.
+ */
 async function readQuestions(
   db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "question" }>[]> {
   const rows = await db
     .select({ payload: events.payload })
-    .from(events)
-    .innerJoin(assignments, eq(assignments.id, events.assignmentId))
+    .from(assignments)
+    .innerJoin(
+      events,
+      sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'information.requested' and ${events.payload}->>'request_id' = (select b.payload->>'request_id' from ${events} b where b.event_id = (select t.event_id from ${assignmentTransitions} t where t.assignment_id = ${assignments.id} and t.to_state = 'blocked_on_information' order by t.version desc limit 1))`
+    )
     .where(
-      sql`${assignments.state} = 'blocked_on_information' and ${events.type} = 'information.requested' and not exists (select 1 from ${events} answered where answered.assignment_id = ${events.assignmentId} and answered.type = 'information.answered' and answered.payload->>'request_id' = ${events.payload}->>'request_id')`
+      sql`${assignments.state} = 'blocked_on_information' and not exists (select 1 from ${events} answered where answered.assignment_id = ${events.assignmentId} and answered.type = 'information.answered' and answered.payload->>'request_id' = ${events.payload}->>'request_id')`
     )
     .orderBy(sql`${events.payload}->>'requested_at'`)
   return rows.map((row) => ({
