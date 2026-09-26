@@ -13,24 +13,12 @@ import {
   TextAnswerSchema,
   WorkspaceStatus,
 } from "../src/owner.ts"
-import { ajv, generated } from "./json-schema.ts"
+import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
 // Every branch of the two owner unions, through Zod and through the published
 // JSON Schema. The round-trip suite fuzzes one sample per contract; a union has
 // a branch per kind, and a branch nobody parses is a branch nobody checked.
-
-type Verdict = { zod: boolean; json: boolean }
-const verdict = (
-  name: string,
-  schema: { safeParse: (v: unknown) => { success: boolean } },
-  value: unknown
-): Verdict => ({
-  zod: schema.safeParse(value).success,
-  json: ajv.validate(generated.components.schemas[name] as object, value),
-})
-const ACCEPTED: Verdict = { zod: true, json: true }
-const REFUSED: Verdict = { zod: false, json: false }
 
 const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
 const ASSIGNMENT = "3c4d5e6f-7081-4c8d-9e0f-3a4b5c6d7e8f"

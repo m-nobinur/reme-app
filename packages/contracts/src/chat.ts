@@ -6,6 +6,9 @@ import { BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
 import { Text } from "./text.ts"
 
 const MessageId = ConversationMessage.shape.id
+/** The server makes these. Named apart from `MessageId` so tightening one never moves the others. */
+const ToolCallId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
+const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 
 /** Each `FactValue` option as its `ask_fact` input, so `prefill` keeps its key's type. */
 type Asks<T extends readonly unknown[]> = {
@@ -67,6 +70,10 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
  */
 export const ChatRequest = z.strictObject({
   conversation_id: Uuid,
+  /**
+   * Governs a typed message only. An answer or an approval resolves the
+   * pending call it names, whatever the mode.
+   */
   mode: z.enum(["ask", "act"]),
   turn: z.discriminatedUnion("kind", [
     z.strictObject({
@@ -78,13 +85,13 @@ export const ChatRequest = z.strictObject({
     z.strictObject({
       kind: z.literal("answer"),
       message_id: MessageId,
-      tool_call_id: MessageId,
+      tool_call_id: ToolCallId,
       output: AskFactOutput,
     }),
     z.strictObject({
       kind: z.literal("approval"),
       message_id: MessageId,
-      approval_id: MessageId,
+      approval_id: ApprovalId,
       approved: z.boolean(),
     }),
   ]),
