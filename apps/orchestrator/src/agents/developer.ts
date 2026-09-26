@@ -427,7 +427,7 @@ Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
  * must take. Writes the request to the log, wakes the Workflow with its id,
  * and ends the turn; the answer arrives as the next message.
  */
-const askChief = (current: Session) =>
+export const askChief = (current: Session) =>
   defineTool({
     name: "ask_chief",
     description: ASK_CHIEF_DESCRIPTION,
