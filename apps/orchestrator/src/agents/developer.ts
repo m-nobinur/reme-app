@@ -38,7 +38,12 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
 import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
-import { ASK_CHIEF_DESCRIPTION, refuseQuestion } from "../question.ts"
+import {
+  ASK_CHIEF_DESCRIPTION,
+  AskChiefInput,
+  askedOptions,
+  refuseQuestion,
+} from "../question.ts"
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
@@ -426,15 +431,7 @@ const askChief = (current: Session) =>
   defineTool({
     name: "ask_chief",
     description: ASK_CHIEF_DESCRIPTION,
-    input: toolInput(
-      InformationRequest.pick({
-        field: true,
-        why: true,
-        answer_schema: true,
-        options: true,
-        blocking: true,
-      })
-    ),
+    input: toolInput(AskChiefInput),
     async run({ data }) {
       // Thrown, so the model reads why and asks again (open item 70).
       const refusal = refuseQuestion(data)
@@ -448,7 +445,7 @@ const askChief = (current: Session) =>
         field: data.field,
         why: data.why,
         answer_schema: data.answer_schema,
-        options: data.options ?? null,
+        options: askedOptions(data),
         blocking: data.blocking,
         requested_at: new Date().toISOString(),
         expires_at: null,

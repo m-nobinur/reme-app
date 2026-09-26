@@ -73,10 +73,13 @@ function convert(node: Node, root: Node): v.GenericSchema {
       return v.null()
     case "array": {
       const items = node.items ? convert(node.items as Node, root) : v.unknown()
-      if (typeof node.minItems === "number") {
-        return v.pipe(v.array(items), v.minLength(node.minItems))
-      }
-      return v.array(items)
+      const checks: v.PipeItem<unknown[], unknown[], v.BaseIssue<unknown>>[] =
+        []
+      if (typeof node.minItems === "number")
+        checks.push(v.minLength(node.minItems))
+      if (typeof node.maxItems === "number")
+        checks.push(v.maxLength(node.maxItems))
+      return checks.length ? v.pipe(v.array(items), ...checks) : v.array(items)
     }
     case undefined:
       return v.unknown()

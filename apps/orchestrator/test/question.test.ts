@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest"
 import {
   ASK_CHIEF_DESCRIPTION,
+  AskChiefInput,
   answers,
+  askedOptions,
   OPTIONS_MAX,
   refuseQuestion,
 } from "../src/question.ts"
 
-// The R exit's question, as staging logged it on 2026-09-25.
-const rExit = {
+// A question a staging run logged on 2026-09-25.
+const logged = {
   field: "hours.saturday",
   answer_schema: {
     type: "object",
@@ -19,11 +21,11 @@ const rExit = {
 }
 
 describe("the questions ask_chief refuses", () => {
-  it("refuses the R exit's question", () => {
-    expect(refuseQuestion(rExit)).toMatch(/option/)
+  it("refuses the logged question", () => {
+    expect(refuseQuestion(logged)).toMatch(/option/)
     // With a text schema, the "null" option alone is still refused.
     expect(
-      refuseQuestion({ ...rExit, answer_schema: { type: "string" } })
+      refuseQuestion({ ...logged, answer_schema: { type: "string" } })
     ).toMatch(/option/)
   })
 
@@ -50,7 +52,7 @@ describe("the questions ask_chief refuses", () => {
 
   it("refuses a schema other than text for any other key", () => {
     for (const answer_schema of [
-      rExit.answer_schema,
+      logged.answer_schema,
       { type: "string", pattern: "^(a+)+$" },
       { type: "string", enum: ["Yes", "No"] },
       { type: "string", maxLength: 501 },
@@ -80,6 +82,53 @@ describe("the questions ask_chief refuses", () => {
         options: ["Street"],
       })
     ).toMatch(/Street/)
+  })
+
+  it("gives a FactValue key's reason before the option rules", () => {
+    expect(
+      refuseQuestion({
+        field: "hours.weekday",
+        answer_schema: { type: "object" },
+        options: ["null"],
+      })
+    ).toMatch(/hours\.weekday has a fixed shape/)
+  })
+
+  it("quotes at most 80 characters of a refused option", () => {
+    const long = `Provide ${"the full opening hours ".repeat(10)}`
+    const reason = refuseQuestion({
+      field: "business.bookings_email",
+      answer_schema: { type: "string", format: "email" },
+      options: [long],
+    })
+    expect(reason).toContain(long.slice(0, 80))
+    expect(reason).not.toContain(long.slice(0, 81))
+  })
+
+  it("stores no options for a FactValue key or an empty list", () => {
+    expect(askedOptions({ field: "hours.weekday", options: [] })).toBeNull()
+    expect(askedOptions({ field: "business.parking", options: [] })).toBeNull()
+    expect(askedOptions({ field: "business.parking" })).toBeNull()
+    expect(
+      askedOptions({ field: "business.parking", options: ["Street"] })
+    ).toEqual(["Street"])
+  })
+
+  it("shows the model the option cap in the tool's input schema", () => {
+    const input = (options: unknown) =>
+      AskChiefInput.safeParse({
+        field: "business.parking",
+        why: "The contact page names parking.",
+        answer_schema: { type: "string" },
+        options,
+        blocking: true,
+      }).success
+    const bays = (n: number) => Array.from({ length: n }, (_, i) => `Bay ${i}`)
+    expect(input(bays(10))).toBe(true)
+    expect(input(null)).toBe(true)
+    expect(input(bays(11))).toBe(false)
+    expect(input(["x".repeat(501)])).toBe(false)
+    expect(input([""])).toBe(false)
   })
 
   it("refuses more than ten options", () => {
@@ -140,7 +189,7 @@ describe("the answers /answer takes", () => {
   it("never takes a null or blank text, whatever the question", () => {
     for (const request of [
       text({ type: "string" }),
-      rExit,
+      logged,
       { field: "business.parking" },
     ]) {
       for (const value of ["null", " NULL ", "", "   ", null]) {
@@ -172,8 +221,20 @@ describe("the answers /answer takes", () => {
     expect(answers(picked, "Car park")).toBe(false)
   })
 
+  it("drops an older question's options when they would now be refused", () => {
+    // ["null"] could never be answered; the schema still holds.
+    const nulled = text({ type: "string", maxLength: 20 }, ["null"])
+    expect(answers(nulled, "Street parking")).toBe(true)
+    expect(answers(nulled, "x".repeat(21))).toBe(false)
+    const instructions = text({ type: "string", format: "email" }, [
+      "Provide the bookings email",
+    ])
+    expect(answers(instructions, "book@brightclean.invalid")).toBe(true)
+    expect(answers(instructions, "Provide the bookings email")).toBe(false)
+  })
+
   it("reads an older schema as 1 to 500 characters of text, options aside", () => {
-    const older = text(rExit.answer_schema, ["Provide the hours"])
+    const older = text(logged.answer_schema, ["Provide the hours"])
     expect(answers(older, "09:00 to 13:00")).toBe(true)
     expect(answers(older, "x".repeat(500))).toBe(true)
     expect(answers(older, "x".repeat(501))).toBe(false)

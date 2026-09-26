@@ -285,7 +285,7 @@ live("an owner starting a build", () => {
 
 live("an owner answering a question", () => {
   async function asked(field: string, question: Record<string, unknown> = {}) {
-    const { orgId, ownerStaffId } = await ownerOrg(kit)
+    const { orgId, ownerStaffId, slug } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
     for (const to of [
       "briefing",
@@ -310,7 +310,20 @@ live("an owner answering a question", () => {
         request_id: requestId,
         value,
       })
-    return { orgId, ownerStaffId, answer }
+    const byConsole = (value: unknown) =>
+      consoleApp.request(
+        `/assignments/${ids.assignmentId}/answer?org=${slug}`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-token",
+            "idempotency-key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({ request_id: requestId, value }),
+        },
+        env
+      )
+    return { orgId, ownerStaffId, answer, byConsole }
   }
 
   const current = (orgId: string, key: string) =>
@@ -360,7 +373,28 @@ live("an owner answering a question", () => {
     }
   })
 
-  it("refuses a null answer to the R exit's question", async () => {
+  it("holds the console to the same check, reading JSON only where it fits", async () => {
+    const { orgId, byConsole } = await asked("business.parking", {
+      answer_schema: { type: "string" },
+    })
+    for (const bad of ["null", "", "   "]) {
+      expect((await byConsole(bad)).status).toBe(400)
+    }
+    expect(await current(orgId, "business.parking")).toBeUndefined()
+    expect((await byConsole("123")).status).toBe(202)
+    expect((await current(orgId, "business.parking"))?.value).toBe("123")
+
+    const hours = await asked("hours.weekday")
+    expect((await hours.byConsole("null")).status).toBe(400)
+    expect(
+      (await hours.byConsole('{"open":"08:00","close":"18:00"}')).status
+    ).toBe(202)
+    expect(await current(hours.orgId, "hours.weekday")).toMatchObject({
+      value: { open: "08:00", close: "18:00" },
+    })
+  })
+
+  it("refuses a null answer to a question that offered null", async () => {
     const { orgId, answer } = await asked("hours.saturday", {
       answer_schema: { type: "object", required: ["open", "close"] },
       options: ["null"],

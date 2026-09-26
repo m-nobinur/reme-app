@@ -1,9 +1,12 @@
 import {
+  ANSWER_TEXT_MAX,
   FactValue,
   FactValueKey,
+  InformationRequest,
   OwnerAnswerText,
   TextAnswerSchema,
 } from "@workspace/contracts"
+import { z } from "zod"
 
 /**
  * What a Developer's question may ask, and what an owner's answer to it must
@@ -39,46 +42,73 @@ function textCheck(schema: unknown) {
   return format === "email" ? text.refine(isEmail) : text
 }
 
+/**
+ * `ask_chief`'s input: the request's own fields, with the option cap and
+ * item length stated in the schema the model reads. The contract is not
+ * narrowed; older requests keep parsing.
+ */
+export const AskChiefInput = InformationRequest.pick({
+  field: true,
+  why: true,
+  answer_schema: true,
+  blocking: true,
+}).extend({
+  options: z
+    .array(z.string().min(1).max(ANSWER_TEXT_MAX))
+    .max(OPTIONS_MAX)
+    .nullable(),
+})
+
+/** The options a request stores: null for a `FactValue` key or an empty list. */
+export function askedOptions(q: {
+  field: string
+  options?: string[] | null
+}): string[] | null {
+  return isFactKey(q.field) || !q.options?.length ? null : q.options
+}
+
 /** What `ask_chief` tells the model it may ask, in the words `refuseQuestion` enforces. */
 export const ASK_CHIEF_DESCRIPTION = [
   "Ask the Chief of Staff for one canonical fact the site needs and does not have. Name the fact key (for example business.phone) and why the site needs it. This ends your turn; the answer comes back as a new message.",
   `For ${FactValueKey.options.join(", ")} the answer has a fixed shape: send answer_schema {"type":"object"} and no options.`,
-  'For any other key the owner answers in text. answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to 500) and "format":"email", and no other keyword or object wrapper.',
+  `For any other key the owner answers in text. answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
   `options is a closed list of literal values the owner picks exactly as written: at most ${OPTIONS_MAX}, each a valid answer under answer_schema. Never put an instruction, a question, an empty string or "null" in options. Leave options out unless the answer is a choice among known values.`,
 ].join("\n")
 
 /** Why `ask_chief` refuses this question, for the model to read; null when it may be asked. */
 export function refuseQuestion(q: {
   field: string
-  answer_schema: unknown
+  answer_schema?: unknown
   options?: string[] | null
 }): string | null {
   const options = q.options ?? []
+  if (isFactKey(q.field)) {
+    return options.length
+      ? `${q.field} has a fixed shape; ask for it with no options.`
+      : null
+  }
   if (options.length > OPTIONS_MAX) {
     return `Offer at most ${OPTIONS_MAX} options.`
   }
   if (options.some(placeholder)) {
     return 'An option is a value the owner picks as written; leave out empty and "null" options.'
   }
-  if (isFactKey(q.field)) {
-    return options.length
-      ? `${q.field} has a fixed shape; ask for it with no options.`
-      : null
-  }
   const check = textCheck(q.answer_schema)
   if (!check) {
-    return `The answer_schema for ${q.field} must be {"type":"string"}, with an optional maxLength of 1 to 500 and an optional "format":"email", and nothing else.`
+    return `The answer_schema for ${q.field} must be {"type":"string"}, with an optional maxLength of 1 to ${ANSWER_TEXT_MAX} and an optional "format":"email", and nothing else.`
   }
   const bad = options.find((o) => !check.safeParse(o).success)
   return bad === undefined
     ? null
-    : `The option "${bad}" does not satisfy the answer_schema. An option is a literal value the owner picks, never an instruction.`
+    : `The option "${bad.slice(0, 80)}" does not satisfy the answer_schema. An option is a literal value the owner picks, never an instruction.`
 }
 
 /**
- * Whether an owner's value answers this question, as sent. A question raised
- * before the text rule falls back to 1 to 500 characters with its options
- * ignored, since those options were instructions rather than values.
+ * Whether an owner's value answers this question, as sent. A stored question
+ * `ask_chief` would now refuse keeps only what still holds: a schema that
+ * parses still checks the text, and its options are dropped, since they were
+ * instructions or placeholders rather than values. Any other schema falls
+ * back to `OwnerAnswerText`.
  */
 export function answers(q: Question, value: unknown): boolean {
   if (isFactKey(q.field)) {
@@ -87,6 +117,10 @@ export function answers(q: Question, value: unknown): boolean {
   const check = textCheck(q.answer_schema)
   if (!(check ?? OwnerAnswerText).safeParse(value).success) return false
   if (placeholder(value as string)) return false
-  const options = Array.isArray(q.options) ? q.options : []
-  return !check || options.length === 0 || options.includes(value)
+  const options =
+    Array.isArray(q.options) && q.options.every((o) => typeof o === "string")
+      ? (q.options as string[])
+      : []
+  const held = refuseQuestion({ ...q, options }) === null
+  return !held || options.length === 0 || options.includes(value as string)
 }

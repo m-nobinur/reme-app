@@ -755,7 +755,6 @@ bridge.post("/:id/answer", async (c) => {
   }
   const requestId = body.request_id
   const owner = byOwner(c)
-  const value = owner ? body.value : parseValue(body.value)
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
     const [row] = await db
       .select()
@@ -774,9 +773,11 @@ bridge.post("/:id/answer", async (c) => {
       .limit(1)
     const field = request?.payload.field
     if (typeof field !== "string") return { no_request: true as const }
-    if (owner && !answers({ ...request?.payload, field }, value)) {
-      return { invalid: field }
-    }
+    // The console's text is read as JSON too, where that is what fits.
+    const question = { ...request?.payload, field }
+    const tried = owner ? [body.value] : [body.value, parseValue(body.value)]
+    const value = tried.find((v) => answers(question, v))
+    if (value === undefined) return { invalid: field }
     const [root] = owner
       ? await db
           .select({ id: staff.id })
