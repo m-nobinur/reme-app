@@ -8,6 +8,7 @@ const NOW = "2026-08-26T09:30:00Z"
 const LATER = "2026-08-27T09:30:00+01:00"
 const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
 const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
+const CONVERSATION = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
 const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 
 /**
@@ -166,6 +167,63 @@ export const samples: Record<ContractName, unknown> = {
     forbidden: ["A placeholder number when the phone is empty"],
     source: "generated",
   },
+  Conversation: {
+    id: CONVERSATION,
+    kind: "assistant",
+    title: "Weekend prices",
+    archived_at: null,
+    created_at: NOW,
+    updated_at: NOW,
+  },
+  ConversationHistory: {
+    messages: [
+      {
+        id: "u1Xy7Qp0aB",
+        parent_id: null,
+        format: "ai-sdk/v6",
+        content: {
+          role: "user",
+          parts: [{ type: "text", text: "Add Saturday hours to the site." }],
+          metadata: { custom: { createdAt: NOW } },
+        },
+      },
+      {
+        id: "a_7Kd2Lm9Q",
+        parent_id: "u1Xy7Qp0aB",
+        format: "ai-sdk/v6",
+        content: {
+          role: "assistant",
+          parts: [
+            { type: "text", text: "What time do you open on Saturdays?" },
+          ],
+          metadata: { custom: { createdAt: NOW } },
+        },
+      },
+    ],
+  },
+  ConversationList: {
+    conversations: [
+      {
+        id: CONVERSATION,
+        kind: "assistant",
+        title: null,
+        archived_at: NOW,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+    ],
+  },
+  ConversationMessage: {
+    id: "u1Xy7Qp0aB",
+    parent_id: null,
+    format: "ai-sdk/v6",
+    content: {
+      role: "user",
+      parts: [{ type: "text", text: "Add Saturday hours to the site." }],
+      metadata: { custom: { createdAt: NOW } },
+    },
+  },
+  ConversationPatch: { title: "Weekend prices" },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
   },

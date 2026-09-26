@@ -1,5 +1,6 @@
 export * from "./assignment.ts"
 export * from "./common.ts"
+export * from "./conversation.ts"
 export * from "./error.ts"
 export * from "./event.ts"
 export * from "./fact.ts"
