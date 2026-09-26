@@ -85,17 +85,19 @@ bytes bought.
 it to the load suite with a reversal trigger of sustained memory above roughly 90 MB. That suite
 does not exist yet. Until it does, this is a known unmeasured risk, not a gate.
 
-**The chat surface stays server-rendered.** It is not in the startup path, so it costs no startup
-CPU. Making it client-only would remove SSR from the surface where first paint matters most and
-put the C4 streaming seam through a client-only shell, in exchange for bytes that stay uploaded
-either way.
+**The chat surface stays server-rendered.** Overturned by the 2026-09-26 amendment below: the chat
+routes are client-only and their bytes leave the worker. It is not in the startup path, so it costs
+no startup CPU. Making it client-only would remove SSR from the surface where first paint matters
+most and put the chat streaming path, the browser's `fetch` to the `/api/chat` server route,
+through a client-only shell, in exchange for bytes that stay uploaded either way.
 
 ## What was rejected
 
 *Squeeze under 1 MiB by making the chat surface client-only.* Buys nothing measurable. `ssr: false`
-was already shown not to remove the bytes, because the route module is reachable from the generated
+was already shown not to remove the bytes (overturned by the 2026-09-26 amendment below, which
+removes them with `import.meta.env.SSR` and a lazy import), because the route module is reachable from the generated
 route tree and wrangler uploads it regardless. The startup closure would not move, because the chat
-chunk is not in it. It costs first paint on the chat surface and puts the C4 streaming seam through
+chunk is not in it. It costs first paint on the chat surface and puts the chat streaming path through
 a client-only shell, and it returns a smaller number.
 
 *`lazyRouteComponent` on the chat route.* Retracted by the 2026-09-26 amendment below, which
@@ -158,7 +160,8 @@ and `pnpm size` run after a fresh build of `web`:
   deleted: 558.49 KiB, 390.65 KiB below `main`. The server output has no chat chunk at all.
 - `wrangler check startup`, both builds kept side by side and run in alternation, eight pairs:
   `main` 7.3 to 11.3 ms, median 7.6; the lazy form 7.2 to 7.6 ms, median 7.45. The lazy form was
-  equal or faster in every pair, and `main` sits where the measurement above put it, 6.3 to 7.6.
+  equal or faster in every pair, and the `main` median of 7.6 ms is where the measurement above
+put it, 6.3 to 7.6.
   An earlier run of five `main` builds followed by five lazy ones, on a machine busy with other
   builds, read 13.7 to 16.2 and 16.4 to 50.2 ms. That was host load moving between the two blocks,
   and the paired run replaces it.
@@ -202,9 +205,11 @@ modules' top-level code on the server. `ClientOnly`: it keeps the import. `creat
 the docs say its client body is pruned from the server build, but I did not measure it, and a Vite
 constant already does the job.
 
-*Cost.* The client downloads the same bytes: the chat chunk is 243.0 KiB gzip in both builds. What
+*Cost.* The client downloads the same bytes. From the same two builds on `4ded99d`, `gzip -9` of
+each file in `dist/client/assets`: the chat chunk is 243.0 KiB in both. What
 changes is order. On `main`, Vite's preload list fetched the chat chunk alongside the route's split
-chunk. In the lazy form the split chunk, 502 bytes gzip, has to arrive and run before the chat chunk
+chunk. In the lazy form the route's split chunk, 502 bytes for `/app/` and 504 for `/app/c/$id` by
+the same method, has to arrive and run before the chat chunk
 request starts, so the composer is ready one round trip later. I did not time it, because `/app`
 needs a signed-in session. The frontend engineer measures it once on the preview of the PR that
 applies the pattern: cold cache, navigation to an enabled composer, `main` against the branch. If
