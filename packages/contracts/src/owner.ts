@@ -64,18 +64,28 @@ export const FactValueKey = z.enum(
   ]
 )
 
+/** The longest text answer an owner can give, in characters. */
+export const ANSWER_TEXT_MAX = 500
+
 /** An owner's answer to a question whose field is not a FactValue key (open item 70). */
-export const OwnerAnswerText = Text(500)
+export const OwnerAnswerText = Text(ANSWER_TEXT_MAX)
 
 /**
  * The `answer_schema` the Developer may send for a field that is not a
- * `FactValueKey`: text, at most `maxLength` characters, optionally an email
- * address. No `pattern`, since a model-written regex is a ReDoS risk on a
- * Worker, and no `enum`, since `options` is the closed list.
+ * `FactValueKey`. No `pattern`, since a model-written regex is a ReDoS risk
+ * on a Worker, and no `enum`, since `options` is the closed list.
+ *
+ * It is read as zod, never compiled as JSON Schema at runtime (ajv needs
+ * `new Function`, which workerd blocks). The answer check is always
+ * `OwnerAnswerText`, so non-blank and at most `ANSWER_TEXT_MAX` characters;
+ * `maxLength` only narrows that cap, and a missing one never lifts it.
+ * `format: "email"` adds `FactValue`'s `business.email` rule (an email
+ * address of at most 254 characters). A schema that does not parse as this
+ * one leaves the check at `OwnerAnswerText` alone.
  */
 export const TextAnswerSchema = z.strictObject({
   type: z.literal("string"),
-  maxLength: z.int().min(1).max(500).optional(),
+  maxLength: z.int().min(1).max(ANSWER_TEXT_MAX).optional(),
   format: z.literal("email").optional(),
 })
 
