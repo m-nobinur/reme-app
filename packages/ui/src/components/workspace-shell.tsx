@@ -6,31 +6,53 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
+import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   type MouseEvent,
   type ReactNode,
+  useCallback,
+  useEffect,
   useState,
 } from "react"
-
-/**
- * The cookie that remembers whether the panel is open. The app's loader reads
- * it on the server and passes `defaultPanelOpen`, so the first paint already
- * has the panel in its final place and nothing moves on hydration.
- */
-const PANEL_COOKIE = "reme-panel"
 
 /** A year: the choice is a preference, not a session. */
 const PANEL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
-/** Closes a sheet when the click inside it followed a link. */
+/**
+ * Closes a sheet when a plain click inside it followed a link. A modified or
+ * middle click opens the link elsewhere, so the sheet stays.
+ */
 function closeOnLink(close: () => void) {
   return (event: MouseEvent) => {
-    if ((event.target as Element).closest("a[href]")) {
+    const modified =
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    if (!modified && (event.target as Element).closest("a[href]")) {
       close()
     }
   }
+}
+
+/**
+ * Closes a sheet once the viewport reaches the width where its content is
+ * inline again, so the rail or panel it holds is never missing from both.
+ */
+function useCloseAt(query: string, close: () => void) {
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const onChange = () => {
+      if (media.matches) {
+        close()
+      }
+    }
+    media.addEventListener("change", onChange)
+    return () => media.removeEventListener("change", onChange)
+  }, [query, close])
 }
 
 /**
@@ -60,6 +82,15 @@ function WorkspaceShell({
   const [panelOpen, setPanelOpen] = useState(defaultPanelOpen)
   const [railSheet, setRailSheet] = useState(false)
   const [panelSheet, setPanelSheet] = useState(false)
+  // Tailwind's `md` and `lg`, the widths the sheets hand back to the layout.
+  useCloseAt(
+    "(min-width: 48rem)",
+    useCallback(() => setRailSheet(false), [])
+  )
+  useCloseAt(
+    "(min-width: 64rem)",
+    useCallback(() => setPanelSheet(false), [])
+  )
 
   const togglePanel = () => {
     const next = !panelOpen
@@ -168,7 +199,13 @@ function WorkspaceShell({
           </Sheet>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto" id="main">
+        <main
+          className="min-h-0 flex-1 overflow-y-auto"
+          // The page scrolls here, not the window: the router resets and
+          // restores this element by its id.
+          data-scroll-restoration-id="main"
+          id="main"
+        >
           {children}
         </main>
       </div>
@@ -208,4 +245,4 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-export { PANEL_COOKIE, WorkspacePage, WorkspaceShell }
+export { WorkspacePage, WorkspaceShell }

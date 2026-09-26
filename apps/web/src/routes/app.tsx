@@ -10,7 +10,7 @@ import {
   createFileRoute,
   Link,
   Outlet,
-  useLocation,
+  useMatches,
   useRouter,
 } from "@tanstack/react-router"
 import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
@@ -51,19 +51,19 @@ const NAV = [
   { to: "/app/profile", label: "Business", icon: BuildingsIcon },
 ] as const
 
-/** The conversation owns its height and scroll; every other page is padded. */
-const CONVERSATION = /^\/app(\/c\/[^/]+)?\/?$/
-
 function AppLayout() {
   const { owner, orgs, active, panelOpen, waiting } = Route.useLoaderData()
-  const pathname = useLocation({ select: (location) => location.pathname })
+  // The conversation owns its height and scroll; every other page is padded.
+  const conversation = useMatches({
+    select: (matches) => matches.some((match) => match.staticData.conversation),
+  })
   const router = useRouter()
 
   return (
     <WorkspaceShell
       defaultPanelOpen={panelOpen}
       panel={<Waiting items={waiting} />}
-      panelCount={waiting.length}
+      panelCount={waiting?.length ?? 0}
       rail={
         <>
           <OrgSwitcher
@@ -85,6 +85,10 @@ function AppLayout() {
           <Link
             activeOptions={{ exact: true }}
             className={navLinkClass}
+            // A fresh state on every click, so a click on /app is a new
+            // navigation: the router reloads in place when both the address
+            // and the state match, and the conversation would keep its thread.
+            state={() => ({ chat: crypto.randomUUID() })}
             to="/app"
           >
             <NotePencilIcon aria-hidden />
@@ -118,7 +122,10 @@ function AppLayout() {
                 <DropdownMenuLinkItem render={<Link to="/app/account" />}>
                   Account
                 </DropdownMenuLinkItem>
-                <DropdownMenuLinkItem render={<Link to="/sign-out" />}>
+                {/* A plain link, not a router one: the router preloads a
+                    route on hover and focus, and /sign-out signs out in its
+                    loader. */}
+                <DropdownMenuLinkItem href="/sign-out">
                   Sign out
                 </DropdownMenuLinkItem>
               </DropdownMenuContent>
@@ -128,7 +135,7 @@ function AppLayout() {
         </>
       }
     >
-      {CONVERSATION.test(pathname) ? (
+      {conversation ? (
         <Outlet />
       ) : (
         <WorkspacePage>
@@ -145,13 +152,18 @@ const KIND = { approval: "Approval", question: "Question" } as const
  * The panel until the live panel lands: what is waiting on the owner, from the
  * same attention list the approvals inbox reads.
  */
-function Waiting({ items }: { items: AttentionItem[] }) {
+function Waiting({ items }: { items: AttentionItem[] | null }) {
   return (
     <section aria-labelledby="panel-waiting">
       <h2 className="mb-2 font-medium text-base" id="panel-waiting">
         Waiting on you
       </h2>
-      {items.length === 0 ? (
+      {items === null ? (
+        <p className="text-muted-foreground text-sm">
+          This list could not be loaded. It will try again when you next open a
+          page.
+        </p>
+      ) : items.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           Nothing right now. Questions and approvals from your team land here.
         </p>

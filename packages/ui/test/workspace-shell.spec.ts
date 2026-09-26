@@ -157,3 +157,37 @@ test("the panel toggle hides the panel and remembers it in a cookie", async ({
   await expect(panel).toBeVisible()
   expect(await cookie()).toBe("open")
 })
+
+test("an open sheet closes when the viewport grows past its breakpoint", async ({
+  page,
+}) => {
+  await open(page, WIDTHS.tablet)
+  await panelSheetToggle(page).click()
+  await expect(sheet(page)).toBeVisible()
+  await page.setViewportSize({ width: WIDTHS.desktop, height: HEIGHT })
+  await expect(sheet(page)).toHaveCount(0)
+  await expect(page.getByRole("complementary", { name: "Panel" })).toBeVisible()
+
+  await page.setViewportSize({ width: WIDTHS.phone, height: HEIGHT })
+  await railToggle(page).click()
+  await expect(sheet(page)).toBeVisible()
+  await page.setViewportSize({ width: WIDTHS.tablet, height: HEIGHT })
+  await expect(sheet(page)).toHaveCount(0)
+  await expect(
+    page.getByRole("complementary", { name: "Workspace" })
+  ).toBeVisible()
+})
+
+test("a modified click on a link leaves the sheet open", async ({ page }) => {
+  await open(page, WIDTHS.phone)
+  await railToggle(page).click()
+  // Dispatched rather than clicked: a real modified click opens a new tab,
+  // which is the browser's business and not what this asserts.
+  await sheet(page)
+    .getByRole("link", { name: "Staff" })
+    .dispatchEvent("click", { button: 0, metaKey: true, bubbles: true })
+  await sheet(page)
+    .getByRole("link", { name: "Staff" })
+    .dispatchEvent("click", { button: 1, bubbles: true })
+  await expect(sheet(page)).toBeVisible()
+})

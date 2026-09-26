@@ -122,6 +122,15 @@ test("the old chat address lands on the conversation", async ({ page }) => {
 test("the chat surface replays the recorded conversation", async ({ page }) => {
   await visit(page, "/app")
 
+  // Server function calls after the send: the frame read the router makes
+  // again once the turn ends, so the panel and its count are not stale.
+  const reads: string[] = []
+  page.on("request", (request) => {
+    if (request.url().includes("/_serverFn/")) {
+      reads.push(request.url())
+    }
+  })
+
   await page.getByLabel("Message input").fill("How did this week go?")
   await page.getByLabel("Send message").click()
 
@@ -139,6 +148,11 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   await expect(approval).toContainText("rev_2f41c9")
   await expect(approval.getByRole("button", { name: "Approve" })).toBeVisible()
   await expect(approval.getByRole("button", { name: "Decline" })).toBeVisible()
+  await expect
+    .poll(() => reads.length, {
+      message: "the frame was not read again after the turn",
+    })
+    .toBeGreaterThan(0)
 
   // The hole this suite used to have: every other screen was scanned and this
   // one was not, so the recording named `Brightclean` to whoever was signed in
@@ -148,6 +162,44 @@ test("the chat surface replays the recorded conversation", async ({ page }) => {
   // the opening turn and not the APPROVED and DENIED branches. Both are clean,
   // checked by hand; a test that answers the approval would cover them.
   await expectNoFixtureContent(page)
+})
+
+test("New chat starts an empty conversation", async ({ page }) => {
+  await visit(page, "/app")
+  await page.getByLabel("Message input").fill("How did this week go?")
+  await page.getByLabel("Send message").click()
+  await expect(page.getByText("How did this week go?")).toBeVisible()
+
+  await page.getByRole("link", { name: "New chat" }).click()
+  await expect(
+    page.getByRole("heading", { name: "What should I look at?" })
+  ).toBeVisible()
+  await expect(page.getByText("How did this week go?")).toHaveCount(0)
+})
+
+test("each page opens at the top, and Back returns to where the owner was", async ({
+  page,
+}) => {
+  const top = () => page.locator("main").evaluate((main) => main.scrollTop)
+  await visit(page, "/app/staff")
+  // An account with no business has no page tall enough to scroll, so main is
+  // given the height. The node sits outside React's tree and survives the
+  // navigation, which is what lets the reset be seen.
+  await page.locator("main").evaluate((main) => {
+    const spacer = document.createElement("div")
+    spacer.style.height = "4000px"
+    main.append(spacer)
+    main.scrollTop = 1200
+  })
+  await page.waitForTimeout(300)
+
+  await page.getByRole("link", { name: "Pipeline" }).click()
+  await expect(page).toHaveURL(/\/app\/pipeline/)
+  await expect.poll(top).toBe(0)
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/app\/staff/)
+  await expect.poll(top).toBe(1200)
 })
 
 test("the approvals inbox has nothing to decide", async ({ page }) => {

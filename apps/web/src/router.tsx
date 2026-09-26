@@ -45,15 +45,31 @@ function RouteNotFound() {
 }
 
 export function getRouter() {
+  // The workspace scrolls its <main>, not the window, so the router has to be
+  // told to reset it. Only on a new visit, though: after restoring an element
+  // on Back, the router resets the reset list whenever the window had nothing
+  // to restore, which in this layout is always. So <main> is left out of the
+  // list on Back, and its restored position stands.
+  let goingBack = false
   const router = createTanStackRouter({
     routeTree,
 
     scrollRestoration: true,
+    scrollToTopSelectors: [
+      () => (goingBack ? null : document.getElementById("main")),
+    ],
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     defaultPendingComponent: () => <LoadingState className="m-6" />,
     defaultErrorComponent: RouteError,
     defaultNotFoundComponent: RouteNotFound,
+  })
+  // Back lands on a lower history index. Forward looks like a new visit and
+  // opens at the top.
+  router.subscribe("onBeforeNavigate", ({ fromLocation, toLocation }) => {
+    goingBack =
+      !!fromLocation &&
+      toLocation.state.__TSR_index < fromLocation.state.__TSR_index
   })
 
   return router
@@ -62,5 +78,13 @@ export function getRouter() {
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof getRouter>
+  }
+  interface HistoryState {
+    /** Set fresh by "New chat", so a click on /app is a new navigation. */
+    chat?: string
+  }
+  interface StaticDataRouteOption {
+    /** The route is the conversation, which takes the full height. */
+    conversation?: boolean
   }
 }

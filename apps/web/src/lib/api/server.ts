@@ -4,8 +4,8 @@ import {
   getRequestProtocol,
   setCookie,
 } from "@tanstack/react-start/server"
-import { PANEL_COOKIE } from "@workspace/ui/components/workspace-shell"
-import { waitingOnOwner } from "@/lib/attention"
+import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
+import { readWaiting } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { source } from "./source"
 import type {
@@ -35,13 +35,14 @@ import type {
 
 const ORG_COOKIE = "reme-org"
 
-async function activeOrg(): Promise<OrgSummary | null> {
-  const orgs = await source.orgs()
-  if (orgs.length === 0) {
-    return null
-  }
+/** The organisation the cookie picked, if it is one of the owner's own. */
+function pickOrg(orgs: OrgSummary[]): OrgSummary | null {
   const picked = getCookie(ORG_COOKIE)
   return orgs.find((org) => org.slug === picked) ?? orgs[0] ?? null
+}
+
+async function activeOrg(): Promise<OrgSummary | null> {
+  return pickOrg(await source.orgs())
 }
 
 /**
@@ -55,17 +56,20 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     orgs: OrgSummary[]
     active: OrgSummary | null
     panelOpen: boolean
-    waiting: AttentionItem[]
+    /** Null when the read failed: the frame still renders, and says so. */
+    waiting: AttentionItem[] | null
   }> => {
-    const [orgs, active] = await Promise.all([source.orgs(), activeOrg()])
-    const attention = active
-      ? await source.attention(active.id, source.staff(active.id))
-      : []
+    const orgs = await source.orgs()
+    const active = pickOrg(orgs)
     return {
       orgs,
       active,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
-      waiting: waitingOnOwner(attention),
+      waiting: active
+        ? await readWaiting(() =>
+            source.attention(active.id, source.staff(active.id))
+          )
+        : [],
     }
   }
 )
