@@ -40,6 +40,7 @@ import {
   readApprovals,
   readBuilds,
   readFacts,
+  readQuestions,
   readSite,
   readWorkspace,
   unchanged,
@@ -497,6 +498,21 @@ async function buildAction(
       message: "That question has been answered.",
       detail: { request_id: body?.request_id ?? null },
     })
+  }
+  // Only the question the build waits on, the one `/workspace` shows: an
+  // earlier question the build moved past is not there to answer.
+  if (body) {
+    const [waiting] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      readQuestions(db, id)
+    )
+    if (waiting?.request.request_id !== body.request_id) {
+      return failure(404, {
+        class: "resource",
+        code: "request.not_found",
+        message: "This build is not waiting on that question.",
+        detail: { request_id: body.request_id },
+      })
+    }
   }
   const result = await bridge(env, owner, `/${id}/${action}`, {
     method: method === "GET" ? "GET" : "POST",

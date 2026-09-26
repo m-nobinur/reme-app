@@ -12,6 +12,7 @@ import {
 import {
   approvals,
   assignments,
+  assignmentTransitions,
   eq,
   events,
   facts,
@@ -30,8 +31,10 @@ import { fields } from "@workspace/starter-site/site-config"
  * `approvals` and `events` on every read, never stored. Every read here runs
  * inside the caller's `withOrg`, so the policy is the org filter, and each
  * one rides an index: the org's assignments, `approvals_one_open_per_revision`
- * for open approvals, `events_assignment_type_idx` for questions and the
- * feed, `facts_one_current_per_key` for facts, and
+ * for open approvals, `assignment_transitions_version_key` for a build's
+ * latest block, the events primary key for the event that block logged,
+ * `events_assignment_type_idx` for questions, answers and the feed,
+ * `facts_one_current_per_key` for facts, and
  * `deployments_site_config_version_key` for the live revision.
  */
 
@@ -118,18 +121,47 @@ export async function readApprovals(
   }))
 }
 
-/** Questions a waiting build asked and nobody has answered, oldest first. */
-async function readQuestions(
-  db: OrgScopedDb
+/**
+ * The question each waiting build is blocked on, oldest first, or only
+ * `assignmentId`'s. The build's latest transition to
+ * `blocked_on_information` names it by `request_id` in its event. A block
+ * that names none (a resume from a pause logs only the states) falls back to
+ * the build's latest question. Either way, an answered question is not
+ * waited on. A build that asked twice waits on its second question, so the
+ * owner's answer path reads this too and refuses any other.
+ */
+export async function readQuestions(
+  db: OrgScopedDb,
+  assignmentId: string | null = null
 ): Promise<Extract<AttentionItem, { kind: "question" }>[]> {
-  const rows = await db
-    .select({ payload: events.payload })
-    .from(events)
-    .innerJoin(assignments, eq(assignments.id, events.assignmentId))
-    .where(
-      sql`${assignments.state} = 'blocked_on_information' and ${events.type} = 'information.requested' and not exists (select 1 from ${events} answered where answered.assignment_id = ${events.assignmentId} and answered.type = 'information.answered' and answered.payload->>'request_id' = ${events.payload}->>'request_id')`
-    )
-    .orderBy(sql`${events.payload}->>'requested_at'`)
+  const rows = await db.execute<{ payload: unknown }>(sql`
+    select q.payload
+    from ${assignments} a
+    cross join lateral (
+      select b.payload->>'request_id' as request_id
+      from ${assignmentTransitions} t
+      join ${events} b on b.event_id = t.event_id
+      where t.assignment_id = a.id and t.to_state = 'blocked_on_information'
+      order by t.version desc
+      limit 1
+    ) latest
+    cross join lateral (
+      select e.payload
+      from ${events} e
+      where e.assignment_id = a.id
+        and e.type = 'information.requested'
+        and (latest.request_id is null or e.payload->>'request_id' = latest.request_id)
+        and not exists (
+          select 1 from ${events} answered
+          where answered.assignment_id = a.id
+            and answered.type = 'information.answered'
+            and answered.payload->>'request_id' = e.payload->>'request_id')
+      order by e.event_id desc
+      limit 1
+    ) q
+    where a.state = 'blocked_on_information'
+      and (${assignmentId}::uuid is null or a.id = ${assignmentId}::uuid)
+    order by q.payload->>'requested_at'`)
   return rows.map((row) => ({
     kind: "question",
     request: InformationRequest.parse(row.payload),

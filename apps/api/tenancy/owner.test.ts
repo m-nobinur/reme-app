@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   type Owner,
   owner,
+  question,
   seed,
   stubOrchestrator,
 } from "../test/owner-fixture.ts"
@@ -41,9 +42,12 @@ let realFetch: typeof fetch
 let mine: Owner
 let theirs: Owner
 let theirAlert: string
-const ids: Record<"mine" | "theirs", { build: string; approval: string }> = {
-  mine: { build: "", approval: "" },
-  theirs: { build: "", approval: "" },
+const ids: Record<
+  "mine" | "theirs",
+  { build: string; approval: string; asking: string; request: string }
+> = {
+  mine: { build: "", approval: "", asking: "", request: "" },
+  theirs: { build: "", approval: "", asking: "", request: "" },
 }
 
 beforeAll(async () => {
@@ -58,7 +62,20 @@ beforeAll(async () => {
     const s = seed(kit, who)
     const build = await s.assignment("awaiting_review")
     const revision = await s.revision(build, 1)
-    ids[name] = { build, approval: await s.approval(build, revision, 72) }
+    // A build waiting on a question, for the answer route. Not a site
+    // build, since the site lock allows one writer and the review holds it.
+    const asking = await s.assignment("blocked_on_information", {
+      kind: "probe.ask",
+    })
+    const asked = question(who, asking)
+    await s.event(asking, "information.requested", asked)
+    await s.blocked(asking, asked.request_id, 1)
+    ids[name] = {
+      build,
+      approval: await s.approval(build, revision, 72),
+      asking,
+      request: asked.request_id,
+    }
   }
   const s = seed(kit, theirs)
   const failed = await s.assignment("failed")
@@ -84,7 +101,7 @@ afterAll(async () => {
 })
 
 const routes = (which: "mine" | "theirs"): [string, RequestInit][] => {
-  const { build, approval } = ids[which]
+  const { build, approval, asking, request } = ids[which]
   const post = (body: unknown) => ({
     method: "POST",
     headers: {
@@ -94,10 +111,7 @@ const routes = (which: "mine" | "theirs"): [string, RequestInit][] => {
     body: JSON.stringify(body),
   })
   return [
-    [
-      `/builds/${build}/answer`,
-      post({ request_id: crypto.randomUUID(), value: "x" }),
-    ],
+    [`/builds/${asking}/answer`, post({ request_id: request, value: "x" })],
     [`/builds/${build}/cancel`, post({})],
     [`/builds/${build}/preview`, { method: "GET" }],
     [

@@ -162,6 +162,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await a.event(asking, "information.requested", request)
     const answered = question(asker, asking, "business.email")
     await a.event(asking, "information.requested", answered)
+    await a.blocked(asking, request.request_id, 4)
     const fact = await kit.withOrg({ orgId: asker.orgId }, (db) =>
       supersedeFact(db, {
         orgId: asker.orgId,
@@ -267,6 +268,60 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         request: expect.objectContaining({ request_id: askIds.request }),
       }),
     ])
+  })
+
+  it("shows one question per build, the one it last blocked on", async () => {
+    const twice = await owner(kit, url as string, "twice")
+    const t = seed(kit, twice)
+    const build = await t.assignment("blocked_on_information")
+    const first = question(twice, build)
+    const second = question(twice, build)
+    for (const [asked, version] of [
+      [first, 3],
+      [second, 5],
+    ] as const) {
+      await t.event(build, "information.requested", asked)
+      await t.blocked(build, asked.request_id, version)
+    }
+    const body = WorkspaceStatus.parse(await (await workspace(twice)).json())
+    expect(body.attention).toEqual([{ kind: "question", request: second }])
+  })
+
+  it("still shows the question after a pause and resume, whose block names none", async () => {
+    const resumed = await owner(kit, url as string, "resumed")
+    const r = seed(kit, resumed)
+    const build = await r.assignment("blocked_on_information")
+    const asked = question(resumed, build)
+    await r.event(build, "information.requested", asked)
+    await r.blocked(build, asked.request_id, 3)
+    await r.transition(build, "blocked_on_information", "paused", 4)
+    await r.transition(build, "paused", "blocked_on_information", 5)
+    const body = WorkspaceStatus.parse(await (await workspace(resumed)).json())
+    expect(body.attention).toEqual([{ kind: "question", request: asked }])
+  })
+
+  it("drops the question once it is answered, while the build still waits", async () => {
+    const waiting = await owner(kit, url as string, "answered")
+    const w = seed(kit, waiting)
+    const build = await w.assignment("blocked_on_information")
+    const asked = question(waiting, build)
+    await w.event(build, "information.requested", asked)
+    await w.blocked(build, asked.request_id, 3)
+    const before = WorkspaceStatus.parse(
+      await (await workspace(waiting)).json()
+    )
+    expect(before.attention).toEqual([{ kind: "question", request: asked }])
+    // The Workflow has not woken yet, so the state is still the blocked one.
+    await w.event(build, "information.answered", {
+      answer_id: crypto.randomUUID(),
+      org_id: waiting.orgId,
+      assignment_id: build,
+      request_id: asked.request_id,
+      fact_id: crypto.randomUUID(),
+      answered_at: new Date().toISOString(),
+    })
+    const after = WorkspaceStatus.parse(await (await workspace(waiting)).json())
+    expect(after.attention).toEqual([])
   })
 
   it("answers an unchanged poll with 304 and no body", async () => {
@@ -798,6 +853,35 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const body = ErrorEnvelope.parse(await response.json())
       expect(body.class).toBe("integrity")
       expect(body.code).toBe("orchestrator.off_contract")
+    })
+
+    it("refuses an answer to a question the build no longer waits on", async () => {
+      const twice = await owner(kit, url as string, "stale")
+      const t = seed(kit, twice)
+      const build = await t.assignment("blocked_on_information")
+      const first = question(twice, build)
+      const second = question(twice, build)
+      await t.event(build, "information.requested", first)
+      await t.blocked(build, first.request_id, 3)
+      await t.event(build, "information.requested", second)
+      await t.blocked(build, second.request_id, 5)
+      const stub = stubOrchestrator()
+      const stale = await twice.call(
+        stub,
+        `/builds/${build}/answer`,
+        json({ request_id: first.request_id, value: "x" })
+      )
+      expect(stale.status).toBe(404)
+      expect(ErrorEnvelope.parse(await stale.json()).code).toBe(
+        "request.not_found"
+      )
+      expect(stub.calls).toHaveLength(0)
+      await twice.call(
+        stub,
+        `/builds/${build}/answer`,
+        json({ request_id: second.request_id, value: "x" })
+      )
+      expect(stub.calls).toHaveLength(1)
     })
 
     it("validates an answer before the binding, then relays it", async () => {

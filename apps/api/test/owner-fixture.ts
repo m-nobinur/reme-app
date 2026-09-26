@@ -2,6 +2,7 @@ import type { AssignmentState } from "@workspace/contracts"
 import {
   approvals,
   assignments,
+  assignmentTransitions,
   deployments,
   eq,
   events,
@@ -139,7 +140,10 @@ export function ulid(at = Date.now()): string {
 export function seed(kit: Tenancy, who: Owner) {
   const { orgId } = who
   return {
-    assignment: (state: AssignmentState, extra: { key?: string } = {}) =>
+    assignment: (
+      state: AssignmentState,
+      extra: { key?: string; kind?: string } = {}
+    ) =>
       kit.withOrg({ orgId }, async (db) => {
         const [row] = await db
           .insert(assignments)
@@ -147,7 +151,7 @@ export function seed(kit: Tenancy, who: Owner) {
             orgId,
             staffId: who.devId,
             createdByStaffId: who.chiefId,
-            kind: "site.build",
+            kind: extra.kind ?? "site.build",
             state,
             goal: "Build the site from the canonical facts.",
             acceptanceCriteria: ["probe"],
@@ -245,6 +249,54 @@ export function seed(kit: Tenancy, who: Owner) {
         })
         return eventId
       }),
+    /**
+     * A transition as `advance` writes it: the state change event, the
+     * transition row citing it, and the assignment's row at the new state and
+     * version. `extra` is the event's payload beyond from, to and version, as
+     * `request_id` for a block on a question.
+     */
+    async transition(
+      assignmentId: string,
+      from: AssignmentState,
+      to: AssignmentState,
+      version: number,
+      extra: Record<string, unknown> = {}
+    ) {
+      const eventId = await this.event(
+        assignmentId,
+        "assignment.state_changed",
+        {
+          from,
+          to,
+          version,
+          ...extra,
+        }
+      )
+      await kit.withOrg({ orgId }, async (db) => {
+        await db.insert(assignmentTransitions).values({
+          orgId,
+          assignmentId,
+          fromState: from,
+          toState: to,
+          version,
+          eventId,
+        })
+        await db
+          .update(assignments)
+          .set({ state: to, version, updatedAt: new Date() })
+          .where(eq(assignments.id, assignmentId))
+      })
+    },
+    /** A block on the question `requestId`, as the Workflow's ask step logs it. */
+    blocked(assignmentId: string, requestId: string, version: number) {
+      return this.transition(
+        assignmentId,
+        "implementing",
+        "blocked_on_information",
+        version,
+        { request_id: requestId }
+      )
+    },
   }
 }
 
