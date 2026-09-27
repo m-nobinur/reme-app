@@ -156,6 +156,54 @@ describe("FactValue", () => {
   it.each(refused)("refuses %s", (_name, fact) => {
     expect(verdict("FactValue", FactValue, fact)).toEqual(REFUSED)
   })
+
+  // JSON Schema cannot compare two properties, so only Zod holds this rule.
+  // Every writer (api, orchestrator, web) parses with Zod.
+  const HOURS = "hours.weekday"
+  it("refuses hours that close before or as they open, or past midnight", () => {
+    for (const value of [
+      { open: "17:30", close: "08:00" },
+      { open: "09:00", close: "09:00" },
+      { open: "22:00", close: "02:00" },
+    ]) {
+      expect(verdict("FactValue", FactValue, { key: HOURS, value })).toEqual({
+        zod: false,
+        json: true,
+      })
+      expect(FactValue.safeParse({ key: HOURS, value }).error?.issues).toEqual([
+        expect.objectContaining({
+          code: "custom",
+          path: ["value", "close"],
+          message: "close must be later than open on the same day",
+        }),
+      ])
+    }
+  })
+
+  it("takes a close of 00:00 as the end of the day, after any opening", () => {
+    for (const open of ["18:00", "23:59", "00:00"]) {
+      expect(
+        verdict("FactValue", FactValue, {
+          key: HOURS,
+          value: { open, close: "00:00" },
+        })
+      ).toEqual(ACCEPTED)
+    }
+  })
+
+  it("says only what is wrong with a time that is not HH:MM", () => {
+    for (const value of [
+      { open: "25:00", close: "08:00" },
+      { open: "8", close: "17:00" },
+    ]) {
+      expect(FactValue.safeParse({ key: HOURS, value }).error?.issues).toEqual([
+        expect.objectContaining({
+          code: "invalid_format",
+          path: ["value", "open"],
+        }),
+      ])
+    }
+  })
 })
 
 describe("the requests around them", () => {

@@ -151,6 +151,13 @@ it("refuses hours that close before, or when, they open", () => {
   expect(answerValue(hours, form({ open: "09:00", close: "09:30" }))).toEqual({
     value: { open: "09:00", close: "09:30" },
   })
+  // A close of 00:00 is midnight, the end of the day.
+  expect(answerValue(hours, form({ open: "18:00", close: "00:00" }))).toEqual({
+    value: { open: "18:00", close: "00:00" },
+  })
+  expect(answerValue(hours, form({ open: "", close: "08:00" }))).toEqual({
+    error: "Check the opening time.",
+  })
 })
 
 it("drops the UK trunk zero written after the country code", () => {
