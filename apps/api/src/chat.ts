@@ -23,7 +23,7 @@ import {
 // bundle (about 49 KiB gzip for `createUIMessageStream`).
 import type { UIMessageChunk } from "ai"
 import { holdsNul, notFound } from "./conversations.ts"
-import { failure, invalid, readBody } from "./http.ts"
+import { failure, invalid, readBody, sortedKeys } from "./http.ts"
 import { type Owner, startChange, stateFacts } from "./owner.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
@@ -233,18 +233,6 @@ function stream(
     headers: STREAM_HEADERS,
   })
 }
-
-/**
- * Keys in code-point order at every depth. A replay reads the call back from
- * jsonb, which keeps its own key order, so without this a retry would send
- * the same chunks in different bytes.
- */
-const sortedKeys = (_key: string, value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? Object.fromEntries(
-        Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      )
-    : value
 
 /** The step that followed `call` in the stored row, as it was first made. */
 function stepAfter(parts: Part[], call: ToolPart): Part[] {

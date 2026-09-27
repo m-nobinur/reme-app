@@ -25,6 +25,7 @@ import {
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
+import { sha256Hex } from "./http.ts"
 
 /**
  * What the owner's panel polls: attention derived from `assignments`,
@@ -296,14 +297,7 @@ export async function readActivity(
  * changes what the owner would see changes the tag.
  */
 export async function etag(body: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(body)
-  )
-  const hex = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-  return `"${hex.slice(0, 32)}"`
+  return `"${(await sha256Hex(body)).slice(0, 32)}"`
 }
 
 /** Whether an `If-None-Match` header names this tag, weak or strong. */

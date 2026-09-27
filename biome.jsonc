@@ -99,6 +99,57 @@
       }
     },
     {
+      // The Chief of Staff's code. The model's history is derived from the
+      // event log (ADR-034), so nothing here may import `conversationMessages`,
+      // the mutable rows the screen shows. This is a tripwire; the hash check
+      // before each model call is the boundary. Narrower than the apps block
+      // and so replacing it, which is why its patterns are repeated.
+      "includes": ["apps/api/src/cos/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@workspace/db": {
+                    "importNames": ["conversationMessages"],
+                    "message": "The CoS reads its history from the event log only (ADR-034). conversation_messages is what the screen shows and never reaches the model."
+                  },
+                  "@workspace/db/schema": {
+                    "importNames": ["conversationMessages"],
+                    "message": "The CoS reads its history from the event log only (ADR-034). conversation_messages is what the screen shows and never reaches the model."
+                  }
+                },
+                "patterns": [
+                  {
+                    // Both import conversationMessages, so reaching them from
+                    // here goes round the ban above, and chat.ts will import
+                    // this directory. Shared helpers live in ../http.ts.
+                    "group": [
+                      "../chat",
+                      "../chat.ts",
+                      "../conversations",
+                      "../conversations.ts"
+                    ],
+                    "message": "cos/ must not import chat.ts or conversations.ts: both read conversation_messages (ADR-034), and chat.ts will import cos/. Take shared helpers from ../http.ts."
+                  },
+                  {
+                    "group": ["**/packages/*/**"],
+                    "message": "Import a package by name. A relative path into another package skips its exports and this check."
+                  },
+                  {
+                    "group": ["@flue/*", "@earendil-works/*"],
+                    "message": "packages/facade is the only importer of flue and Pi (R2). Agent modules take hooks from the facade."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       // The one file allowed to import `@flue/vite`: the orchestrator's build
       // has to load the plugin that scans agents and generates their Durable
       // Objects. Narrower than the apps block, so the relative-reach pattern
