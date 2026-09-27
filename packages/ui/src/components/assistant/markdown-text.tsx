@@ -52,12 +52,77 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeExternalLinks]}
       className="aui-md"
       components={markdownComponents}
       disallowedElements={["img"]}
       defer
     />
   )
+}
+
+/** The part of a hast node this file reads and writes. */
+type HastNode = {
+  type: string
+  tagName?: string
+  value?: string
+  properties?: Record<string, unknown>
+  children?: HastNode[]
+}
+
+/** A link's text as a reader sees it: images are dropped, so they add none. */
+const linkText = (node: HastNode): string =>
+  node.type === "text"
+    ? (node.value ?? "")
+    : node.tagName === "img"
+      ? ""
+      : (node.children ?? []).map(linkText).join("")
+
+/** The host a URL, or text that reads as one, points at. */
+function hostOf(value: string): string | null {
+  try {
+    const url = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`
+    return new URL(url).hostname
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every link to an absolute http(s) URL opens in a new tab with no opener
+ * or referrer, shows the host it goes to unless its text already is that
+ * host, and tells a screen reader it opens a new tab. Link text is the
+ * model's, so "Open your new site" could point anywhere. A link whose only
+ * content was an image is named by its host. Footnotes, mailto and the
+ * blank href a blocked scheme leaves stay as they are. Written into the
+ * tree rather than the `a` component, so a caller's `a` still gets it.
+ */
+function rehypeExternalLinks() {
+  const visit = (node: HastNode) => {
+    for (const child of node.children ?? []) visit(child)
+    const href = String(node.properties?.href ?? "")
+    if (node.tagName !== "a" || !/^https?:\/\//i.test(href)) return
+    const host = hostOf(href)
+    if (!host) return
+    const text = linkText(node).trim()
+    node.properties = {
+      ...node.properties,
+      target: "_blank",
+      rel: ["noopener", "noreferrer"],
+    }
+    node.children = !text
+      ? [{ type: "text", value: host }]
+      : hostOf(text) === host
+        ? (node.children ?? [])
+        : [...(node.children ?? []), { type: "text", value: ` (${host})` }]
+    node.children.push({
+      type: "element",
+      tagName: "span",
+      properties: { className: ["sr-only"] },
+      children: [{ type: "text", value: " (opens in a new tab)" }],
+    })
+  }
+  return visit
 }
 
 export const MarkdownText = memo(MarkdownTextImpl)
@@ -148,8 +213,6 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  // A new tab keeps the conversation open, and no referrer tells the other
-  // site which conversation the link was in.
   a: ({ className, ...props }) => (
     <a
       className={cn(
@@ -157,8 +220,6 @@ const defaultComponents = memoizeMarkdownComponents({
         className
       )}
       {...props}
-      rel="noopener noreferrer"
-      target="_blank"
     />
   ),
   blockquote: ({ className, ...props }) => (

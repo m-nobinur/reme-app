@@ -280,39 +280,35 @@ for (const theme of ["light", "dark"] as const) {
   }
 }
 
-test("a reply's markdown image never loads, and its links open a new tab", async ({
-  page,
-}) => {
-  const fetched: string[] = []
-  page.on("request", (request) => {
-    if (request.url().startsWith("https://example.net/")) {
-      fetched.push(request.url())
-    }
-  })
-  for (const theme of ["light", "dark"] as const) {
-    for (const [name, width] of Object.entries({
-      phone: 390,
-      tablet: 768,
-      desktop: 1440,
-    })) {
+for (const theme of ["light", "dark"] as const) {
+  for (const [name, width] of Object.entries({
+    phone: 390,
+    tablet: 768,
+    desktop: 1440,
+  })) {
+    test(`a reply's markdown image never loads, and an outside link names its host, on a ${name} in ${theme}`, async ({
+      page,
+    }) => {
+      const fetched: string[] = []
+      page.on("request", (request) => {
+        if (request.url().startsWith("https://example.net/")) {
+          fetched.push(request.url())
+        }
+      })
       await open(page, "MarkdownText", width, theme)
       const reply = page.locator('[data-entry="MarkdownText"] .aui-md')
-      await expect(reply).toContainText("The shop front:")
+      await expect(reply).toContainText("Photos of the shop front")
       await expect(reply.locator("img")).toHaveCount(0)
-      await expect(
-        reply.getByRole("link", { name: "revision" })
-      ).toHaveAttribute("rel", "noopener noreferrer")
-      const results = await new AxeBuilder({ page })
-        .include('[data-entry="MarkdownText"]')
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-        .analyze()
-      expect
-        .soft(
-          results.violations.map((v) => `${theme} ${name}: ${v.id}`),
-          JSON.stringify(results.violations, null, 2)
-        )
-        .toEqual([])
-    }
+      const outside = reply.getByRole("link", {
+        name: "the site (example.net) (opens in a new tab)",
+      })
+      await expect(outside).toHaveAttribute("target", "_blank")
+      await expect(outside).toHaveAttribute("rel", "noopener noreferrer")
+      // An in-page link stays in the tab.
+      const inPage = reply.getByRole("link", { name: "revision", exact: true })
+      await expect(inPage).not.toHaveAttribute("target", /./)
+      await axe(page, `MarkdownText ${theme} ${name}`)
+      expect(fetched).toEqual([])
+    })
   }
-  expect(fetched).toEqual([])
-})
+}
