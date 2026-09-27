@@ -8,6 +8,7 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
+  approvals as approvalRows,
   assignments,
   eq,
   staff,
@@ -738,7 +739,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           [
             () => new Response("upstream broke", { status: 500 }),
             503,
-            "orchestrator.off_contract",
+            "orchestrator.unavailable",
             false,
           ],
           [
@@ -802,7 +803,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       plan: {
         create?: "hang"
         end?: "hang" | "refuse"
-        cancel?: "hang"
+        cancel?: "hang" | "refuse"
         delay?: number
       } = {}
     ) => {
@@ -826,6 +827,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           await s.state(reviewing, "cancelled")
           return Response.json({})
         }
+        if (plan.cancel === "refuse") return notRequested()
         await s.state(made.id, "cancelled")
         if (plan.cancel === "hang") return never()
         return Response.json({ assignment_id: made.id, state: "cancelled" })
@@ -954,11 +956,15 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
 
     it("gives up on its own reads at the deadline", async () => {
+      // The read the deadline gave up on still runs; awaited below so it
+      // ends inside this case.
+      let late: Promise<unknown> = Promise.resolve()
       const slow: Tenancy = {
         ...kit,
-        withOrg: async (ctx, fn) => {
-          await sleep(1_000)
-          return kit.withOrg(ctx, fn)
+        withOrg: (ctx, fn) => {
+          const run = sleep(1_000).then(() => kit.withOrg(ctx, fn))
+          late = run.catch(() => undefined)
+          return run
         },
       }
       const stub = stubOrchestrator()
@@ -993,7 +999,104 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         expect(stub.calls).toHaveLength(0)
       } finally {
         timer.restore()
+        await late
       }
+    })
+
+    it("answers a key's settled build without reading how to route", async () => {
+      const s = seed(kit, changes)
+      const key = crypto.randomUUID()
+      const made = await s.assignment("implementing", { key })
+      // Any read of the open reviews fails, so only a skip answers 200.
+      const blind: Tenancy = {
+        ...kit,
+        withOrg: (ctx, fn) =>
+          kit.withOrg(ctx, (db) =>
+            fn(
+              new Proxy(db, {
+                get(target, prop, receiver) {
+                  const value = Reflect.get(target, prop, receiver)
+                  if (prop !== "select") return value
+                  return (...args: unknown[]) => {
+                    const query = value.apply(target, args)
+                    return new Proxy(query, {
+                      get(q, p, r) {
+                        const from = Reflect.get(q, p, r)
+                        if (p !== "from") return from
+                        return (table: unknown) => {
+                          if (table === approvalRows) {
+                            throw new Error("routed a settled build")
+                          }
+                          return from.call(q, table)
+                        }
+                      },
+                    })
+                  }
+                },
+              })
+            )
+          ),
+      }
+      const stub = stubOrchestrator()
+      const response = await startChange(
+        {
+          ...env(url as string),
+          ORCHESTRATOR: stub,
+          SITE_HOST_SUFFIX: SUFFIX,
+        } as unknown as Env,
+        blind,
+        {
+          orgId: changes.orgId,
+          session: {
+            workosUserId: changes.workosUserId,
+            sessionId: "session_probe",
+            impersonated: false,
+            email: "owner@changes-probe.invalid",
+            name: "Probe Owner",
+          },
+        },
+        "Change the hero.",
+        key
+      )
+      expect(response.status).toBe(200)
+      expect(BuildSummary.parse(await response.json()).assignment_id).toBe(made)
+      expect(stub.calls).toHaveLength(0)
+      await s.state(made, "cancelled")
+    })
+
+    it("answers a refused cancel as a conflict, and alerts with both builds", async () => {
+      const { s, reviewing } = await reviewIn("awaiting_review", 72, 24)
+      const { stub, made } = replacing(s, reviewing, {
+        end: "refuse",
+        cancel: "refuse",
+      })
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        const response = await changes.call(
+          stub,
+          "/changes",
+          json({ text: "Change the hero." })
+        )
+        expect(response.status).toBe(409)
+        expect(ErrorEnvelope.parse(await response.json())).toMatchObject({
+          class: "validation",
+          code: "change.not_cancelled",
+        })
+        expect(logged).toHaveBeenCalledWith(
+          JSON.stringify({
+            alert: "change.not_cancelled",
+            new_assignment_id: made.id,
+            old_assignment_id: reviewing,
+            status: 409,
+          })
+        )
+      } finally {
+        logged.mockRestore()
+      }
+      await s.state(reviewing, "cancelled")
+      await s.state(made.id, "cancelled")
     })
 
     it("routes on every unfinished build, not the panel's ten", async () => {
@@ -1230,21 +1333,26 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(stub.calls).toHaveLength(1)
     })
 
-    it("answers 503 transient when the builder fails outside the envelope", async () => {
-      const stub = stubOrchestrator(
-        () => new Response("upstream broke", { status: 500 })
-      )
-      const response = await asker.call(
-        stub,
-        `/builds/${askIds.asking}/preview`
-      )
-      expect(response.status).toBe(503)
-      const body = ErrorEnvelope.parse(await response.json())
-      expect([body.class, body.code]).toEqual([
-        "transient",
-        "orchestrator.off_contract",
-      ])
-    })
+    it.each([
+      [500, 503, "transient", "orchestrator.unavailable"],
+      // A 4xx outside the envelope is a route or shape mismatch: nothing
+      // committed, and a retry would fail the same way.
+      [404, 502, "integrity", "orchestrator.off_contract"],
+    ])(
+      "answers a bare %s from the builder as %s %s",
+      async (given, status, errorClass, code) => {
+        const stub = stubOrchestrator(
+          () => new Response("upstream broke", { status: given })
+        )
+        const response = await asker.call(
+          stub,
+          `/builds/${askIds.asking}/preview`
+        )
+        expect(response.status).toBe(status)
+        const body = ErrorEnvelope.parse(await response.json())
+        expect([body.class, body.code]).toEqual([errorClass, code])
+      }
+    )
 
     it("relays the builder's refusal of a different answer to an answered question", async () => {
       const stub = stubOrchestrator(refusal(409, "answer.already_given"))

@@ -295,4 +295,38 @@ describe("the bridge", () => {
       spy.mockRestore()
     }
   })
+
+  it("answers 503 transient when the binding rejects the call", async () => {
+    const result = await bridge(
+      {
+        ORCHESTRATOR: {
+          fetch: async () => {
+            throw new TypeError("Network connection lost.")
+          },
+        },
+      } as unknown as Env,
+      owner,
+      `/${A}/cancel`,
+      { key: "k" }
+    )
+    expect(result.status).toBe(503)
+    expect(ErrorEnvelope.parse(result.body)).toMatchObject({
+      class: "transient",
+      code: "orchestrator.unavailable",
+    })
+  })
+
+  it("takes its listener off a shared signal once the call settles", async () => {
+    const shared = new AbortController()
+    const removed = vi.spyOn(shared.signal, "removeEventListener")
+    await bridge(
+      {
+        ORCHESTRATOR: { fetch: async () => Response.json({}) },
+      } as unknown as Env,
+      owner,
+      `/${A}/preview`,
+      { method: "GET", signal: shared.signal }
+    )
+    expect(removed).toHaveBeenCalledWith("abort", expect.any(Function))
+  })
 })

@@ -42,6 +42,7 @@ import {
   owner,
   type Stub,
   SUFFIX,
+  seed,
   stubOrchestrator,
 } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
@@ -975,6 +976,52 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       conversation_id: id,
       mode: "act",
       turn: { kind: "message", message_id: messageId, text: "Wait" },
+    })
+
+    it("keeps a refused cancel as the card's answer, so the retry calls nothing", async () => {
+      const { who, me, id, body } = await carded("chat-not-cancelled")
+      // An open review, so the yes replaces it.
+      const s = seed(kit, who)
+      const reviewing = await s.assignment("awaiting_review")
+      await s.approval(reviewing, await s.revision(reviewing, 1), 72)
+      const refusal = (code: string) =>
+        Response.json(
+          {
+            class: "validation",
+            code,
+            message: "Refused.",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 409 }
+        )
+      const created = building()
+      const refusing = stubOrchestrator((request) => {
+        const path = new URL(request.url).pathname
+        if (path === "/assignments/") return created.fetch(request)
+        return refusal(
+          path.endsWith("/cancel") ? "assignment.state" : "approval.gone"
+        )
+      })
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        const first = await me.turn(id, body(true), refusing)
+        expect(first.after.parts.at(-2)).toMatchObject({
+          output: {
+            outcome: "refused",
+            error: { code: "change.not_cancelled" },
+          },
+        })
+      } finally {
+        logged.mockRestore()
+      }
+      expect(refusing.calls).toHaveLength(3)
+      const again = await me.send(body(true), refusing)
+      expect(again.response.status).toBe(200)
+      expect(refusing.calls).toHaveLength(3)
+      await s.state(reviewing, "cancelled")
     })
 
     it("answers a turn sent while a yes runs with chat.busy at once", async () => {

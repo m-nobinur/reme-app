@@ -78,19 +78,39 @@ const BRIDGE_TIMEOUT_MS = 10_000
  * `work`, or `late()` once `signal` aborts, whichever comes first. An
  * aborted signal starts no work; work already started is no longer waited
  * for, not stopped. The listener goes on before the work starts, so the
- * deadline wins a tie with the work's own abort.
+ * deadline wins a tie with the work's own abort, and comes off once either
+ * settles, so a change's one signal does not collect a listener per call.
  */
-function within<T>(
+export function within<T>(
   signal: AbortSignal,
   work: () => Promise<T>,
   late: () => T
 ): Promise<T> {
   if (signal.aborted) return Promise.resolve(late())
-  const aborted = new Promise<T>((resolve) =>
-    signal.addEventListener("abort", () => resolve(late()), { once: true })
+  let onAbort: () => void = () => undefined
+  const aborted = new Promise<T>((resolve) => {
+    onAbort = () => resolve(late())
+    signal.addEventListener("abort", onAbort, { once: true })
+  })
+  return Promise.race([work(), aborted]).finally(() =>
+    signal.removeEventListener("abort", onAbort)
   )
-  return Promise.race([work(), aborted])
 }
+
+/** The orchestrator answered in no shape at all, or not at all. */
+const unreachable = (
+  code: "orchestrator.timeout" | "orchestrator.unavailable"
+) =>
+  ({
+    status: 503,
+    body: {
+      class: "transient",
+      code,
+      message: "The builder did not answer.",
+      detail: {},
+      occurred_at: new Date().toISOString(),
+    },
+  }) satisfies Bridged
 
 /**
  * One call over the binding. The request is built here from nothing the
@@ -101,7 +121,8 @@ function within<T>(
  * It ends by `signal`, or by its own `BRIDGE_TIMEOUT_MS` when given none,
  * and a call cut off answers as a 503 `orchestrator.timeout`: the request
  * is aborted, and the answer is not waited for even if the binding ignores
- * the abort.
+ * the abort. A call the binding rejects (the orchestrator unreachable or
+ * failing before it answers) is a 503 `orchestrator.unavailable`.
  */
 export async function bridge(
   env: Env,
@@ -132,47 +153,51 @@ export async function bridge(
           body: init.body === undefined ? null : JSON.stringify(init.body),
           signal,
         })
-      )
+      ).catch(() => null)
+      if (!response) return unreachable("orchestrator.unavailable")
       return {
         status: response.status,
         body: await response.json().catch(() => null),
       }
     },
-    () => ({
-      status: 503,
-      body: {
-        class: "transient",
-        code: "orchestrator.timeout",
-        message: "The builder did not answer in time.",
-        detail: {},
-        occurred_at: new Date().toISOString(),
-      },
-    })
+    () => unreachable("orchestrator.timeout")
   )
 }
 
 /**
  * The orchestrator's answer, checked against the contract on the way out. A
  * success passes when it parses, and a refusal when it is a 4xx carrying the
- * §28.1 envelope. Anything else, a timeout, a 5xx or an answer off the
- * contract, leaves the outcome unknown (ADR-034): the call may have
- * committed. The owner gets 503 `transient`, and a retry under the same key
- * finds what the call did.
+ * §28.1 envelope. A 4xx without one is a route or shape mismatch that
+ * committed nothing and will fail the same way again: 502 `integrity`.
+ * Anything else, a timeout, a 5xx or a success off the contract, leaves the
+ * outcome unknown (ADR-034): the call may have committed. The owner gets 503
+ * `transient`, and a retry under the same key finds what the call did.
  */
 function relay(result: Bridged, parse: (body: unknown) => unknown): Response {
   if (result.status < 300) {
     try {
       return Response.json(parse(result.body), { status: result.status })
     } catch (error) {
-      return offContract(result.status, (error as { issues?: [] }).issues)
+      noted("orchestrator.off_contract", result.status, error)
+      return unknown("orchestrator.off_contract")
     }
   }
   const refusal = ErrorEnvelope.safeParse(result.body)
-  if (!refusal.success) return offContract(result.status, refusal.error.issues)
   if (result.status < 500) {
-    return Response.json(refusal.data, { status: result.status })
+    if (refusal.success) {
+      return Response.json(refusal.data, { status: result.status })
+    }
+    noted("orchestrator.off_contract", result.status, refusal.error)
+    return failure(502, {
+      class: "integrity",
+      code: "orchestrator.off_contract",
+      message: "The builder answered in a shape we do not accept.",
+      detail: {},
+    })
   }
-  return unknown(refusal.data.code)
+  if (refusal.success) return unknown(refusal.data.code)
+  noted("orchestrator.unavailable", result.status)
+  return unknown("orchestrator.unavailable")
 }
 
 /** An outcome nobody can vouch for, under the code that says why. */
@@ -184,15 +209,10 @@ const unknown = (code: string) =>
     detail: {},
   })
 
-function offContract(status: number, issues?: { path: PropertyKey[] }[]) {
-  console.error(
-    JSON.stringify({
-      code: "orchestrator.off_contract",
-      status,
-      issues: issuePaths(issues),
-    })
-  )
-  return unknown("orchestrator.off_contract")
+/** The log line for an answer that is not the contract's, paths only. */
+function noted(code: string, status: number, error?: unknown) {
+  const { issues } = (error ?? {}) as { issues?: { path: PropertyKey[] }[] }
+  console.error(JSON.stringify({ code, status, issues: issuePaths(issues) }))
 }
 
 const notFound = (noun: "assignment" | "approval") =>
@@ -426,10 +446,15 @@ export async function startChange(
           workosUserId: session.workosUserId,
           ownerName: session.name ?? session.email,
         })
-        const [made] = await db
+        const [found] = await db
           .select()
           .from(assignments)
           .where(eq(assignments.idempotencyKey, key))
+        const made = found ? toAssignment(found) : null
+        // Only a queued build can have steps left; any other answers alone.
+        if (made && made.state !== "queued") {
+          return { made, steered: null, builds: [], reviews: [], live: false }
+        }
         // A steer makes no build, so a retried steer is found by its event
         // and replayed against the build it went to, whatever that build is
         // doing now: routing again could start or steer a different one.
@@ -455,7 +480,7 @@ export async function startChange(
           readSite(db, env.SITE_HOST_SUFFIX),
         ])
         return {
-          made: made ? toAssignment(made) : null,
+          made,
           steered: null,
           builds,
           reviews,
@@ -510,15 +535,34 @@ export async function startChange(
       () => null
     )
     if (cancelled.ok) return ended
-    return cancelled.status >= 500 ? cancelled : unknown("change.not_cancelled")
+    if (cancelled.status >= 500) return cancelled
+    // Refused outright: both builds stay open and no retry will change
+    // that, so it is a conflict someone has to look at, not a 503 to loop on.
+    console.error(
+      JSON.stringify({
+        alert: "change.not_cancelled",
+        new_assignment_id: build.assignment_id,
+        old_assignment_id: old.assignment_id,
+        status: cancelled.status,
+      })
+    )
+    return failure(409, {
+      class: "validation",
+      code: "change.not_cancelled",
+      message:
+        "Your change could not replace the build waiting for review. We have flagged it.",
+      detail: {
+        assignment_id: build.assignment_id,
+        replacing_assignment_id: old.assignment_id,
+      },
+    })
   }
   if (made) {
     if (made.state === "cancelled") {
       return failure(409, {
         class: "validation",
         code: "change.cancelled",
-        message:
-          "That change was cancelled before it started. Ask for it again.",
+        message: "That change was cancelled. Ask for it again.",
         detail: { assignment_id: made.assignment_id },
       })
     }
