@@ -1,7 +1,7 @@
 import { ErrorEnvelope } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import worker from "../src/index.ts"
-import { type ChangeInput, routeChange } from "../src/owner.ts"
+import { bridge, type ChangeInput, routeChange } from "../src/owner.ts"
 import { etag, orderAttention, unchanged } from "../src/workspace.ts"
 import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 
@@ -251,5 +251,48 @@ describe("owner routes refuse before the database", () => {
       "session.absent"
     )
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe("the bridge", () => {
+  const owner = {
+    orgId: A,
+    session: { workosUserId: "user_probe", sessionId: "session_probe" },
+  } as Parameters<typeof bridge>[1]
+
+  it("gives a call with no deadline its own 10 s, and answers 503 transient", async () => {
+    // The real 10 s, asserted, then run as 20 ms so the case is quick.
+    const timeout = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      asked.push(ms)
+      return timeout(20)
+    })
+    const sent: Request[] = []
+    try {
+      const result = await bridge(
+        {
+          ORCHESTRATOR: {
+            fetch: (request: Request) => {
+              sent.push(request)
+              return new Promise<never>(() => undefined)
+            },
+          },
+        } as unknown as Env,
+        owner,
+        `/${A}/cancel`,
+        { key: "k" }
+      )
+      expect(asked).toEqual([10_000])
+      expect(result.status).toBe(503)
+      expect(ErrorEnvelope.parse(result.body)).toMatchObject({
+        class: "transient",
+        code: "orchestrator.timeout",
+      })
+      // The call itself is cancelled, not only given up on.
+      expect(sent[0]?.signal.aborted).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

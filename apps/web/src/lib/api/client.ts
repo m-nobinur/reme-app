@@ -475,6 +475,8 @@ const REFUSALS: Record<string, string> = {
     "Answer the question waiting on you first, then ask again.",
   "change.build_busy":
     "A build is finishing. Ask again once it is ready for you.",
+  "change.cancelled":
+    "That change was cancelled before it started. Ask for it again.",
 }
 const STALE = "That has changed since this page loaded. Look again and retry."
 
