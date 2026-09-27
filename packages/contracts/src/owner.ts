@@ -37,13 +37,22 @@ const fact = <K extends string, V extends z.ZodRawShape>(key: K, value: V) =>
  * are the golden fixtures'. Currencies are the ones the content gate can
  * verify. The keys are `FactValue.options`; there is no second list.
  *
- * Open-before-close is not checked: the form's time input sets `min`.
+ * Hours close after they open, on the same day. `HH:MM` compares as text. The
+ * published JSON Schema cannot say so, since it cannot compare two fields.
  */
 export const FactValue = z.discriminatedUnion("key", [
   fact("business.name", { name: Text(120) }),
   fact("business.phone", { e164: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
   fact("business.email", { address: z.email().max(254) }),
-  fact("hours.weekday", { open: HHMM, close: HHMM }),
+  z.strictObject({
+    key: z.literal("hours.weekday"),
+    value: z
+      .strictObject({ open: HHMM, close: HHMM })
+      .refine((v) => v.open < v.close, {
+        path: ["close"],
+        message: "close must be later than open on the same day",
+      }),
+  }),
   fact("service_area.radius", {
     centre: Text(80),
     radius_km: z.number().positive().max(200),

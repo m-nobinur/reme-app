@@ -156,6 +156,29 @@ describe("FactValue", () => {
   it.each(refused)("refuses %s", (_name, fact) => {
     expect(verdict("FactValue", FactValue, fact)).toEqual(REFUSED)
   })
+
+  // JSON Schema cannot compare two properties, so only Zod holds this rule.
+  // Every writer (api, orchestrator, web) parses with Zod.
+  const hours = FactValue.options
+    .map((o) => o.shape.key.value)
+    .filter((key) => key.startsWith("hours."))
+  it.each(hours)("refuses %s that closes before or as it opens", (key) => {
+    for (const value of [
+      { open: "17:30", close: "08:00" },
+      { open: "09:00", close: "09:00" },
+    ]) {
+      expect(verdict("FactValue", FactValue, { key, value })).toEqual({
+        zod: false,
+        json: true,
+      })
+      expect(FactValue.safeParse({ key, value }).error?.issues).toEqual([
+        expect.objectContaining({
+          path: ["value", "close"],
+          message: "close must be later than open on the same day",
+        }),
+      ])
+    }
+  })
 })
 
 describe("the requests around them", () => {

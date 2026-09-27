@@ -212,16 +212,11 @@ export function answerValue(
     ...("fixed" in rest ? rest.fixed : {}),
   }
   const parsed = FactValue.safeParse({ key: spec.key, value })
-  // `FactValue` leaves the order of the hours to the form. `HH:MM` compares
-  // as text.
-  if (
-    parsed.success &&
-    parsed.data.key === "hours.weekday" &&
-    parsed.data.value.close <= parsed.data.value.open
-  ) {
+  if (parsed.success) return { value }
+  // A format issue comes first; the only custom one is hours out of order.
+  if (parsed.error.issues[0]?.code === "custom") {
     return { error: "Closing time has to be after opening time." }
   }
-  if (parsed.success) return { value }
   const name = parsed.error.issues[0]?.path[1]
   const field = fields.find((each: FactInput) => each.name === name)
   return {
