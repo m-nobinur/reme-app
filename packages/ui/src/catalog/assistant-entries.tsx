@@ -378,6 +378,11 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
       error: BROKEN,
     },
   }),
+  // A yes held back while another card in the same step waits on the owner.
+  {
+    ...requestChange("held", "Add Saturday hours, 9 to 1.", { approved: true }),
+    status: WAITING,
+  },
 ]
 
 /** A new owner's onboarding, two answers in and waiting on the third. */
@@ -706,7 +711,7 @@ const assistantCatalog = [
   {
     name: "RequestChange",
     render: () => (
-      <FixtureThread height="h-[92rem]" messages={REQUEST_CHANGE_STATES} />
+      <FixtureThread height="h-[102rem]" messages={REQUEST_CHANGE_STATES} />
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },

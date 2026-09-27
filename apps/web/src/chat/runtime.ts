@@ -8,7 +8,7 @@ import {
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, type UIMessage } from "ai"
 import { useRef, useState } from "react"
 import { getConversationMessages } from "@/lib/api/server"
 import { toUIMessage } from "./history"
@@ -37,6 +37,9 @@ export function useConversationRuntime({
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
+  // The last message of the turn in flight, as the transport saw it. A turn
+  // refused before the thread re-renders leaves `chat.messages` without it.
+  const sending = useRef<UIMessage | undefined>(undefined)
   const [transport] = useState(
     () =>
       new DefaultChatTransport({
@@ -46,6 +49,7 @@ export function useConversationRuntime({
         // ever leave the browser.
         prepareSendMessagesRequest: async ({ messages }) => {
           const { remoteId } = await aui.threadListItem.initialize()
+          sending.current = messages.at(-1)
           return { body: chatTurn(remoteId, mode(), messages) }
         },
       })
@@ -67,7 +71,7 @@ export function useConversationRuntime({
     const remoteId = aui.threadListItem.getState().remoteId
     // A session that ended can read nothing back; the error offers sign-in.
     if (!remoteId || error.message === SESSION_ENDED) return
-    const last = chat.messages.at(-1)
+    const last = sending.current
     void getConversationMessages({ data: { id: remoteId } })
       .then((rows) => {
         const stored = rows.map(toUIMessage)

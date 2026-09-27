@@ -222,6 +222,76 @@ it("sends on after an answer or an approval, and not after the last stored step"
   ).toBe(false)
 })
 
+const read = {
+  type: "tool-get_workspace",
+  toolCallId: "call_read",
+  state: "output-available",
+  input: {},
+  output: { site: { host: null, live_version: null } },
+} as unknown as Part
+
+const answerQuestion = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-answer_question",
+    toolCallId: "call_question",
+    state,
+    input: { request_id: CONVERSATION, value: "Saturdays, 9 to 1" },
+    ...extra,
+  }) as unknown as Part
+
+it("waits for every card in the step, then sends them as one turn", () => {
+  const halfway = [
+    assistant(
+      read,
+      change("approval-responded", {
+        approval: { id: "appr_1", approved: true },
+      }),
+      answerQuestion("approval-requested", { approval: { id: "appr_2" } })
+    ),
+  ]
+  expect(sendsOn({ messages: halfway })).toBe(false)
+
+  const answered = [
+    assistant(
+      read,
+      change("approval-responded", {
+        approval: { id: "appr_1", approved: true },
+      }),
+      answerQuestion("approval-responded", {
+        approval: { id: "appr_2", approved: false },
+      })
+    ),
+  ]
+  expect(sendsOn({ messages: answered })).toBe(true)
+  expect(
+    ChatRequest.parse(chatTurn(CONVERSATION, "act", answered)).turn
+  ).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [
+      { kind: "approval", approval_id: "appr_1", approved: true },
+      { kind: "approval", approval_id: "appr_2", approved: false },
+    ],
+  })
+})
+
+it("never sends a step the server finished by itself", () => {
+  // A read at the step cap, and a results turn the fallback resolved with no
+  // step after it: every call has its output, and none of it is the owner's.
+  for (const parts of [
+    [read],
+    [
+      read,
+      change("output-available", {
+        approval: { id: "appr_1", approved: true },
+        output: { outcome: "refused" },
+      }),
+    ],
+  ]) {
+    expect(sendsOn({ messages: [assistant(...parts)] })).toBe(false)
+  }
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })

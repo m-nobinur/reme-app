@@ -67,7 +67,7 @@ test("the change card is one tap either way, and waits for the server", async ({
 }) => {
   await open(page, "RequestChange")
   const cards = page.locator('[data-slot="request-change"]')
-  await expect(cards).toHaveCount(8)
+  await expect(cards).toHaveCount(9)
   const asked = cards.nth(0)
   await expect(asked.getByRole("heading")).toHaveText(
     "Build my website from the details I gave you."
@@ -85,6 +85,13 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(cards.nth(4)).toContainText("Answer it first")
   await expect(cards.nth(5)).toContainText("You said not now.")
   await expect(cards.nth(6)).toContainText("Not started")
+  // A yes that waits for the rest of its step is not starting anything yet.
+  const held = cards.nth(8)
+  await expect(held.getByRole("status")).toHaveText(
+    "You said yes. Sent once you answer the other cards."
+  )
+  await expect(held.getByRole("button", { name: "Approve" })).toBeDisabled()
+  await expect(held.getByRole("button", { name: "Starting" })).toHaveCount(0)
 })
 
 test("the approve button shows a visible focus ring from the keyboard", async ({
@@ -106,7 +113,11 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
 })
 
 for (const theme of ["light", "dark"] as const) {
-  for (const [name, width] of Object.entries({ phone: 390, desktop: 1440 })) {
+  for (const [name, width] of Object.entries({
+    phone: 390,
+    tablet: 768,
+    desktop: 1440,
+  })) {
     for (const entry of ["Onboarding", "AskFact", "RequestChange"]) {
       test(`${entry} has no accessibility violations on a ${name} in ${theme}`, async ({
         page,

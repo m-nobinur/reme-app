@@ -1,4 +1,7 @@
-import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
+import {
+  type ToolCallMessagePartComponent,
+  useAuiState,
+} from "@assistant-ui/react"
 import {
   CheckCircleIcon,
   ProhibitIcon,
@@ -80,6 +83,11 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
   const deciding =
     view.state === "approval-requested" || view.state === "responding"
   useRevealWaiting(view.state === "approval-requested")
+  // Another card in the same step still waits on the owner, so this answer
+  // has not been sent: nothing is starting yet.
+  const held =
+    useAuiState((s) => s.message.status?.type === "requires-action") &&
+    view.state === "responding"
 
   return (
     <section
@@ -111,7 +119,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
               size="sm"
               type="button"
             >
-              {view.state === "responding" && view.approved
+              {view.state === "responding" && view.approved && !held
                 ? "Starting"
                 : "Approve"}
             </Button>
@@ -125,6 +133,12 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
               Not now
             </Button>
           </div>
+          {held ? (
+            <p className="text-[0.8125rem] text-muted-foreground" role="status">
+              {view.approved ? "You said yes." : "You said not now."} Sent once
+              you answer the other cards.
+            </p>
+          ) : null}
         </>
       ) : (
         <Outcome view={view} />

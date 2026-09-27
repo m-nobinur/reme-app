@@ -387,3 +387,186 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     await matches(chat, FIXTURE.histories.typed)
   })
 }
+
+/**
+ * A Chief of Staff step as ai 7's agent streams it: a read it ran itself,
+ * then two calls that wait on the owner. Written by hand until the agent
+ * records one; the shapes are the SDK's.
+ */
+const COS = "msg_cos_step"
+const REQUEST_ID = "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
+const AT = "2026-09-27T10:00:00.000Z"
+const row = (id: string, parent: string | null, content: object) => ({
+  id,
+  parent_id: parent,
+  format: "ai-sdk/v6",
+  content: { ...content, metadata: { custom: { createdAt: AT } } },
+})
+const COS_HISTORY = {
+  messages: [
+    row("msg_owner", null, {
+      role: "user",
+      parts: [{ type: "text", text: "Add Saturday hours, 9 to 1." }],
+    }),
+    row(COS, "msg_owner", {
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-get_workspace",
+          toolCallId: "call_read",
+          state: "output-available",
+          input: {},
+          output: {
+            site: { host: null, live_version: null },
+            builds: [],
+            questions: [],
+            approvals: [],
+            missing_facts: [],
+          },
+        },
+        {
+          type: "tool-request_change",
+          toolCallId: "call_change",
+          state: "approval-requested",
+          input: { text: "Add Saturday hours, 9 to 1." },
+          approval: { id: "appr_change" },
+        },
+        {
+          type: "tool-answer_question",
+          toolCallId: "call_question",
+          state: "approval-requested",
+          input: { request_id: REQUEST_ID, value: "Saturdays, 9 to 1" },
+          approval: { id: "appr_question" },
+        },
+      ],
+    }),
+  ],
+}
+
+const frames = (...chunks: object[]) =>
+  [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
+    .map((data) => `data: ${data}\n\n`)
+    .join("")
+
+/** The fallback resolving both yeses with no model and no step after them. */
+const RESOLVED = frames(
+  { type: "start", messageId: COS },
+  {
+    type: "tool-output-available",
+    toolCallId: "call_change",
+    output: {
+      outcome: "started",
+      build: {
+        assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+        kind: "site.revise",
+        state: "queued",
+        goal: "Add Saturday hours, 9 to 1.",
+        revision: null,
+        created_at: AT,
+        updated_at: AT,
+      },
+    },
+  },
+  {
+    type: "tool-output-available",
+    toolCallId: "call_question",
+    output: { outcome: "answered", request_id: REQUEST_ID },
+  },
+  { type: "finish" }
+)
+
+const card = (container: HTMLElement, slot: string) => {
+  const found = container.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
+  if (!found) throw new Error(`no ${slot} card`)
+  return found
+}
+
+async function approve(container: HTMLElement, slot: string) {
+  const yes = [...card(container, slot).querySelectorAll("button")].find(
+    (each) => each.textContent?.trim() === "Approve"
+  )
+  if (!yes) throw new Error(`no Approve on ${slot}`)
+  await act(async () => yes.click())
+}
+
+/** Lets a send the runtime would make on its own start, and fail, first. */
+const settle = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  })
+
+it("holds a yes until every card in the step is answered, then sends one turn", async () => {
+  const chat = await open(COS_HISTORY)
+  await approve(chat, "request-change")
+  await settle()
+  expect(sent).toEqual([])
+  // Nothing is in flight, so nothing claims the build is starting.
+  const held = card(chat, "request-change")
+  expect(held.textContent).not.toContain("Starting")
+  expect(held.querySelector('[role="status"]')?.textContent).toBe(
+    "You said yes. Sent once you answer the other cards."
+  )
+
+  turns.push(() =>
+    Promise.resolve(
+      new Response(RESOLVED, {
+        headers: { "content-type": "text/event-stream" },
+      })
+    )
+  )
+  await approve(chat, "approval-request")
+  await vi.waitFor(() =>
+    expect(card(chat, "request-change").textContent).toContain("Started.")
+  )
+  expect(sent.map((body) => ChatRequest.parse(body).turn)).toEqual([
+    {
+      kind: "results",
+      message_id: COS,
+      results: [
+        { kind: "approval", approval_id: "appr_change", approved: true },
+        { kind: "approval", approval_id: "appr_question", approved: true },
+      ],
+    },
+  ])
+  // Every call now has its output, none of it the owner's: nothing more goes.
+  await settle()
+  expect(sent).toHaveLength(1)
+  expect(chat.querySelector(".aui-message-error-message")).toBeNull()
+  expect(card(chat, "request-change").textContent).toContain("Started.")
+})
+
+const BUSY = "Another turn in this conversation is still running."
+
+const ACTIONS = {
+  "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
+  "a whole step of yeses": async (chat: HTMLElement) => {
+    await approve(chat, "request-change")
+    await approve(chat, "approval-request")
+  },
+}
+
+for (const [action, run] of Object.entries(ACTIONS)) {
+  it(`${action} sent while another tab's turn runs shows chat.busy and is not sent again`, async () => {
+    const chat = await open(COS_HISTORY)
+    turns.push(refusal(409, "chat.busy", BUSY))
+    await run(chat)
+    await vi.waitFor(() =>
+      expect(chat.querySelector('[role="alert"]')?.textContent).toContain(BUSY)
+    )
+    await settle()
+    expect(sent).toHaveLength(1)
+    // Back to what is stored: both cards open, a typed message in the
+    // composer to send again once the other turn ends.
+    await vi.waitFor(() =>
+      expect(
+        [...chat.querySelectorAll("button")].filter(
+          (each) => each.textContent?.trim() === "Approve" && !each.disabled
+        )
+      ).toHaveLength(2)
+    )
+    if (action === "a typed message") {
+      expect(chat.querySelector("textarea")?.value).toBe("Make it 10 to 2.")
+    }
+  })
+}
