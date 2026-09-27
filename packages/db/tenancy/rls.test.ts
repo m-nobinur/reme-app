@@ -11,6 +11,7 @@ import {
   listOrgIds,
   ORG_SETTING,
   type OrgScopedDb,
+  pgCode,
   resolveOrg,
   resolveOrgBySlug,
   setContext,
@@ -355,17 +356,11 @@ const { tables, tenantTables, derived, definers, policies } = await discover()
 /** One case per discovered tenant table. */
 const cases = tenantTables.map((t) => [t.name, t] as const)
 
-/** Every error shape postgres.js can be wrapped in on the way out of drizzle. */
-function errorCode(error: unknown): string | undefined {
-  const seen = error as { code?: string; cause?: { code?: string } }
-  return seen.code ?? seen.cause?.code
-}
-
 async function denied(run: () => Promise<unknown>) {
   try {
     await run()
   } catch (error) {
-    return errorCode(error)
+    return pgCode(error) ?? undefined
   }
   return undefined
 }
@@ -748,10 +743,14 @@ describe("a tenant transaction runs under the statement and idle limits", () => 
   beforeAll(() => {
     kit = tenancy(connectionString(), { max: 1 })
     // The kit's own client, reached the way nothing outside a test would:
-    // its one symbol key. postgres.js reads `debug` per query.
-    const [key] = Object.getOwnPropertySymbols(kit)
-    client = (kit as unknown as Record<symbol, { $client: Sql }>)[key as symbol]
+    // the symbol the kit keeps its pool under, found by its name.
+    const key = Object.getOwnPropertySymbols(kit).find(
+      (k) => k.description === "pool"
+    )
+    if (!key) throw new Error("the tenancy kit keeps no pool symbol")
+    client = (kit as unknown as Record<symbol, { $client: Sql }>)[key]
       ?.$client as Sql
+    // postgres.js reads `debug` per query.
     // The type lookup postgres.js runs once per new connection is not the
     // kit's, so it is left out of the count.
     client.options.debug = (_id, query) => {
@@ -769,13 +768,21 @@ describe("a tenant transaction runs under the statement and idle limits", () => 
     rows[0] as { statement: string; idle: string; pid: number }
 
   it("reads its limits inside withOrg, and the defaults in the next transaction", async () => {
+    const plain = async () => read(await client.begin((tx) => tx.unsafe(LIMIT)))
+    const before = await plain()
+    // Defaults that happen to equal the limits would prove nothing.
+    expect(before.statement).not.toBe("5s")
+    expect(before.idle).not.toBe("15s")
     const inside = await kit.withOrg({ orgId: ORG_A }, async (db) =>
       read(await db.execute(sql.raw(LIMIT)))
     )
     expect(inside).toMatchObject({ statement: "5s", idle: "15s" })
-    const after = read(await client.begin((tx) => tx.unsafe(LIMIT)))
-    expect(after.pid, "the same backend").toBe(inside.pid)
-    expect(after).toMatchObject({ statement: "0", idle: "0" })
+    const after = await plain()
+    expect([after.pid, inside.pid], "the same backend").toEqual([
+      before.pid,
+      before.pid,
+    ])
+    expect(after).toEqual(before)
   })
 
   it("sends as many statements as it did before the limits", async () => {
@@ -789,6 +796,25 @@ describe("a tenant transaction runs under the statement and idle limits", () => 
       "select 1",
       "commit",
     ])
+  })
+
+  // The server ends the session with 25P03 while no query is waiting, so
+  // what reaches the caller is the driver's own code, on its next statement.
+  // This is the code the idle limit shows in a log.
+  it("surfaces an idle-limit kill as CONNECTION_CLOSED", async () => {
+    const error = await kit
+      .withOrg({ orgId: ORG_A }, async (db) => {
+        await db.execute(
+          sql`select set_config('idle_in_transaction_session_timeout', '300ms', true)`
+        )
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        await db.execute(sql`select 1`)
+      })
+      .then(
+        () => null,
+        (thrown: unknown) => thrown
+      )
+    expect(pgCode(error)).toBe("CONNECTION_CLOSED")
   })
 
   it("leaves the limits out of the single-statement resolvers", async () => {
@@ -1164,7 +1190,7 @@ async function inTransaction(run: (tx: TransactionSql) => Promise<unknown>) {
   } catch (error) {
     return error instanceof Error && error.message === ROLLED_BACK
       ? undefined
-      : errorCode(error)
+      : (pgCode(error) ?? undefined)
   } finally {
     await raw.end()
   }

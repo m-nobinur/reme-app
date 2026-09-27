@@ -612,7 +612,7 @@ describe("the artifact check and the probe", () => {
     expect(signal).toBeInstanceOf(AbortSignal)
   })
 
-  it("points the host at what Postgres says is live, whatever KV holds", async () => {
+  it("points the host at what Postgres says is live, whatever KV holds, after the read commits", async () => {
     const store = storage()
     const site = "10000001-0000-4000-8000-000000000001"
     const newest = {
@@ -628,9 +628,30 @@ describe("the artifact check and the probe", () => {
         }),
       }),
     }
-    const env = { ROUTES: store.ROUTES } as unknown as Env
+    // The KV write waits for the read's transaction to end.
+    let open = false
+    const puts: boolean[] = []
+    const reading = {
+      withOrg: async (_ctx: unknown, fn: (db: never) => Promise<unknown>) => {
+        open = true
+        try {
+          return await fn(db as never)
+        } finally {
+          open = false
+        }
+      },
+    }
+    const env = {
+      ROUTES: {
+        put: async (key: string, value: string) => {
+          puts.push(open)
+          await store.ROUTES.put(key, value)
+        },
+      },
+    } as unknown as Env
     store.pointers.set("host:h", "not a pointer")
-    await writePointer(env, db as never, site, site, "h")
+    await writePointer(env, reading as never, site, site, "h")
+    expect(puts).toEqual([false])
     expect(JSON.parse(store.pointers.get("host:h") ?? "{}")).toEqual({
       org_id: site,
       site_id: site,

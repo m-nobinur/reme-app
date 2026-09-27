@@ -279,6 +279,38 @@ live("three publishes on one site", () => {
   }, 60_000)
 })
 
+live("a sweep cut off between its deletes and its event", () => {
+  it("settles the revision on the next run, once, though its prefix is empty", async () => {
+    const store = storage()
+    const { orgId, revisionId } = await previewed(store)
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(siteRevisions)
+        .set({ status: "retired", retireAfter: new Date(Date.now() - DAY) })
+        .where(eq(siteRevisions.id, revisionId))
+    )
+    // The deletes happened; the event never did.
+    const prefix = `sites/${orgId}/${revisionId}/`
+    for (const key of [...store.objects.keys()]) {
+      if (key.startsWith(prefix)) store.objects.delete(key)
+    }
+    const row = await revisionRow(orgId, revisionId)
+    for (const run of [1, 2]) {
+      const { keys } = await kit.withOrg({ orgId }, (db) =>
+        deleteRevisionFiles(store.SITES, db, row)
+      )
+      expect(keys, `run ${run}`).toEqual([])
+    }
+    expect(await kit.withOrg({ orgId }, (db) => dueRevisions(db))).toEqual([])
+    const events = await eventsOf(
+      { orgId, assignmentId: row.assignmentId as string },
+      "revision.files_deleted"
+    )
+    expect(events).toHaveLength(1)
+    expect(events[0]?.payload).toMatchObject({ keys: [], count: 0 })
+  })
+})
+
 live("a build that ends without publishing", () => {
   it("retires its unpublished revisions in the cancelling transaction, and never a published one", async () => {
     const store = storage()

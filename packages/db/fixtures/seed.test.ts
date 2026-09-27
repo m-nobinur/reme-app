@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm"
 import { beforeAll, expect, it } from "vitest"
 import { connect } from "../src/client.ts"
 import { events, staff, users } from "../src/schema.ts"
-import { withOrg } from "../src/tenancy.ts"
+import { pgCode, withOrg } from "../src/tenancy.ts"
 import { brightclean, emptyco, mopandbucket } from "./golden.ts"
 import { seedGolden } from "./seed.ts"
 
@@ -140,9 +140,7 @@ it("refuses an event that numbers a stream it is not in", async () => {
       try {
         await db.insert(events).values(row)
       } catch (error) {
-        // drizzle wraps the driver error, so the code can be one level down.
-        const seen = error as { code?: string; cause?: { code?: string } }
-        return seen.code ?? seen.cause?.code
+        return pgCode(error) ?? undefined
       }
       await db.delete(events).where(eq(events.eventId, row.eventId))
       return undefined

@@ -7,7 +7,7 @@ import {
 } from "@workspace/contracts"
 import {
   deployments,
-  pgCode,
+  failureCode,
   resolveOrgBySlug,
   sql,
   tenancy,
@@ -438,7 +438,7 @@ app.onError((error, c) => {
   console.error(
     JSON.stringify({
       host: new URL(c.req.url).hostname,
-      code: pgCode(error) ?? "unknown",
+      code: failureCode(error),
     })
   )
   return envelope(c, 503, {

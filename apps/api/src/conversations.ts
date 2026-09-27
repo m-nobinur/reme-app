@@ -11,6 +11,7 @@ import {
   conversations,
   eq,
   type OrgScopedDb,
+  pgCode,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -201,12 +202,11 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
 /** Every error shape postgres.js can be wrapped in on the way out of drizzle. */
 const constraint = (error: unknown) => {
   const e = error as {
-    code?: string
     constraint_name?: string
-    cause?: { code?: string; constraint_name?: string }
+    cause?: { constraint_name?: string }
   }
   return {
-    code: e.code ?? e.cause?.code,
+    code: pgCode(error),
     name: e.constraint_name ?? e.cause?.constraint_name,
   }
 }

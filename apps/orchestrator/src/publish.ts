@@ -750,20 +750,24 @@ export async function readTarget(
 /**
  * The routing pointer (§11.1.3): KV is the cache and Postgres the truth, so
  * every write puts the site's newest deployment as Postgres has it now, and a
- * late or retried write can only repeat what is live. The binding is
- * optional in the generated types because production has no namespace yet;
- * a publish without one is a configuration error, not a retry.
+ * late or retried write can only repeat what is live. The KV write follows
+ * the read's commit rather than running inside it, so no transaction is held
+ * open on KV. The binding is optional in the generated types because
+ * production has no namespace yet; a publish without one is a configuration
+ * error, not a retry.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
-  db: OrgScopedDb,
+  kit: Pick<Tenancy, "withOrg">,
   orgId: string,
   siteId: string,
   host: string
 ): Promise<{ host: string }> {
   if (!env.ROUTES)
     throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
-  const live = await activeDeployment(db, siteId)
+  const live = await kit.withOrg({ orgId }, (db) =>
+    activeDeployment(db, siteId)
+  )
   if (!live) throw new Error("no deployment to point at")
   await env.ROUTES.put(
     `host:${host}`,
