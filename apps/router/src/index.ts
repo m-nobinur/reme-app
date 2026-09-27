@@ -1,6 +1,8 @@
 import {
   DeploymentManifest,
   type ErrorEnvelope,
+  formatSiteRevision,
+  SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
 import { deployments, resolveOrgBySlug, sql, tenancy } from "@workspace/db"
@@ -415,12 +417,13 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
-  return serve(
-    c,
-    host,
-    `${found.base}dist/${file}`,
-    previewHeaders(found.manifest.headers, file, cacheFor(file))
-  )
+  const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
+  // Which version answered a page, so the publisher's probe judges only its
+  // own. An immutable asset names its revision in its path already.
+  if (file.endsWith(".html")) {
+    headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
+  }
+  return serve(c, host, `${found.base}dist/${file}`, headers)
 })
 
 app.notFound(notHere)

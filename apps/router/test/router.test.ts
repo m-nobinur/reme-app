@@ -1,3 +1,4 @@
+import { formatSiteRevision, SITE_REVISION_HEADER } from "@workspace/contracts"
 import { signPreview } from "@workspace/gates/preview"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import app from "../src/index.ts"
@@ -284,6 +285,24 @@ describe("the edge cache", () => {
     expect(warm.headers.get("etag")).toBeTruthy()
     expect(await warm.text()).toBe("")
     expect(reads).toEqual([])
+  })
+
+  it("tags a page served from the cache, a 304 and a HEAD", async () => {
+    withEdgeCache()
+    point(REV, 1)
+    const tag = formatSiteRevision({ revision_id: REV, config_version: 1 })
+    const cold = await get(SITE_HOST, "/")
+    reads.length = 0
+    const warm = await get(SITE_HOST, "/")
+    expect(reads).toEqual([])
+    expect(warm.headers.get(SITE_REVISION_HEADER)).toBe(tag)
+    const same = await get(SITE_HOST, "/", {
+      headers: { "if-none-match": cold.headers.get("etag") as string },
+    })
+    expect(same.status).toBe(304)
+    expect(same.headers.get(SITE_REVISION_HEADER)).toBe(tag)
+    const head = await get(SITE_HOST, "/", { method: "HEAD" })
+    expect(head.headers.get(SITE_REVISION_HEADER)).toBe(tag)
   })
 
   it("files a name with a fragment in it under its own key", async () => {
@@ -676,6 +695,17 @@ describe("a published host", () => {
     expect(await head.text()).toBe("")
   })
 
+  it("tags each HTML page with the revision it served by, and no immutable asset", async () => {
+    pointers.set(`host:${SITE_HOST}`, pointer)
+    const tag = formatSiteRevision(pointer)
+    const home = await get(SITE_HOST, "/")
+    expect(home.headers.get(SITE_REVISION_HEADER)).toBe(tag)
+    const head = await get(SITE_HOST, "/contact/", { method: "HEAD" })
+    expect(head.headers.get(SITE_REVISION_HEADER)).toBe(tag)
+    const css = await get(SITE_HOST, "/_astro/index.C1.css")
+    expect(css.headers.get(SITE_REVISION_HEADER)).toBeNull()
+  })
+
   it("serves nothing the manifest does not list, screenshots included", async () => {
     pointers.set(`host:${SITE_HOST}`, pointer)
     for (const path of [
@@ -784,6 +814,11 @@ live("a published host, against a real database", () => {
     const res = await app.request(`https://${host}/`, {}, liveEnv)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain(revisionId.slice(-4))
+    const tag = formatSiteRevision({
+      revision_id: revisionId,
+      config_version: 1,
+    })
+    expect(res.headers.get(SITE_REVISION_HEADER)).toBe(tag)
     expect(pointers.get(`host:${host}`)).toMatchObject({
       org_id: orgId,
       site_id: orgId,
@@ -810,6 +845,8 @@ live("a published host, against a real database", () => {
     limited = true
     const served = await app.request(`https://${host}/`, {}, liveEnv)
     expect(served.status).toBe(200)
+    // Served from the pointer the edge believed, and tagged from it.
+    expect(served.headers.get(SITE_REVISION_HEADER)).toBe(tag)
     const refused = await app.request(
       `https://nobody-here${SUFFIX}/`,
       {},
