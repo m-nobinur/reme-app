@@ -127,15 +127,19 @@
                     // so reaching them from here goes round the ban above, and
                     // chat.ts will import this directory. The change path lives
                     // in ../changes.ts and shared helpers in ../http.ts.
+                    // `**/../chat` matches a specifier whose last step climbs
+                    // to chat, at any depth: `../chat.ts` from cos/ and
+                    // `../../chat.ts` from cos/agent/, never `./chat.ts`
+                    // (checked against Biome 2.5.10).
                     "group": [
-                      "../chat",
-                      "../chat.ts",
-                      "../conversations",
-                      "../conversations.ts",
-                      "../owner",
-                      "../owner.ts",
-                      "../org",
-                      "../org.ts"
+                      "**/../chat",
+                      "**/../chat.ts",
+                      "**/../conversations",
+                      "**/../conversations.ts",
+                      "**/../owner",
+                      "**/../owner.ts",
+                      "**/../org",
+                      "**/../org.ts"
                     ],
                     "message": "cos/ must not import chat.ts, conversations.ts, owner.ts or org.ts: each reaches conversation_messages (ADR-034), and chat.ts will import cos/. Take the change path from ../changes.ts and shared helpers from ../http.ts."
                   },
