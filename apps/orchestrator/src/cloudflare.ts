@@ -126,9 +126,11 @@ type DeveloperEvent =
  * How long a round waits for its answer, from the block, and how long one
  * wait lasts before the round looks again. The looks, not the `answer`
  * events, find the answer: an event is only a nudge to look now, and the
- * timeout recovers a nudge that never arrived. At most 28 looks a round with
- * no nudges; with the 20 rounds that is well inside the 10,000 steps an
- * instance gets on Workers Paid.
+ * timeout recovers a nudge that never arrived. With no nudges a round takes
+ * 28 six-hour waits and 29 looks, one more if a timer fires early, and each
+ * nudge adds a look and a wait: about 60 steps a round, 1,200 over the 20
+ * rounds, inside the 10,000 steps an instance gets on Workers Paid (Workers
+ * Free allows 1,024).
  */
 const ANSWER_DEADLINE_MS = 7 * 24 * 60 * 60 * 1000
 const LOOK_EVERY_MS = 6 * 60 * 60 * 1000
@@ -480,7 +482,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         `deadline ${round}`,
         async () => Date.now() + ANSWER_DEADLINE_MS
       )
-      let factId: string | null = null
+      let factId = ""
       for (let look = 1; ; look++) {
         // The clock is read inside the step too, so a replay takes the same
         // branch below.
@@ -490,11 +492,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               waitedOn(db, ids.assignmentId)
             )
           )
+          // The answered fact's current version: an edit made since the
+          // answer is what the Developer should see.
           const answered =
-            waited?.request.request_id === payload.request_id &&
-            typeof waited.answer?.fact_id === "string"
-              ? waited.answer.fact_id
-              : null
+            waited?.request.request_id === payload.request_id
+              ? (waited.fact_id ?? "")
+              : ""
           return { factId: answered, left: deadline - Date.now() }
         })
         factId = seen.factId
@@ -513,7 +516,6 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           // No nudge in time: look anyway.
         }
       }
-      const answer = { request_id: payload.request_id, fact_id: factId }
       await step.do(`rehydrate ${round}`, async () => {
         const result = await rehydrate(this.env, ids)
         await run((kit) => appendAudit(kit, ids, "sandbox.rehydrated", result))
@@ -525,17 +527,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             const [row] = await db
               .select()
               .from(facts)
-              .where(eq(facts.id, answer.fact_id))
+              .where(eq(facts.id, factId))
             if (!row) throw new NonRetryableError("fact.not_found")
             return toFactRecord(row)
           })
         )
         await run((kit) =>
           advance(kit, ids, "implementing", {
-            payload: {
-              request_id: answer.request_id,
-              fact_id: answer.fact_id,
-            },
+            payload: { request_id: payload.request_id, fact_id: factId },
           })
         )
         // The Developer never sees "the owner said"; it sees a fact record.
@@ -543,10 +542,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           message: {
             kind: "signal",
             type: "information.answered",
-            body: JSON.stringify({
-              request_id: answer.request_id,
-              fact,
-            }),
+            body: JSON.stringify({ request_id: payload.request_id, fact }),
             attributes: { field: fact.key },
           },
         })

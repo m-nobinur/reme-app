@@ -89,6 +89,7 @@ vi.mock("@workspace/db", () => ({
         request: { request_id: seen.request_id },
         answer: seen.fact_id ? { fact_id: seen.fact_id } : null,
         value: null,
+        fact_id: seen.current ?? seen.fact_id,
       },
     ]
   },
@@ -123,7 +124,12 @@ const script = {
   origin: "console" as "owner" | "console",
   reviews: 0,
   reviewRefusal: null as string | null,
-  looks: [] as { request_id: string; fact_id: string | null }[],
+  looks: [] as {
+    request_id: string
+    fact_id: string | null
+    /** The fact's current version, when an edit superseded the answer's. */
+    current?: string
+  }[],
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -152,6 +158,7 @@ vi.mock("../src/sandbox.ts", () => ({
   rehydrate: async () => ({ restored: true, ms: 1 }),
 }))
 const advanced: [string, string | undefined][] = []
+const resumedOn: Record<string, unknown>[] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
     constructor(
@@ -165,9 +172,10 @@ vi.mock("../src/state.ts", () => ({
     _kit: unknown,
     _ids: unknown,
     to: string,
-    options?: { reason?: string }
+    options?: { reason?: string; payload?: Record<string, unknown> }
   ) => {
     advanced.push([to, options?.reason])
+    if (options?.payload?.fact_id) resumedOn.push(options.payload)
     return {}
   },
   appendEvent: async () => "e",
@@ -251,7 +259,6 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
 }
 
 const HOUR = 60 * 60 * 1000
-const DAY = 24 * HOUR
 const unanswered = { request_id: "q", fact_id: null }
 
 const completion: Wake = {
@@ -355,9 +362,10 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
   [
     "nobody answered",
     [information],
+    // 28 six-hour waits use up the seven days; the 29th look fails the round.
     {
-      looks: [unanswered, unanswered],
-      answers: [{ timeout: true, after: 7 * DAY }],
+      looks: Array(29).fill(unanswered),
+      answers: Array(28).fill({ timeout: true, after: 6 * HOUR }),
     },
     {
       outcome: "failed",
@@ -369,6 +377,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-09-27T09:00:00Z"))
   script.looks = []
   dispatched.length = 0
+  resumedOn.length = 0
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -389,29 +398,37 @@ describe("the assignment Workflow's step names", () => {
 
   it("keeps a round's deadline through a stale nudge, and resumes on its answer", async () => {
     script.verdicts = ["preview_ready"]
-    // Round 1 is answered at once. In round 2 a nudge for round 1's question
-    // arrives an hour before the deadline: one look finds round 2 unanswered,
-    // the next wait gets only the hour left, and the answer ends it.
+    // Round 1 is answered at once. Round 2 waits out 27 six-hour timeouts, so
+    // six hours are left; five hours in, a nudge for round 1's question comes.
+    // It costs one look, the next wait gets only the hour left, and the
+    // answer's nudge ends the round.
     script.looks = [
       { request_id: "q", fact_id: "f" },
-      unanswered,
-      unanswered,
+      ...Array(29).fill(unanswered),
       { request_id: "q", fact_id: "f2" },
     ]
     const { names, waits, run } = drive(
       [information, information, completion],
-      [{ after: 7 * DAY - HOUR }, {}]
+      [
+        ...Array(27).fill({ timeout: true, after: 6 * HOUR }),
+        { after: 5 * HOUR },
+        {},
+      ]
     )
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
     expect(names.filter((n) => n.startsWith("deadline"))).toEqual([
       "deadline 1",
       "deadline 2",
     ])
-    expect(waits).toEqual([6 * HOUR, HOUR])
-    const resumed = dispatched
-      .map((d) => d.message as { type?: string; body?: string })
-      .filter((m) => m.type === "information.answered")
-    expect(resumed).toHaveLength(2)
+    expect(waits).toEqual([...Array(28).fill(6 * HOUR), HOUR])
+    expect(resumedOn.map((p) => p.fact_id)).toEqual(["f", "f2"])
+  })
+
+  it("resumes on the fact's current version when the owner edited it", async () => {
+    script.verdicts = ["preview_ready"]
+    script.looks = [{ request_id: "q", fact_id: "f", current: "f-edited" }]
+    await drive([information, completion]).run()
+    expect(resumedOn).toEqual([{ request_id: "q", fact_id: "f-edited" }])
   })
 
   it("finds an answer whose nudge was lost at the next look", async () => {

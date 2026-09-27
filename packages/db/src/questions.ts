@@ -8,31 +8,41 @@ export type Waited = {
   assignment_id: string
   /** The `information.requested` payload. */
   request: Payload
-  /** Its `information.answered` payload, or null while unanswered. */
+  /** Its latest `information.answered` payload, or null while unanswered. */
   answer: Payload | null
   /** The fact value that answer wrote, or null. */
   value: unknown
+  /**
+   * The current version of the fact that answer wrote, which may be a later
+   * edit of it: what a build resumes on. Null while unanswered.
+   */
+  fact_id: string | null
 }
 
 /**
  * The question a build waits on: the `information.requested` named by its
  * latest move into `blocked_on_information` whose event names a
- * `request_id`, with its answer and the fact value that answer wrote. A move
- * that names none, such as a resume from a pause, is passed over, and a build
- * that never named one waits on nothing.
+ * `request_id`, with its latest answer, the value that answer wrote and that
+ * fact's current version. A move that names none, such as a resume from a
+ * pause, is passed over, and a build that never named one waits on nothing.
  *
  * With `assignmentId`, that build whatever its state; without, every build
- * in `blocked_on_information`, in one query. The Workflow's wait, the
+ * in `blocked_on_information`. Each mode has its own query shape, so the
+ * single-build plan keeps its primary-key lookup. The Workflow's wait, the
  * orchestrator's `/answer` and the owner's `/workspace` all read this, so
  * they agree on the question.
  */
 export async function waitedOn(
   db: OrgScopedDb,
-  assignmentId: string | null = null
+  assignmentId?: string
 ): Promise<Waited[]> {
+  const which =
+    assignmentId === undefined
+      ? sql`a.state = 'blocked_on_information'`
+      : sql`a.id = ${assignmentId}::uuid`
   return db.execute<Waited>(sql`
     select a.id as assignment_id, q.payload as request,
-      answered.payload as answer, f.value as value
+      answered.payload as answer, f.value as value, cur.id as fact_id
     from ${assignments} a
     cross join lateral (
       select b.payload->>'request_id' as request_id
@@ -59,10 +69,11 @@ export async function waitedOn(
       where e.assignment_id = a.id
         and e.type = 'information.answered'
         and e.payload->>'request_id' = latest.request_id
-      order by e.event_id
+      order by e.event_id desc
       limit 1
     ) answered on true
     left join ${facts} f on f.id = (answered.payload->>'fact_id')::uuid
-    where (${assignmentId}::uuid is null and a.state = 'blocked_on_information')
-      or a.id = ${assignmentId}::uuid`)
+    left join ${facts} cur
+      on cur.key = f.key and cur.valid_to is null
+    where ${which}`)
 }
