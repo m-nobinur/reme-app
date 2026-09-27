@@ -9,7 +9,9 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { tenancy } from "@workspace/db"
+import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { chat } from "../src/chat.ts"
 import { appendMessages } from "../src/conversations.ts"
 import {
   type Owner,
@@ -18,7 +20,7 @@ import {
   seed,
   stubOrchestrator,
 } from "../test/owner-fixture.ts"
-import { stubJwksFetch } from "../test/sealed-session.ts"
+import { env, stubJwksFetch } from "../test/sealed-session.ts"
 
 /**
  * Cross-org denial on the owner routes, and the bridge carrying the
@@ -303,6 +305,49 @@ describe("another org's conversation is 404 and never written to", () => {
     expect(
       (await history(theirs, theirConversation.id)).map((m) => m.id)
     ).toEqual(["u_1"])
+  })
+
+  it("reaches no model for a turn in it", async () => {
+    const theirConversation = await create(theirs)
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        throw new Error("the model was called")
+      },
+    })
+    const stub = stubOrchestrator()
+    const refused = await chat(
+      new Request("http://api.invalid/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: theirConversation.id,
+          mode: "act",
+          turn: { kind: "message", message_id: "u_cos", text: "Hello" },
+        }),
+      }),
+      {
+        ...env(url),
+        ORCHESTRATOR: stub,
+        SITE_HOST_SUFFIX: "-stg.remeai.co.uk",
+      } as unknown as Env,
+      kit,
+      {
+        orgId: mine.orgId,
+        session: {
+          workosUserId: mine.workosUserId,
+          sessionId: "session_probe",
+          impersonated: false,
+          email: "owner@tenancy-probe.invalid",
+          name: "Probe Owner",
+        },
+      },
+      { model }
+    )
+    expect(refused.status).toBe(404)
+    expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
+      "conversation.not_found"
+    )
+    expect(model.doStreamCalls).toHaveLength(0)
+    expect(await history(theirs, theirConversation.id)).toEqual([])
   })
 
   it("takes no chat turn in it, of any kind", async () => {

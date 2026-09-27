@@ -3,6 +3,7 @@ import {
   type CosToolName,
   FactValue,
   FactValueKey,
+  OwnerAnswerText,
 } from "@workspace/contracts"
 import {
   assignments,
@@ -543,29 +544,31 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     } as const
 
     /**
-     * The orchestrator's `/answer` as it reads a value (`answers` in
-     * `question.ts`): a fact field takes the fact's inner value, any other
-     * field text. A key it has seen gets its stored receipt. `hang` leaves
-     * the first call unanswered.
+     * The orchestrator's `/answer` as it reads a value (`answers` in its
+     * `question.ts`, which its own tests cover): a fact field takes the
+     * fact's inner value in that key's shape, and any other field the
+     * owner's text. A retry is replayed by what it says, the request id and
+     * the value, as the orchestrator replays it; the key is only carried.
+     * `hang` leaves the first call unanswered.
      */
     const answering = (fields: Record<string, string>, hang = false) => {
       const receipts = new Map<string, Response>()
       let calls = 0
       return stubOrchestrator(async (request) => {
         if (hang && calls++ === 0) return never()
-        const key = request.headers.get("idempotency-key") ?? ""
-        const stored = receipts.get(key)
-        if (stored) return stored.clone()
         const body = (await request.clone().json()) as {
           request_id: string
           value: unknown
         }
+        const said = `${body.request_id} ${JSON.stringify(body.value)}`
+        const stored = receipts.get(said)
+        if (stored) return stored.clone()
         const field = fields[body.request_id]
         const fits =
           field !== undefined &&
           (FactValueKey.safeParse(field).success
             ? FactValue.safeParse({ key: field, value: body.value }).success
-            : typeof body.value === "string")
+            : OwnerAnswerText.safeParse(body.value).success)
         if (!fits) {
           return Response.json(
             {
@@ -589,7 +592,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           },
           { status: 202 }
         )
-        receipts.set(key, receipt.clone())
+        receipts.set(said, receipt.clone())
         return receipt
       })
     }

@@ -34,7 +34,6 @@ import {
   type Part,
   readScript,
   type Script,
-  STREAM_HEADERS,
   type ToolPart,
 } from "../src/chat.ts"
 import {
@@ -199,10 +198,6 @@ describe("the onboarding script", () => {
       },
     })
   })
-
-  it("streams with the AI SDK's headers", () => {
-    expect(STREAM_HEADERS).toEqual(UI_MESSAGE_STREAM_HEADERS)
-  })
 })
 
 const url = process.env.DATABASE_URL
@@ -339,7 +334,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         } as unknown as Env,
         using,
         { orgId: who.orgId, session },
-        newId
+        { newId }
       )
       return { response, text: await response.text() }
     }

@@ -12,16 +12,18 @@
     "size": "node scripts/size.mjs"
   },
   "dependencies": {
+    "@openrouter/ai-sdk-provider": "3.1.0",
     "@workos-inc/node": "10.11.0",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/facade": "workspace:*",
     "@workspace/gates": "workspace:*",
-    "@workspace/starter-site": "workspace:*"
+    "@workspace/starter-site": "workspace:*",
+    "ai": "7.0.83"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^22",
-    "ai": "7.0.83",
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",
     "vitest": "^4.1.11",

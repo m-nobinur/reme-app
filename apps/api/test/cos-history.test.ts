@@ -186,6 +186,7 @@ const tools = {
  */
 const RELEASED: Record<string, { turns: number; toolTurns: number }> = {
   "1": { turns: 12, toolTurns: 2 },
+  "2": { turns: 12, toolTurns: 2 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -326,8 +327,8 @@ describe("deriveCosMessages", () => {
       deriveCosMessages(session(said(TURN_1, "m1", "Hi")), CONTEXT_POLICY)
     ).toThrow(/no turn/)
     expect(() =>
-      deriveCosMessages(twoTurns(), { ...CONTEXT_POLICY, version: "2" })
-    ).toThrow(/policy 1, not 2/)
+      deriveCosMessages(twoTurns(), { ...CONTEXT_POLICY, version: "other" })
+    ).toThrow(`policy ${CONTEXT_POLICY.version}, not other`)
   })
 
   it("refuses an event whose payload is off the contract", () => {
