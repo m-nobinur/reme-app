@@ -421,6 +421,30 @@ describe("deriveCosMessages", () => {
       }
     })
 
+    it("resolves only the call its id names, beside another call of the tool", () => {
+      const other = {
+        ...change("approval-responded", { approved: true }),
+        toolCallId: "functions.request_change:1",
+        approval: { id: "approval-2", approved: true },
+      }
+      const events = session(
+        ...earlier(change("approval-responded", { approved: true })).map(
+          (row): Row =>
+            row[0] === "cos.message" &&
+            (row[1] as { message: { id: string } }).message.id === "a1"
+              ? replied(TURN_1, "a1", [
+                  { type: "step-start" },
+                  change("approval-responded", { approved: true }),
+                  other,
+                ])
+              : row
+        ),
+        result(TURN_1, started)
+      )
+      expect(parts(events, "a1")?.[1]).toMatchObject({ output: started })
+      expect(parts(events, "a1")?.[2]).toEqual(other)
+    })
+
     it("applies to the message as it stood when the result was written", () => {
       const pending = change("approval-responded", { approved: true })
       const events = session(
