@@ -68,8 +68,9 @@ and a review lasting days should not hold a container from a pool of five.
 **Deploys and waiting instances (open item 46).** Step bodies carry ids only, as they already do.
 A test drives each Workflow path with a recording fake step and commits the ordered step names to
 `apps/orchestrator/test/workflow-steps.json`. When that file differs from the deployed commit, the
-staging deploy lists running, queued and paused instances and refuses while any exist; an
-unchanged file deploys freely.
+staging deploy lists running, queued, paused, waiting and waitingForPause instances and refuses
+while any exist; an unchanged file deploys freely. `waiting` matters most: a build blocked on an
+owner's question sits in `waitForEvent` for days, and it would resume under the new step list.
 
 **No purge token.** Worker responses are not cached unless the Worker uses the Cache API, which is
 per data center, so there is nothing global to purge. HTML is served `no-cache` and hashed assets
