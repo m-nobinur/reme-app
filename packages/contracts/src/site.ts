@@ -170,11 +170,35 @@ export const SitePointer = z.strictObject({
 })
 
 /**
- * The header the router puts on every file it serves for a published host:
- * `<revision_id>@<config_version>`, from the pointer it served by, so the
- * publisher's probe can tell which version answered before judging it.
+ * The header the router puts on every HTML page it serves for a published
+ * host, from the pointer it served by, so the publisher's probe can tell
+ * which version answered before judging it. Written by `formatSiteRevision`
+ * and read by `parseSiteRevision`, never by hand.
  */
 export const SITE_REVISION_HEADER = "x-reme-revision"
+
+const ServedRevision = SitePointer.pick({
+  revision_id: true,
+  config_version: true,
+})
+type ServedRevision = z.infer<typeof ServedRevision>
+
+/** `<revision_id>@<config_version>`, the header's one wire format. */
+export const formatSiteRevision = (served: ServedRevision) =>
+  `${served.revision_id}@${served.config_version}`
+
+/** The pair a header names, or null for a missing or malformed one. */
+export function parseSiteRevision(
+  value: string | null | undefined
+): ServedRevision | null {
+  const [revision_id, version, ...rest] = value?.split("@") ?? []
+  if (rest.length > 0 || !version || !/^\d+$/.test(version)) return null
+  const parsed = ServedRevision.safeParse({
+    revision_id,
+    config_version: Number(version),
+  })
+  return parsed.success ? parsed.data : null
+}
 
 export type ComponentManifest = z.infer<typeof ComponentManifest>
 export type PreviewClaim = z.infer<typeof PreviewClaim>
