@@ -7,6 +7,15 @@
   // through comes from the Node compatibility layer.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Minified because the `ai` runtime the chief of staff brings measured 465.60
+  // KiB gzip unminified against 324.91 minified. Measured on this change alone
+  // with `pnpm size`: 296.21 KiB gzip (1660.51 raw) before, 207.37 (856.09)
+  // after. `keep_names` defaults to true for a deploy, so classes keep their
+  // `name`, which `postgres` and `jose` copy into `error.name` through
+  // `this.constructor.name`. The source map is uploaded so stack traces in
+  // Workers Logs map back to `src/`; it does not count toward the bundle size.
+  "minify": true,
+  "upload_source_maps": true,
   // The worker runs next to the database, not next to the reader. Measured on
   // staging before this line existed: `/staff` p95 3499 ms from Dhaka against a
   // database in eu-central-1, with `cpuTime` 6 to 45 ms. So it was never
