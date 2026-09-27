@@ -8,6 +8,8 @@ import {
   ComingUp,
   PanelBlank,
   QuestionItem,
+  type ReminderRow,
+  Reminders,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,
@@ -96,6 +98,40 @@ const working = (state: AssignmentState, extra = {}) => (
   />
 )
 
+/**
+ * One row per derived rule, in the words `apps/web/src/lib/reminders.ts`
+ * writes. The first two point at items in the sample panel.
+ */
+const REMINDERS = {
+  review: {
+    id: "review",
+    text: "Review version 4 before it closes",
+    href: "#approval-sample",
+  },
+  question: {
+    id: "question",
+    text: "Answer the question about weekday hours",
+    detail: "Waiting on you since 1 Oct 2026, 09:00",
+    href: "#question-sample",
+  },
+  preview: { id: "preview", text: "Version 3 is ready but not published" },
+  facts: {
+    id: "facts",
+    text: "Tell Reme your phone number and weekday hours",
+  },
+} satisfies Record<string, ReminderRow>
+
+/** A panel item a reminder can point at, as `apps/web` wraps them. */
+const target = (id: string, item: ReactNode) => (
+  <div
+    className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+    id={id}
+    tabIndex={-1}
+  >
+    {item}
+  </div>
+)
+
 /** The panel as a workspace shows it mid-build, for the shell's own entry. */
 function SamplePanel() {
   return (
@@ -110,14 +146,18 @@ function SamplePanel() {
         queued: ["Add Saturday hours to the contact section"],
       })}
       <WaitingOnYou>
-        {question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")}
-        {approval()}
+        {target(
+          "question-sample",
+          question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
+        )}
+        {target("approval-sample", approval())}
       </WaitingOnYou>
       <ComingUp
         items={[
           { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
         ]}
       />
+      <Reminders items={[REMINDERS.review, REMINDERS.question]} />
       <YourWebsite host="brightclean-demo.example.invalid" live={3} />
     </>
   )
@@ -254,6 +294,42 @@ const panelCatalog: Entry[] = [
           },
         ]}
       />
+    ),
+  },
+  {
+    name: "Reminders",
+    render: () => <Reminders items={Object.values(REMINDERS)} />,
+  },
+  {
+    name: "Reminders review",
+    render: () => <Reminders items={[REMINDERS.review]} />,
+  },
+  {
+    name: "Reminders question",
+    render: () => <Reminders items={[REMINDERS.question]} />,
+  },
+  {
+    name: "Reminders preview",
+    render: () => <Reminders items={[REMINDERS.preview]} />,
+  },
+  {
+    name: "Reminders facts",
+    render: () => <Reminders items={[REMINDERS.facts]} />,
+  },
+  {
+    // An empty list renders nothing, so the entry shows the sections either
+    // side of where it would be.
+    name: "Reminders empty",
+    render: () => (
+      <div className="flex flex-col gap-6">
+        <ComingUp
+          items={[
+            { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+          ]}
+        />
+        <Reminders items={[]} />
+        <YourWebsite host="brightclean-demo.example.invalid" live={3} />
+      </div>
     ),
   },
   {

@@ -5,6 +5,7 @@ import type {
   ConversationMessage,
   ConversationPatch,
   DecisionRequest,
+  DerivedReminder,
   FactRecord,
   FactValueKey,
 } from "@workspace/contracts"
@@ -109,6 +110,8 @@ export type Workspace = {
   host: string | null
   /** The required facts still to ask for. */
   missingFacts: FactValueKey[]
+  /** What the api derived from rows waiting on the owner, as facts. */
+  derivedReminders: DerivedReminder[]
   /** `/workspace`'s tag, sent back on the next poll; null when nothing was read. */
   etag: string | null
 }

@@ -25,6 +25,7 @@ import {
   Children,
   type FormEvent,
   isValidElement,
+  type MouseEvent,
   type ReactNode,
   useEffect,
   useId,
@@ -769,6 +770,58 @@ function ComingUp({
   )
 }
 
+/** One reminder: what needs doing, and where in the panel it is. */
+type ReminderRow = {
+  id: string
+  text: string
+  detail?: string | null
+  /** `#` and the id of the panel element it points at. */
+  href?: string | null
+}
+
+/**
+ * Focus the element a reminder points at, which scrolls it into view, and
+ * leave the address alone. The target carries `tabIndex={-1}`. Without one
+ * on the page, the link does what a link does.
+ */
+function jump(event: MouseEvent<HTMLAnchorElement>) {
+  const target = document.getElementById(event.currentTarget.hash.slice(1))
+  if (!target) return
+  event.preventDefault()
+  target.focus()
+}
+
+/**
+ * What needs the owner soon, in their words, each row linked to the item it
+ * is about when the panel shows that item. Nothing renders when there are
+ * none.
+ */
+function Reminders({ items }: { items: ReminderRow[] }) {
+  if (items.length === 0) return null
+  return (
+    <PanelSection title="Reminders">
+      <ul className="flex flex-col divide-y divide-border">
+        {items.map((item) => (
+          <li className="flex flex-col py-2" key={item.id}>
+            {item.href ? (
+              <a
+                className="self-start rounded-sm py-0.5 text-sm underline decoration-muted-foreground underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring"
+                href={item.href}
+                onClick={jump}
+              >
+                {item.text}
+              </a>
+            ) : (
+              <span className="text-sm">{item.text}</span>
+            )}
+            {item.detail ? <span className={META}>{item.detail}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </PanelSection>
+  )
+}
+
 /** The site as it stands: the version that is live, and where. */
 function YourWebsite({
   host,
@@ -827,7 +880,7 @@ function PanelBlank({
   )
 }
 
-export type { Preview }
+export type { Preview, ReminderRow }
 export {
   AnswerInputs,
   ApprovalItem,
@@ -835,6 +888,7 @@ export {
   ComingUp,
   PanelBlank,
   QuestionItem,
+  Reminders,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,

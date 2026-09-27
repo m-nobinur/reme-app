@@ -9,6 +9,7 @@ export const EMPTY_WORKSPACE: Workspace = {
   builds: [],
   host: null,
   missingFacts: [],
+  derivedReminders: [],
   etag: null,
 }
 

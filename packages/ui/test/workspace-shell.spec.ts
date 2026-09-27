@@ -202,3 +202,14 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
     .dispatchEvent("click", { button: 1, bubbles: true })
   await expect(sheet(page)).toBeVisible()
 })
+
+test("a reminder moves focus to the item it is about", async ({ page }) => {
+  await open(page, WIDTHS.desktop)
+  const panel = page.getByRole("complementary", { name: "Panel" })
+  await panel
+    .getByRole("link", { name: "Review version 4 before it closes" })
+    .click()
+  await expect(page.locator("#approval-sample")).toBeFocused()
+  // The address stays put: a hash change would be a navigation to the router.
+  expect(new URL(page.url()).hash).toBe("")
+})

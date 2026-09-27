@@ -394,6 +394,7 @@ function workspaceOf(
     builds: status.builds,
     host: status.site.host,
     missingFacts: status.missing_facts,
+    derivedReminders: status.reminders.derived,
     etag,
   }
 }
