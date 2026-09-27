@@ -1,6 +1,7 @@
 import {
   DeploymentManifest,
   type ErrorEnvelope,
+  formatSiteRevision,
   SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
@@ -417,11 +418,11 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
-  // Which version answered, so the publisher's probe judges only its own.
-  headers.set(
-    SITE_REVISION_HEADER,
-    `${pointer.revision_id}@${pointer.config_version}`
-  )
+  // Which version answered a page, so the publisher's probe judges only its
+  // own. An immutable asset names its revision in its path already.
+  if (file.endsWith(".html")) {
+    headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
+  }
   return serve(c, host, `${found.base}dist/${file}`, headers)
 })
 
