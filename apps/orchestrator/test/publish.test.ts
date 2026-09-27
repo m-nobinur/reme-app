@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
-import { SITE_REVISION_HEADER } from "@workspace/contracts"
+import { formatSiteRevision, SITE_REVISION_HEADER } from "@workspace/contracts"
 import {
   approvals,
   assignments,
@@ -9,6 +9,7 @@ import {
   siteRevisions,
   sql,
   supersedeFact,
+  tenancy,
 } from "@workspace/db"
 import fc from "fast-check"
 import { afterAll, describe, expect, it, vi } from "vitest"
@@ -50,7 +51,10 @@ const {
   decideApproval,
   probeHost,
   redriveQueued,
+  FETCH_TIMEOUT_MS,
   requestReview,
+  SERVE_TRIES,
+  SERVE_WAIT_MS,
   stillLive,
   verifyArtifact,
   writePointer,
@@ -292,6 +296,55 @@ live("activation", () => {
     ).rejects.toThrow()
   })
 
+  it("checks what is live only between activations, never across one", async () => {
+    const { orgId, ids, revisionId, store } = await previewed()
+    const first = await activated(orgId, {
+      id: crypto.randomUUID(),
+      siteId: orgId,
+      revisionId,
+      kind: "rollback",
+      reason: "setup",
+    })
+    const rev2 = await addRevision(store, orgId, ids.assignmentId, GOOD_HTML)
+    // A second pool, so the check waits on the site and not on a connection.
+    const other = tenancy(process.env.DATABASE_URL ?? "postgres://unused")
+    let held: () => void = () => undefined
+    const holding = new Promise<void>((done) => {
+      held = done
+    })
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((done) => {
+      release = done
+    })
+    const newer = kit.withOrg({ orgId }, async (db) => {
+      await activate(db, orgId, {
+        id: crypto.randomUUID(),
+        siteId: orgId,
+        revisionId: rev2,
+        kind: "rollback",
+        reason: "newer",
+      })
+      held()
+      await gate
+    })
+    await holding
+    const target = {
+      site_id: orgId,
+      revision_id: revisionId,
+      assignment_id: ids.assignmentId,
+    }
+    const check = other.withOrg({ orgId }, (db) =>
+      stillLive(db, orgId, target, first.id, "alert")
+    )
+    // Uncommitted, the newer activation is invisible: a check that ran now
+    // would find the first still live and let a stale alert through.
+    await new Promise((done) => setTimeout(done, 200))
+    release()
+    await newer
+    expect(await check).toBe(false)
+    await other.close()
+  })
+
   it("adds no row for a revision that is already live", async () => {
     const { orgId, revisionId } = await previewed()
     const input = {
@@ -449,43 +502,114 @@ describe("the artifact check and the probe", () => {
     const pause = async (ms: number) => {
       waits.push(ms)
     }
-    const router = (tags: string[], body: string) =>
+    const MINE = "10000001-0000-4000-8000-00000000000a"
+    const OLDER = "10000001-0000-4000-8000-00000000000b"
+    const NEWER = "10000001-0000-4000-8000-00000000000c"
+    const mine = { revision_id: MINE, config_version: 2 }
+    const tag = (revision_id: string, config_version: number) => ({
+      [SITE_REVISION_HEADER]: formatSiteRevision({
+        revision_id,
+        config_version,
+      }),
+    })
+    // Answers in turn, then this revision's own tagged page for good.
+    const router = (answers: Response[], body: string) =>
       (async () =>
+        answers.shift() ??
         new Response(body, {
           status: 200,
-          headers: { [SITE_REVISION_HEADER]: tags.shift() ?? "mine@2" },
+          headers: tag(MINE, 2),
         })) as unknown as typeof fetch
-    const mine = { revision_id: "mine", config_version: 2 }
+    const older = () =>
+      new Response("<p>older</p>", { status: 200, headers: tag(OLDER, 1) })
     const broken = GOOD_HTML.replace("$35", "$49")
     // The older deployment answers twice, then this one, whose page is judged.
     expect(
       await probeHost(
         "x",
         null,
-        router(["older@1", "older@1"], "<html></html>"),
+        router([older(), older()], "<html></html>"),
         mine,
         pause
       )
     ).toMatchObject({ ok: false, reason: "blank page" })
     expect(waits).toHaveLength(2)
-    // A newer deployment's page is never judged and never waited for.
+    // Untagged answers are not this version's either: a cached "nobody" 404,
+    // the limiter's 429, the router's own 503, a page with no tag.
     waits.length = 0
-    expect(
-      await probeHost("x", null, router(["newer@3"], broken), mine, pause)
-    ).toMatchObject({ ok: false, not_served: "newer@3" })
-    expect(waits).toEqual([])
-    // An older one that never moves is not judged either: after its tries
-    // the probe fails as not served, never as the page.
     expect(
       await probeHost(
         "x",
         null,
-        router(new Array(50).fill("older@1"), broken),
+        router(
+          [
+            new Response("No site here.", { status: 404 }),
+            new Response("Too many requests.", { status: 429 }),
+            new Response("{}", { status: 503 }),
+            new Response(broken, { status: 200 }),
+          ],
+          GOOD_HTML
+        ),
         mine,
         pause
       )
-    ).toMatchObject({ ok: false, not_served: "older@1" })
-    expect(waits.length).toBeGreaterThan(2)
+    ).toEqual({ ok: true })
+    expect(waits).toHaveLength(4)
+    // A newer deployment's page is never judged and never waited for.
+    waits.length = 0
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router(
+          [new Response(broken, { status: 200, headers: tag(NEWER, 3) })],
+          GOOD_HTML
+        ),
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: `${NEWER}@3` })
+    expect(waits).toEqual([])
+    // One that never serves this version is not judged: after its tries the
+    // probe fails as not served, never on the page, and a fetch that throws
+    // counts the same way.
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router(new Array(50).fill(null).map(older), broken),
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: `${OLDER}@1` })
+    expect(waits).toHaveLength(SERVE_TRIES - 1)
+    expect(
+      await probeHost(
+        "x",
+        null,
+        (async () => {
+          throw new Error("down")
+        }) as unknown as typeof fetch,
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: "fetch failed: down" })
+  })
+
+  it("keeps every wait and fetch inside one step's timeout, and long enough for the edge to catch up", async () => {
+    // Workflows' default step timeout is 10 minutes per attempt. KV takes up
+    // to a minute to reach every location, and the router believes a pointer
+    // it read from Postgres for another minute (BELIEVED_FOR).
+    const worst =
+      (SERVE_TRIES - 1) * SERVE_WAIT_MS + SERVE_TRIES * FETCH_TIMEOUT_MS
+    expect(worst).toBeLessThan(10 * 60_000)
+    expect((SERVE_TRIES - 1) * SERVE_WAIT_MS).toBeGreaterThanOrEqual(120_000)
+    let signal: AbortSignal | undefined
+    await probeHost("x", null, (async (_: string, init: RequestInit) => {
+      signal = init.signal ?? undefined
+      return new Response(GOOD_HTML)
+    }) as unknown as typeof fetch)
+    expect(signal).toBeInstanceOf(AbortSignal)
   })
 
   it("points the host at what Postgres says is live, whatever KV holds", async () => {
@@ -523,6 +647,7 @@ describe("the artifact check and the probe", () => {
     }[] = []
     const current = [{ id: "d3", revisionId: "v2" }]
     const db = {
+      execute: async () => undefined,
       select: () => ({
         from: () => ({
           where: () => ({ orderBy: () => ({ limit: async () => current }) }),
@@ -575,6 +700,8 @@ describe("the artifact check and the probe", () => {
         orderBy: () => ({ limit: async () => current }),
       })
     const db = {
+      // The site lock, which a fake has no one to share with.
+      execute: async () => undefined,
       select: () => ({ from: () => ({ where }) }),
       insert: () => ({
         values: async (row: unknown) => {
@@ -1151,6 +1278,33 @@ live("the publish workflow", () => {
       step: "alert",
       revision_id: first.revisionId,
     })
+  })
+
+  it("keeps the id it minted when an activation is retried after its result was lost", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    await publish(env, { org_id: orgId, approval_id: second.approvalId })
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, site_id: orgId, rollback: { key: "k", reason: "x" } },
+      fakeStep(names, {}, ["activate"])
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({
+      outcome: "published",
+      revision_id: first.revisionId,
+    })
+    expect(names).toEqual(steps.PublishWorkflow.rollback)
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.select().from(deployments).where(eq(deployments.siteId, orgId))
+    )
+    expect(rows).toHaveLength(3)
   })
 
   it("alerts on a failed probe with nothing earlier to restore, and says so", async () => {

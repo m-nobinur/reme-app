@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   ApprovalTarget,
   type FactRecord,
+  parseSiteRevision,
   SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
@@ -351,6 +352,14 @@ export async function activeDeployment(
   return row ?? null
 }
 
+/**
+ * Activations and the checks of what is live take one transaction lock per
+ * site, so a check and the event it writes see one state: an activation
+ * either committed before the check or waits until after its write.
+ */
+const lockSite = (db: OrgScopedDb, siteId: string) =>
+  db.execute(sql`select pg_advisory_xact_lock(hashtext(${siteId}))`)
+
 export type Activation = {
   /** The row's id, minted once per instance, so a retried step finds its own row and no other. */
   id: string
@@ -380,6 +389,7 @@ export async function activate(
   orgId: string,
   input: Activation
 ): Promise<DeploymentRow | null> {
+  await lockSite(db, input.siteId)
   const [mine] = await db
     .select()
     .from(deployments)
@@ -466,6 +476,7 @@ export async function stillLive(
   deploymentId: string | null,
   step: string
 ): Promise<boolean> {
+  await lockSite(db, target.site_id)
   const live = await activeDeployment(db, target.site_id)
   if (live?.id === deploymentId) return true
   await appendEvent(db, {
@@ -511,16 +522,23 @@ export async function verifyArtifact(
     : { ok: false, message: result.message ?? "the artifact is incomplete" }
 }
 
-/** Tries, and the wait between them, for the router to serve a revision: KV and its edge cache each lag up to a minute. */
-const SERVE_TRIES = 10
-const SERVE_WAIT_MS = 15_000
+/**
+ * How long a probe waits for the router to serve its version: KV takes up to
+ * a minute to reach every location and the router believes a pointer read
+ * from Postgres for another. The worst case, every wait and every fetch,
+ * stays inside Workflows' 10-minute step timeout; a test holds both bounds.
+ */
+export const SERVE_TRIES = 10
+export const SERVE_WAIT_MS = 15_000
+export const FETCH_TIMEOUT_MS = 10_000
 
 /**
  * The live host's answer, judged the way the gates would (§11.1.7). With
- * `expected`, a page the router tagged as another revision's is not this
- * one's to judge: an older deployment's is waited out and asked again, a
- * newer one's ends it, and either way the probe fails as `not_served`, never
- * on that page. An untagged answer is judged.
+ * `expected`, only a page the router tagged as this revision is judged. Any
+ * other answer (an older deployment's page, an untagged 404, 429 or 503, a
+ * fetch that fails) is waited out and asked again; a newer deployment's page
+ * ends it at once. Either way the probe fails as `not_served`, never on
+ * that answer.
  */
 export async function probeHost(
   host: string,
@@ -529,21 +547,28 @@ export async function probeHost(
   expected?: Pick<SitePointer, "revision_id" | "config_version">,
   pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
 ): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
-  let res: Response
+  let res: Response | null = null
   for (let attempt = 1; ; attempt++) {
+    let seen: string
     try {
       res = await fetcher(`https://${host}/`, {
         headers: { "cache-control": "no-cache" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
+      const tag = res.headers.get(SITE_REVISION_HEADER)
+      const served = parseSiteRevision(tag)
+      if (!expected || served?.revision_id === expected.revision_id) break
+      await res.body?.cancel()
+      seen = tag ?? `untagged ${res.status}`
+      if (served && served.config_version > expected.config_version) {
+        return { ok: false, reason: `served ${seen}`, not_served: seen }
+      }
     } catch (error) {
-      return { ok: false, reason: `fetch failed: ${(error as Error).message}` }
+      seen = `fetch failed: ${(error as Error).message}`
+      if (!expected) return { ok: false, reason: seen }
     }
-    const served = res.headers.get(SITE_REVISION_HEADER)
-    const [revision, version] = served?.split("@") ?? []
-    if (!expected || !served || revision === expected.revision_id) break
-    await res.body?.cancel()
-    if (Number(version) > expected.config_version || attempt >= SERVE_TRIES) {
-      return { ok: false, reason: `served ${served}`, not_served: served }
+    if (attempt >= SERVE_TRIES) {
+      return { ok: false, reason: `served ${seen}`, not_served: seen }
     }
     await pause(SERVE_WAIT_MS)
   }
