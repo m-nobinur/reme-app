@@ -192,7 +192,10 @@ function unknownOutcome(path: string, result: Bridged) {
  * outcome unknown (ADR-034): the call may have committed. The owner gets 503
  * `transient`, and a retry under the same key finds what the call did.
  */
-function relay(result: Bridged, parse: (body: unknown) => unknown): Response {
+export function relay(
+  result: Bridged,
+  parse: (body: unknown) => unknown
+): Response {
   if (result.status < 300) {
     try {
       return Response.json(parse(result.body), { status: result.status })
@@ -235,7 +238,7 @@ function noted(code: string, status: number, error?: unknown) {
   console.error(JSON.stringify({ code, status, issues: issuePaths(issues) }))
 }
 
-const notFound = (noun: "assignment" | "approval") =>
+export const notFound = (noun: "assignment" | "approval") =>
   failure(404, {
     class: "resource",
     code: `${noun}.not_found`,
@@ -637,7 +640,7 @@ export async function startChange(
  * Whether the org holds this row. RLS answers: another org's id finds
  * nothing.
  */
-async function holds(
+export async function holds(
   kit: Tenancy,
   orgId: string,
   table: typeof assignments | typeof approvals,
