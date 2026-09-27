@@ -6,7 +6,7 @@ import {
   AssistantRuntimeProvider,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
-import { ChatRequest } from "@workspace/contracts"
+import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement } from "react"
@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
 import { useConversationRuntime } from "./runtime"
+import { sendsOn } from "./turn"
 
 /**
  * The chat as the owner's browser runs it: the AI SDK chat, assistant-ui's
@@ -44,6 +45,13 @@ vi.mock("@tanstack/react-start/server", () => ({
   setCookie: () => undefined,
   getRequestProtocol: () => "https",
 }))
+
+// Every time the AI SDK asks whether to send on its own, and what it was
+// told: the only way to see that it decided not to send.
+vi.mock("./turn", async (original) => {
+  const turn = await original<typeof import("./turn")>()
+  return { ...turn, sendsOn: vi.fn(turn.sendsOn) }
+})
 
 // React's act() warns without this; the approval test renders the same way.
 ;(
@@ -99,6 +107,7 @@ const refusal = (status: number, code: string, message: string) => () =>
   )
 
 beforeEach(() => {
+  vi.mocked(sendsOn).mockClear()
   process.env.REME_API_URL = "https://api.test"
   sent = []
   turns = []
@@ -209,9 +218,10 @@ const transcript = (container: HTMLElement) =>
       node.textContent?.replace(/\s+/g, " ").trim()
   )
 
+/** The first button by that name the owner can still press. */
 const button = (container: HTMLElement, name: string) => {
   const found = [...container.querySelectorAll("button")].find(
-    (each) => each.textContent?.trim() === name
+    (each) => each.textContent?.trim() === name && !each.disabled
   )
   if (!found) throw new Error(`no ${name} button`)
   return found
@@ -402,7 +412,11 @@ const CHANGE_APPROVAL = "aitxt-ZWhRxAZy2eiSJtmVmPNfsgpN"
 const QUESTION_APPROVAL = "aitxt-Hk4pQ9sLw2Vn7bTc1RxYe3Ud"
 const REQUEST_ID = "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
 const AT = "2026-09-27T10:00:00.000Z"
-const row = (id: string, parent: string | null, content: object) => ({
+const row = <C extends object>(
+  id: string,
+  parent: string | null,
+  content: C
+) => ({
   id,
   parent_id: parent,
   format: "ai-sdk/v6",
@@ -415,41 +429,38 @@ const WORKSPACE = {
   approvals: [],
   missing_facts: [],
 }
-const COS_HISTORY = {
-  messages: [
-    row("msg_owner", null, {
-      role: "user",
-      parts: [{ type: "text", text: "Add Saturday hours, 9 to 1." }],
-    }),
-    row(COS, "msg_owner", {
-      role: "assistant",
-      parts: [
-        { type: "step-start" },
-        {
-          type: "tool-get_workspace",
-          toolCallId: READ,
-          state: "output-available",
-          input: {},
-          output: WORKSPACE,
-        },
-        {
-          type: "tool-request_change",
-          toolCallId: CHANGE,
-          state: "approval-requested",
-          input: { text: "Add Saturday hours, 9 to 1." },
-          approval: { id: CHANGE_APPROVAL },
-        },
-        {
-          type: "tool-answer_question",
-          toolCallId: QUESTION,
-          state: "approval-requested",
-          input: { request_id: REQUEST_ID, value: "Saturdays, 9 to 1" },
-          approval: { id: QUESTION_APPROVAL },
-        },
-      ],
-    }),
+const OWNER_ROW = row("msg_owner", null, {
+  role: "user",
+  parts: [{ type: "text", text: "Add Saturday hours, 9 to 1." }],
+})
+const STEP_ROW = row(COS, "msg_owner", {
+  role: "assistant",
+  parts: [
+    { type: "step-start" },
+    {
+      type: "tool-get_workspace",
+      toolCallId: READ,
+      state: "output-available",
+      input: {},
+      output: WORKSPACE,
+    },
+    {
+      type: "tool-request_change",
+      toolCallId: CHANGE,
+      state: "approval-requested",
+      input: { text: "Add Saturday hours, 9 to 1." },
+      approval: { id: CHANGE_APPROVAL },
+    },
+    {
+      type: "tool-answer_question",
+      toolCallId: QUESTION,
+      state: "approval-requested",
+      input: { request_id: REQUEST_ID, value: "Saturdays, 9 to 1" },
+      approval: { id: QUESTION_APPROVAL },
+    },
   ],
-}
+})
+const COS_HISTORY = { messages: [OWNER_ROW, STEP_ROW] }
 
 const frames = (...chunks: object[]) =>
   [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
@@ -538,49 +549,36 @@ const RESOLVED = {
   ),
 }
 
-const card = (container: HTMLElement, slot: string) => {
-  const found = container.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
-  if (!found) throw new Error(`no ${slot} card`)
-  return found
-}
+const changeCard = (container: HTMLElement) =>
+  container.querySelector<HTMLElement>('[data-slot="request-change"]')
 
-async function approve(container: HTMLElement, slot: string) {
-  const yes = [...card(container, slot).querySelectorAll("button")].find(
-    (each) => each.textContent?.trim() === "Approve"
+/** Resolves once the SDK has asked `sendsOn` `times` times, with the answers. */
+async function decided(times: number) {
+  await vi.waitFor(() =>
+    expect(vi.mocked(sendsOn).mock.results).toHaveLength(times)
   )
-  if (!yes) throw new Error(`no Approve on ${slot}`)
-  await act(async () => yes.click())
+  return vi.mocked(sendsOn).mock.results.map((result) => result.value)
 }
 
-/** Lets a send the runtime would make on its own start, and fail, first. */
-const settle = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  })
+const HELD = "You said yes. Sent once you answer the other cards."
 
 for (const [answer, response] of Object.entries(RESOLVED)) {
   it(`holds a yes until every card in the step is answered, sends one turn, and nothing more after ${answer} answers`, async () => {
     const chat = await open(COS_HISTORY)
-    await approve(chat, "request-change")
-    await settle()
+    await press(chat, "Approve")
+    expect(await decided(1)).toEqual([false])
     expect(sent).toEqual([])
     // Nothing is in flight, so nothing claims the build is starting.
-    const held = card(chat, "request-change")
-    expect(held.textContent).not.toContain("Starting")
-    expect(held.querySelector('[role="status"]')?.textContent).toBe(
-      "You said yes. Sent once you answer the other cards."
-    )
+    expect(changeCard(chat)?.textContent).not.toContain("Starting")
+    expect(
+      changeCard(chat)?.querySelector('[role="status"]')?.textContent
+    ).toBe(HELD)
+    expect(changeCard(chat)?.querySelector('[aria-busy="true"]')).toBeNull()
 
-    turns.push(() =>
-      Promise.resolve(
-        new Response(response, {
-          headers: { "content-type": "text/event-stream" },
-        })
-      )
-    )
-    await approve(chat, "approval-request")
+    turns.push(sse({ request: null, response }))
+    await press(chat, "Approve")
     await vi.waitFor(() =>
-      expect(card(chat, "request-change").textContent).toContain("Started.")
+      expect(changeCard(chat)?.textContent).toContain("Started.")
     )
     expect(sent.map((body) => ChatRequest.parse(body).turn)).toEqual([
       {
@@ -592,14 +590,109 @@ for (const [answer, response] of Object.entries(RESOLVED)) {
         ],
       },
     ])
-    // Every call now has its output, none of it the owner's: nothing more
-    // goes, even when the last step is a read the agent ran itself.
-    await settle()
+    // Once the stream ends the SDK asks again. Every call now has its
+    // output, none of it the owner's, so it sends nothing more, even when
+    // the last step is a read the agent ran itself.
+    expect(await decided(3)).toEqual([false, true, false])
     expect(sent).toHaveLength(1)
     expect(chat.querySelector(".aui-message-error-message")).toBeNull()
-    expect(card(chat, "request-change").textContent).toContain("Started.")
   })
 }
+
+it("the question card holds its yes the same way", async () => {
+  const chat = await open(COS_HISTORY)
+  const question = chat.querySelector<HTMLElement>(
+    '[data-slot="approval-request"]'
+  )
+  if (!question) throw new Error("no question card")
+  await act(async () => button(question, "Approve").click())
+  expect(await decided(1)).toEqual([false])
+  expect(
+    chat.querySelector('[data-slot="approval-held"][role="status"]')
+      ?.textContent
+  ).toBe(HELD)
+})
+
+it("a message typed while a yes is held cancels it, as the api stores it", async () => {
+  const chat = await open(COS_HISTORY)
+  await press(chat, "Approve")
+  await vi.waitFor(() => expect(changeCard(chat)?.textContent).toContain(HELD))
+  turns.push(
+    sse({
+      request: null,
+      response: frames(
+        { type: "start", messageId: "Rt7wYk2Pq9LmXc4v" },
+        { type: "start-step" },
+        { type: "text-start", id: "txt-0" },
+        { type: "text-delta", id: "txt-0", delta: "Noted: 10 to 2." },
+        { type: "text-end", id: "txt-0" },
+        { type: "finish-step" },
+        { type: "finish" }
+      ),
+    })
+  )
+  await type(chat, "Make it 10 to 2.")
+  await vi.waitFor(() => expect(chat.textContent).toContain("Noted: 10 to 2."))
+  expect(chat.textContent).not.toContain(HELD)
+  const cancelled = { state: "output-error", errorText: TOOL_CALL_CANCELLED }
+  await matches(chat, {
+    messages: [
+      OWNER_ROW,
+      {
+        ...STEP_ROW,
+        content: {
+          ...STEP_ROW.content,
+          parts: STEP_ROW.content.parts.map(({ approval: _, ...part }) =>
+            part.type === "tool-request_change" ||
+            part.type === "tool-answer_question"
+              ? { ...part, ...cancelled }
+              : part
+          ),
+        },
+      },
+      row("msg_typed", COS, {
+        role: "user",
+        parts: [{ type: "text", text: "Make it 10 to 2." }],
+      }),
+      row("Rt7wYk2Pq9LmXc4v", "msg_typed", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "text", text: "Noted: 10 to 2." },
+        ],
+      }),
+    ],
+  })
+})
+
+it("a yes already sent, with no other card waiting, says it is starting", async () => {
+  // A load while the turn runs: the stored row has the yes and no result.
+  const chat = await open({
+    messages: [
+      OWNER_ROW,
+      {
+        ...STEP_ROW,
+        content: {
+          ...STEP_ROW.content,
+          parts: [
+            { type: "step-start" },
+            {
+              type: "tool-request_change",
+              toolCallId: CHANGE,
+              state: "approval-responded",
+              input: { text: "Add Saturday hours, 9 to 1." },
+              approval: { id: CHANGE_APPROVAL, approved: true },
+            },
+          ],
+        },
+      },
+    ],
+  })
+  const card = changeCard(chat)
+  expect(card?.textContent).toContain("Starting")
+  expect(card?.textContent).not.toContain(HELD)
+  expect(card?.querySelector('[aria-busy="true"]')).not.toBeNull()
+})
 
 /** The api's own copy for `chat.busy`, in `apps/api/src/chat.ts`. */
 const BUSY = "I'm still working on your last message. Try again in a moment."
@@ -607,8 +700,8 @@ const BUSY = "I'm still working on your last message. Try again in a moment."
 const ACTIONS = {
   "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
   "a whole step of yeses": async (chat: HTMLElement) => {
-    await approve(chat, "request-change")
-    await approve(chat, "approval-request")
+    await press(chat, "Approve")
+    await press(chat, "Approve")
   },
 }
 
@@ -620,7 +713,7 @@ for (const [action, run] of Object.entries(ACTIONS)) {
     await vi.waitFor(() =>
       expect(chat.querySelector('[role="alert"]')?.textContent).toContain(BUSY)
     )
-    await settle()
+    // The alert shows only once the one request has failed for good.
     expect(sent).toHaveLength(1)
     // Back to what is stored: both cards open, a typed message in the
     // composer to send again once the other turn ends.
