@@ -389,11 +389,17 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
 }
 
 /**
- * A Chief of Staff step as ai 7's agent streams it: a read it ran itself,
- * then two calls that wait on the owner. Written by hand until the agent
- * records one; the shapes are the SDK's.
+ * A Chief of Staff step as `apps/api` stores it: a read the agent ran
+ * itself, then two calls that wait on the owner. Ids have the shapes of
+ * `apps/api/test/cos-recorded-turn.json`: the provider's call ids and the
+ * SDK's approval ids.
  */
-const COS = "msg_cos_step"
+const COS = "Qm3vT8xLr2WcNf5p"
+const READ = "call_81a1d2d8144143768bba913d"
+const CHANGE = "call_033f85dfac7e4140ba76f31a"
+const QUESTION = "call_f95c13d21f6d4666876663f1"
+const CHANGE_APPROVAL = "aitxt-ZWhRxAZy2eiSJtmVmPNfsgpN"
+const QUESTION_APPROVAL = "aitxt-Hk4pQ9sLw2Vn7bTc1RxYe3Ud"
 const REQUEST_ID = "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
 const AT = "2026-09-27T10:00:00.000Z"
 const row = (id: string, parent: string | null, content: object) => ({
@@ -402,6 +408,13 @@ const row = (id: string, parent: string | null, content: object) => ({
   format: "ai-sdk/v6",
   content: { ...content, metadata: { custom: { createdAt: AT } } },
 })
+const WORKSPACE = {
+  site: { host: null, live_version: null },
+  builds: [],
+  questions: [],
+  approvals: [],
+  missing_facts: [],
+}
 const COS_HISTORY = {
   messages: [
     row("msg_owner", null, {
@@ -414,30 +427,24 @@ const COS_HISTORY = {
         { type: "step-start" },
         {
           type: "tool-get_workspace",
-          toolCallId: "call_read",
+          toolCallId: READ,
           state: "output-available",
           input: {},
-          output: {
-            site: { host: null, live_version: null },
-            builds: [],
-            questions: [],
-            approvals: [],
-            missing_facts: [],
-          },
+          output: WORKSPACE,
         },
         {
           type: "tool-request_change",
-          toolCallId: "call_change",
+          toolCallId: CHANGE,
           state: "approval-requested",
           input: { text: "Add Saturday hours, 9 to 1." },
-          approval: { id: "appr_change" },
+          approval: { id: CHANGE_APPROVAL },
         },
         {
           type: "tool-answer_question",
-          toolCallId: "call_question",
+          toolCallId: QUESTION,
           state: "approval-requested",
           input: { request_id: REQUEST_ID, value: "Saturdays, 9 to 1" },
-          approval: { id: "appr_question" },
+          approval: { id: QUESTION_APPROVAL },
         },
       ],
     }),
@@ -449,12 +456,16 @@ const frames = (...chunks: object[]) =>
     .map((data) => `data: ${data}\n\n`)
     .join("")
 
-/** The fallback resolving both yeses with no model and no step after them. */
-const RESOLVED = frames(
-  { type: "start", messageId: COS },
+/** Both calls settled, as `settledLead` in `apps/api/src/chat.ts` sends them. */
+const SETTLED = [
+  {
+    type: "tool-approval-response",
+    approvalId: CHANGE_APPROVAL,
+    approved: true,
+  },
   {
     type: "tool-output-available",
-    toolCallId: "call_change",
+    toolCallId: CHANGE,
     output: {
       outcome: "started",
       build: {
@@ -469,12 +480,63 @@ const RESOLVED = frames(
     },
   },
   {
+    type: "tool-approval-response",
+    approvalId: QUESTION_APPROVAL,
+    approved: true,
+  },
+  {
     type: "tool-output-available",
-    toolCallId: "call_question",
+    toolCallId: QUESTION,
     output: { outcome: "answered", request_id: REQUEST_ID },
   },
-  { type: "finish" }
-)
+]
+
+/**
+ * How the api answers the results turn. The model: the settled calls right
+ * after `start`, then its own steps, here a reply and a last step that is a
+ * read at the step limit. The fallback: a new step, then the settled calls.
+ */
+const RESOLVED = {
+  "the model": frames(
+    { type: "start", messageId: COS },
+    ...SETTLED,
+    { type: "start-step" },
+    { type: "text-start", id: "txt-0" },
+    {
+      type: "text-delta",
+      id: "txt-0",
+      delta: "Started, and I saved your answer.",
+    },
+    { type: "text-end", id: "txt-0" },
+    { type: "finish-step" },
+    { type: "start-step" },
+    {
+      type: "tool-input-start",
+      toolCallId: "call_read_2",
+      toolName: "get_workspace",
+    },
+    {
+      type: "tool-input-available",
+      toolCallId: "call_read_2",
+      toolName: "get_workspace",
+      input: {},
+    },
+    {
+      type: "tool-output-available",
+      toolCallId: "call_read_2",
+      output: WORKSPACE,
+    },
+    { type: "finish-step" },
+    { type: "finish", finishReason: "tool-calls" }
+  ),
+  "the fallback": frames(
+    { type: "start", messageId: COS },
+    { type: "start-step" },
+    ...SETTLED,
+    { type: "finish-step" },
+    { type: "finish" }
+  ),
+}
 
 const card = (container: HTMLElement, slot: string) => {
   const found = container.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
@@ -496,47 +558,51 @@ const settle = () =>
     await new Promise((resolve) => setTimeout(resolve, 50))
   })
 
-it("holds a yes until every card in the step is answered, then sends one turn", async () => {
-  const chat = await open(COS_HISTORY)
-  await approve(chat, "request-change")
-  await settle()
-  expect(sent).toEqual([])
-  // Nothing is in flight, so nothing claims the build is starting.
-  const held = card(chat, "request-change")
-  expect(held.textContent).not.toContain("Starting")
-  expect(held.querySelector('[role="status"]')?.textContent).toBe(
-    "You said yes. Sent once you answer the other cards."
-  )
-
-  turns.push(() =>
-    Promise.resolve(
-      new Response(RESOLVED, {
-        headers: { "content-type": "text/event-stream" },
-      })
+for (const [answer, response] of Object.entries(RESOLVED)) {
+  it(`holds a yes until every card in the step is answered, sends one turn, and nothing more after ${answer} answers`, async () => {
+    const chat = await open(COS_HISTORY)
+    await approve(chat, "request-change")
+    await settle()
+    expect(sent).toEqual([])
+    // Nothing is in flight, so nothing claims the build is starting.
+    const held = card(chat, "request-change")
+    expect(held.textContent).not.toContain("Starting")
+    expect(held.querySelector('[role="status"]')?.textContent).toBe(
+      "You said yes. Sent once you answer the other cards."
     )
-  )
-  await approve(chat, "approval-request")
-  await vi.waitFor(() =>
-    expect(card(chat, "request-change").textContent).toContain("Started.")
-  )
-  expect(sent.map((body) => ChatRequest.parse(body).turn)).toEqual([
-    {
-      kind: "results",
-      message_id: COS,
-      results: [
-        { kind: "approval", approval_id: "appr_change", approved: true },
-        { kind: "approval", approval_id: "appr_question", approved: true },
-      ],
-    },
-  ])
-  // Every call now has its output, none of it the owner's: nothing more goes.
-  await settle()
-  expect(sent).toHaveLength(1)
-  expect(chat.querySelector(".aui-message-error-message")).toBeNull()
-  expect(card(chat, "request-change").textContent).toContain("Started.")
-})
 
-const BUSY = "Another turn in this conversation is still running."
+    turns.push(() =>
+      Promise.resolve(
+        new Response(response, {
+          headers: { "content-type": "text/event-stream" },
+        })
+      )
+    )
+    await approve(chat, "approval-request")
+    await vi.waitFor(() =>
+      expect(card(chat, "request-change").textContent).toContain("Started.")
+    )
+    expect(sent.map((body) => ChatRequest.parse(body).turn)).toEqual([
+      {
+        kind: "results",
+        message_id: COS,
+        results: [
+          { kind: "approval", approval_id: CHANGE_APPROVAL, approved: true },
+          { kind: "approval", approval_id: QUESTION_APPROVAL, approved: true },
+        ],
+      },
+    ])
+    // Every call now has its output, none of it the owner's: nothing more
+    // goes, even when the last step is a read the agent ran itself.
+    await settle()
+    expect(sent).toHaveLength(1)
+    expect(chat.querySelector(".aui-message-error-message")).toBeNull()
+    expect(card(chat, "request-change").textContent).toContain("Started.")
+  })
+}
+
+/** The api's own copy for `chat.busy`, in `apps/api/src/chat.ts`. */
+const BUSY = "I'm still working on your last message. Try again in a moment."
 
 const ACTIONS = {
   "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
