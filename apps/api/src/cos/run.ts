@@ -246,28 +246,32 @@ export async function streamTurn(
 }
 
 type Call = {
-  message: UIMessage
+  messageId: string
   toolCallId: string
   tool: CosTool
   input: unknown
   approvalId: string
 }
 
-/**
- * Every call the owner approved that the log holds no result for, in log
- * order, read unpruned: the ones this turn's results just approved, and
- * any a dead turn approved and never finished.
- */
-export async function unsettled(run: AgentTurn): Promise<Call[]> {
+/** The session's messages as the log holds them now, unpruned. */
+async function logged(run: AgentTurn): Promise<UIMessage[]> {
   const rows = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     readSession(db, run.turn.sessionId)
   )
-  const { messages } = deriveCosMessages(rows, {
+  return deriveCosMessages(rows, {
     ...CONTEXT_POLICY,
     turns: Number.POSITIVE_INFINITY,
     toolTurns: Number.POSITIVE_INFINITY,
-  })
-  return messages.flatMap((message) =>
+  }).messages
+}
+
+/**
+ * Every call the owner approved that the log holds no result for, in log
+ * order: the ones this turn's results just approved, and any a dead turn
+ * approved and never finished.
+ */
+export async function unsettled(run: AgentTurn): Promise<Call[]> {
+  return (await logged(run)).flatMap((message) =>
     message.role !== "assistant"
       ? []
       : message.parts.flatMap((part) => {
@@ -285,7 +289,7 @@ export async function unsettled(run: AgentTurn): Promise<Call[]> {
             p.toolCallId
             ? [
                 {
-                  message,
+                  messageId: message.id,
                   toolCallId: p.toolCallId,
                   tool: tool.data,
                   input: p.input,
@@ -316,16 +320,19 @@ export async function settle(
       await runTool(
         run,
         call.tool,
-        call.input as never,
+        call.input,
         call.toolCallId,
         call.approvalId
       )
     } catch (error) {
       if (!(error instanceof ToolFailed)) throw error
       if (error.error.class !== "integrity") return error
+      // Read again: an earlier call in the same message may have a result by now.
+      const current = (await logged(run)).find((m) => m.id === call.messageId)
+      if (!current) throw error
       const message = {
-        ...call.message,
-        parts: call.message.parts.map((part) =>
+        ...current,
+        parts: current.parts.map((part) =>
           "toolCallId" in part && part.toolCallId === call.toolCallId
             ? {
                 ...part,

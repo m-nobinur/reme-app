@@ -42,7 +42,14 @@ import {
   deriveCosMessages,
   readSession,
 } from "./cos/history.ts"
-import { closeTurn, type Rows, ranTurn, settle, streamTurn } from "./cos/run.ts"
+import {
+  closeTurn,
+  type FellBack,
+  type Rows,
+  ranTurn,
+  settle,
+  streamTurn,
+} from "./cos/run.ts"
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
   beginTurn,
@@ -61,18 +68,21 @@ import { failure, invalid, readBody, sortedKeys } from "./http.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
 /**
- * `POST /chat`, with no model: a script. In the onboarding conversation it
- * asks for each missing fact with `ask_fact`, then offers the first build
- * with a `request_change` the owner approves. After that, and in every
- * assistant conversation, a typed message in Act mode becomes a
- * `request_change`, and in Ask mode gets one fixed line.
+ * `POST /chat`: a turn, answered by the Chief of Staff (ADR-034) or by the
+ * script. The script owns the onboarding conversation until its build offer
+ * is approved or refused, and every results turn on a call it made: it asks
+ * for each missing fact with `ask_fact`, then offers the first build with a
+ * `request_change` the owner approves. Every other turn goes to the CoS,
+ * whose history is the event log; when the CoS has no model, no budget, a
+ * frozen conversation or a provider that fails before any content, the
+ * script's step stands in for it: a change card in Act mode and one fixed
+ * line in Ask.
  *
- * The client sends only what the owner just did (`ChatRequest`); history is
- * the stored rows. Each turn is written first and then streamed, so a
- * reload shows what the stream showed. The onboarding transcript is one
- * assistant row that grows: ai 7 continues the last assistant message, so
- * an answer or an approval updates that row, compare-and-swap on its
- * content, and never appends a second one.
+ * The client sends only what the owner just did (`ChatRequest`). The stored
+ * rows are what assistant-ui reads, written in the same transactions as the
+ * log, so a reload shows what the stream showed. A continued message is one
+ * row that grows: ai 7 continues the last assistant message, so an answer or
+ * an approval updates that row and never appends a second one.
  */
 
 /** The facts an owner may skip. Pricing only: the rest the site needs. */
@@ -83,9 +93,9 @@ export const SKIPPABLE: readonly FactValueKey[] = [
 /** The first build's goal, when the owner has not typed one. */
 export const ONBOARDING_GOAL = "Build my website from the details I gave you."
 
-/** The whole of Ask mode until the Chief of Staff can answer. */
+/** Ask mode's one line when the Chief of Staff cannot answer: the script's, or the fallback's. */
 export const ASK_REPLY =
-  "I can't answer questions yet. Switch to Act and tell me what to change on your site."
+  "I can't answer right now. Try again in a moment, or switch to Act and tell me what to change on your site."
 
 /** assistant-ui's words when a new message cancels a pending call, so a reload matches. */
 export const CANCELLED = TOOL_CALL_CANCELLED
@@ -790,45 +800,54 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
       ? { ...ran, outcome, reason }
       : { ...ran, outcome }
   }
-  let failed: ToolFailed | null
+  // Anything that throws before a response exists closes the turn as an
+  // error, so the next turn need not wait for it to lapse.
+  let failed: ToolFailed | null = null
+  let streamed: Response | FellBack | null = null
   try {
     failed = await settle(run, rows)
+    if (!failed && !a.opened.fallback && a.model) {
+      streamed = await startModel(run, a, a.model, rows)
+    }
   } catch (error) {
-    await closeTurn(run, ended("error"), null, rows)
+    await closeTurn(run, ended("error"), null, rows).catch(() => undefined)
     throw error
   }
   if (failed) {
     await closeTurn(run, ended("error"), null, rows)
-    return failure(failed.status, {
-      ...failed.error,
-      detail: {},
-    })
+    return failure(failed.status, { ...failed.error, detail: {} })
   }
-  let fallback = a.opened.fallback
-  if (!fallback && a.model) {
-    const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-      readSession(db, run.turn.sessionId)
-    )
-    const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
-    const tail = a.opened.tail
-    const streamed = await streamTurn({
-      run,
-      model: a.model,
-      mode: a.mode,
-      modelId: a.modelId,
-      uiMessages: messages,
-      newMessageId: a.newId,
-      lead: tail ? settledLead(messages, tail.id) : [],
-      rows,
-      waitUntil: a.waitUntil,
-    })
-    if (streamed instanceof Response) return streamed
-    if (run.state.integrity) {
-      return fallbackTurn(run, a, rows, ended("integrity"))
-    }
-    fallback = "provider"
+  if (streamed instanceof Response) return streamed
+  if (streamed && run.state.integrity) {
+    return fallbackTurn(run, a, rows, ended("integrity"))
   }
+  const fallback = streamed ? "provider" : a.opened.fallback
   return fallbackTurn(run, a, rows, ended("fallback", fallback ?? "resource"))
+}
+
+/** The model's run over the history the log derives now. */
+async function startModel(
+  run: AgentTurn,
+  a: Answering,
+  model: LanguageModel,
+  rows: Rows
+): Promise<Response | FellBack> {
+  const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+    readSession(db, run.turn.sessionId)
+  )
+  const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+  const tail = a.opened.tail
+  return streamTurn({
+    run,
+    model,
+    mode: a.mode,
+    modelId: a.modelId,
+    uiMessages: messages,
+    newMessageId: a.newId,
+    lead: tail ? settledLead(messages, tail.id) : [],
+    rows,
+    waitUntil: a.waitUntil,
+  })
 }
 
 /** The lead chunks for a results turn: its tail's calls as the log now has them. */

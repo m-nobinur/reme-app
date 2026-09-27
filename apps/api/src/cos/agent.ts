@@ -185,7 +185,7 @@ export const reservation = (price: Price) =>
 export type Usage = CosStep["usage"]
 
 /** The SDK's usage as the log holds it. */
-export function usageOf(usage: LanguageModelUsage): Usage {
+function usageOf(usage: LanguageModelUsage): Usage {
   return {
     input_tokens: usage.inputTokens ?? 0,
     cached_input_tokens: usage.inputTokenDetails.cacheReadTokens ?? 0,
@@ -278,14 +278,14 @@ export type AgentTurn = {
 }
 
 /** Thrown in `prepareStep` when the messages are not the ones the log derives. */
-export class IntegrityError extends Error {
+class IntegrityError extends Error {
   constructor() {
     super("cos.integrity")
   }
 }
 
 /** A tool's output, logged as the turn's `cos.tool_result` before it is returned. */
-export async function logResult(run: AgentTurn, result: CosToolResult) {
+async function logResult(run: AgentTurn, result: CosToolResult) {
   await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     writeAsTurn(db, run.turn, [
       { type: "cos.tool_result", payload: result, taint: resultTaint(result) },
@@ -293,25 +293,12 @@ export async function logResult(run: AgentTurn, result: CosToolResult) {
   )
 }
 
-type Input<N extends CosToolName> = Parameters<(typeof BODIES)[N]>[1]
-
 const BODIES = {
-  get_workspace: (ctx: ToolContext, input: Record<string, never>) =>
-    getWorkspace(ctx, input),
-  get_facts: (ctx: ToolContext, input: Record<string, never>) =>
-    getFacts(ctx, input),
-  get_preview: (ctx: ToolContext, input: Parameters<typeof getPreview>[1]) =>
-    getPreview(ctx, input),
-  request_change: (
-    ctx: ToolContext,
-    input: Parameters<typeof requestChange>[1],
-    key: string
-  ) => requestChange(ctx, input, key),
-  answer_question: (
-    ctx: ToolContext,
-    input: Parameters<typeof answerQuestion>[1],
-    key: string
-  ) => answerQuestion(ctx, input, key),
+  get_workspace: getWorkspace,
+  get_facts: getFacts,
+  get_preview: getPreview,
+  request_change: requestChange,
+  answer_question: answerQuestion,
 }
 
 /**
@@ -321,10 +308,10 @@ const BODIES = {
  * is never stored as an answer, so the call stays open for the next turn to
  * run again under the same key.
  */
-export async function runTool<N extends CosToolName>(
+export async function runTool(
   run: AgentTurn,
-  name: N,
-  input: Input<N>,
+  name: CosToolName,
+  input: unknown,
   toolCallId: string,
   approvalId: string | null
 ): Promise<unknown> {
@@ -349,10 +336,14 @@ export async function runTool<N extends CosToolName>(
 
 /**
  * What the model reads when a tool throws: a fixed line and the error's
- * code, never a driver or orchestrator message. A `ToolFailed` is an
- * unknown outcome, not a refusal, so it is not told as one.
+ * code, never a driver or orchestrator message. A `ToolFailed` is never a
+ * refusal: one of class `integrity` is an answer off the contract, which
+ * did nothing; any other left the outcome unknown.
  */
 export function toolErrorText(error: unknown): string {
+  if (error instanceof ToolFailed && error.error.class === "integrity") {
+    return `tool_failed (${error.error.code}): the builder answered in a shape we do not accept, so nothing was done. Tell the owner it did not go through.`
+  }
   if (error instanceof ToolFailed) {
     return `unknown_outcome (${error.error.code}): the tool did not report back, so nothing is known about its result. Do not guess it; tell the owner it could not be confirmed.`
   }
@@ -392,7 +383,7 @@ function toolsFor(run: AgentTurn) {
         return await runTool(
           run,
           name,
-          input as never,
+          input,
           toolCallId,
           approvalFor(messages, toolCallId)
         )

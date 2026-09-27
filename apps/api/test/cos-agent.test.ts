@@ -77,6 +77,8 @@ const faults = vi.hoisted(() => ({
   dead: false,
   /** Holds the next write that closes a turn, until it settles. */
   hold: null as Promise<void> | null,
+  /** Called when a close reaches the hold. */
+  held: (): void => undefined,
 }))
 
 class Died extends Error {}
@@ -96,6 +98,7 @@ vi.mock("../src/cos/turns.ts", async (importOriginal) => {
         // Taken by the first close only.
         const held = faults.hold
         faults.hold = null
+        faults.held()
         await held
       }
       return real.writeAsTurn(...args)
@@ -312,6 +315,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     faults.dropStep = false
     faults.dead = false
     faults.hold = null
+    faults.held = () => undefined
     await kit.withOrg({ orgId: me.orgId }, (db) =>
       db
         .update(assignments)
@@ -606,9 +610,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const id = await conversation(me)
     const hold = gate()
     faults.hold = hold.promise
+    const reached = new Promise<void>((r) => {
+      faults.held = r
+    })
     const { model } = scripted(said("A slow answer."))
     const first = await send(me, typed(id, "First"), { model })
     const reading = first.response.text()
+    // Every write of the first turn but its close has run, so the turn is
+    // open and holds no lock.
+    await reached
     const second = await send(me, typed(id, "Second"), {
       model: scripted(said("unused")).model,
     })
@@ -675,11 +685,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     }
     await readUntil((t) => t.includes('"finish"'), 500)
     expect(text).toContain("Hello.")
-    expect(text).not.toContain('"type":"finish"}')
+    expect(text).not.toMatch(/"type":"finish"[,}]/)
     faults.hold = null
     hold.resolve()
     await readUntil((t) => t.includes("[DONE]"), 5_000)
-    expect(text).toContain('"type":"finish"')
+    expect(text).toMatch(/"type":"finish"[,}]/)
     const follow = await send(me, typed(id, "And again", "ask"), {
       model: scripted(said("Again.")).model,
     })
@@ -1077,7 +1087,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const log = await logOf(id)
     expect(log.filter((e) => e.type === "cos.tool_result")).toHaveLength(0)
     const toolMessage = JSON.stringify(sent[1]?.prompt)
-    expect(toolMessage).toContain("unknown_outcome (orchestrator.off_contract)")
+    expect(toolMessage).toContain("tool_failed (orchestrator.off_contract)")
     expect(toolMessage).not.toContain('"outcome":"refused"')
     await s.state(build, "cancelled")
   })
@@ -1131,6 +1141,55 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const log = await logOf(id)
     expect(log.filter((e) => e.type === "cos.tool_result")).toHaveLength(0)
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
+  })
+
+  it("closes an approved call whose answer was off the contract as failed, not refused, and goes on", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: { text: "Add a Saturday slot." },
+        })
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const [call] = waiting(tail)
+    const { model, sent } = scripted(said("That did not go through."))
+    const done = await turn(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: true,
+            },
+          ],
+        },
+      },
+      { model },
+      // A 4xx with no envelope: the builder refused in no shape at all.
+      stubOrchestrator(() => new Response("nope", { status: 418 }))
+    )
+    expect(done.response.status, done.text).toBe(200)
+    const log = await logOf(id)
+    expect(log.filter((e) => e.type === "cos.tool_result")).toHaveLength(0)
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(
+      "tool_failed (orchestrator.off_contract)"
+    )
+    const after = await tailOf(me, id)
+    const part = after.parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call?.toolCallId
+    ) as { state: string }
+    expect(part.state).toBe("output-error")
+    expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
   })
 
   it("never reserves past the day's cap across five concurrent turns in five conversations", async () => {
