@@ -11,6 +11,8 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import {
+  heldText,
+  isHeld,
   type RequestChangeView,
   requestChangeView,
 } from "@workspace/ui/lib/tool-state"
@@ -85,9 +87,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
   useRevealWaiting(view.state === "approval-requested")
   // Another card in the same step still waits on the owner, so this answer
   // has not been sent: nothing is starting yet.
-  const held =
-    useAuiState((s) => s.message.status?.type === "requires-action") &&
-    view.state === "responding"
+  const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
 
   return (
     <section
@@ -112,7 +112,10 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
           <p className="text-[0.8125rem] text-muted-foreground">
             This starts a build. Nothing goes live until you approve a version.
           </p>
-          <div aria-busy={view.state === "responding"} className="flex gap-2">
+          <div
+            aria-busy={view.state === "responding" && !held}
+            className="flex gap-2"
+          >
             <Button
               disabled={view.state === "responding"}
               onClick={() => props.respondToApproval({ approved: true })}
@@ -133,10 +136,9 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
               Not now
             </Button>
           </div>
-          {held ? (
+          {held && view.state === "responding" ? (
             <p className="text-[0.8125rem] text-muted-foreground" role="status">
-              {view.approved ? "You said yes." : "You said not now."} Sent once
-              you answer the other cards.
+              {heldText(view.approved)}
             </p>
           ) : null}
         </>

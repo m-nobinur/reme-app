@@ -1,6 +1,7 @@
-import type {
-  ToolCallMessagePartComponent,
-  ToolCallMessagePartProps,
+import {
+  type ToolCallMessagePartComponent,
+  type ToolCallMessagePartProps,
+  useAuiState,
 } from "@assistant-ui/react"
 import {
   CheckCircleIcon,
@@ -11,6 +12,7 @@ import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { Button } from "@workspace/ui/components/button"
+import { heldText, isHeld } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 
 /**
@@ -138,6 +140,7 @@ export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
 
 const Approval: ToolCallMessagePartComponent = (props) => {
   const { approval, respondToApproval, toolName } = props
+  const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const Owned = Object.hasOwn(OWNER_CARDS, toolName)
     ? OWNER_CARDS[toolName]
     : undefined
@@ -153,6 +156,19 @@ const Approval: ToolCallMessagePartComponent = (props) => {
         respondToApproval={respondToApproval}
         toolName={toolName}
       />
+    )
+  }
+
+  // Answered, with another card in the step still open: not sent yet.
+  if (held && approval?.approved !== undefined) {
+    return (
+      <p
+        className="px-1 py-1.5 text-muted-foreground text-sm"
+        data-slot="approval-held"
+        role="status"
+      >
+        {heldText(approval.approved)}
+      </p>
     )
   }
 
