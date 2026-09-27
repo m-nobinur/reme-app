@@ -179,6 +179,22 @@ const tools = {
   }),
 }
 
+/**
+ * Each policy version's numbers, as logged turns were derived under them.
+ * The eval replay derives an old turn with its logged version, so a version's
+ * numbers never change: a new policy is a new row and a new version.
+ */
+const RELEASED: Record<string, { turns: number; toolTurns: number }> = {
+  "1": { turns: 12, toolTurns: 2 },
+}
+
+describe("CONTEXT_POLICY", () => {
+  it("keeps the numbers its version was released with", () => {
+    const { version, ...numbers } = CONTEXT_POLICY
+    expect(numbers).toEqual(RELEASED[version])
+  })
+})
+
 describe("deriveCosMessages", () => {
   afterEach(() => vi.useRealTimers())
 
