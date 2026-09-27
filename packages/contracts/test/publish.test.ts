@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { ApprovalDecision } from "../src/assignment.ts"
-import { PreviewClaim, SitePointer } from "../src/site.ts"
+import {
+  formatSiteRevision,
+  PreviewClaim,
+  parseSiteRevision,
+  SitePointer,
+} from "../src/site.ts"
 import { samples } from "./samples.ts"
 
 const claim = samples.PreviewClaim as Record<string, unknown>
@@ -49,6 +54,31 @@ describe("SitePointer", () => {
         config_version: 0,
       }).success
     ).toBe(false)
+  })
+})
+
+describe("the site revision header", () => {
+  it("round-trips the served revision and config version, and refuses anything else", () => {
+    const served = {
+      revision_id: "10000001-0000-4000-8000-000000000003",
+      config_version: 2,
+    }
+    const value = formatSiteRevision(served)
+    expect(value).toBe(`${served.revision_id}@2`)
+    expect(parseSiteRevision(value)).toEqual(served)
+    for (const junk of [
+      null,
+      undefined,
+      "",
+      served.revision_id,
+      `${served.revision_id}@`,
+      `${served.revision_id}@0`,
+      `${served.revision_id}@2.5`,
+      `${served.revision_id}@2@3`,
+      "not-a-uuid@2",
+    ]) {
+      expect(parseSiteRevision(junk)).toBeNull()
+    }
   })
 })
 
