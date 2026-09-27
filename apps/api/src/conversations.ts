@@ -14,6 +14,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import type { Owner } from "./changes.ts"
 import {
   constraint,
   failure,
@@ -22,8 +23,7 @@ import {
   keyMissing,
   readBody,
 } from "./http.ts"
-import { ownerStaffId } from "./org.ts"
-import type { Owner } from "./owner.ts"
+import { ownerStaffId } from "./staff.ts"
 
 /**
  * The owner's conversations. Every read and write runs under the session's

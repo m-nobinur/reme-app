@@ -1,5 +1,6 @@
 import { CreateOrgRequest } from "@workspace/contracts"
 import { failureCode, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
+import type { Owner } from "./changes.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -15,7 +16,7 @@ import {
   readOrg,
   readStaffDirectory,
 } from "./org.ts"
-import { OWNER_PATH, type Owner, ownerRoute } from "./owner.ts"
+import { OWNER_PATH, ownerRoute } from "./owner.ts"
 import { readSession, type Session, workos } from "./session.ts"
 
 /**

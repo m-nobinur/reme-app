@@ -24,7 +24,6 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { failure } from "../http.ts"
 import {
   bridge,
   holds,
@@ -32,7 +31,8 @@ import {
   type Owner,
   relay,
   startChange,
-} from "../owner.ts"
+} from "../changes.ts"
+import { failure } from "../http.ts"
 import { readFacts, readWorkspace } from "../workspace.ts"
 
 /**

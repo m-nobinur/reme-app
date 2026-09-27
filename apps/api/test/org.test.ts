@@ -19,10 +19,10 @@ import worker from "../src/index.ts"
 import {
   createOrg,
   type Directory,
-  ensureStartingTeam,
   readOrg,
   readStaffDirectory,
 } from "../src/org.ts"
+import { ensureStartingTeam } from "../src/staff.ts"
 
 /**
  * Two halves, the same split `health.test.ts` uses. The routing half needs no

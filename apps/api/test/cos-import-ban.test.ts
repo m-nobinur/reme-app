@@ -72,6 +72,13 @@ beforeAll(() => {
     "apps/api/src/cos/chat-bare.ts": importing("../chat"),
     "apps/api/src/cos/conversations.ts": importing("../conversations.ts"),
     "apps/api/src/cos/http.ts": importing("../http.ts"),
+    "apps/api/src/cos/owner.ts": importing("../owner.ts"),
+    "apps/api/src/cos/org-bare.ts": importing("../org"),
+    "apps/api/src/cos/changes.ts": importing("../changes.ts"),
+    "apps/api/src/cos/agent/loop.ts": importing("../../chat.ts"),
+    "apps/api/src/cos/agent/org.ts": importing("../../org"),
+    "apps/api/src/cos/agent/history.ts": importing("../history.ts"),
+    "apps/api/src/cos/agent/local.ts": importing("./chat.ts"),
     "apps/api/src/owner.ts": importing("./chat.ts"),
   }
   for (const [path, source] of Object.entries(probes)) {
@@ -85,11 +92,15 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 describe("the conversationMessages ban in cos/", () => {
   it("fails lint on the table's import, and on the modules that import it, inside cos/ only", () => {
     expect(flagged()).toEqual([
+      "apps/api/src/cos/agent/loop.ts",
+      "apps/api/src/cos/agent/org.ts",
       "apps/api/src/cos/aliased.ts",
       "apps/api/src/cos/banned.ts",
       "apps/api/src/cos/chat-bare.ts",
       "apps/api/src/cos/chat.ts",
       "apps/api/src/cos/conversations.ts",
+      "apps/api/src/cos/org-bare.ts",
+      "apps/api/src/cos/owner.ts",
       "apps/api/src/cos/schema.ts",
     ])
   })
