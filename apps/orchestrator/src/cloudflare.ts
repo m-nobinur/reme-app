@@ -11,6 +11,7 @@ import {
   eq,
   facts,
   listOrgIds,
+  pgCode,
   type Tenancy,
   tenancy,
   toFactRecord,
@@ -896,8 +897,7 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
                 JSON.stringify({
                   sweep: event.payload.hour,
                   org_id: orgId,
-                  code:
-                    (error as { code?: string }).code ?? (error as Error).name,
+                  code: pgCode(error) ?? "unknown",
                 })
               )
             }
