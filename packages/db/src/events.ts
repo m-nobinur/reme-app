@@ -1,6 +1,6 @@
 import type { TaintLabel } from "@workspace/contracts"
 import { type SQL, sql } from "drizzle-orm"
-import { monotonicFactory, ulid } from "ulid"
+import { monotonicFactory } from "ulid"
 import { events } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
 
@@ -20,11 +20,19 @@ export type AppendSessionEvent = AppendEvent & {
   idempotencyKey?: string
 }
 
-// `event_id` is the append order, and a Worker's clock stands still within a
-// request, so plain `ulid()` would order same-millisecond appends at random.
-// The monotonic factory increments the random part instead. Marked pure so a
-// bundle that never appends, such as the router's, drops it and `ulid`.
-const nextEventId = /* @__PURE__ */ monotonicFactory()
+// Marked pure so a bundle that never makes an id, such as the router's, drops
+// it and `ulid`.
+const monotonic = /* @__PURE__ */ monotonicFactory()
+
+/**
+ * The repo's one ULID source (ADR-034). `event_id` is the append order, and a
+ * Worker's clock stands still within a request, so plain `ulid()` would order
+ * same-millisecond ids at random. The monotonic factory increments the random
+ * part instead, so ids made in one isolate sort in the order they were made.
+ */
+export function newUlid(): string {
+  return monotonic()
+}
 
 /** The row both appenders write. `session` is null for a sessionless event. */
 function row(
@@ -33,7 +41,7 @@ function row(
   idempotencyKey: string
 ) {
   return {
-    eventId: nextEventId(),
+    eventId: newUlid(),
     orgId: event.orgId,
     staffId: event.staffId,
     assignmentId: event.assignmentId,
@@ -56,7 +64,7 @@ export async function appendEvent(
   db: OrgScopedDb,
   event: AppendEvent
 ): Promise<string> {
-  const values = row(event, null, ulid())
+  const values = row(event, null, newUlid())
   await db.insert(events).values(values)
   return values.eventId
 }
@@ -82,7 +90,7 @@ export async function appendSessionEvent(
   const values = row(
     event,
     { sessionId: event.sessionId, seq },
-    event.idempotencyKey ?? ulid()
+    event.idempotencyKey ?? newUlid()
   )
   const [written] = await db
     .insert(events)

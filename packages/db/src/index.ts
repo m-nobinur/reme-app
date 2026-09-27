@@ -8,6 +8,7 @@ export {
   type AppendSessionEvent,
   appendEvent,
   appendSessionEvent,
+  newUlid,
 } from "./events.ts"
 export { supersedeFact } from "./facts.ts"
 export * from "./map.ts"

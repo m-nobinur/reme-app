@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm"
-import { ulid } from "ulid"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
-import { appendEvent, appendSessionEvent } from "../src/events.ts"
+import { appendEvent, appendSessionEvent, newUlid } from "../src/events.ts"
 import { events, orgs } from "../src/schema.ts"
 import { pgCode, withOrg } from "../src/tenancy.ts"
 
@@ -112,7 +111,7 @@ describe("a session's event stream", () => {
 
   it("refuses a retried idempotency key and writes no second seq", async () => {
     const session = crypto.randomUUID()
-    const retry = { ...append(session), idempotencyKey: ulid() }
+    const retry = { ...append(session), idempotencyKey: newUlid() }
     const once = await withOrg(ctx, (db) => appendSessionEvent(db, retry))
     const again = await withOrg(ctx, (db) =>
       appendSessionEvent(db, retry)
