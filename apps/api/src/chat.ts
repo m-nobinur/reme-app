@@ -239,7 +239,7 @@ function stream(
  * jsonb, which keeps its own key order, so without this a retry would send
  * the same chunks in different bytes.
  */
-const sortedKeys = (_key: string, value: unknown) =>
+export const sortedKeys = (_key: string, value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? Object.fromEntries(
         Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
