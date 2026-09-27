@@ -200,7 +200,7 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
 }
 
 /** Every error shape postgres.js can be wrapped in on the way out of drizzle. */
-const constraint = (error: unknown) => {
+export const constraint = (error: unknown) => {
   const e = error as {
     constraint_name?: string
     cause?: { constraint_name?: string }
