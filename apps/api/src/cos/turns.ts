@@ -381,6 +381,8 @@ export const DAILY_CAP_USD = 1
  * second turn in another conversation sums after this one has reserved.
  * Closed turns count their cost, open ones their reservation, and abandoned
  * ones their whole reservation, since their last step's usage is lost. A
+ * turn counts on the UTC day its `cos.context` was recorded, by the
+ * database's clock, the same clock that decides when a turn lapses. A
  * wait on the lock past the statement limit ends in 57014, which the api
  * answers as 503 `transient`.
  */
@@ -402,7 +404,7 @@ export async function withinCap(
     left join ${events} t on t.session_id = c.session_id and t.type = 'cos.turn'
       and t.payload->>'turn_id' = c.payload->>'turn_id'
     where c.org_id = ${orgId} and c.type = 'cos.context'
-      and c.occurred_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
+      and c.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
   return Number(row?.spent ?? 0) + amount <= DAILY_CAP_USD
 }
 
@@ -460,4 +462,22 @@ export async function chiefStaffId(db: OrgScopedDb): Promise<string | null> {
     .from(staff)
     .where(eq(staff.staffCode, "COS-001"))
   return row?.id ?? null
+}
+
+/**
+ * The newest logged version of a message, reasoning included, which the
+ * stored row leaves out. Null for a message the CoS never logged.
+ */
+export async function loggedMessage(
+  db: OrgScopedDb,
+  sessionId: string,
+  messageId: string
+): Promise<CosMessage["message"] | null> {
+  const [row] = await db.execute<{ payload: unknown }>(sql`
+    select payload from ${events}
+    where session_id = ${sessionId} and type = 'cos.message'
+      and payload->'message'->>'id' = ${messageId}
+    order by seq desc
+    limit 1`)
+  return row ? CosMessage.parse(row.payload).message : null
 }

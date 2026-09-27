@@ -144,6 +144,15 @@ const said = (text: string): Step => [
   },
 ]
 
+/** A step that reasons, then does `then`'s parts. */
+const reasoned = (thought: string, then: Step): Step => [
+  { type: "stream-start", warnings: [] },
+  { type: "reasoning-start", id: "r1" },
+  { type: "reasoning-delta", id: "r1", delta: thought },
+  { type: "reasoning-end", id: "r1" },
+  ...then.slice(1),
+]
+
 const calls = (
   ...made: { id: string; tool: string; input: unknown }[]
 ): Step => [
@@ -1190,6 +1199,121 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ) as { state: string }
     expect(part.state).toBe("output-error")
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
+  })
+
+  it("keeps reasoning in the log but out of the owner's stream and rows, and sends it back with an approval", async () => {
+    const id = await conversation(me)
+    const first = await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        reasoned(
+          "The owner wants a change; propose it.",
+          calls({
+            id: "call_rc",
+            tool: "request_change",
+            input: { text: "Add a Saturday slot." },
+          })
+        )
+      ).model,
+    })
+    expect(first.response.status, first.text).toBe(200)
+    expect(first.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(false)
+    const tail = await tailOf(me, id)
+    expect(tail.parts.some((p) => p.type === "reasoning")).toBe(false)
+    const logged = (await logOf(id)).filter((e) => e.type === "cos.message")
+    expect(JSON.stringify(logged.at(-1)?.payload)).toContain(
+      "The owner wants a change"
+    )
+    expect(
+      JSON.stringify(
+        (await logOf(id)).find((e) => e.type === "cos.step")?.payload
+      )
+    ).toContain("The owner wants a change")
+    // The stored row matches what the owner saw.
+    expect(plain(await replay(undefined, first.chunks))).toStrictEqual(
+      plain(tail)
+    )
+
+    const [call] = waiting(tail)
+    const { model, sent } = scripted(said("Started."))
+    const done = await turn(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: true,
+            },
+          ],
+        },
+      },
+      { model },
+      orchestrator()
+    )
+    expect(done.response.status, done.text).toBe(200)
+    // The approved tail went back to the model with its reasoning.
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(
+      "The owner wants a change"
+    )
+    const after = await tailOf(me, id)
+    expect(after.parts.some((p) => p.type === "reasoning")).toBe(false)
+    expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+    expect((await turnsOf(id)).map((t) => t.outcome)).toEqual([
+      "answered",
+      "answered",
+    ])
+  })
+
+  it("counts a turn's spend on the day the database recorded it, not the day the Worker says", async () => {
+    const who = await owner(kit, url as string, "cos-day")
+    const room = await conversation(who)
+    const spent = async (
+      turnId: string,
+      cost: number,
+      occurredShift: string,
+      recordedShift: string,
+      seq: number
+    ) => {
+      await admin`
+        insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, recorded_at, idempotency_key, payload, taint)
+        values
+          (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, ${seq}, 'cos.context', now() + ${occurredShift}::interval, now() + ${recordedShift}::interval, ${ulid()},
+            ${admin.json({ turn_id: turnId, prefix_sha256: "a".repeat(64), context_policy_version: "1", mode: "ask", active_tools: [], text: "x", reserved_usd: 0 })}, '{}'),
+          (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, ${seq + 1}, 'cos.turn', now(), now(), ${ulid()},
+            ${admin.json({ outcome: "answered", turn_id: turnId, model: DEFAULT_MODEL, usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 }, cost_usd: cost, tools: [], steps: 1, first_chunk_ms: 1 })}, '{}')`
+    }
+    // The Worker's clock says today, the database recorded it yesterday.
+    await spent("01K6A00000000000000000DAY1", 0.9, "0 days", "-1 day", 0)
+    // The Worker's clock says yesterday, the database recorded it today.
+    await spent("01K6A00000000000000000DAY2", 0.5, "-1 day", "0 days", 2)
+    const check = (amount: number) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        withinCap(db, who.orgId, amount)
+      )
+    expect(await check(0.4)).toBe(true)
+    expect(await check(0.6)).toBe(false)
+  })
+
+  it("gives an org made before the starting team its Chief of Staff, and the CoS answers", async () => {
+    const who = await owner(kit, url as string, "cos-old")
+    const room = await conversation(who)
+    // As an org from before the team existed: no COS-001 row.
+    await admin`update staff set staff_code = 'OLD-001' where id = ${who.chiefId}`
+    const { model, sent } = scripted(said("Hello from the CoS."))
+    const done = await turn(who, typed(room, "Hi", "ask"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(sent).toHaveLength(1)
+    const [chief] = await admin<{ id: string }[]>`
+      select id from staff where org_id = ${who.orgId} and staff_code = 'COS-001'`
+    expect(chief?.id).toBeDefined()
+    const [row] = await admin<{ staff_id: string }[]>`
+      select staff_id from events where session_id = ${room} and type = 'cos.context'`
+    expect(row?.staff_id).toBe(chief?.id)
   })
 
   it("never reserves past the day's cap across five concurrent turns in five conversations", async () => {

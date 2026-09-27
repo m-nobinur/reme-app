@@ -199,21 +199,23 @@ export async function streamTurn(
   queued = start?.type === "start" ? [start, ...input.lead, ...rest] : queued
   let finish: UIMessageChunk | null = null
   let errored = queued.some((c) => c.type === "error")
+  // Reasoning counts as content above and stays in the log, but the owner
+  // never sees it.
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
-      const next = queued.shift()
-      if (next) {
-        controller.enqueue(next)
-        return
-      }
-      const { done, value } = await read()
-      if (!done) {
-        if (value.type === "finish") finish = value
-        else {
-          if (value.type === "error") errored = true
-          controller.enqueue(value)
+      for (;;) {
+        let chunk = queued.shift()
+        if (!chunk) {
+          const { done, value } = await read()
+          if (done) break
+          chunk = value
         }
-        return
+        if (chunk.type === "finish") finish = chunk
+        else if (!chunk.type.startsWith("reasoning-")) {
+          if (chunk.type === "error") errored = true
+          controller.enqueue(chunk)
+          return
+        }
       }
       try {
         if ((await closeRun()) && finish) controller.enqueue(finish)

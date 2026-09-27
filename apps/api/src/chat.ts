@@ -55,6 +55,7 @@ import {
   beginTurn,
   chiefStaffId,
   closeLapsedTurn,
+  loggedMessage,
   NoSuchSession,
   type Opening,
   SessionBusy,
@@ -65,6 +66,7 @@ import {
   writeAsTurn,
 } from "./cos/turns.ts"
 import { failure, invalid, readBody, sortedKeys } from "./http.ts"
+import { ownerStaffId } from "./staff.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
 /**
@@ -479,7 +481,7 @@ export async function chat(
     opened = await kit.withOrg(scope, async (db) => {
       const held = await read(db, id)
       if (held instanceof Response) return held
-      const chiefId = await chiefStaffId(db)
+      const chiefId = await chiefOf(db, owner)
       const session = chiefId
         ? { orgId: owner.orgId, staffId: chiefId, sessionId: id }
         : null
@@ -561,6 +563,24 @@ export async function chat(
   })
 }
 
+/**
+ * The org's CoS staff row. An org made before the starting team gets the
+ * team here, as a change does (`ownerStaffId` is idempotent). Null only when
+ * the row is still missing, which is logged: the script then answers.
+ */
+async function chiefOf(db: OrgScopedDb, owner: Owner): Promise<string | null> {
+  const found = await chiefStaffId(db)
+  if (found) return found
+  await ownerStaffId(db, {
+    orgId: owner.orgId,
+    workosUserId: owner.session.workosUserId,
+    ownerName: owner.session.name ?? owner.session.email,
+  })
+  const hired = await chiefStaffId(db)
+  if (!hired) console.error(JSON.stringify({ code: "cos.chief_missing" }))
+  return hired
+}
+
 type Fallback = "provider" | "budgetary" | "resource"
 
 /** What a CoS turn's first transaction hands to the rest of the turn. */
@@ -568,7 +588,7 @@ type Opened = {
   turn: Turn
   fallback: Fallback | null
   /** For a results turn: the message its results resolved. */
-  tail: (Content & { id: string }) | null
+  tail: { id: string } | null
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -668,7 +688,7 @@ async function openCos(
 ): Promise<
   | {
       messages: Opening["messages"]
-      tail: (Content & { id: string }) | null
+      tail: { id: string } | null
     }
   | Response
 > {
@@ -680,10 +700,14 @@ async function openCos(
       role: "user" as const,
       parts: [{ type: "text", text: turn.text }],
     }
-    const messages =
+    // The log keeps the tail's reasoning, which its row leaves out.
+    const logged =
       cancelled && log.named && held.tail
-        ? [{ id: held.tail.id, ...cancelled }, user]
-        : [user]
+        ? await loggedMessage(db, id, held.tail.id)
+        : null
+    const messages = logged
+      ? [{ ...logged, parts: cancelParts(logged.parts) }, user]
+      : [user]
     return {
       messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
       tail: null,
@@ -693,7 +717,13 @@ async function openCos(
   if (tail?.id !== turn.message_id || tail.content.role !== "assistant") {
     return stale()
   }
-  const parts = tail.content.parts as CosPart[]
+  // Resolved on the logged message, which keeps the reasoning the row leaves out.
+  const logged = (await loggedMessage(db, id, tail.id)) ?? {
+    id: tail.id,
+    role: "assistant" as const,
+    parts: tail.content.parts,
+  }
+  const parts = logged.parts as CosPart[]
   const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
   const waiting = last.filter(
     (p) => p.type.startsWith("tool-") && p.state === "approval-requested"
@@ -721,9 +751,9 @@ async function openCos(
       ? { ...part, state: "approval-responded", approval }
       : { ...part, state: "output-denied", approval }
   })
-  const content = { role: "assistant" as const, parts: applied as Part[] }
-  if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
-  const message = { id: tail.id, ...content }
+  const row = { role: "assistant" as const, parts: shown(applied) as Part[] }
+  if (!(await swapTail(db, id, tail, row))) throw new Refusal(stale())
+  const message = { id: tail.id, role: "assistant" as const, parts: applied }
   return {
     messages: [{ message, taint: messageTaint(message) }],
     tail: message,
@@ -740,7 +770,10 @@ async function putRow(
   id: string,
   message: { id: string; role: string; parts: unknown[] }
 ): Promise<void> {
-  const content = { role: message.role, parts: message.parts }
+  const content = {
+    role: message.role,
+    parts: shown(message.parts as { type: string }[]),
+  }
   const updated = await db
     .update(conversationMessages)
     .set({ content })
@@ -931,6 +964,20 @@ const messageExists = () =>
     detail: {},
   })
 
+/** `parts` with every pending call cancelled, as assistant-ui shows it. */
+function cancelParts<P extends { type: string }>(parts: P[]): P[] {
+  return parts.map((part) => {
+    const p = part as unknown as ToolPart
+    if (!isTool(p) || !pending(p)) return part
+    const { approval: _, ...rest } = p
+    return { ...rest, state: "output-error", errorText: CANCELLED } as never
+  })
+}
+
+/** What a stored row shows of a message: everything but its reasoning. */
+const shown = <P extends { type: string }>(parts: P[]): P[] =>
+  parts.filter((p) => !p.type.startsWith("reasoning"))
+
 /**
  * The tail with every pending call cancelled, the way assistant-ui's
  * `cancelPendingToolCallsOnSend` cancels it on screen, written back. Null
@@ -947,12 +994,7 @@ async function cancelPending(
   ) {
     return null
   }
-  const parts = tail.content.parts.map((part): Part => {
-    if (!isTool(part) || !pending(part)) return part
-    const { approval: _, ...rest } = part
-    return { ...rest, state: "output-error", errorText: CANCELLED }
-  })
-  const content = { ...tail.content, parts }
+  const content = { ...tail.content, parts: cancelParts(tail.content.parts) }
   if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
   return content
 }
