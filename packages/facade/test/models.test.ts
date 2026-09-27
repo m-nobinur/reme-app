@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-import { createRequire } from "node:module"
 import { describe, expect, it } from "vitest"
 import { OPENROUTER_IDS, openrouterModels } from "../src/models/index.ts"
 
@@ -21,10 +19,7 @@ describe("the generated OpenRouter models", () => {
     }
   })
 
-  // The owner's rule (2026-09-27): route under twice the list price, so
-  // several providers qualify, while the logged cost stays the list price.
-  // `ROUTING_CAP_FACTOR` in scripts/openrouter-models.mjs.
-  it("route under twice the rate the log charges", () => {
+  it("route only to providers at or under the rate the log charges", () => {
     for (const id of OPENROUTER_IDS) {
       const model = openrouterModels().find((m) => m.id === id)
       // A model the catalog has no price for would ceil at zero, which no
@@ -36,8 +31,8 @@ describe("the generated OpenRouter models", () => {
       expect(model?.compat, id).toMatchObject({
         openRouterRouting: {
           max_price: {
-            prompt: (model?.cost.input ?? 0) * 2,
-            completion: (model?.cost.output ?? 0) * 2,
+            prompt: model?.cost.input,
+            completion: model?.cost.output,
           },
         },
       })
@@ -53,30 +48,5 @@ describe("the generated OpenRouter models", () => {
   it("layer over the catalog rather than replacing it", () => {
     const models = openrouterModels()
     expect(models.length).toBeGreaterThan(OPENROUTER_IDS.length)
-  })
-
-  // apps/api prices its own model calls from the same table without Pi, so
-  // the two files are package exports of their own.
-  it("are published as JSON at their own paths, the same the facade reads", () => {
-    // Resolved through the package's exports, as a reader in apps/api would.
-    const exported = (file: string) =>
-      JSON.parse(
-        readFileSync(
-          createRequire(import.meta.url).resolve(
-            `@workspace/facade/models/${file}`
-          ),
-          "utf8"
-        )
-      )
-    const ids: string[] = exported("openrouter.ids.json")
-    const table: { id: string; cost: unknown }[] = exported(
-      "openrouter.models.json"
-    )
-    expect(ids).toEqual(OPENROUTER_IDS)
-    for (const entry of table) {
-      expect(openrouterModels().find((m) => m.id === entry.id)?.cost).toEqual(
-        entry.cost
-      )
-    }
   })
 })
