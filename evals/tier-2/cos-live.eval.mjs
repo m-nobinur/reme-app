@@ -133,6 +133,7 @@ async function runCase(call, kase) {
  */
 export async function liveRun() {
   const base = (process.env.COS_API_URL ?? "").replace(/\/$/, "")
+  if (!base) throw new Error("COS_API_URL names no api")
   if (new URL(base).hostname === "api.remeai.co.uk")
     throw new Error("COS_API_URL is production; this runs against staging")
   const vars = process.env
