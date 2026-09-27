@@ -44,11 +44,17 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
     }
   }, [stableComponents])
 
+  // No images, by any syntax. The text is a model's, and an injected prompt
+  // can make it write an image whose URL carries workspace data, which the
+  // browser fetches on render. Dropped from the tree, so no `components`
+  // override can bring one back. Raw HTML already renders as text, and the
+  // default `urlTransform` already blanks `javascript:` and `data:` links.
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={markdownComponents}
+      disallowedElements={["img"]}
       defer
     />
   )
@@ -142,6 +148,8 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
+  // A new tab keeps the conversation open, and no referrer tells the other
+  // site which conversation the link was in.
   a: ({ className, ...props }) => (
     <a
       className={cn(
@@ -149,6 +157,8 @@ const defaultComponents = memoizeMarkdownComponents({
         className
       )}
       {...props}
+      rel="noopener noreferrer"
+      target="_blank"
     />
   ),
   blockquote: ({ className, ...props }) => (

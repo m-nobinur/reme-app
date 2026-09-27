@@ -21,6 +21,13 @@ export const Route = createRootRoute({
       {
         title: "Reme",
       },
+      // Images load only from the app, data URLs (the MFA QR code) and the
+      // signed preview hosts, all on remeai.co.uk. A backstop for the chat's
+      // markdown, which drops images itself.
+      {
+        httpEquiv: "Content-Security-Policy",
+        content: "img-src 'self' data: https://*.remeai.co.uk",
+      },
     ],
     links: [
       {

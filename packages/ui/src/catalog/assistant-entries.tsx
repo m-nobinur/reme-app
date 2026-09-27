@@ -485,6 +485,8 @@ const MARKDOWN: ThreadMessageLike[] = [
 
 Three assignments closed and **one** is waiting on you. See the [revision](#).
 
+The shop front: ![Front of the shop](https://example.net/shop.png)
+
 | Assignment | State |
 | --- | --- |
 | Service areas | Closed |

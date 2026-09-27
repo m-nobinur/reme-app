@@ -279,3 +279,40 @@ for (const theme of ["light", "dark"] as const) {
     })
   }
 }
+
+test("a reply's markdown image never loads, and its links open a new tab", async ({
+  page,
+}) => {
+  const fetched: string[] = []
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://example.net/")) {
+      fetched.push(request.url())
+    }
+  })
+  for (const theme of ["light", "dark"] as const) {
+    for (const [name, width] of Object.entries({
+      phone: 390,
+      tablet: 768,
+      desktop: 1440,
+    })) {
+      await open(page, "MarkdownText", width, theme)
+      const reply = page.locator('[data-entry="MarkdownText"] .aui-md')
+      await expect(reply).toContainText("The shop front:")
+      await expect(reply.locator("img")).toHaveCount(0)
+      await expect(
+        reply.getByRole("link", { name: "revision" })
+      ).toHaveAttribute("rel", "noopener noreferrer")
+      const results = await new AxeBuilder({ page })
+        .include('[data-entry="MarkdownText"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .analyze()
+      expect
+        .soft(
+          results.violations.map((v) => `${theme} ${name}: ${v.id}`),
+          JSON.stringify(results.violations, null, 2)
+        )
+        .toEqual([])
+    }
+  }
+  expect(fetched).toEqual([])
+})
