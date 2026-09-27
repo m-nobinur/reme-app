@@ -5,9 +5,12 @@
  * the script imports this file straight into Node.
  */
 
-type Rates = Record<string, string | number | undefined>
-type Pricing = {
-  [key: string]: string | number | undefined | Rates[]
+type Rates = { [key: string]: unknown }
+type Pricing = Rates & {
+  /**
+   * Hourly prices (`utc_start`, `utc_end`, `utc_days`) and long-context tiers
+   * (`min_prompt_tokens`), each replacing the base rates while it applies.
+   */
   overrides?: Rates[]
 }
 
@@ -41,58 +44,71 @@ export type Endpoint = {
  */
 export const ROUTING_CAP_FACTOR = 2.1
 
-/** Dollars per token as OpenRouter prints them, to dollars per million. */
-const perMillion = (value: unknown) =>
-  Math.round(Number(value ?? 0) * 1e6 * 1e6) / 1e6
-
-/** The highest rate a pricing block charges for `key` at any hour of any day. */
-const peak = (pricing: Pricing | undefined, key: string) =>
-  Math.max(
-    perMillion(pricing?.[key]),
-    ...(pricing?.overrides ?? []).map((o) => perMillion(o[key]))
-  )
+/**
+ * The fewest live providers a model's cap must admit, or the generator stops.
+ * The primary model's third provider cleared the cap by 1.5% on 2026-09-27,
+ * so a small price move can take it back to one.
+ */
+const MIN_LIVE_PROVIDERS: Record<string, number> = {
+  "deepseek/deepseek-v4.1-flash": 3,
+}
 
 /** Dollars per million, rounded as OpenRouter's own figures are. */
 const rounded = (value: number) => Math.round(value * 1e6) / 1e6
 
-/** The smallest of the numbers given, or undefined when there are none. */
-const least = (values: (number | null | undefined)[]) => {
-  const known = values.filter((v): v is number => typeof v === "number")
-  return known.length > 0 ? Math.min(...known) : undefined
-}
+/** Dollars per token as OpenRouter prints them, to dollars per million. */
+const perMillion = (value: unknown) => rounded(Number(value ?? 0) * 1e6)
+
+/** The base rates and the hourly ones; a long-context tier is not an hour. */
+const hours = (pricing: Pricing | undefined): Rates[] => [
+  pricing ?? {},
+  ...(pricing?.overrides ?? []).filter(
+    (o) => o.min_prompt_tokens === undefined
+  ),
+]
+
+/** Every block of rates, long-context tiers included. */
+const blocks = (pricing: Pricing | undefined): Rates[] => [
+  pricing ?? {},
+  ...(pricing?.overrides ?? []),
+]
+
+const rate = (key: string) => (r: Rates) => perMillion(r[key])
 
 /**
  * A generated entry in Pi's `Model` shape, and how many distinct live
  * providers its routing cap admits.
  *
- * OpenRouter routes under the cap, so the entry's cost is the cap: the most
- * any admitted provider can bill. The log, and the budget summed from it,
- * then never counts less than was billed (§29.2), and overstates by up to
- * the factor until a call's actual cost is logged. Cache reads are not
- * capped by routing, so theirs is the dearest admitted provider's. The
- * context and output limits are the smallest any admitted provider serves,
- * so a request fits whichever one OpenRouter picks.
+ * The cap is the factor times the list price, the day's hourly peak without
+ * long-context tiers. OpenRouter compares a provider against it when a
+ * request is made, so a provider under it at any hour can serve a call, and
+ * the entry's cost is the cap: the most such a call can bill. The log, and
+ * the budget summed from it, then never counts less than was billed (§29.2),
+ * and overstates by up to the factor until a call's actual cost is logged.
+ * Cache reads are not capped by routing, so theirs is the dearest any
+ * admitted provider charges. The context and output limits are the smallest
+ * any admitted provider serves, so a request fits whichever one is picked.
  */
 export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
-  // OpenRouter's list price moves by the hour for some models, so the base
-  // is the day's peak.
+  const listed = hours(model.pricing)
   const cap = {
-    prompt: rounded(peak(model.pricing, "prompt") * ROUTING_CAP_FACTOR),
-    completion: rounded(peak(model.pricing, "completion") * ROUTING_CAP_FACTOR),
-  }
-  const admitted = endpoints.filter(
-    (e) =>
-      peak(e.pricing, "prompt") <= cap.prompt &&
-      peak(e.pricing, "completion") <= cap.completion
-  )
-  const cost = {
-    input: cap.prompt,
-    output: cap.completion,
-    cacheRead: Math.max(
-      0,
-      ...admitted.map((e) => peak(e.pricing, "input_cache_read"))
+    prompt: rounded(
+      Math.max(...listed.map(rate("prompt"))) * ROUTING_CAP_FACTOR
     ),
-    cacheWrite: 0,
+    completion: rounded(
+      Math.max(...listed.map(rate("completion"))) * ROUTING_CAP_FACTOR
+    ),
+  }
+  const admitted = endpoints.filter((e) =>
+    hours(e.pricing).some(
+      (r) =>
+        rate("prompt")(r) <= cap.prompt &&
+        rate("completion")(r) <= cap.completion
+    )
+  )
+  const least = (values: (number | null | undefined)[]) => {
+    const known = values.filter((v): v is number => typeof v === "number")
+    return known.length > 0 ? Math.min(...known) : undefined
   }
   const entry = {
     id: model.id,
@@ -104,7 +120,17 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
     input: (model.architecture?.input_modalities ?? ["text"]).filter(
       (mode) => mode === "text" || mode === "image"
     ),
-    cost,
+    cost: {
+      input: cap.prompt,
+      output: cap.completion,
+      cacheRead: Math.max(
+        0,
+        ...admitted.flatMap((e) =>
+          blocks(e.pricing).map(rate("input_cache_read"))
+        )
+      ),
+      cacheWrite: 0,
+    },
     contextWindow:
       least(admitted.map((e) => e.context_length)) ?? model.context_length,
     maxTokens:
@@ -120,4 +146,14 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
     admitted.filter((e) => e.status === 0).map((e) => e.provider_name)
   )
   return { entry, live: live.size }
+}
+
+/** One line per model whose cap admits fewer live providers than it needs. */
+export function shortOfProviders(results: { id: string; live: number }[]) {
+  return results.flatMap(({ id, live }) => {
+    const needs = MIN_LIVE_PROVIDERS[id]
+    return needs !== undefined && live < needs
+      ? [`${id} has ${live} live providers, needs ${needs}`]
+      : []
+  })
 }

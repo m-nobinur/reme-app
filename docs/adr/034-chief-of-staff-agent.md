@@ -209,17 +209,18 @@ while it sums the day's spend: settled cost for closed turns, the reservation fo
 full reservation for abandoned ones, whose last step's usage is lost. It then adds this turn's
 reservation, or falls back if that would pass $1. Concurrent turns in five conversations therefore
 cannot overshoot. The reservation is the worst case of six steps at 30,000 input tokens and
-`maxOutputTokens` at the model's price. OpenRouter's `/api/v1/models`, read on 2026-09-27, lists
-`deepseek/deepseek-v4.1-flash` at $0.035 per million input tokens and $0.29 per million output, so
-the reservation is 6 × (30,000 × $0.035 + 1,000 × $0.29) / 1,000,000, about $0.008. Both token
-figures are guesses the agent's PR replaces with measured p99s, and the price is re-read from the
-listing whenever the model changes.
+`maxOutputTokens` at the model's price in `openrouter.models.json` in `packages/facade`. That table
+prices every call at its routing cap, 2.1 times OpenRouter's list price, which is the most any
+provider it routes to can bill. On 2026-09-27 that is $0.0735 per million input tokens and $0.609
+per million output for `deepseek/deepseek-v4.1-flash`, so the reservation is
+6 × (30,000 × $0.0735 + 1,000 × $0.609) / 1,000,000, about $0.017. Both token figures are guesses
+the agent's PR replaces with measured p99s, and the table is regenerated whenever the model changes.
 
-Step cost is priced from usage at the rates the Developer's metering uses, so both reconcile
-against one OpenRouter bill. That generated table, `openrouter.models.json` in `packages/facade`,
-still lists $0.30 and $1.20 for this model, so it is regenerated before the CoS ships. Before
-the CoS ships, the bill must also come within 5% of the logged sum, with abandoned turns reported
-twice, at logged spend and at reservation, and the bill between the two. The cap is a ceiling,
+Step cost is priced from usage at the same table the Developer's metering uses, so both reconcile
+against one OpenRouter bill. Priced at the cap, the logged sum overstates the bill by up to the
+factor until each call's actual cost is logged. Until then, the check before the CoS ships is that
+the bill is at or under the logged sum, with the gap reported, abandoned turns reported twice, at
+logged spend and at reservation, and the bill between the two. The cap is a ceiling,
 not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if every org spends it. The
 agent's PR measures typical cost per turn and first-chunk p95 over 20 staging turns.
 

@@ -11,7 +11,10 @@
 import { execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { openrouterEntry } from "../packages/facade/src/models/price.ts"
+import {
+  openrouterEntry,
+  shortOfProviders,
+} from "../packages/facade/src/models/price.ts"
 
 const dir = fileURLToPath(
   new URL("../packages/facade/src/models/", import.meta.url)
@@ -36,24 +39,23 @@ async function endpoints(id) {
   return (await r.json()).data.endpoints
 }
 
-const models = []
-/** How many distinct live providers each model's cap admits, printed. */
-const admittedBy = new Map()
-const missing = []
-for (const id of ids) {
-  const m = byId.get(id)
-  if (!m) {
-    missing.push(id)
-    continue
-  }
-  const { entry, live } = openrouterEntry(m, await endpoints(id))
-  admittedBy.set(id, live)
-  models.push(entry)
-}
+const missing = ids.filter((id) => !byId.has(id))
 if (missing.length > 0) {
   console.error(`not on OpenRouter's list: ${missing.join(", ")}`)
   process.exit(1)
 }
+const results = await Promise.all(
+  ids.map(async (id) => ({
+    id,
+    ...openrouterEntry(byId.get(id), await endpoints(id)),
+  }))
+)
+const short = shortOfProviders(results)
+if (short.length > 0) {
+  console.error(`too few providers under the routing cap: ${short.join("; ")}`)
+  process.exit(1)
+}
+const models = results.map((r) => r.entry)
 models.sort((a, b) => a.id.localeCompare(b.id))
 const out = `${dir}openrouter.models.json`
 writeFileSync(out, `${JSON.stringify(models, null, 2)}\n`)
@@ -61,8 +63,8 @@ writeFileSync(out, `${JSON.stringify(models, null, 2)}\n`)
 execFileSync("pnpm", ["exec", "biome", "format", "--write", out], {
   stdio: "ignore",
 })
-for (const m of models) {
+for (const { entry: m, live } of results) {
   console.log(
-    `${m.id}  in $${m.cost.input}/M  out $${m.cost.output}/M  context ${m.contextWindow}  live providers under the cap ${admittedBy.get(m.id)}`
+    `${m.id}  in $${m.cost.input}/M  out $${m.cost.output}/M  context ${m.contextWindow}  live providers under the cap ${live}`
   )
 }

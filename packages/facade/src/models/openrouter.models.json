@@ -34,8 +34,8 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 8.4,
-      "output": 25.2,
+      "input": 4.2,
+      "output": 12.6,
       "cacheRead": 2,
       "cacheWrite": 0
     },
@@ -45,8 +45,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 8.4,
-          "completion": 25.2
+          "prompt": 4.2,
+          "completion": 12.6
         }
       }
     }
