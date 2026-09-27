@@ -115,11 +115,12 @@ clock and no environment. The derived messages pass `validateUIMessages` with th
 (`dist/index.js:10015`), and a throw there ends the stream without a call. Before each call it reads
 the session's events back, derives the expected messages, and compares their hash with the
 messages the SDK is about to send. A mismatch throws an `integrity` error: no call is made, the
-turn ends with outcome `integrity`, the conversation takes only the fallback until an operator
-appends `cos.unfrozen`, and ops are alerted, as §28.1 says. On a match it appends `cos.call` with
-the hash. The step's output is logged in `onStepEnd`, which the SDK awaits before the next step
-(`dist/index.js:9556`, `:10385`) but whose errors it swallows (`notify`, `:2769`). A failed step
-write therefore surfaces as a mismatch at the next `prepareStep`, never as a silent gap.
+turn ends with outcome `integrity`, and ops are alerted. As §28.1 says, the conversation is then
+frozen: a later turn that finds an `integrity` outcome in its session takes only the fallback, for
+good, and the owner starts a new conversation. Nothing unfreezes one. On a match `prepareStep`
+appends `cos.call` with the hash. The step's output is logged in `onStepEnd`, which the SDK
+awaits before the next step (`dist/index.js:9556`, `:10385`) but whose errors it swallows
+(`notify`, `:2769`). A failed step write therefore surfaces as a mismatch at the next `prepareStep`, never as a silent gap.
 
 This meets §10.6 at every call, not only the first: the model receives code logged by version in
 `cos.prefix` and messages derived from events appended before that call.
@@ -136,7 +137,9 @@ tripwire. The check is the boundary.
 1. A first transaction takes the conversation's row lock, then the org's row lock for the budget.
    It refuses with 409 `chat.busy` while another turn is open, validates the request, reserves
    spend, and appends `cos.prefix` when the version is new, `cos.message` for the owner's input,
-   and `cos.context`. It writes the owner's row and commits.
+   and `cos.context`. It writes the owner's row and commits. Every turn routed to the CoS writes
+   `cos.context`, one that falls back included, so every such turn holds a token and ends with a
+   `cos.turn`.
 2. The agent streams outside any lock. The api buffers chunks until the first content chunk, text,
    reasoning or tool input, or an error. `start` does not count, because `streamText` emits it
    before any provider call (`dist/index.js:9662`) and a provider error arrives later as an error
@@ -161,9 +164,12 @@ token check, so it cannot write late. A tab closed more than 30 s before its tur
 loses the turn's tail the same way.
 
 **An approved call with no result.** A turn can die after an approved tool ran and before its result
-was logged. The next turn, before anything else, runs that call's tool again under its approval id,
-which replays the first run, and logs the result. History never holds an approved call without a
-result.
+was logged. The dead turn's token is closed by then, so the next CoS turn owns the repair. Its
+first transaction abandons the dead turn and appends its own `cos.context`. Then, before the model
+call or the fallback, it runs that call's tool again under the approval id, which replays the first
+run, and appends the `cos.tool_result` under its own token. The write follows the token rule, and
+it is never refused forever, because the turn that makes it is open. History never holds an
+approved call without a result.
 
 A message id already stored gets 409 `chat.message_exists`, as now. A results turn whose calls are
 already resolved gets 409 `chat.stale`, and the web reloads the stored rows. The script keeps its
@@ -196,13 +202,17 @@ while it sums the day's spend: settled cost for closed turns, the reservation fo
 full reservation for abandoned ones, whose last step's usage is lost. It then adds this turn's
 reservation, or falls back if that would pass $1. Concurrent turns in five conversations therefore
 cannot overshoot. The reservation is the worst case of six steps at 30,000 input tokens and
-`maxOutputTokens` at the model's price, $0.061 at DeepSeek's listed $0.30 and $1.20 per million.
-Both token figures are guesses the agent's PR replaces with measured p99s.
+`maxOutputTokens` at the model's price. OpenRouter's `/api/v1/models`, read on 2026-09-27, lists
+`deepseek/deepseek-v4.1-flash` at $0.035 per million input tokens and $0.29 per million output, so
+the reservation is 6 × (30,000 × $0.035 + 1,000 × $0.29) / 1,000,000, about $0.008. Both token
+figures are guesses the agent's PR replaces with measured p99s, and the price is re-read from the
+listing whenever the model changes.
 
 Step cost is priced from usage at the rates the Developer's metering uses, so both reconcile
-against one OpenRouter bill. Before the CoS ships, the bill must come within 5% of the logged sum,
-with abandoned turns reported twice, at logged spend and at reservation, and the bill between the
-two. The cap is a ceiling, not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if
+against one OpenRouter bill. That generated table, `openrouter.models.json` in `packages/facade`,
+still lists $0.30 and $1.20 for this model, so it is regenerated before the CoS ships. Before
+the CoS ships, the bill must also come within 5% of the logged sum, with abandoned turns reported
+twice, at logged spend and at reservation, and the bill between the two. The cap is a ceiling, not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if
 every org spends it. The agent's PR measures typical cost per turn and first-chunk p95 over 20
 staging turns.
 
@@ -250,6 +260,18 @@ The agent's PR, each red once by mutation:
   appends `abandoned` and runs, and the old turn's next write is refused.
 - A stored message id gets 409 `chat.message_exists`.
 - Five concurrent turns in five conversations of one org never reserve past $1.
+- A turn killed after an approved `request_change` ran leaves the next turn to append exactly one
+  `cos.tool_result` under its own token, and the orchestrator holds one build for that approval id.
+- A conversation with an `integrity` outcome takes only the fallback on every later turn.
+- Taint labels: a turn whose context carries owner text and a question's `why` labels
+  `cos.context` and the `get_workspace` result `untrusted_input` and `inferred`, and an owner
+  message alone labels its `cos.message` `untrusted_input` only.
+- With no key, one results turn approving `request_change` and `answer_question` and denying
+  `create_reminder` makes no model call, runs each approved tool once under its approval id in
+  order, logs two `cos.tool_result` rows and one `cos.message`, and stores the denial as
+  `output-denied`.
+- With the second transaction held open, the client receives no `finish` chunk until it commits,
+  and a follow-up request sent on `finish` never gets `chat.busy`.
 - A provider error before content gives the fallback, not a 5xx, and one after content gives an
   error chunk.
 
@@ -261,8 +283,9 @@ The agent's PR, each red once by mutation:
   of 20 staging approvals and sets the timeout to three times that p95.
 - Every transaction the api opens sets `statement_timeout` to 5 s and
   `idle_in_transaction_session_timeout` to 15 s with `SET LOCAL`, so a hung bridge call inside the
-  script's lock ends before a connection is held past 15 s. Both are guesses, above the 139 ms
-  `/workspace` p95 and the 10 s bridge timeout, and move with measurements.
+  script's lock ends before a connection is held past 15 s. Both are guesses. The statement timeout
+  becomes ten times the slowest api statement's p99 in Neon's `pg_stat_statements` over a week of
+  staging. The idle timeout becomes the measured bridge timeout above plus 5 s.
 - A recorded staging turn from the chosen model and provider, committed as an api test fixture,
   shows that its tool-call ids pass the new pattern.
 - The contracts PR and `appendEvent` in `packages/db` are merged.
@@ -315,6 +338,7 @@ The agent's PR, each red once by mutation:
   Log fallback turns as model-visible.
 - The owner decides the `answer_question` card costs more than it protects, after the CoS evals
   and 200 live turns show no fabricated value. Reconsider automatic approval with that record.
+- The first frozen conversation on a real org. Build a way to unfreeze one.
 - Any caller other than the owner's own turn takes the conversation lock, a model call runs inside
   it, the approval turn's p95 passes 5 s, or a Hyperdrive connection-count alarm fires. Build the
   two-transaction approval.
