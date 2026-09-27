@@ -124,7 +124,8 @@ async function signup(
 async function route(
   request: Request,
   env: Env,
-  kit: Tenancy
+  kit: Tenancy,
+  waitUntil: (promise: Promise<unknown>) => void
 ): Promise<Response> {
   const { pathname } = new URL(request.url)
   const method = request.method
@@ -180,7 +181,7 @@ async function route(
   if (OWNER_PATH.test(pathname)) {
     const resolved = await currentOrg(session, kit)
     if ("response" in resolved) return resolved.response
-    const answered = await ownerRoute(request, env, kit, resolved)
+    const answered = await ownerRoute(request, env, kit, resolved, waitUntil)
     if (answered) return answered
   }
 
@@ -196,10 +197,12 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     // A client per request, which is what Hyperdrive is for: it holds the pool
     // and this pays no connection cost. Closed after the response rather than
-    // before it, so the body is already on its way out.
+    // before it, so the body is already on its way out, and after any work
+    // the response left running, such as a chat turn still streaming.
     const kit = tenancy(env.HYPERDRIVE.connectionString)
+    const running: Promise<unknown>[] = []
     try {
-      return await route(request, env, kit)
+      return await route(request, env, kit, (promise) => running.push(promise))
     } catch (error) {
       if (error instanceof BodyTooLarge) return tooLarge()
       // The code and nothing else. A driver message can carry the connection
@@ -217,7 +220,7 @@ export default {
         detail: {},
       })
     } finally {
-      ctx.waitUntil(kit.close())
+      ctx.waitUntil(Promise.allSettled(running).then(() => kit.close()))
     }
   },
 } satisfies ExportedHandler<Env>

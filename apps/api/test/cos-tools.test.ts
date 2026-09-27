@@ -1,9 +1,4 @@
-import {
-  COS_TOOLS,
-  type CosToolName,
-  FactValue,
-  FactValueKey,
-} from "@workspace/contracts"
+import { COS_TOOLS, type CosToolName } from "@workspace/contracts"
 import {
   assignments,
   sql,
@@ -20,6 +15,9 @@ import {
   it,
   vi,
 } from "vitest"
+// The orchestrator's own rule for an owner's answer, so the stand-in below
+// accepts exactly what the real `/answer` would.
+import { answers } from "../../orchestrator/src/question.ts"
 import {
   answerQuestion,
   getFacts,
@@ -543,29 +541,32 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     } as const
 
     /**
-     * The orchestrator's `/answer` as it reads a value (`answers` in
-     * `question.ts`): a fact field takes the fact's inner value, any other
-     * field text. A key it has seen gets its stored receipt. `hang` leaves
-     * the first call unanswered.
+     * The orchestrator's `/answer` as it reads a value: its own `answers`
+     * decides whether the value fits the question's field, so the api's
+     * shape for a value is checked against the real rule. A retry is
+     * replayed by what it says, the request id and the value, as the
+     * orchestrator replays it; the key is only carried. `hang` leaves the
+     * first call unanswered.
      */
     const answering = (fields: Record<string, string>, hang = false) => {
       const receipts = new Map<string, Response>()
       let calls = 0
       return stubOrchestrator(async (request) => {
         if (hang && calls++ === 0) return never()
-        const key = request.headers.get("idempotency-key") ?? ""
-        const stored = receipts.get(key)
-        if (stored) return stored.clone()
         const body = (await request.clone().json()) as {
           request_id: string
           value: unknown
         }
+        const said = `${body.request_id} ${JSON.stringify(body.value)}`
+        const stored = receipts.get(said)
+        if (stored) return stored.clone()
         const field = fields[body.request_id]
         const fits =
           field !== undefined &&
-          (FactValueKey.safeParse(field).success
-            ? FactValue.safeParse({ key: field, value: body.value }).success
-            : typeof body.value === "string")
+          answers(
+            { field, answer_schema: { type: "string" }, options: null },
+            body.value
+          )
         if (!fits) {
           return Response.json(
             {
@@ -589,7 +590,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           },
           { status: 202 }
         )
-        receipts.set(key, receipt.clone())
+        receipts.set(said, receipt.clone())
         return receipt
       })
     }

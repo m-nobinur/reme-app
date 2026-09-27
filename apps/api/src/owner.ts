@@ -153,7 +153,8 @@ export async function ownerRoute(
   request: Request,
   env: Env,
   kit: Tenancy,
-  owner: Owner
+  owner: Owner,
+  waitUntil: (promise: Promise<unknown>) => void
 ): Promise<Response | null> {
   const { pathname } = new URL(request.url)
   const method = request.method
@@ -182,7 +183,7 @@ export async function ownerRoute(
     return requestChange(request, env, kit, owner)
   }
   if (pathname === "/chat" && method === "POST") {
-    return chat(request, env, kit, owner)
+    return chat(request, env, kit, owner, { waitUntil })
   }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))

@@ -339,7 +339,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         } as unknown as Env,
         using,
         { orgId: who.orgId, session },
-        newId
+        { newId }
       )
       return { response, text: await response.text() }
     }

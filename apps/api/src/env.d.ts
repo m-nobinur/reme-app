@@ -14,4 +14,8 @@ interface Env {
   WORKOS_CLIENT_ID: string
   /** The seal `apps/web` writes with and this worker reads with (ADR-024). */
   WORKOS_COOKIE_PASSWORD: string
+  /** The Chief of Staff's key (ADR-034). Unset, every CoS turn takes the fallback. */
+  OPENROUTER_API_KEY?: string
+  /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */
+  COS_MODEL?: string
 }

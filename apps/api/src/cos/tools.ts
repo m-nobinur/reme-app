@@ -263,9 +263,11 @@ const answerInvalid = () =>
  * the bridge's path needs; an id the org never asked, another org's
  * included, is refused here and never reaches the orchestrator. Which
  * question may be answered is the orchestrator's to say, as on the owner's
- * route: it refuses any but the one the build waits on, and replays the
- * stored receipt to a retry under the same key even after the build has
- * moved on to a newer question.
+ * route: it refuses any but the one the build waits on. A retry is replayed
+ * by what it says, not by its key: the same request id with the same value
+ * gets the stored receipt, even after the build has moved on to a newer
+ * question, and another value gets 409 `answer.already_given`. The approval
+ * id still goes as the idempotency key, for the bridge's own logs.
  *
  * The value goes as the orchestrator reads it for the question's field: a
  * fact's inner value, for a fact the question names, or the owner's text.

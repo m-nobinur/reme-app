@@ -2,6 +2,7 @@ import {
   CosCall,
   CosContext,
   CosMessage,
+  CosPrefix,
   CosStep,
   CosToolResult,
   CosTurn,
@@ -14,6 +15,7 @@ import {
   events,
   type OrgScopedDb,
   sql,
+  staff,
 } from "@workspace/db"
 import { constraint } from "../http.ts"
 import { stepMessages } from "./history.ts"
@@ -242,7 +244,7 @@ const abandoned = (found: Open): Checked => ({
 async function append(
   db: OrgScopedDb,
   turn: Omit<Turn, "turnId">,
-  write: Checked
+  write: { type: string; payload: Record<string, unknown>; taint: TaintLabel[] }
 ): Promise<number | null> {
   try {
     const { seq } = await appendSessionEvent(db, {
@@ -336,4 +338,126 @@ export async function closeLapsedTurn(
     throw new SessionBusy(session.sessionId)
   }
   return false
+}
+
+/** What a turn's first transaction needs from the session's log. */
+export type SessionState = {
+  /** A turn in the session ended with outcome `integrity`: the model never answers here again. */
+  frozen: boolean
+  /** The session already holds this prefix. */
+  prefixLogged: boolean
+  /** A `cos.message` in the session names this message id, so the CoS made it. */
+  named: boolean
+}
+
+export async function sessionState(
+  db: OrgScopedDb,
+  sessionId: string,
+  prefixSha: string,
+  messageId: string | null
+): Promise<SessionState> {
+  const [row] = await db.execute<SessionState>(sql`
+    select
+      exists (select 1 from ${events} where session_id = ${sessionId}
+        and type = 'cos.turn' and payload->>'outcome' = 'integrity') as frozen,
+      exists (select 1 from ${events} where session_id = ${sessionId}
+        and type = 'cos.prefix' and payload->>'sha256' = ${prefixSha}) as "prefixLogged",
+      exists (select 1 from ${events} where session_id = ${sessionId}
+        and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named`)
+  return {
+    frozen: row?.frozen === true,
+    prefixLogged: row?.prefixLogged === true,
+    named: row?.named === true,
+  }
+}
+
+/** ADR-034's cap on an org's CoS spend per UTC day. */
+export const DAILY_CAP_USD = 1
+
+/**
+ * Whether the org's CoS spend today, with `amount` added, stays within the
+ * cap. It takes the org's budget lock (key 3), always after the
+ * conversation's (key 2), and holds it to the end of the transaction, so a
+ * second turn in another conversation sums after this one has reserved.
+ * Closed turns count their cost, open ones their reservation, and abandoned
+ * ones their whole reservation, since their last step's usage is lost. A
+ * wait on the lock past the statement limit ends in 57014, which the api
+ * answers as 503 `transient`.
+ */
+export async function withinCap(
+  db: OrgScopedDb,
+  orgId: string,
+  amount: number
+): Promise<boolean> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(3, hashtext(${orgId}::text))`
+  )
+  const [row] = await db.execute<{ spent: number }>(sql`
+    select coalesce(sum(case
+        when t.payload is null then (c.payload->>'reserved_usd')::float8
+        when t.payload->>'outcome' = 'abandoned' then (t.payload->>'reserved_usd')::float8
+        else (t.payload->>'cost_usd')::float8
+      end), 0) as spent
+    from ${events} c
+    left join ${events} t on t.session_id = c.session_id and t.type = 'cos.turn'
+      and t.payload->>'turn_id' = c.payload->>'turn_id'
+    where c.org_id = ${orgId} and c.type = 'cos.context'
+      and c.occurred_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
+  return Number(row?.spent ?? 0) + amount <= DAILY_CAP_USD
+}
+
+/** A turn's opening writes, in the order the log holds them. */
+export type Opening = {
+  prefix: CosPrefix | null
+  messages: { message: CosMessage["message"]; taint: TaintLabel[] }[]
+  context: CosContext
+  contextTaint: TaintLabel[]
+}
+
+/**
+ * For a turn's first transaction, after `closeLapsedTurn` said no turn is
+ * open: the prefix when the session lacks it, the turn's messages and its
+ * `cos.context`, which gives the turn its token. Throws `SessionBusy` when
+ * another writer took a seq meanwhile.
+ */
+export async function beginTurn(
+  db: OrgScopedDb,
+  turn: Turn,
+  opening: Opening
+): Promise<void> {
+  const context = CosContext.parse(opening.context)
+  if (context.turn_id !== turn.turnId) {
+    throw new Error("cos.turns: a context for another turn")
+  }
+  const writes = [
+    ...(opening.prefix
+      ? [
+          {
+            type: "cos.prefix",
+            payload: CosPrefix.parse(opening.prefix),
+            taint: [],
+          },
+        ]
+      : []),
+    ...opening.messages.map(({ message, taint }) => ({
+      type: "cos.message",
+      payload: CosMessage.parse({ turn_id: turn.turnId, message }),
+      taint,
+    })),
+    { type: "cos.context", payload: context, taint: opening.contextTaint },
+  ]
+  for (const write of writes) {
+    if ((await append(db, turn, write)) === null) {
+      throw new SessionBusy(turn.sessionId)
+    }
+  }
+}
+
+/** The org's Chief of Staff staff row, or null for an org made before the starting team. */
+export async function chiefStaffId(db: OrgScopedDb): Promise<string | null> {
+  const [row] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(eq(staff.staffCode, "COS-001"))
+  return row?.id ?? null
 }

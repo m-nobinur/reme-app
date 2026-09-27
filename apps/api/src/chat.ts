@@ -4,6 +4,7 @@ import {
   BuildSummary,
   ChatRequest,
   type ChatResult,
+  type CosTurn,
   ErrorEnvelope,
   FactValue,
   type FactValueKey,
@@ -14,16 +15,48 @@ import {
   conversationMessages,
   conversations,
   eq,
+  newUlid,
   type OrgScopedDb,
   orgs,
   sql,
   type Tenancy,
 } from "@workspace/db"
-// Types only: the frames are written here by hand, so `ai` never enters the
-// bundle (about 49 KiB gzip for `createUIMessageStream`).
-import type { UIMessageChunk } from "ai"
+import type { LanguageModel, UIMessage, UIMessageChunk } from "ai"
 import { type Owner, startChange, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
+import {
+  type AgentTurn,
+  activeTools,
+  contextOf,
+  cosPrefix,
+  DEFAULT_MODEL,
+  LIMITS,
+  messageTaint,
+  newRunState,
+  openrouterModel,
+  priceOf,
+  reservation,
+} from "./cos/agent.ts"
+import {
+  CONTEXT_POLICY,
+  deriveCosMessages,
+  readSession,
+} from "./cos/history.ts"
+import { closeTurn, type Rows, ranTurn, settle, streamTurn } from "./cos/run.ts"
+import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
+import {
+  beginTurn,
+  chiefStaffId,
+  closeLapsedTurn,
+  NoSuchSession,
+  type Opening,
+  SessionBusy,
+  type SessionState,
+  sessionState,
+  type Turn,
+  withinCap,
+  writeAsTurn,
+} from "./cos/turns.ts"
 import { failure, invalid, readBody, sortedKeys } from "./http.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
@@ -216,12 +249,12 @@ function resolved(part: ToolPart): UIMessageChunk[] {
 function stream(
   messageId: string,
   step: Part[],
-  call: ToolPart | null = null
+  lead: UIMessageChunk[] = []
 ): Response {
   const chunks: UIMessageChunk[] = [
     { type: "start", messageId },
     { type: "start-step" },
-    ...(call ? resolved(call) : []),
+    ...lead,
     ...step.flatMap(made),
     { type: "finish-step" },
     { type: "finish" },
@@ -294,7 +327,7 @@ const busy = () =>
   failure(409, {
     class: "validation",
     code: "chat.busy",
-    message: "Another turn in this conversation is still running.",
+    message: "I'm still working on your last message. Try again in a moment.",
     detail: {},
   })
 
@@ -391,13 +424,25 @@ class Refusal {
   constructor(readonly response: Response) {}
 }
 
+export type ChatDeps = {
+  newId?: () => string
+  /**
+   * The Chief of Staff's model. Left out, it is OpenRouter's when the api
+   * holds a key, and none otherwise, which is the fallback. Tests pass one.
+   */
+  model?: LanguageModel | null
+  /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
+  waitUntil?: (promise: Promise<unknown>) => void
+}
+
 export async function chat(
   request: Request,
   env: Env,
   kit: Tenancy,
   owner: Owner,
-  newId: () => string = () => crypto.randomUUID()
+  deps: ChatDeps = {}
 ): Promise<Response> {
+  const newId = deps.newId ?? (() => crypto.randomUUID())
   const body = await readBody(request)
   const parsed = ChatRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
@@ -405,36 +450,492 @@ export async function chat(
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
   const { conversation_id: id, mode, turn } = parsed.data
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
+  const tools = { env, kit, owner }
+  // Read before the turn's lock is taken; the CoS's context is built from it.
+  const [workspace, prefix] = await Promise.all([
+    getWorkspace(tools, {}),
+    cosPrefix(),
+  ])
+  const modelId = env.COS_MODEL ?? DEFAULT_MODEL
+  const price = priceOf(modelId)
+  const model =
+    deps.model !== undefined
+      ? deps.model
+      : env.OPENROUTER_API_KEY
+        ? openrouterModel(env.OPENROUTER_API_KEY, modelId)
+        : null
+  let opened: Opened | Response
   try {
-    return await kit.withOrg(scope, async (db) => {
+    opened = await kit.withOrg(scope, async (db) => {
       const held = await read(db, id)
       if (held instanceof Response) return held
+      const chiefId = await chiefStaffId(db)
+      const session = chiefId
+        ? { orgId: owner.orgId, staffId: chiefId, sessionId: id }
+        : null
+      // Every turn respects an open CoS turn, the script's included.
+      if (session && (await closeLapsedTurn(db, session, LIMITS.totalMs))) {
+        return busy()
+      }
+      const named = turn.kind === "results" ? turn.message_id : held.tail?.id
+      const log = session
+        ? await sessionState(db, id, prefix.sha256, named ?? null)
+        : null
+      const scripted =
+        !session ||
+        !log ||
+        (held.kind === "onboarding" && !(await readScript(db, id)).offered) ||
+        (turn.kind === "results" && !log.named)
+      if (scripted)
+        return scriptTurn(db, env, kit, owner, held, id, parsed.data, newId)
+      const reserve = model && price && !log.frozen ? reservation(price) : 0
+      const fallback: Fallback | null =
+        log.frozen || !model || !price
+          ? "resource"
+          : (await withinCap(db, owner.orgId, reserve))
+            ? null
+            : "budgetary"
+      const opening = await openCos(db, held, id, parsed.data, log)
+      if (opening instanceof Response) return opening
+      const cosTurn: Turn = { ...session, turnId: newUlid() }
+      const context = contextOf(mode, workspace)
+      await beginTurn(db, cosTurn, {
+        prefix: log.prefixLogged ? null : prefix,
+        messages: opening.messages,
+        context: {
+          turn_id: cosTurn.turnId,
+          prefix_sha256: prefix.sha256,
+          context_policy_version: CONTEXT_POLICY.version,
+          mode,
+          active_tools: activeTools(mode),
+          text: context.text,
+          reserved_usd: fallback ? 0 : reserve,
+        },
+        contextTaint: context.taint,
+      })
       if (turn.kind === "message") {
-        return typed(
-          db,
-          owner,
-          held,
-          id,
-          { mode, text: turn.text },
-          turn.message_id,
-          newId
-        )
+        await putRow(db, owner, id, {
+          id: turn.message_id,
+          role: "user",
+          parts: [{ type: "text", text: turn.text }],
+        })
       }
-      // The script's steps each wait on one call, so its results turn
-      // resolves exactly one; any other set is not what it is waiting on.
-      // The script has no model, so an approval's reason is not kept.
-      const [result, ...more] = turn.results
-      if (!result || more.length > 0) return stale()
-      const one = { message_id: turn.message_id, ...result }
-      if (one.kind === "answer") {
-        return answer(db, owner, held, id, one, newId)
-      }
-      return approve(db, env, kit, owner, held, id, one)
+      return { turn: cosTurn, fallback, tail: opening.tail }
     })
   } catch (error) {
     if (error instanceof Refusal) return error.response
+    if (error instanceof SessionBusy) return busy()
+    if (error instanceof NoSuchSession) return notFound()
     throw error
   }
+  if (opened instanceof Response) return opened
+  const run: AgentTurn = {
+    turn: opened.turn,
+    kit,
+    tools,
+    price: price ?? { input: 0, output: 0, cacheRead: 0 },
+    state: newRunState(),
+    abort: new AbortController(),
+  }
+  return answerCos(run, {
+    env,
+    owner,
+    id,
+    mode,
+    turn: parsed.data.turn,
+    opened,
+    model: opened.fallback ? null : model,
+    modelId,
+    newId,
+    waitUntil: deps.waitUntil ?? ((promise) => void promise),
+  })
+}
+
+type Fallback = "provider" | "budgetary" | "resource"
+
+/** What a CoS turn's first transaction hands to the rest of the turn. */
+type Opened = {
+  turn: Turn
+  fallback: Fallback | null
+  /** For a results turn: the message its results resolved. */
+  tail: (Content & { id: string }) | null
+}
+
+/** A turn the script answers: everything before the CoS, unchanged. */
+function scriptTurn(
+  db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  held: Read,
+  id: string,
+  { mode, turn }: ChatRequest,
+  newId: () => string
+): Promise<Response> {
+  if (turn.kind === "message") {
+    return typed(
+      db,
+      owner,
+      held,
+      id,
+      { mode, text: turn.text },
+      turn.message_id,
+      newId
+    )
+  }
+  // The script's steps each wait on one call, so its results turn
+  // resolves exactly one; any other set is not what it is waiting on.
+  // The script has no model, so an approval's reason is not kept.
+  const [result, ...more] = turn.results
+  if (!result || more.length > 0) return Promise.resolve(stale())
+  const one = { message_id: turn.message_id, ...result }
+  if (one.kind === "answer") {
+    return answer(db, owner, held, id, one, newId)
+  }
+  return approve(db, env, kit, owner, held, id, one)
+}
+
+type CosPart = {
+  type: string
+  toolCallId?: string
+  state?: string
+  output?: unknown
+  errorText?: string
+  approval?: { id: string; approved?: boolean; reason?: string }
+}
+
+/** The chunks that show a CoS call as the owner's results left it. */
+function settledChunks(part: CosPart): UIMessageChunk[] {
+  const toolCallId = part.toolCallId as string
+  const response: UIMessageChunk[] = part.approval
+    ? [
+        {
+          type: "tool-approval-response",
+          approvalId: part.approval.id,
+          approved: part.approval.approved === true,
+          ...(part.approval.reason === undefined
+            ? {}
+            : { reason: part.approval.reason }),
+        },
+      ]
+    : []
+  if (part.state === "output-denied") {
+    return [...response, { type: "tool-output-denied", toolCallId }]
+  }
+  if (part.state === "output-error") {
+    return [
+      ...response,
+      {
+        type: "tool-output-error",
+        toolCallId,
+        errorText: part.errorText ?? "",
+      },
+    ]
+  }
+  if (part.state === "output-available") {
+    return [
+      ...response,
+      { type: "tool-output-available", toolCallId, output: part.output },
+    ]
+  }
+  return response
+}
+
+/**
+ * The CoS side of a turn's first transaction: the messages the turn logs,
+ * and the stored rows they change. A typed message cancels the tail's
+ * pending calls, as the script's does, and logs the tail again when the
+ * CoS made it. A results turn must resolve exactly the pending calls of the
+ * tail's last step, each once: an approval is `approval-responded` until
+ * its tool runs, a denial is `output-denied`, and a reason is kept.
+ */
+async function openCos(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  { turn }: ChatRequest,
+  log: SessionState
+): Promise<
+  | {
+      messages: Opening["messages"]
+      tail: (Content & { id: string }) | null
+    }
+  | Response
+> {
+  if (turn.kind === "message") {
+    if (await messageTaken(db, id, turn.message_id)) return messageExists()
+    const cancelled = await cancelPending(db, id, held.tail)
+    const user = {
+      id: turn.message_id,
+      role: "user" as const,
+      parts: [{ type: "text", text: turn.text }],
+    }
+    const messages =
+      cancelled && log.named && held.tail
+        ? [{ id: held.tail.id, ...cancelled }, user]
+        : [user]
+    return {
+      messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
+      tail: null,
+    }
+  }
+  const { tail } = held
+  if (tail?.id !== turn.message_id || tail.content.role !== "assistant") {
+    return stale()
+  }
+  const parts = tail.content.parts as CosPart[]
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  const waiting = last.filter(
+    (p) => p.type.startsWith("tool-") && p.state === "approval-requested"
+  )
+  const results = turn.results
+  const byApproval = new Map(
+    results.flatMap((r) => (r.kind === "approval" ? [[r.approval_id, r]] : []))
+  )
+  if (
+    results.length !== waiting.length ||
+    byApproval.size !== results.length ||
+    !waiting.every((p) => p.approval && byApproval.has(p.approval.id))
+  ) {
+    return stale()
+  }
+  const applied = parts.map((part): CosPart => {
+    const result = part.approval ? byApproval.get(part.approval.id) : undefined
+    if (!result || !waiting.includes(part)) return part
+    const approval = {
+      id: result.approval_id,
+      approved: result.approved,
+      ...(result.reason === undefined ? {} : { reason: result.reason }),
+    }
+    return result.approved
+      ? { ...part, state: "approval-responded", approval }
+      : { ...part, state: "output-denied", approval }
+  })
+  const content = { role: "assistant" as const, parts: applied as Part[] }
+  if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
+  const message = { id: tail.id, ...content }
+  return {
+    messages: [{ message, taint: messageTaint(message) }],
+    tail: message,
+  }
+}
+
+/**
+ * Writes a message's stored row: its content when the row exists, or a new
+ * row after the conversation's last one. The conversation moves up the list.
+ */
+async function putRow(
+  db: OrgScopedDb,
+  owner: Owner,
+  id: string,
+  message: { id: string; role: string; parts: unknown[] }
+): Promise<void> {
+  const content = { role: message.role, parts: message.parts }
+  const updated = await db
+    .update(conversationMessages)
+    .set({ content })
+    .where(
+      sql`${conversationMessages.conversationId} = ${id} and ${conversationMessages.id} = ${message.id}`
+    )
+    .returning({ id: conversationMessages.id })
+  if (updated.length === 0) {
+    const [last] = await db
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, id))
+      .orderBy(sql`${conversationMessages.seq} desc`)
+      .limit(1)
+    await db.insert(conversationMessages).values({
+      conversationId: id,
+      orgId: owner.orgId,
+      format: FORMAT,
+      id: message.id,
+      parentId: last?.id ?? null,
+      content,
+    })
+  }
+  await db
+    .update(conversations)
+    .set({ updatedAt: new Date() })
+    .where(eq(conversations.id, id))
+}
+
+/** Everything a CoS turn needs after its first transaction. */
+type Answering = {
+  env: Env
+  owner: Owner
+  id: string
+  mode: "ask" | "act"
+  turn: ChatRequest["turn"]
+  opened: Opened
+  model: LanguageModel | null
+  modelId: string
+  newId: () => string
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
+/**
+ * The CoS answers an open turn. Approved calls with no result run first,
+ * under their approval ids, whether the model or the fallback answers.
+ * Then the model streams, or the script's step stands in for it.
+ */
+async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
+  const rows: Rows = (db, message) => putRow(db, a.owner, a.id, message)
+  const ended = (
+    outcome: "error" | "integrity" | "fallback",
+    reason: Fallback = "resource"
+  ): CosTurn => {
+    const { outcome: _, ...ran } = ranTurn(run, a.modelId, "answered", null)
+    return outcome === "fallback"
+      ? { ...ran, outcome, reason }
+      : { ...ran, outcome }
+  }
+  let failed: ToolFailed | null
+  try {
+    failed = await settle(run, rows)
+  } catch (error) {
+    await closeTurn(run, ended("error"), null, rows)
+    throw error
+  }
+  if (failed) {
+    await closeTurn(run, ended("error"), null, rows)
+    return failure(failed.status, {
+      ...failed.error,
+      detail: {},
+    })
+  }
+  let fallback = a.opened.fallback
+  if (!fallback && a.model) {
+    const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+      readSession(db, run.turn.sessionId)
+    )
+    const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+    const tail = a.opened.tail
+    const streamed = await streamTurn({
+      run,
+      model: a.model,
+      mode: a.mode,
+      modelId: a.modelId,
+      uiMessages: messages,
+      newMessageId: a.newId,
+      lead: tail ? settledLead(messages, tail.id) : [],
+      rows,
+      waitUntil: a.waitUntil,
+    })
+    if (streamed instanceof Response) return streamed
+    if (run.state.integrity) {
+      return fallbackTurn(run, a, rows, ended("integrity"))
+    }
+    fallback = "provider"
+  }
+  return fallbackTurn(run, a, rows, ended("fallback", fallback ?? "resource"))
+}
+
+/** The lead chunks for a results turn: its tail's calls as the log now has them. */
+function settledLead(messages: UIMessage[], tailId: string): UIMessageChunk[] {
+  const tail = messages.find((m) => m.id === tailId)
+  const parts = (tail?.parts ?? []) as CosPart[]
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  return last
+    .filter(
+      (p) => p.type.startsWith("tool-") && p.approval?.approved !== undefined
+    )
+    .flatMap(settledChunks)
+}
+
+/**
+ * The turn without the model: the script's step for a typed message, not
+ * logged, so the model learns its effect from the next context; for a
+ * results turn, the resolved message, logged with no model text.
+ */
+async function fallbackTurn(
+  run: AgentTurn,
+  a: Answering,
+  rows: Rows,
+  payload: CosTurn
+): Promise<Response> {
+  if (a.turn.kind === "message") {
+    const step = nextStep({
+      kind: "assistant",
+      missing: [],
+      orgName: "",
+      skipped: [],
+      offered: true,
+      message: { mode: a.mode, text: a.turn.text },
+      newId: a.newId,
+    })
+    const assistantId = a.newId()
+    await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
+      await writeAsTurn(db, run.turn, [{ type: "cos.turn", payload }])
+      await rows(db, {
+        id: assistantId,
+        role: "assistant",
+        parts: [{ type: "step-start" }, ...step],
+      })
+    })
+    return stream(assistantId, step)
+  }
+  const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+    readSession(db, run.turn.sessionId)
+  )
+  const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+  const tailId = a.opened.tail?.id as string
+  const tail = messages.find((m) => m.id === tailId) as UIMessage
+  const message = {
+    ...tail,
+    parts: [...tail.parts, { type: "step-start" as const }],
+  }
+  await closeTurn(run, payload, message, rows)
+  return stream(tailId, [], settledLead(messages, tailId))
+}
+
+/** A message id is written once. A retried send is refused, never merged. */
+async function messageTaken(
+  db: OrgScopedDb,
+  id: string,
+  messageId: string
+): Promise<boolean> {
+  const [taken] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      sql`${conversationMessages.conversationId} = ${id} and ${conversationMessages.id} = ${messageId}`
+    )
+  return taken !== undefined
+}
+
+const messageExists = () =>
+  failure(409, {
+    class: "validation",
+    code: "chat.message_exists",
+    message: "That message is already in this conversation.",
+    detail: {},
+  })
+
+/**
+ * The tail with every pending call cancelled, the way assistant-ui's
+ * `cancelPendingToolCallsOnSend` cancels it on screen, written back. Null
+ * when nothing was pending.
+ */
+async function cancelPending(
+  db: OrgScopedDb,
+  id: string,
+  tail: Tail | null
+): Promise<Content | null> {
+  if (
+    tail?.content.role !== "assistant" ||
+    !tail.content.parts.some((p) => isTool(p) && pending(p))
+  ) {
+    return null
+  }
+  const parts = tail.content.parts.map((part): Part => {
+    if (!isTool(part) || !pending(part)) return part
+    const { approval: _, ...rest } = part
+    return { ...rest, state: "output-error", errorText: CANCELLED }
+  })
+  const content = { ...tail.content, parts }
+  if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
+  return content
 }
 
 /**
@@ -451,35 +952,9 @@ async function typed(
   messageId: string,
   newId: () => string
 ): Promise<Response> {
-  // A message id is written once. A retried send is refused, never merged.
-  const [taken] = await db
-    .select({ id: conversationMessages.id })
-    .from(conversationMessages)
-    .where(
-      sql`${conversationMessages.conversationId} = ${id} and ${conversationMessages.id} = ${messageId}`
-    )
-  if (taken) {
-    return failure(409, {
-      class: "validation",
-      code: "chat.message_exists",
-      message: "That message is already in this conversation.",
-      detail: {},
-    })
-  }
+  if (await messageTaken(db, id, messageId)) return messageExists()
   const { tail } = held
-  if (
-    tail?.content.role === "assistant" &&
-    tail.content.parts.some((p) => isTool(p) && pending(p))
-  ) {
-    const parts = tail.content.parts.map((part): Part => {
-      if (!isTool(part) || !pending(part)) return part
-      const { approval: _, ...rest } = part
-      return { ...rest, state: "output-error", errorText: CANCELLED }
-    })
-    if (!(await swapTail(db, id, tail, { ...tail.content, parts }))) {
-      throw new Refusal(stale())
-    }
-  }
+  await cancelPending(db, id, tail)
   const step = await next(db, held, id, {
     missing: missingFacts(await readFacts(db)),
     message,
@@ -562,7 +1037,7 @@ async function answer(
     const given = AskFactOutput.safeParse(call.output)
     // The same answer again is a retry, and gets the first one's stream.
     return given.success && JSON.stringify(given.data) === output
-      ? stream(tail.id, stepAfter(tail.content.parts, call), call)
+      ? stream(tail.id, stepAfter(tail.content.parts, call), resolved(call))
       : stale()
   }
   const { key } = call.input as AskFactInput
@@ -596,7 +1071,7 @@ async function answer(
   if (!(await swapTail(db, id, tail, { ...tail.content, parts }))) {
     throw new Refusal(stale())
   }
-  return stream(tail.id, step, done)
+  return stream(tail.id, step, resolved(done))
 }
 
 /**
@@ -622,7 +1097,7 @@ async function approve(
   // Resolved already: the same decision replays it, another is stale.
   const replay = (at: Tail, decided: ToolPart) =>
     decided.approval?.approved === turn.approved
-      ? stream(at.id, stepAfter(at.content.parts, decided), decided)
+      ? stream(at.id, stepAfter(at.content.parts, decided), resolved(decided))
       : stale()
   if (!pending(call)) return replay(tail, call)
   const approval = { id: turn.approval_id, approved: turn.approved }
@@ -638,7 +1113,7 @@ async function approve(
     { type: "step-start" } as const,
   ]
   if (await swapTail(db, id, tail, { ...tail.content, parts })) {
-    return stream(tail.id, [], done)
+    return stream(tail.id, [], resolved(done))
   }
   // Written by something outside the lock meanwhile: this same decision is
   // a replay, anything else is stale.
