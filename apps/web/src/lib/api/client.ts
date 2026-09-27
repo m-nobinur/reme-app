@@ -300,6 +300,7 @@ async function workspaceStatus(
         builds: [],
         attention: [],
         missing_facts: [],
+        reminders: { notes: [], derived: [] },
       },
       etag: null,
     }

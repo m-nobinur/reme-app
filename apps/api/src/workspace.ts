@@ -279,6 +279,7 @@ export async function readWorkspace(
       builds,
       attention: orderAttention(approvalItems, questions, feed),
       missing_facts: missingFacts(current),
+      reminders: { notes: [], derived: [] },
     })
   })
 }

@@ -152,6 +152,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
             },
           })),
           missing_facts: [],
+          reminders: { notes: [], derived: [] },
         }
         const workspace = await apiSource.pollWorkspace(null)
         if (workspace === "unchanged") throw new Error("no workspace read")

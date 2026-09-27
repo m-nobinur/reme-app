@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   ActivityFeed,
   AttentionItem,
+  CreateReminderRequest,
+  DerivedReminder,
   FactValue,
   FactValueKey,
   GOAL_MAX,
@@ -9,6 +11,9 @@ import {
   OwnerAnswerText,
   OwnerChangeRequest,
   PreviewLink,
+  REMINDER_NOTES_MAX,
+  Reminder,
+  ReminderPatch,
   SetFactsRequest,
   TextAnswerSchema,
   WorkspaceStatus,
@@ -329,5 +334,134 @@ describe("the bridge's building blocks", () => {
     const names = Object.values(OWNER_BRIDGE_HEADERS)
     expect(new Set(names).size).toBe(3)
     for (const n of names) expect(n).toMatch(/^x-reme-[a-z-]+$/)
+  })
+})
+
+describe("Reminder", () => {
+  const note = samples.Reminder as Record<string, unknown>
+
+  it("takes a 200-character title and refuses 201 or a blank one", () => {
+    const titled = (title: string) => ({ ...note, title })
+    expect(verdict("Reminder", Reminder, titled("a".repeat(200)))).toEqual(
+      ACCEPTED
+    )
+    expect(verdict("Reminder", Reminder, titled("a".repeat(201)))).toEqual(
+      REFUSED
+    )
+    expect(verdict("Reminder", Reminder, titled(" \n "))).toEqual(REFUSED)
+  })
+
+  it("comes from the owner or the assistant only", () => {
+    const from = (source: string) => ({ ...note, source })
+    expect(verdict("Reminder", Reminder, from("owner"))).toEqual(ACCEPTED)
+    expect(verdict("Reminder", Reminder, from("developer"))).toEqual(REFUSED)
+  })
+})
+
+describe("the reminder requests", () => {
+  const create = samples.CreateReminderRequest as Record<string, unknown>
+
+  it.each([
+    ["an undated reminder", { ...create, due_at: null }],
+    ["a 200-character title", { ...create, title: "a".repeat(200) }],
+  ])("creates %s", (_name, body) => {
+    expect(
+      verdict("CreateReminderRequest", CreateReminderRequest, body)
+    ).toEqual(ACCEPTED)
+  })
+
+  // The route decides the source; a caller cannot claim one.
+  it.each([
+    ["a source", { ...create, source: "assistant" }],
+    ["no due_at at all", { title: create.title }],
+    ["a 201-character title", { ...create, title: "a".repeat(201) }],
+    ["a blank title", { ...create, title: "  " }],
+    ["a due time with no offset", { ...create, due_at: "2026-08-27T09:30" }],
+  ])("refuses %s", (_name, body) => {
+    expect(
+      verdict("CreateReminderRequest", CreateReminderRequest, body)
+    ).toEqual(REFUSED)
+  })
+
+  it("patches done and nothing else", () => {
+    const patch = (body: unknown) =>
+      verdict("ReminderPatch", ReminderPatch, body)
+    expect(patch({ done: false })).toEqual(ACCEPTED)
+    expect(patch({})).toEqual(REFUSED)
+    expect(patch({ done: "yes" })).toEqual(REFUSED)
+    expect(patch({ done: true, title: "Renamed" })).toEqual(REFUSED)
+  })
+})
+
+describe("DerivedReminder", () => {
+  const derived = (
+    samples.WorkspaceStatus as {
+      reminders: { derived: { rule: string }[] }
+    }
+  ).reminders.derived
+  const byRule = Object.fromEntries(derived.map((d) => [d.rule, d]))
+
+  it("has a case here for exactly the four rules", () => {
+    const rules = DerivedReminder.options.map((o) => o.shape.rule.value)
+    expect(rules.sort()).toEqual(Object.keys(byRule).sort())
+  })
+
+  it.each(derived.map((d) => [d.rule, d]))("accepts %s", (_rule, item) => {
+    expect(verdict("DerivedReminder", DerivedReminder, item)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["a fifth rule", { ...byRule.question_waiting, rule: "stale_site" }],
+    ["copy", { ...byRule.question_waiting, message: "Answer this" }],
+    ["a done state", { ...byRule.question_waiting, done_at: null }],
+    ["an id of its own", { ...byRule.question_waiting, id: ASSIGNMENT }],
+    [
+      "an expiring approval with no expiry",
+      { ...byRule.approval_expiring, expires_at: undefined },
+    ],
+    ["no missing keys", { rule: "facts_missing", keys: [] }],
+    ["a key the owner cannot state", { rule: "facts_missing", keys: ["x"] }],
+  ])("refuses %s", (_name, item) => {
+    expect(verdict("DerivedReminder", DerivedReminder, item)).toEqual(REFUSED)
+  })
+})
+
+describe("WorkspaceStatus reminders", () => {
+  const status = samples.WorkspaceStatus as {
+    reminders: { notes: unknown[]; derived: unknown[] }
+  }
+  const withNotes = (n: number) => ({
+    ...status,
+    reminders: {
+      ...status.reminders,
+      notes: Array(n).fill(status.reminders.notes[0]),
+    },
+  })
+
+  it("lists at most REMINDER_NOTES_MAX open notes", () => {
+    expect(REMINDER_NOTES_MAX).toBe(20)
+    expect(
+      verdict("WorkspaceStatus", WorkspaceStatus, withNotes(REMINDER_NOTES_MAX))
+    ).toEqual(ACCEPTED)
+    expect(
+      verdict(
+        "WorkspaceStatus",
+        WorkspaceStatus,
+        withNotes(REMINDER_NOTES_MAX + 1)
+      )
+    ).toEqual(REFUSED)
+  })
+
+  it("always answers with reminders, even when there are none", () => {
+    const { reminders: _, ...without } = status
+    expect(verdict("WorkspaceStatus", WorkspaceStatus, without)).toEqual(
+      REFUSED
+    )
+    expect(
+      verdict("WorkspaceStatus", WorkspaceStatus, {
+        ...status,
+        reminders: { notes: [], derived: [] },
+      })
+    ).toEqual(ACCEPTED)
   })
 })

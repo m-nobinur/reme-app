@@ -102,6 +102,20 @@ export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/**
+ * `create_reminder`'s output once the owner said yes: the due time as
+ * stored, and no id, since the model has nothing to do with one. A no is
+ * `output-denied`. Its input is `CreateReminderRequest`. The tool joins
+ * `COS_TOOLS` and `CosToolResult` in the change that implements it.
+ */
+export const CreateReminderOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("created"),
+    due_at: Timestamp.nullable(),
+  }),
+  Refused,
+])
+
 const Empty = z.strictObject({})
 
 /**
@@ -258,6 +272,7 @@ export type GetPreviewInput = z.infer<typeof GetPreviewInput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>
 export type AnswerQuestionOutput = z.infer<typeof AnswerQuestionOutput>
+export type CreateReminderOutput = z.infer<typeof CreateReminderOutput>
 export type CosTurn = z.infer<typeof CosTurn>
 export type CosPrefix = z.infer<typeof CosPrefix>
 export type CosContext = z.infer<typeof CosContext>
