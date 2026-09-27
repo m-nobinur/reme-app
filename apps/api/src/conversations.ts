@@ -22,6 +22,7 @@ import {
   invalid,
   keyMissing,
   readBody,
+  withoutProviderData,
 } from "./http.ts"
 import { ownerStaffId } from "./staff.ts"
 
@@ -177,7 +178,8 @@ function toConversationMessage(row: MessageRow): ConversationMessage {
     format: row.format as ConversationMessage["format"],
     content: {
       role,
-      parts,
+      // A row written before the provider's data was stripped still holds it.
+      parts: parts.map((part) => withoutProviderData(part)),
       metadata: { custom: { createdAt: row.createdAt.toISOString() } },
     },
   }

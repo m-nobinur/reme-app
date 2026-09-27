@@ -11,6 +11,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { withoutProviderData } from "../http.ts"
 import {
   type AgentTurn,
   cosAgent,
@@ -43,26 +44,6 @@ const isContent = (chunk: UIMessageChunk) =>
   chunk.type.startsWith("text-") ||
   chunk.type.startsWith("reasoning-") ||
   chunk.type.startsWith("tool-input-")
-
-/**
- * The keys a provider's own data travels under on a chunk or a part, as
- * ai 7.0.83 types them (an approval carries none). The
- * provider puts the model's reasoning there (OpenRouter's
- * `reasoning_details`), so none of it reaches the owner or a stored row; the
- * log keeps it, since the provider needs it sent back.
- */
-const PROVIDER_KEYS = [
-  "providerMetadata",
-  "callProviderMetadata",
-  "resultProviderMetadata",
-] as const
-
-/** `value` without the provider's data. */
-export function withoutProviderData<T extends object>(value: T): T {
-  const copy = { ...value } as Record<string, unknown>
-  for (const key of PROVIDER_KEYS) delete copy[key]
-  return copy as T
-}
 
 /** A tool part the model left unfinished. It never enters the history. */
 const unfinished = (part: UIMessage["parts"][number]) =>

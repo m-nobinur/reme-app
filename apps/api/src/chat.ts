@@ -54,7 +54,6 @@ import {
   ranTurn,
   settle,
   streamTurn,
-  withoutProviderData,
 } from "./cos/run.ts"
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
@@ -71,7 +70,13 @@ import {
   withinCap,
   writeAsTurn,
 } from "./cos/turns.ts"
-import { failure, invalid, readBody, sortedKeys } from "./http.ts"
+import {
+  failure,
+  invalid,
+  readBody,
+  sortedKeys,
+  withoutProviderData,
+} from "./http.ts"
 import { ownerStaffId } from "./staff.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
@@ -1016,7 +1021,12 @@ async function cancelPending(
   ) {
     return null
   }
-  const content = { ...tail.content, parts: cancelParts(tail.content.parts) }
+  // Through `shown`, so a row written before the provider's data was
+  // stripped loses it here too.
+  const content = {
+    ...tail.content,
+    parts: shown(cancelParts(tail.content.parts)),
+  }
   if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
   return content
 }
@@ -1151,7 +1161,9 @@ async function answer(
     { type: "step-start" } as const,
     ...step,
   ]
-  if (!(await swapTail(db, id, tail, { ...tail.content, parts }))) {
+  if (
+    !(await swapTail(db, id, tail, { ...tail.content, parts: shown(parts) }))
+  ) {
     throw new Refusal(stale())
   }
   return stream(tail.id, step, resolved(done))
@@ -1195,7 +1207,7 @@ async function approve(
     ...tail.content.parts.map((p) => (p === call ? done : p)),
     { type: "step-start" } as const,
   ]
-  if (await swapTail(db, id, tail, { ...tail.content, parts })) {
+  if (await swapTail(db, id, tail, { ...tail.content, parts: shown(parts) })) {
     return stream(tail.id, [], resolved(done))
   }
   // Written by something outside the lock meanwhile: this same decision is
