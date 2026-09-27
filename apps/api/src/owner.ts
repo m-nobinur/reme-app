@@ -493,7 +493,9 @@ async function buildAction(
     body = parsed.data
   }
   // Which question an answer may reach, and whether it repeats one already
-  // given, is the orchestrator's to say, under the build's row lock.
+  // given, is the orchestrator's to say, under the build's row lock. Whether
+  // the org holds the build is checked here, so another org's id never
+  // reaches the binding (the tenancy gate holds that).
   const found = await holds(kit, owner.orgId, assignments, id)
   if (!found) return notFound("assignment")
   const result = await bridge(env, owner, `/${id}/${action}`, {

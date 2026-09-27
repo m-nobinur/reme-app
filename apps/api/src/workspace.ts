@@ -122,21 +122,19 @@ export async function readApprovals(
 }
 
 /**
- * The question each waiting build is blocked on (`waitedOn`), oldest first,
- * in one query. An answered question is not shown while the Workflow wakes.
- * The orchestrator's `/answer` reads the same helper and refuses any other.
+ * The question each waiting build is blocked on (`waitedOn`), open ones only,
+ * oldest first, in one query. An answered question is not shown while the
+ * Workflow wakes. The orchestrator's `/answer` reads the same helper and
+ * refuses any other.
  */
 export async function readQuestions(
   db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "question" }>[]> {
-  const waiting = await waitedOn(db)
-  return waiting
-    .filter((waited) => !waited.answer)
-    .map((waited) => ({
-      kind: "question" as const,
-      request: InformationRequest.parse(waited.request),
-    }))
-    .sort((a, b) => (a.request.requested_at < b.request.requested_at ? -1 : 1))
+  const waiting = await waitedOn(db, undefined, { unanswered: true })
+  return waiting.map((waited) => ({
+    kind: "question" as const,
+    request: InformationRequest.parse(waited.request),
+  }))
 }
 
 /**

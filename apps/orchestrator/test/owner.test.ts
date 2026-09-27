@@ -1,5 +1,5 @@
 import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
-import { assignments, events, facts, sql } from "@workspace/db"
+import { assignments, events, facts, sql, supersedeFact } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment, ownerOrg } from "./fixture.ts"
@@ -450,14 +450,17 @@ live("an owner answering a question", () => {
   )
 
   it.each(["owner", "console"] as const)(
-    "gives a retry by the %s the first receipt and wakes the build again",
+    "keeps an answer by the %s whose nudge failed, and nudges again on a retry",
     async (by) => {
       const b = await asked("business.parking")
+      // The answer is committed before the nudge, so a failed nudge is
+      // logged and the answer stands; the Workflow's next look finds it.
       wake.failures = 1
       const lost = await b.post(by, b.requestId, "Street parking")
-      expect(lost.status).toBeGreaterThanOrEqual(500)
+      expect(lost.status).toBe(202)
       const [stored] = await b.answered()
-      expect(stored).toBeDefined()
+      expect(await lost.json()).toEqual(stored)
+      expect(wake.sent).toEqual([])
 
       const retry = await b.post(by, b.requestId, "Street parking")
       expect(retry.status).toBe(202)
@@ -484,6 +487,32 @@ live("an owner answering a question", () => {
       )
     }
   )
+
+  it("refuses a repeat of an answer stored in an older shape rather than failing", async () => {
+    const b = await asked("business.parking")
+    const fact = await kit.withOrg({ orgId: b.orgId }, (db) =>
+      supersedeFact(db, {
+        orgId: b.orgId,
+        key: "business.parking",
+        factType: "business",
+        value: "Street parking",
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    // No answer_id, answered_at or org: not an `InformationAnswer` today.
+    await kit.withOrg({ orgId: b.orgId }, (db) =>
+      appendEvent(db, {
+        orgId: b.orgId,
+        assignmentId: b.ids.assignmentId,
+        staffId: null,
+        type: "information.answered",
+        payload: { request_id: b.requestId, fact_id: fact.factId },
+      })
+    )
+    const res = await b.answer("Street parking")
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "answer.already_given" })
+  })
 
   it("gives a retry for a question the build moved past its receipt, and no nudge", async () => {
     const b = await asked("business.parking")

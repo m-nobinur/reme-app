@@ -27,19 +27,27 @@ export type Waited = {
  * pause, is passed over, and a build that never named one waits on nothing.
  *
  * With `assignmentId`, that build whatever its state; without, every build
- * in `blocked_on_information`. Each mode has its own query shape, so the
- * single-build plan keeps its primary-key lookup. The Workflow's wait, the
+ * in `blocked_on_information`, oldest question first and then by build, so
+ * the list is stable. Each mode has its own query shape, so the single-build
+ * plan keeps its primary-key lookup. `unanswered` leaves answered questions
+ * out in the query. The Workflow's wait, the
  * orchestrator's `/answer` and the owner's `/workspace` all read this, so
  * they agree on the question.
  */
 export async function waitedOn(
   db: OrgScopedDb,
-  assignmentId?: string
+  assignmentId?: string,
+  options: { unanswered?: boolean } = {}
 ): Promise<Waited[]> {
   const which =
     assignmentId === undefined
       ? sql`a.state = 'blocked_on_information'`
       : sql`a.id = ${assignmentId}::uuid`
+  const open = options.unanswered ? sql` and answered.payload is null` : sql``
+  const order =
+    assignmentId === undefined
+      ? sql` order by q.payload->>'requested_at', a.id`
+      : sql``
   return db.execute<Waited>(sql`
     select a.id as assignment_id, q.payload as request,
       answered.payload as answer, f.value as value, cur.id as fact_id
@@ -75,5 +83,5 @@ export async function waitedOn(
     left join ${facts} f on f.id = (answered.payload->>'fact_id')::uuid
     left join ${facts} cur
       on cur.key = f.key and cur.valid_to is null
-    where ${which}`)
+    where ${which}${open}${order}`)
 }

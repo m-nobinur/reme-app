@@ -778,27 +778,31 @@ bridge.post("/:id/answer", async (c) => {
     const blocked = row.state === "blocked_on_information"
     const [waited] = await waitedOn(db, id)
     const current = waited?.request.request_id === requestId
-    const [given] = await db.execute<{
-      answer: Record<string, unknown>
-      value: unknown
-    }>(sql`
-      select e.payload as answer, f.value as value
-      from ${events} e
-      left join ${facts} f on f.id = (e.payload->>'fact_id')::uuid
-      where e.assignment_id = ${id}
-        and e.type = 'information.answered'
-        and e.payload->>'request_id' = ${requestId}
-      order by e.event_id
-      limit 1`)
+    // The waited-on question's answer came with it; any other question's is
+    // looked up, latest first as `waitedOn` takes it.
+    const [given] = current
+      ? waited.answer
+        ? [{ answer: waited.answer, value: waited.value }]
+        : []
+      : await db.execute<{ answer: Record<string, unknown>; value: unknown }>(
+          sql`
+          select e.payload as answer, f.value as value
+          from ${events} e
+          left join ${facts} f on f.id = (e.payload->>'fact_id')::uuid
+          where e.assignment_id = ${id}
+            and e.type = 'information.answered'
+            and e.payload->>'request_id' = ${requestId}
+          order by e.event_id desc
+          limit 1`
+        )
     if (given) {
       // The same answer again is a retry: its receipt, and the Workflow
-      // nudged again only while it still waits on this question.
+      // nudged again only while it still waits on this question. A receipt
+      // stored in an older shape cannot be given back, so it is refused.
       const same = tried.some((v) => canonical(v) === canonical(given.value))
-      if (!same) return { given: true as const }
-      return {
-        answer: InformationAnswer.parse(given.answer),
-        nudge: blocked && current,
-      }
+      const receipt = InformationAnswer.safeParse(given.answer)
+      if (!same || !receipt.success) return { given: true as const }
+      return { answer: receipt.data, nudge: blocked && current }
     }
     if (!blocked) return { state: row.state }
     const field = waited?.request.field
@@ -880,11 +884,24 @@ bridge.post("/:id/answer", async (c) => {
     })
   }
   if (result.nudge) {
-    const instance = await c.env.ASSIGNMENTS.get(id)
-    await instance.sendEvent({
-      type: "answer",
-      payload: { request_id: requestId, fact_id: result.answer.fact_id },
-    })
+    // The answer is committed; a nudge that fails costs only time, since the
+    // Workflow looks again within six hours. So it is logged, not surfaced.
+    try {
+      const instance = await c.env.ASSIGNMENTS.get(id)
+      await instance.sendEvent({
+        type: "answer",
+        payload: { request_id: requestId, fact_id: result.answer.fact_id },
+      })
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          code: "answer.nudge_failed",
+          assignment_id: id,
+          request_id: requestId,
+          error: error instanceof Error ? error.name : "unknown",
+        })
+      )
+    }
   }
   return c.json(result.answer, 202)
 })

@@ -1025,7 +1025,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 })
 
 describe("the questions on /workspace", () => {
-  it("reads every blocked build's question in one query, open ones only, oldest first", async () => {
+  // The query leaves answered questions out and sorts by when each was asked,
+  // then by build (packages/db's own tests hold it to that); readQuestions
+  // takes its rows as they come.
+  it("reads every blocked build's question in one query, in the query's order", async () => {
     const request = (n: number) => ({
       request_id: crypto.randomUUID(),
       org_id: crypto.randomUUID(),
@@ -1039,27 +1042,15 @@ describe("the questions on /workspace", () => {
       requested_at: `2026-09-2${n}T09:00:00.000Z`,
       expires_at: null,
     })
-    const [late, early, answered] = [request(7), request(5), request(6)]
-    const rows = [
-      {
-        assignment_id: late.assignment_id,
-        request: late,
-        answer: null,
-        value: null,
-      },
-      {
-        assignment_id: early.assignment_id,
-        request: early,
-        answer: null,
-        value: null,
-      },
-      {
-        assignment_id: answered.assignment_id,
-        request: answered,
-        answer: { request_id: answered.request_id },
-        value: "Street parking",
-      },
-    ]
+    // Whatever order the rows arrive in is the one shown; no second sort.
+    const [first, second] = [request(7), request(5)]
+    const rows = [first, second].map((asked) => ({
+      assignment_id: asked.assignment_id,
+      request: asked,
+      answer: null,
+      value: null,
+      fact_id: null,
+    }))
     const queries: unknown[] = []
     const db = {
       execute: async (query: unknown) => {
@@ -1070,8 +1061,8 @@ describe("the questions on /workspace", () => {
     const questions = await readQuestions(db as never)
     expect(queries).toHaveLength(1)
     expect(questions.map((q) => q.request.request_id)).toEqual([
-      early.request_id,
-      late.request_id,
+      first.request_id,
+      second.request_id,
     ])
   })
 })

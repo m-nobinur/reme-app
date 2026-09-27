@@ -35,3 +35,24 @@ describe("waitedOn's query", () => {
     expect(params).toEqual([])
   })
 })
+
+describe("waitedOn's query for /workspace", () => {
+  it("orders by when each question was asked, then by build, for a stable list", async () => {
+    const { sql } = await sent()
+    expect(sql).toMatch(/order by q\.payload->>'requested_at', a\.id\s*$/)
+  })
+
+  it("leaves answered questions out in the query when asked to", async () => {
+    let query: SQL | undefined
+    const db = {
+      execute: async (q: SQL) => {
+        query = q
+        return []
+      },
+    }
+    await waitedOn(db as never, undefined, { unanswered: true })
+    const { sql } = new PgDialect().sqlToQuery(query as SQL)
+    expect(sql).toMatch(/and answered\.payload is null/)
+    expect((await sent()).sql).not.toMatch(/answered\.payload is null/)
+  })
+})
