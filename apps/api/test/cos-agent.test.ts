@@ -5,6 +5,7 @@ import {
   CosTurn,
 } from "@workspace/contracts"
 import {
+  appendSessionEvent,
   assignments,
   conversationMessages,
   eq,
@@ -1459,6 +1460,178 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
     expect(await check(0.5)).toBe(true)
     expect(await check(0.51)).toBe(false)
+  })
+
+  it("counts a Worker killed after one step at its full reservation", async () => {
+    const who = await owner(kit, url as string, "cos-killed")
+    const room = await conversation(who)
+    const turnId = "01K6A00000000000000000KLLD"
+    await admin`
+      insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
+      values
+        (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 0, 'cos.context', now(), ${ulid()},
+          ${admin.json({ turn_id: turnId, prefix_sha256: "a".repeat(64), context_policy_version: "2", mode: "ask", active_tools: [], text: "x", reserved_usd: 0.3 })}, '{}'),
+        (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 1, 'cos.turn', now(), ${ulid()},
+          ${admin.json({ outcome: "abandoned", turn_id: turnId, logged_usd: 0.001, reserved_usd: 0.3 })}, '{}')`
+    const check = (amount: number) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        withinCap(db, who.orgId, amount)
+      )
+    // Its last step's usage is lost, so the reservation stands, not the
+    // one step it logged.
+    expect(await check(0.7)).toBe(true)
+    expect(await check(0.71)).toBe(false)
+  })
+
+  it("makes a second reservation wait for the first and count it", async () => {
+    const who = await owner(kit, url as string, "cos-serial")
+    const room = await conversation(who)
+    const reserved = gate()
+    const release = gate()
+    const first = kit.withOrg({ orgId: who.orgId }, async (db) => {
+      expect(await withinCap(db, who.orgId, 0.6)).toBe(true)
+      await appendSessionEvent(db, {
+        orgId: who.orgId,
+        staffId: who.chiefId,
+        assignmentId: null,
+        sessionId: room,
+        type: "cos.context",
+        payload: {
+          turn_id: "01K6A00000000000000000SER1",
+          prefix_sha256: "a".repeat(64),
+          context_policy_version: "2",
+          mode: "ask",
+          active_tools: [],
+          text: "x",
+          reserved_usd: 0.6,
+        },
+      })
+      reserved.resolve()
+      await release.promise
+    })
+    await reserved.promise
+    // Sums only after the first commits, so it sees the first's 0.6.
+    const second = kit.withOrg({ orgId: who.orgId }, (db) =>
+      withinCap(db, who.orgId, 0.6)
+    )
+    await new Promise((r) => setTimeout(r, 200))
+    release.resolve()
+    await first
+    expect(await second).toBe(false)
+  })
+
+  it("falls back as budgetary, with no model call, when the first call alone could pass the reservation", async () => {
+    const id = await conversation(me)
+    // A logged history far larger than a reservation's input guess.
+    await admin`
+      insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
+      values (${ulid()}, ${me.orgId}, ${me.chiefId}, ${id}, 0, 'cos.message', now(), ${ulid()},
+        ${admin.json({ turn_id: "01K6A00000000000000000HGGE", message: { id: "m-huge", role: "user", parts: [{ type: "text", text: "x".repeat(500_000) }] } })}, '{"untrusted_input"}')`
+    const { model, sent } = scripted(said("never sent"))
+    const done = await turn(me, typed(id, "Hello", "ask"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(sent).toHaveLength(0)
+    expect((await turnsOf(id)).at(-1)).toMatchObject({
+      outcome: "fallback",
+      reason: "budgetary",
+    })
+  })
+
+  it("tells the model a transient tool failure is unknown, never that it was refused", async () => {
+    const s = seed(kit, me)
+    const build = await s.assignment("implementing")
+    const id = await conversation(me)
+    const { model, sent } = scripted(
+      calls({
+        id: "call_pv",
+        tool: "get_preview",
+        input: { assignment_id: build },
+      }),
+      said("I could not confirm it.")
+    )
+    const down = stubOrchestrator(() =>
+      Response.json(
+        {
+          class: "transient",
+          code: "orchestrator.unavailable",
+          message: "down",
+          detail: {},
+          occurred_at: new Date().toISOString(),
+        },
+        { status: 503 }
+      )
+    )
+    const done = await turn(
+      me,
+      typed(id, "Is the preview ready?", "ask"),
+      { model },
+      down
+    )
+    expect(done.response.status, done.text).toBe(200)
+    const prompt = sent[1]?.prompt as { role: string; content: unknown }[]
+    const results = prompt
+      .filter((m) => m.role === "tool")
+      .flatMap((m) => m.content as { type: string; output: unknown }[])
+    const read = JSON.stringify(results.at(-1)?.output)
+    expect(read).toContain(
+      "unknown_outcome (orchestrator.unavailable): the tool did not report back"
+    )
+    expect(read).not.toMatch(/refus/i)
+    expect(
+      (await logOf(id)).filter((e) => e.type === "cos.tool_result")
+    ).toHaveLength(0)
+    await s.state(build, "cancelled")
+  })
+
+  it("stores no reasoning in the rows even when a results turn dies after its first transaction", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        reasoned(
+          "The owner wants a change; propose it.",
+          calls({
+            id: "call_rc",
+            tool: "request_change",
+            input: { text: "Add a Saturday slot." },
+          })
+        )
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const [call] = waiting(tail)
+    const stub = orchestrator()
+    const dying = send(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: true,
+            },
+          ],
+        },
+      },
+      { model: scripted(said("unused")).model },
+      stubOrchestrator(async (request) => {
+        faults.dead = true
+        return stub.fetch(request)
+      })
+    )
+    await expect(dying).rejects.toBeInstanceOf(Died)
+    faults.dead = false
+    const rows = await rowsOf(me, id)
+    expect(JSON.stringify(rows)).not.toContain("The owner wants a change")
+    // The log keeps it.
+    const logged = (await logOf(id)).filter((e) => e.type === "cos.message")
+    expect(JSON.stringify(logged.at(-1)?.payload)).toContain(
+      "The owner wants a change"
+    )
   })
 
   it("ends a turn as an error, never frozen, when the log cannot be read to check a call", async () => {
