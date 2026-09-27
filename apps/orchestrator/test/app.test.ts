@@ -144,11 +144,12 @@ describe("the publish routes' edge", () => {
     })
   })
 
-  it("wants an idempotency key on review, approve and rollback", async () => {
+  it("wants an idempotency key on review, approve, rollback and steer, before the body", async () => {
     for (const path of [
       "/assignments/x/review",
       "/assignments/x/approve",
       "/assignments/rollback",
+      "/assignments/x/steer",
     ]) {
       const res = await app.request(
         `${path}?org=brightclean`,
@@ -177,7 +178,7 @@ describe("the publish routes' edge", () => {
 
       const res = await app.request(
         `${path}?org=brightclean`,
-        { method: "POST", headers: authed },
+        { method: "POST", headers: { ...authed, "idempotency-key": "k" } },
         env
       )
       expect(res.status).toBe(400)
@@ -396,7 +397,14 @@ describe("a steer", () => {
     const body = JSON.stringify({ message: "x".repeat(4001) })
     const console_ = await app.request(
       "/assignments/x/steer?org=brightclean",
-      { method: "POST", headers: { authorization: "Bearer test-token" }, body },
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+          "idempotency-key": "k",
+        },
+        body,
+      },
       env
     )
     const owner = await new Hono<{ Bindings: Env }>()
@@ -410,6 +418,7 @@ describe("a steer", () => {
               "10000001-0000-4000-8000-000000000000",
             [OWNER_BRIDGE_HEADERS.workosUserId]: "user_1",
             [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
+            "idempotency-key": "k",
           },
           body,
         },

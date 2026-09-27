@@ -18,6 +18,7 @@ export {
   observe,
   type Sandbox,
   type SandboxFactory,
+  SubmissionConflictError,
   type ToolContext,
   type ToolDefinition,
   useAgentFinish,

@@ -7,6 +7,7 @@ export { supersedeFact } from "./facts.ts"
 export * from "./map.ts"
 export { type Waited, waitedOn } from "./questions.ts"
 export * from "./schema.ts"
+export { steerByKey, steerKeyHash } from "./steers.ts"
 export type {
   Identity,
   OrgScopedDb,

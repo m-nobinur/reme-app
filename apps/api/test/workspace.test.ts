@@ -7,7 +7,14 @@ import {
   InformationAnswer,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { eq, staff, supersedeFact, type Tenancy, tenancy } from "@workspace/db"
+import {
+  eq,
+  staff,
+  steerKeyHash,
+  supersedeFact,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { readQuestions, readWorkspace } from "../src/workspace.ts"
 import {
@@ -560,6 +567,38 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       )
       expect(stub.calls[0]?.body).toEqual({ message: "Use a darker blue." })
       await s.state(working, "cancelled")
+    })
+
+    it("replays a steer its key made against that build, never routing again", async () => {
+      const s = seed(kit, changes)
+      const steered = await s.assignment("implementing")
+      const key = "change-steer-replay-1"
+      // The first attempt's steer landed (the orchestrator logged it under the
+      // key's hash), then the bridge timed out, and the build moved on: routed
+      // afresh, this change would now start a second build.
+      await s.event(steered, "assignment.steered", {
+        message: "Use a darker blue.",
+        key_sha256: steerKeyHash(key),
+      })
+      await s.state(steered, "failed")
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          { assignment_id: steered, submission_id: "s-1" },
+          { status: 202 }
+        )
+      )
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Use a darker blue." }, key)
+      )
+      expect(response.status).toBe(202)
+      expect(BuildSummary.parse(await response.json()).assignment_id).toBe(
+        steered
+      )
+      expect(paths(stub)).toEqual([`/assignments/${steered}/steer`])
+      expect(stub.calls[0]?.body).toEqual({ message: "Use a darker blue." })
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(key)
     })
 
     it("refuses while a question is open, without the binding", async () => {
