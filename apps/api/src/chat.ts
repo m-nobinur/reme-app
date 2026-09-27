@@ -3,6 +3,7 @@ import {
   AskFactOutput,
   BuildSummary,
   ChatRequest,
+  type ChatResult,
   ErrorEnvelope,
   FactValue,
   type FactValueKey,
@@ -413,10 +414,16 @@ export async function chat(
           newId
         )
       }
-      if (turn.kind === "answer") {
-        return answer(db, owner, held, id, turn, newId)
+      // The script's steps each wait on one call, so its results turn
+      // resolves exactly one; any other set is not what it is waiting on.
+      // The script has no model, so an approval's reason is not kept.
+      const [result, ...more] = turn.results
+      if (!result || more.length > 0) return stale()
+      const one = { message_id: turn.message_id, ...result }
+      if (one.kind === "answer") {
+        return answer(db, owner, held, id, one, newId)
       }
-      return approve(db, env, kit, owner, held, id, turn)
+      return approve(db, env, kit, owner, held, id, one)
     })
   } catch (error) {
     if (error instanceof Refusal) return error.response
@@ -510,11 +517,23 @@ function callIn(
   if (tail?.id !== messageId || tail.content.role !== "assistant") {
     return stale()
   }
-  const call = tail.content.parts.find(
-    (p): p is ToolPart => isTool(p) && match(p)
-  )
-  return call ? { tail, call } : stale()
+  const { parts } = tail.content
+  const call = parts.find((p): p is ToolPart => isTool(p) && match(p))
+  if (!call) return stale()
+  // A pending call is answered only as the last step's one waiting call;
+  // a resolved one falls through to its caller's replay.
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  const waiting = last.filter((p) => isTool(p) && pending(p))
+  return !pending(call) || (waiting.length === 1 && waiting[0] === call)
+    ? { tail, call }
+    : stale()
 }
+
+/** One result of a results turn, with the message that holds its call. */
+type Resolved<K extends ChatResult["kind"]> = Extract<
+  ChatResult,
+  { kind: K }
+> & { message_id: string }
 
 /** An answer to `ask_fact`: the fact is stated, or the key skipped. */
 async function answer(
@@ -522,7 +541,7 @@ async function answer(
   owner: Owner,
   held: Read,
   id: string,
-  turn: Extract<ChatRequest["turn"], { kind: "answer" }>,
+  turn: Resolved<"answer">,
   newId: () => string
 ): Promise<Response> {
   const found = callIn(
@@ -587,7 +606,7 @@ async function approve(
   owner: Owner,
   held: Read,
   id: string,
-  turn: Extract<ChatRequest["turn"], { kind: "approval" }>
+  turn: Resolved<"approval">
 ): Promise<Response> {
   const matches = (p: ToolPart) =>
     p.type === "tool-request_change" && p.approval?.id === turn.approval_id
@@ -651,9 +670,18 @@ async function changed(
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }
   }
-  const { occurred_at: _, ...error } = ErrorEnvelope.parse(body)
+  const error = ErrorEnvelope.parse(body)
   if (!KEPT.includes(error.class)) return response
-  return RequestChangeOutput.parse({ outcome: "refused", error })
+  // The model reads this output, so only the class, the code and the capped
+  // message cross; `detail` can hold ids and links and never does.
+  return RequestChangeOutput.parse({
+    outcome: "refused",
+    error: {
+      class: error.class,
+      code: error.code,
+      message: error.message.slice(0, 500),
+    },
+  })
 }
 
 /**

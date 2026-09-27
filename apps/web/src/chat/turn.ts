@@ -1,5 +1,7 @@
 import {
+  ANSWER_TEXT_MAX,
   type ChatRequest,
+  type ChatResult,
   ErrorEnvelope,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -20,7 +22,8 @@ export const textOf = (message: UIMessage) =>
 /**
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
- * message, an answer to `ask_fact`, or a yes or no on `request_change`.
+ * message, or every answer to `ask_fact` and every yes or no on a tool in
+ * the last step, as the SDK sends them together.
  */
 export function chatTurn(
   conversationId: string,
@@ -35,47 +38,51 @@ export function chatTurn(
       turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
-  // The server opens a new step after every call it resolves, so the last
-  // step holds only calls it is waiting on, and the one resolved here is
-  // the turn.
+  // The server opens a new step after the calls it resolves, so the last
+  // step holds only calls it is waiting on, and those resolved here are the
+  // turn.
   const parts = last?.parts ?? []
   const step = parts.slice(
     parts.map((part) => part.type).lastIndexOf("step-start") + 1
   )
-  for (const part of step) {
-    if (!last || !isToolUIPart(part)) continue
+  const results = step.flatMap((part): ChatResult[] => {
+    if (!isToolUIPart(part)) return []
     if (part.type === "tool-ask_fact" && part.state === "output-available") {
-      return {
-        conversation_id: conversationId,
-        mode,
-        turn: {
+      return [
+        {
           kind: "answer",
-          message_id: last.id,
           tool_call_id: part.toolCallId,
           output: part.output as Extract<
-            ChatRequest["turn"],
+            ChatResult,
             { kind: "answer" }
           >["output"],
         },
-      }
+      ]
     }
-    if (
-      part.type === "tool-request_change" &&
-      part.state === "approval-responded"
-    ) {
-      return {
-        conversation_id: conversationId,
-        mode,
-        turn: {
+    if (part.state === "approval-responded") {
+      const { id, approved } = part.approval
+      // The SDK takes any reason; the contract takes non-blank text up to
+      // the answer cap, so one long or blank reason cannot fail the turn.
+      const reason = part.approval.reason?.trim().slice(0, ANSWER_TEXT_MAX)
+      return [
+        {
           kind: "approval",
-          message_id: last.id,
-          approval_id: part.approval.id,
-          approved: part.approval.approved,
+          approval_id: id,
+          approved,
+          ...(reason ? { reason } : {}),
         },
-      }
+      ]
     }
+    return []
+  })
+  if (!last || results.length === 0) {
+    throw new Error("There is nothing new in this conversation to send.")
   }
-  throw new Error("There is nothing new in this conversation to send.")
+  return {
+    conversation_id: conversationId,
+    mode,
+    turn: { kind: "results", message_id: last.id, results },
+  }
 }
 
 /**

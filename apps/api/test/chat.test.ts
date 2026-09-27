@@ -418,10 +418,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       const call = pendingCall(at)
       const done = await me.turn(id, {
         turn: {
-          kind: "answer",
+          kind: "results",
           message_id: at.id,
-          tool_call_id: call.toolCallId,
-          output,
+          results: [{ kind: "answer", tool_call_id: call.toolCallId, output }],
         },
       })
       bodies.push(done.text)
@@ -438,10 +437,15 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       id,
       {
         turn: {
-          kind: "approval",
+          kind: "results",
           message_id: (await me.tail(id)).id,
-          approval_id: offer.approval?.id,
-          approved: true,
+          results: [
+            {
+              kind: "approval",
+              approval_id: offer.approval?.id,
+              approved: true,
+            },
+          ],
         },
       },
       building()
@@ -516,17 +520,26 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       id = await me.onboarding()
     }, 60_000)
 
-    const answering = async (output: unknown, over: object = {}) => {
+    const answering = async (
+      output: unknown,
+      over: { message_id?: string; tool_call_id?: string } = {}
+    ) => {
       const at = await me.tail(id)
+      const { message_id = at.id, ...call } = over
       return me.send({
         conversation_id: id,
         mode: "ask",
         turn: {
-          kind: "answer",
-          message_id: at.id,
-          tool_call_id: pendingCall(at).toolCallId,
-          output,
-          ...over,
+          kind: "results",
+          message_id,
+          results: [
+            {
+              kind: "answer",
+              tool_call_id: pendingCall(at).toolCallId,
+              output,
+              ...call,
+            },
+          ],
         },
       })
     }
@@ -557,6 +570,66 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       }
     })
 
+    it("refuses a results turn that resolves more than the one call it waits on", async () => {
+      const before = await me.rows(id)
+      const at = await me.tail(id)
+      const answer = {
+        kind: "answer",
+        tool_call_id: pendingCall(at).toolCallId,
+        output: { answer: "skipped" },
+      }
+      const { response, text } = await me.send({
+        conversation_id: id,
+        mode: "ask",
+        turn: { kind: "results", message_id: at.id, results: [answer, answer] },
+      })
+      expect(response.status, text).toBe(409)
+      expect(ErrorEnvelope.parse(JSON.parse(text)).code).toBe("chat.stale")
+      expect(await me.rows(id)).toEqual(before)
+    })
+
+    it("refuses an answer to a call that is not the last step's only pending call", async () => {
+      const other = await owner(kit, url as string, "chat-steps")
+      const them = talker(other)
+      const conversation = await them.onboarding()
+      const at = await them.tail(conversation)
+      const call = pendingCall(at)
+      const store = (parts: unknown[]) =>
+        kit.withOrg({ orgId: other.orgId }, (db) =>
+          db
+            .update(conversationMessages)
+            .set({ content: { role: "assistant", parts } })
+            .where(eq(conversationMessages.id, at.id))
+        )
+      for (const parts of [
+        // A second call waits in the same step.
+        [...at.parts, { ...call, toolCallId: "call_second" }],
+        // The call is pending, but a later step opened after it.
+        [...at.parts, { type: "step-start" }],
+      ]) {
+        await store(parts)
+        const before = await them.rows(conversation)
+        const { response, text } = await them.send({
+          conversation_id: conversation,
+          mode: "ask",
+          turn: {
+            kind: "results",
+            message_id: at.id,
+            results: [
+              {
+                kind: "answer",
+                tool_call_id: call.toolCallId,
+                output: { answer: "skipped" },
+              },
+            ],
+          },
+        })
+        expect(response.status, text).toBe(409)
+        expect(ErrorEnvelope.parse(JSON.parse(text)).code).toBe("chat.stale")
+        expect(await them.rows(conversation)).toEqual(before)
+      }
+    })
+
     it("states the fact as the owner's, replays a retry and refuses a change of mind", async () => {
       const at = await me.tail(id)
       const call = pendingCall(at)
@@ -564,16 +637,21 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         conversation_id: id,
         mode: "act",
         turn: {
-          kind: "answer",
+          kind: "results",
           message_id: at.id,
-          tool_call_id: call.toolCallId,
-          output: {
-            answer: "stated",
-            fact: {
-              key: "business.name",
-              value: { name: "Sparkle (fixture)" },
+          results: [
+            {
+              kind: "answer",
+              tool_call_id: call.toolCallId,
+              output: {
+                answer: "stated",
+                fact: {
+                  key: "business.name",
+                  value: { name: "Sparkle (fixture)" },
+                },
+              },
             },
-          },
+          ],
         },
       }
       const first = await me.send(body)
@@ -589,10 +667,19 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         ...body,
         turn: {
           ...body.turn,
-          output: {
-            answer: "stated",
-            fact: { key: "business.name", value: { name: "Other (fixture)" } },
-          },
+          results: [
+            {
+              kind: "answer",
+              tool_call_id: call.toolCallId,
+              output: {
+                answer: "stated",
+                fact: {
+                  key: "business.name",
+                  value: { name: "Other (fixture)" },
+                },
+              },
+            },
+          ],
         },
       })
       expect(changed.response.status).toBe(409)
@@ -777,10 +864,16 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         conversation_id: id,
         mode: "ask",
         turn: {
-          kind: "approval",
+          kind: "results",
           message_id: at.id,
-          approval_id: call.approval?.id,
-          approved,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call.approval?.id,
+              approved,
+              ...(approved ? {} : { reason: "Not this week." }),
+            },
+          ],
         },
       })
       return { who, me, id, body }
@@ -793,7 +886,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(stub.calls).toHaveLength(1)
       const [call] = stub.calls
       expect(call?.request.headers.get("idempotency-key")).toBe(
-        body(true).turn.approval_id
+        body(true).turn.results.at(0)?.approval_id
       )
       expect(call?.body).toEqual({ kind: "site.build", goal: "Add Saturdays" })
       const again = await me.send(body(true), stub)
@@ -813,24 +906,39 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         toolCallId: expect.any(String),
         state: "output-denied",
         input: { text: "Add Saturdays" },
-        approval: { id: body(false).turn.approval_id, approved: false },
+        approval: {
+          id: body(false).turn.results.at(0)?.approval_id,
+          approved: false,
+        },
       })
     })
 
-    it("carries a refusal as the tool's output, without its time", async () => {
-      const { me, id, body } = await carded("chat-refused")
-      const refused = await me.turn(id, body(true))
-      expect(refused.after.parts.at(-2)).toMatchObject({
-        state: "output-available",
-        output: {
-          outcome: "refused",
-          error: { code: "stub.refused", class: "validation" },
+    it("carries a refusal as the tool's output with its class, code and message only", async () => {
+      const { who, me, id, body } = await carded("chat-refused")
+      // An envelope whose detail holds what the model must never read, and a
+      // message past the refusal's cap.
+      const leaky = stubOrchestrator(async () =>
+        Response.json(
+          {
+            class: "validation",
+            code: "stub.refused",
+            message: `Refused. ${"a".repeat(600)}`,
+            detail: { org_id: who.orgId, preview: { url: "https://x/?sig=1" } },
+            occurred_at: new Date().toISOString(),
+          },
+          { status: 409 }
+        )
+      )
+      const refused = await me.turn(id, body(true), leaky)
+      const { output } = refused.after.parts.at(-2) as ToolPart
+      expect(output).toStrictEqual({
+        outcome: "refused",
+        error: {
+          class: "validation",
+          code: "stub.refused",
+          message: `Refused. ${"a".repeat(600)}`.slice(0, 500),
         },
       })
-      const output = (refused.after.parts.at(-2) as ToolPart).output as {
-        error: object
-      }
-      expect(output.error).not.toHaveProperty("occurred_at")
     })
 
     it("replays one build for a double-clicked yes", async () => {

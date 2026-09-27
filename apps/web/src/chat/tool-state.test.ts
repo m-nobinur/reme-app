@@ -79,7 +79,6 @@ it("reads every request_change state", () => {
           class: "validation",
           code: "change.question_open",
           message: "Answer the open question first.",
-          detail: {},
         },
       },
     })

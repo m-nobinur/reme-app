@@ -1,13 +1,13 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
-import { ErrorEnvelope } from "./error.ts"
-import { BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
+import { ToolCallId } from "./ids.ts"
+import { ANSWER_TEXT_MAX, BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
+import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
 
 const MessageId = ConversationMessage.shape.id
-/** The server makes these. Named apart from `MessageId` so tightening one never moves the others. */
-const ToolCallId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
+/** The AI SDK or the api makes these. Named apart from `MessageId` so tightening one never moves the other. */
 const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 
 /**
@@ -62,9 +62,25 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
  */
 export const RequestChangeOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("started"), build: BuildSummary }),
+  Refused,
+])
+
+/**
+ * The owner's resolution of one pending call: an answer to `ask_fact`, or a
+ * yes or no on a call that needs approval.
+ */
+const ChatResult = z.discriminatedUnion("kind", [
   z.strictObject({
-    outcome: z.literal("refused"),
-    error: ErrorEnvelope.omit({ occurred_at: true }),
+    kind: z.literal("answer"),
+    tool_call_id: ToolCallId,
+    output: AskFactOutput,
+  }),
+  z.strictObject({
+    kind: z.literal("approval"),
+    approval_id: ApprovalId,
+    approved: z.boolean(),
+    /** The owner's words, as the AI SDK holds them: data, never instructions. */
+    reason: Text(ANSWER_TEXT_MAX).optional(),
   }),
 ])
 
@@ -72,14 +88,14 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
  * `POST /chat`: one turn of one conversation. The client sends only what
  * the owner just did; the server reads the history from its own rows and
  * never takes a message list, a system prompt or tools from the client.
- * `message_id` on an answer or an approval names the stored assistant
- * message that holds the call.
+ * `message_id` on a results turn names the stored assistant message that
+ * holds the calls.
  */
 export const ChatRequest = z.strictObject({
   conversation_id: Uuid,
   /**
-   * Governs a typed message only. An answer or an approval resolves the
-   * pending call it names, whatever the mode.
+   * Governs a typed message only. A results turn resolves the pending calls
+   * it names, whatever the mode.
    */
   mode: z.enum(["ask", "act"]),
   turn: z.discriminatedUnion("kind", [
@@ -90,16 +106,14 @@ export const ChatRequest = z.strictObject({
       text: Text(GOAL_MAX),
     }),
     z.strictObject({
-      kind: z.literal("answer"),
+      kind: z.literal("results"),
       message_id: MessageId,
-      tool_call_id: ToolCallId,
-      output: AskFactOutput,
-    }),
-    z.strictObject({
-      kind: z.literal("approval"),
-      message_id: MessageId,
-      approval_id: ApprovalId,
-      approved: z.boolean(),
+      /**
+       * Every pending call of the message's last step, resolved, as the AI
+       * SDK sends them together. The server refuses any other set with 409
+       * `chat.stale`.
+       */
+      results: z.array(ChatResult).min(1),
     }),
   ]),
 })
@@ -108,3 +122,4 @@ export type AskFactInput = z.infer<typeof AskFactInput>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>
 export type ChatRequest = z.infer<typeof ChatRequest>
+export type ChatResult = z.infer<typeof ChatResult>

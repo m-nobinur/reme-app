@@ -356,7 +356,6 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
       error: {
         class: "validation",
         code: "change.question_open",
-        detail: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
         message: "A build is waiting on your answer. Answer it first.",
       },
       outcome: "refused",

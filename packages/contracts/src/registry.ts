@@ -18,6 +18,21 @@ import {
   ConversationMessage,
   ConversationPatch,
 } from "./conversation.ts"
+import {
+  AnswerQuestionInput,
+  AnswerQuestionOutput,
+  CosCall,
+  CosContext,
+  CosFacts,
+  CosMessage,
+  CosPrefix,
+  CosStep,
+  CosToolResult,
+  CosTurn,
+  CosWorkspace,
+  GetPreviewInput,
+  GetPreviewOutput,
+} from "./cos.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
@@ -54,6 +69,8 @@ import {
  */
 export const contracts = {
   ActivityFeed,
+  AnswerQuestionInput,
+  AnswerQuestionOutput,
   AnswerRequest,
   ApprovalDecision,
   ApprovalRequest,
@@ -71,6 +88,15 @@ export const contracts = {
   ConversationList,
   ConversationMessage,
   ConversationPatch,
+  CosCall,
+  CosContext,
+  CosFacts,
+  CosMessage,
+  CosPrefix,
+  CosStep,
+  CosToolResult,
+  CosTurn,
+  CosWorkspace,
   CreateOrgRequest,
   DecisionRequest,
   DeploymentManifest,
@@ -81,6 +107,8 @@ export const contracts = {
   FactSnapshot,
   FactValue,
   FailureReport,
+  GetPreviewInput,
+  GetPreviewOutput,
   InformationAnswer,
   InformationRequest,
   Org,

@@ -35,6 +35,14 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
   },
+  AnswerQuestionInput: {
+    request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",
+    value: { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
+  },
+  AnswerQuestionOutput: {
+    outcome: "answered",
+    request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",
+  },
   AnswerRequest: {
     request_id: "b4c5d6e7-f809-44c5-8687-112233445566",
     value: { centre: "Fairhaven", radius_km: 25 },
@@ -135,10 +143,21 @@ export const samples: Record<ContractName, unknown> = {
     conversation_id: CONVERSATION,
     mode: "act",
     turn: {
-      kind: "answer",
+      kind: "results",
       message_id: "a_7Kd2Lm9Q",
-      tool_call_id: "call_5Hn2Wq8E",
-      output: { answer: "skipped" },
+      results: [
+        {
+          kind: "answer",
+          tool_call_id: "call_5Hn2Wq8E",
+          output: { answer: "skipped" },
+        },
+        {
+          kind: "approval",
+          approval_id: "ap_3Rt8Zx1Q",
+          approved: false,
+          reason: "Not until the prices are right.",
+        },
+      ],
     },
   },
   CompletionReport: {
@@ -243,6 +262,91 @@ export const samples: Record<ContractName, unknown> = {
     },
   },
   ConversationPatch: { title: "Weekend prices" },
+  CosCall: { turn_id: ULID, step: 0, sha256: SHA },
+  CosContext: {
+    turn_id: ULID,
+    prefix_sha256: SHA,
+    context_policy_version: "cos-context@1",
+    mode: "act",
+    active_tools: ["get_workspace", "request_change"],
+    text: "Facts: Brightclean, weekdays 08:00 to 18:00.",
+    reserved_usd: 0.008,
+  },
+  CosFacts: {
+    facts: [{ key: "business.name", value: { name: "Brightclean" } }],
+  },
+  CosMessage: {
+    turn_id: ULID,
+    message: {
+      id: "u1Xy7Qp0aB",
+      role: "user",
+      parts: [{ type: "text", text: "Add Saturday hours" }],
+    },
+  },
+  CosPrefix: {
+    version: "cos@1",
+    sha256: SHA,
+    instructions: "You are the chief of staff for a fictional cleaning firm.",
+    tools: [
+      {
+        name: "get_facts",
+        description: "Read the business facts.",
+        input_schema: { type: "object", properties: {} },
+      },
+    ],
+  },
+  CosStep: {
+    turn_id: ULID,
+    step: 0,
+    messages: [{ role: "assistant", content: "Done." }],
+    usage: { input_tokens: 1200, cached_input_tokens: 800, output_tokens: 40 },
+    cost_usd: 0.0001,
+  },
+  CosToolResult: {
+    turn_id: ULID,
+    tool_call_id: "functions.get_preview:0",
+    tool: "get_preview",
+    output: {
+      outcome: "ready",
+      assignment_id: ASSIGNMENT,
+      version: 3,
+      expires_at: LATER,
+    },
+  },
+  CosTurn: {
+    outcome: "fallback",
+    reason: "provider",
+    turn_id: ULID,
+    model: "deepseek/deepseek-v4.1-flash",
+    usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 },
+    cost_usd: 0,
+    tools: [],
+    steps: 0,
+    first_chunk_ms: null,
+  },
+  CosWorkspace: {
+    site: { host: "brightclean.example", live_version: 2 },
+    builds: [
+      {
+        assignment_id: ASSIGNMENT,
+        kind: "site.revise",
+        state: "blocked_on_information",
+        goal: "Add Saturday hours.",
+        version: null,
+      },
+    ],
+    questions: [
+      {
+        request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",
+        field: "hours.saturday",
+        why: "The hours section lists weekdays only.",
+        options: null,
+        blocking: true,
+      },
+    ],
+    approvals: [{ version: 2, expires_at: LATER }],
+    missing_facts: ["pricing.standard_clean_hourly"],
+  },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
   },
@@ -372,6 +476,13 @@ export const samples: Record<ContractName, unknown> = {
     last_checkpoint_ref: "checkpoint:01JZ8QK5M7N9P0R2T4V6W8X0Y2",
     attempt: 2,
     reported_at: NOW,
+  },
+  GetPreviewInput: { assignment_id: ASSIGNMENT },
+  GetPreviewOutput: {
+    outcome: "ready",
+    assignment_id: ASSIGNMENT,
+    version: 3,
+    expires_at: LATER,
   },
   InformationAnswer: {
     answer_id: "e7f8091a-2b3c-47f8-b9ba-445566778899",

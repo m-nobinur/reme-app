@@ -1,4 +1,5 @@
 import {
+  ANSWER_TEXT_MAX,
   TOOL_CALL_CANCELLED as CANCELLED,
   ChatRequest,
 } from "@workspace/contracts"
@@ -66,27 +67,89 @@ it("an answer sends the call it resolves, from the last step only", () => {
     ),
   ])
   expect(ChatRequest.parse(request).turn).toEqual({
-    kind: "answer",
+    kind: "results",
     message_id: "msg_assistant",
-    tool_call_id: "call_name",
-    output: { answer: "skipped" },
+    results: [
+      {
+        kind: "answer",
+        tool_call_id: "call_name",
+        output: { answer: "skipped" },
+      },
+    ],
   })
 })
 
-it("a yes or a no sends the approval it answers", () => {
-  for (const approved of [true, false]) {
+it("a yes or a no sends the approval it answers, with the owner's reason", () => {
+  for (const approval of [
+    { id: "appr_1", approved: true },
+    { id: "appr_1", approved: false, reason: "Not this week" },
+  ]) {
     const request = chatTurn(CONVERSATION, "act", [
-      assistant(
-        change("approval-responded", { approval: { id: "appr_1", approved } })
-      ),
+      assistant(change("approval-responded", { approval })),
     ])
+    const { id, ...rest } = approval
     expect(ChatRequest.parse(request).turn).toEqual({
-      kind: "approval",
+      kind: "results",
       message_id: "msg_assistant",
-      approval_id: "appr_1",
-      approved,
+      results: [{ kind: "approval", approval_id: id, ...rest }],
     })
   }
+})
+
+it("sends a yes or no on any tool that asked for one", () => {
+  const question = {
+    type: "tool-answer_question",
+    toolCallId: "call_question",
+    state: "approval-responded",
+    input: { request_id: CONVERSATION, value: "Saturdays" },
+    approval: { id: "appr_2", approved: false },
+  } as unknown as Part
+  const request = chatTurn(CONVERSATION, "act", [assistant(question)])
+  expect(ChatRequest.parse(request).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [{ kind: "approval", approval_id: "appr_2", approved: false }],
+  })
+})
+
+it("trims the reason, drops a blank one and cuts a long one to the cap", () => {
+  const reasonOf = (reason: string) => {
+    const { turn } = ChatRequest.parse(
+      chatTurn(CONVERSATION, "act", [
+        assistant(
+          change("approval-responded", {
+            approval: { id: "appr_1", approved: false, reason },
+          })
+        ),
+      ])
+    )
+    const [result] = turn.kind === "results" ? turn.results : []
+    return result?.kind === "approval" ? result.reason : undefined
+  }
+  expect(reasonOf("  Not this week  ")).toBe("Not this week")
+  expect(reasonOf("   ")).toBeUndefined()
+  expect(reasonOf("a".repeat(ANSWER_TEXT_MAX + 50))).toBe(
+    "a".repeat(ANSWER_TEXT_MAX)
+  )
+})
+
+it("sends every result of the last step in one turn", () => {
+  const request = chatTurn(CONVERSATION, "act", [
+    assistant(
+      ask("output-available", { output: STATED }),
+      change("approval-responded", {
+        approval: { id: "appr_1", approved: true },
+      })
+    ),
+  ])
+  expect(ChatRequest.parse(request).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [
+      { kind: "answer", tool_call_id: "call_name", output: STATED },
+      { kind: "approval", approval_id: "appr_1", approved: true },
+    ],
+  })
 })
 
 it("refuses to send a turn with nothing new in it", () => {
