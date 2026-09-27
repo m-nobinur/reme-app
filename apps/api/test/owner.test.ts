@@ -1,7 +1,7 @@
 import { ErrorEnvelope } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { bridge, type ChangeInput, routeChange } from "../src/changes.ts"
 import worker from "../src/index.ts"
-import { bridge, type ChangeInput, routeChange } from "../src/owner.ts"
 import { etag, orderAttention, unchanged } from "../src/workspace.ts"
 import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 

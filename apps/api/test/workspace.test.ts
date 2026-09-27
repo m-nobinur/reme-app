@@ -27,7 +27,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { startChange } from "../src/owner.ts"
+import { startChange } from "../src/changes.ts"
 import { readQuestions, readWorkspace } from "../src/workspace.ts"
 import {
   type Owner,

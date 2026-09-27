@@ -22,9 +22,9 @@ import {
 // Types only: the frames are written here by hand, so `ai` never enters the
 // bundle (about 49 KiB gzip for `createUIMessageStream`).
 import type { UIMessageChunk } from "ai"
+import { type Owner, startChange, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import { failure, invalid, readBody, sortedKeys } from "./http.ts"
-import { type Owner, startChange, stateFacts } from "./owner.ts"
 import { missingFacts, readFacts } from "./workspace.ts"
 
 /**
