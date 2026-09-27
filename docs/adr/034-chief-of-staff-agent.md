@@ -120,7 +120,8 @@ frozen: a later turn that finds an `integrity` outcome in its session takes only
 good, and the owner starts a new conversation. Nothing unfreezes one. On a match `prepareStep`
 appends `cos.call` with the hash. The step's output is logged in `onStepEnd`, which the SDK
 awaits before the next step (`dist/index.js:9556`, `:10385`) but whose errors it swallows
-(`notify`, `:2769`). A failed step write therefore surfaces as a mismatch at the next `prepareStep`, never as a silent gap.
+(`notify`, `:2769`). A failed step write therefore surfaces as a mismatch at the next
+`prepareStep`, never as a silent gap.
 
 This meets §10.6 at every call, not only the first: the model receives code logged by version in
 `cos.prefix` and messages derived from events appended before that call.
@@ -212,9 +213,9 @@ Step cost is priced from usage at the rates the Developer's metering uses, so bo
 against one OpenRouter bill. That generated table, `openrouter.models.json` in `packages/facade`,
 still lists $0.30 and $1.20 for this model, so it is regenerated before the CoS ships. Before
 the CoS ships, the bill must also come within 5% of the logged sum, with abandoned turns reported
-twice, at logged spend and at reservation, and the bill between the two. The cap is a ceiling, not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if
-every org spends it. The agent's PR measures typical cost per turn and first-chunk p95 over 20
-staging turns.
+twice, at logged spend and at reservation, and the bill between the two. The cap is a ceiling,
+not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if every org spends it. The
+agent's PR measures typical cost per turn and first-chunk p95 over 20 staging turns.
 
 ### Contract changes, in one contracts PR before the agent
 
