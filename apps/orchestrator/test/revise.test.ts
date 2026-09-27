@@ -127,6 +127,7 @@ live("a revise", () => {
 
     await kit.withOrg({ orgId }, (db) =>
       activate(db, orgId, {
+        id: crypto.randomUUID(),
         siteId: orgId,
         revisionId,
         kind: "rollback",

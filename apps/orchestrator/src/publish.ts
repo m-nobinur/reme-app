@@ -3,6 +3,8 @@ import {
   ApprovalRequest,
   ApprovalTarget,
   type FactRecord,
+  parseSiteRevision,
+  SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
 import {
@@ -350,7 +352,17 @@ export async function activeDeployment(
   return row ?? null
 }
 
+/**
+ * Activations and the checks of what is live take one transaction lock per
+ * site, so a check and the event it writes see one state: an activation
+ * either committed before the check or waits until after its write.
+ */
+const lockSite = (db: OrgScopedDb, siteId: string) =>
+  db.execute(sql`select pg_advisory_xact_lock(hashtext(${siteId}))`)
+
 export type Activation = {
+  /** The row's id, minted once per instance, so a retried step finds its own row and no other. */
+  id: string
   siteId: string
   revisionId: string
   kind: "publish" | "rollback"
@@ -358,28 +370,40 @@ export type Activation = {
   /** The assignment a publish moves to `published`; a rollback moves none. */
   assignmentId?: string
   reason?: string
+  /** The deployment that must still be live, or nothing is activated: a rollback names the one it replaces. */
+  over?: string
 }
 
 /**
  * Activation, one transaction (ADR-032): a `deployments` row under the
  * unique `(site_id, config_version)`, the revision marked `published`, and
  * for a publish the assignment moved to `published`. Retried after its
- * commit it finds the row it wrote and returns it. `reme_app` cannot update
- * or delete a deployment, so a race is an insert conflict, which is
- * transient and retried.
+ * commit it finds the row it wrote, by its id, and returns it. `reme_app`
+ * cannot update or delete a deployment, so a race is an insert conflict,
+ * which is transient and retried. With `over`, another deployment live in
+ * its place means null: the row read here is the one the insert's config
+ * version follows, so the check cannot go stale.
  */
 export async function activate(
   db: OrgScopedDb,
   orgId: string,
   input: Activation
-): Promise<DeploymentRow> {
+): Promise<DeploymentRow | null> {
+  await lockSite(db, input.siteId)
+  const [mine] = await db
+    .select()
+    .from(deployments)
+    .where(eq(deployments.id, input.id))
+  if (mine) return mine
   const active = await activeDeployment(db, input.siteId)
+  if (input.over && active?.id !== input.over) return null
   if (active?.revisionId === input.revisionId) return active
   let inserted: DeploymentRow | undefined
   try {
     ;[inserted] = await db
       .insert(deployments)
       .values({
+        id: input.id,
         orgId,
         siteId: input.siteId,
         revisionId: input.revisionId,
@@ -439,6 +463,37 @@ export async function activate(
   return inserted
 }
 
+/**
+ * Whether this instance's deployment is still the site's newest, read in the
+ * step that acts on the answer. When it is not, a newer activation holds the
+ * site: one `publish.superseded` event, the same wherever it is found, and
+ * the instance neither alerts nor rolls back (ADR-032).
+ */
+export async function stillLive(
+  db: OrgScopedDb,
+  orgId: string,
+  target: Pick<Target, "site_id" | "revision_id" | "assignment_id">,
+  deploymentId: string | null,
+  step: string
+): Promise<boolean> {
+  await lockSite(db, target.site_id)
+  const live = await activeDeployment(db, target.site_id)
+  if (live?.id === deploymentId) return true
+  await appendEvent(db, {
+    orgId,
+    assignmentId: target.assignment_id,
+    staffId: null,
+    type: "publish.superseded",
+    payload: {
+      step,
+      revision_id: target.revision_id,
+      live_deployment_id: live?.id ?? null,
+      live_revision_id: live?.revisionId ?? null,
+    },
+  })
+  return false
+}
+
 /** The slice of R2 the publisher reads. */
 export type Artifacts = {
   get: (
@@ -467,19 +522,55 @@ export async function verifyArtifact(
     : { ok: false, message: result.message ?? "the artifact is incomplete" }
 }
 
-/** The live host's answer, judged the way the gates would (§11.1.7). */
+/**
+ * How long a probe waits for the router to serve its version: KV takes up to
+ * a minute to reach every location and the router believes a pointer read
+ * from Postgres for another. The worst case, every wait and every fetch,
+ * stays inside Workflows' 10-minute step timeout; a test holds both bounds.
+ */
+export const SERVE_TRIES = 10
+export const SERVE_WAIT_MS = 15_000
+export const FETCH_TIMEOUT_MS = 10_000
+
+/**
+ * The live host's answer, judged the way the gates would (§11.1.7). With
+ * `expected`, only a page the router tagged as this revision is judged. Any
+ * other answer (an older deployment's page, an untagged 404, 429 or 503, a
+ * fetch that fails) is waited out and asked again; a newer deployment's page
+ * ends it at once. Either way the probe fails as `not_served`, never on
+ * that answer.
+ */
 export async function probeHost(
   host: string,
   facts: readonly FactRecord[] | null,
-  fetcher: typeof fetch = fetch
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  let res: Response
-  try {
-    res = await fetcher(`https://${host}/`, {
-      headers: { "cache-control": "no-cache" },
-    })
-  } catch (error) {
-    return { ok: false, reason: `fetch failed: ${(error as Error).message}` }
+  fetcher: typeof fetch = fetch,
+  expected?: Pick<SitePointer, "revision_id" | "config_version">,
+  pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
+): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
+  let res: Response | null = null
+  for (let attempt = 1; ; attempt++) {
+    let seen: string
+    try {
+      res = await fetcher(`https://${host}/`, {
+        headers: { "cache-control": "no-cache" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+      const tag = res.headers.get(SITE_REVISION_HEADER)
+      const served = parseSiteRevision(tag)
+      if (!expected || served?.revision_id === expected.revision_id) break
+      await res.body?.cancel()
+      seen = tag ?? `untagged ${res.status}`
+      if (served && served.config_version > expected.config_version) {
+        return { ok: false, reason: `served ${seen}`, not_served: seen }
+      }
+    } catch (error) {
+      seen = `fetch failed: ${(error as Error).message}`
+      if (!expected) return { ok: false, reason: seen }
+    }
+    if (attempt >= SERVE_TRIES) {
+      return { ok: false, reason: `served ${seen}`, not_served: seen }
+    }
+    await pause(SERVE_WAIT_MS)
   }
   if (res.status !== 200) return { ok: false, reason: `status ${res.status}` }
   const html = await res.text()
@@ -586,7 +677,8 @@ export type Target = {
   revision_id: string
   assignment_id: string | null
   host: string
-  previous_revision_id: string | null
+  /** The deployment a rollback replaces, read with its target; null for a publish. */
+  live_deployment_id: string | null
 }
 
 /**
@@ -616,7 +708,7 @@ export async function readTarget(
       revision_id: active.previousRevisionId,
       assignment_id: null,
       host,
-      previous_revision_id: active.revisionId,
+      live_deployment_id: active.id,
     }
   }
   const [approval] = await db
@@ -646,32 +738,43 @@ export async function readTarget(
   if (row.state !== "release_candidate" && row.state !== "published") {
     throw refuse("assignment.not_release_candidate")
   }
-  const active = await activeDeployment(db, latest.siteId)
   return {
     site_id: latest.siteId,
     revision_id: latest.id,
     assignment_id: row.id,
     host,
-    previous_revision_id: active?.revisionId ?? null,
+    live_deployment_id: null,
   }
 }
 
 /**
- * The routing pointer (§11.1.3): KV is the cache and this row is what the
- * router serves. The binding is optional in the generated types because
- * production has no namespace yet; a publish without one is a configuration
- * error, not a retry.
+ * The routing pointer (§11.1.3): KV is the cache and Postgres the truth, so
+ * every write puts the site's newest deployment as Postgres has it now, and a
+ * late or retried write can only repeat what is live. The binding is
+ * optional in the generated types because production has no namespace yet;
+ * a publish without one is a configuration error, not a retry.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
-  host: string,
-  pointer: SitePointer
+  db: OrgScopedDb,
+  orgId: string,
+  siteId: string,
+  host: string
 ): Promise<{ host: string }> {
   if (!env.ROUTES)
     throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
+  const live = await activeDeployment(db, siteId)
+  if (!live) throw new Error("no deployment to point at")
   await env.ROUTES.put(
     `host:${host}`,
-    JSON.stringify(SitePointer.parse(pointer))
+    JSON.stringify(
+      SitePointer.parse({
+        org_id: orgId,
+        site_id: siteId,
+        revision_id: live.revisionId,
+        config_version: live.configVersion,
+      })
+    )
   )
   return { host }
 }

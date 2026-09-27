@@ -1,13 +1,19 @@
 import { readdirSync, readFileSync } from "node:fs"
+import { formatSiteRevision, SITE_REVISION_HEADER } from "@workspace/contracts"
 import {
   approvals,
   assignments,
   deployments,
   eq,
+  events,
   siteRevisions,
+  sql,
+  supersedeFact,
+  tenancy,
 } from "@workspace/db"
 import fc from "fast-check"
 import { afterAll, describe, expect, it, vi } from "vitest"
+import type { Activation } from "../src/publish.ts"
 import { advance, TransitionError } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
 import steps from "./workflow-steps.json" with { type: "json" }
@@ -45,8 +51,13 @@ const {
   decideApproval,
   probeHost,
   redriveQueued,
+  FETCH_TIMEOUT_MS,
   requestReview,
+  SERVE_TRIES,
+  SERVE_WAIT_MS,
+  stillLive,
   verifyArtifact,
+  writePointer,
 } = await import("../src/publish.ts")
 const { PublishWorkflow } = await import("../src/cloudflare.ts")
 const { takeSnapshot } = await import("../src/brief.ts")
@@ -218,6 +229,12 @@ live("an approval", () => {
 })
 
 live("activation", () => {
+  const activated = async (orgId: string, input: Activation) => {
+    const row = await kit.withOrg({ orgId }, (db) => activate(db, orgId, input))
+    if (!row) throw new Error("nothing was activated")
+    return row
+  }
+
   it("appends one deployment per activation, points previous at the last, and moves only a publish's assignment", async () => {
     const { orgId, ids, revisionId, store } = await previewed()
     await requestReview(kit, ids)
@@ -225,40 +242,38 @@ live("activation", () => {
       revisionId,
       decidedBy: { kind: "console" },
     })
-    const first = await kit.withOrg({ orgId }, (db) =>
-      activate(db, orgId, {
-        siteId: orgId,
-        revisionId,
-        kind: "publish",
-        approvalId: decision.approval_id,
-        assignmentId: ids.assignmentId,
-      })
-    )
+    const key = crypto.randomUUID()
+    const first = await activated(orgId, {
+      id: key,
+      siteId: orgId,
+      revisionId,
+      kind: "publish",
+      approvalId: decision.approval_id,
+      assignmentId: ids.assignmentId,
+    })
     expect(first.configVersion).toBe(1)
     expect(first.previousRevisionId).toBeNull()
     expect(await stateOf(ids)).toBe("published")
     // Again, after its commit: the same row, nothing new.
-    const same = await kit.withOrg({ orgId }, (db) =>
-      activate(db, orgId, {
-        siteId: orgId,
-        revisionId,
-        kind: "publish",
-        approvalId: decision.approval_id,
-        assignmentId: ids.assignmentId,
-      })
-    )
+    const same = await activated(orgId, {
+      id: key,
+      siteId: orgId,
+      revisionId,
+      kind: "publish",
+      approvalId: decision.approval_id,
+      assignmentId: ids.assignmentId,
+    })
     expect(same.id).toBe(first.id)
 
     const second = await newAssignment(kit, orgId)
     const rev2 = await addRevision(store, orgId, second.assignmentId, GOOD_HTML)
-    const row2 = await kit.withOrg({ orgId }, (db) =>
-      activate(db, orgId, {
-        siteId: orgId,
-        revisionId: rev2,
-        kind: "rollback",
-        reason: "probe",
-      })
-    )
+    const row2 = await activated(orgId, {
+      id: crypto.randomUUID(),
+      siteId: orgId,
+      revisionId: rev2,
+      kind: "rollback",
+      reason: "probe",
+    })
     expect(row2.configVersion).toBe(2)
     expect(row2.previousRevisionId).toBe(revisionId)
     expect(await stateOf(second)).toBe("queued")
@@ -279,6 +294,109 @@ live("activation", () => {
           .where(eq(deployments.id, row2.id))
       )
     ).rejects.toThrow()
+  })
+
+  it("checks what is live only between activations, never across one", async () => {
+    const { orgId, ids, revisionId, store } = await previewed()
+    const first = await activated(orgId, {
+      id: crypto.randomUUID(),
+      siteId: orgId,
+      revisionId,
+      kind: "rollback",
+      reason: "setup",
+    })
+    const rev2 = await addRevision(store, orgId, ids.assignmentId, GOOD_HTML)
+    // A second pool, so the check waits on the site and not on a connection.
+    const other = tenancy(process.env.DATABASE_URL ?? "postgres://unused")
+    let held: () => void = () => undefined
+    const holding = new Promise<void>((done) => {
+      held = done
+    })
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((done) => {
+      release = done
+    })
+    const newer = kit.withOrg({ orgId }, async (db) => {
+      await activate(db, orgId, {
+        id: crypto.randomUUID(),
+        siteId: orgId,
+        revisionId: rev2,
+        kind: "rollback",
+        reason: "newer",
+      })
+      held()
+      await gate
+    })
+    await holding
+    const target = {
+      site_id: orgId,
+      revision_id: revisionId,
+      assignment_id: ids.assignmentId,
+    }
+    const check = other.withOrg({ orgId }, (db) =>
+      stillLive(db, orgId, target, first.id, "alert")
+    )
+    // Uncommitted, the newer activation is invisible: a check that ran now
+    // would find the first still live and let a stale alert through.
+    await new Promise((done) => setTimeout(done, 200))
+    release()
+    await newer
+    expect(await check).toBe(false)
+    await other.close()
+  })
+
+  it("adds no row for a revision that is already live", async () => {
+    const { orgId, revisionId } = await previewed()
+    const input = {
+      siteId: orgId,
+      revisionId,
+      kind: "rollback" as const,
+      reason: "setup",
+    }
+    const first = await activated(orgId, { ...input, id: crypto.randomUUID() })
+    const again = await activated(orgId, { ...input, id: crypto.randomUUID() })
+    expect(again.id).toBe(first.id)
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.select().from(deployments).where(eq(deployments.siteId, orgId))
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it("replays only its own row: another activation of the same revision is not one", async () => {
+    const { orgId, ids, revisionId, store } = await previewed()
+    const first = await activated(orgId, {
+      id: crypto.randomUUID(),
+      siteId: orgId,
+      revisionId,
+      kind: "rollback",
+      reason: "setup",
+    })
+    const rev2 = await addRevision(store, orgId, ids.assignmentId, GOOD_HTML)
+    const second = await activated(orgId, {
+      id: crypto.randomUUID(),
+      siteId: orgId,
+      revisionId: rev2,
+      kind: "rollback",
+      reason: "setup",
+    })
+    // The owner rolls the second back; a probe's rollback of the same second
+    // then finds the first already restored, but not by itself.
+    const back = {
+      siteId: orgId,
+      revisionId: first.revisionId,
+      kind: "rollback" as const,
+      over: second.id,
+    }
+    const owners = await activated(orgId, { ...back, id: crypto.randomUUID() })
+    expect(
+      await kit.withOrg({ orgId }, (db) =>
+        activate(db, orgId, { ...back, id: crypto.randomUUID() })
+      )
+    ).toBeNull()
+    // The owner's own retry, after its result was lost, is its row again.
+    expect((await activated(orgId, { ...back, id: owners.id })).id).toBe(
+      owners.id
+    )
   })
 })
 
@@ -379,6 +497,191 @@ describe("the artifact check and the probe", () => {
     ).toMatchObject({ ok: false, reason: "fetch failed: down" })
   })
 
+  it("judges only a page its own revision served, and waits for it", async () => {
+    const waits: number[] = []
+    const pause = async (ms: number) => {
+      waits.push(ms)
+    }
+    const MINE = "10000001-0000-4000-8000-00000000000a"
+    const OLDER = "10000001-0000-4000-8000-00000000000b"
+    const NEWER = "10000001-0000-4000-8000-00000000000c"
+    const mine = { revision_id: MINE, config_version: 2 }
+    const tag = (revision_id: string, config_version: number) => ({
+      [SITE_REVISION_HEADER]: formatSiteRevision({
+        revision_id,
+        config_version,
+      }),
+    })
+    // Answers in turn, then this revision's own tagged page for good.
+    const router = (answers: Response[], body: string) =>
+      (async () =>
+        answers.shift() ??
+        new Response(body, {
+          status: 200,
+          headers: tag(MINE, 2),
+        })) as unknown as typeof fetch
+    const older = () =>
+      new Response("<p>older</p>", { status: 200, headers: tag(OLDER, 1) })
+    const broken = GOOD_HTML.replace("$35", "$49")
+    // The older deployment answers twice, then this one, whose page is judged.
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router([older(), older()], "<html></html>"),
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, reason: "blank page" })
+    expect(waits).toHaveLength(2)
+    // Untagged answers are not this version's either: a cached "nobody" 404,
+    // the limiter's 429, the router's own 503, a page with no tag.
+    waits.length = 0
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router(
+          [
+            new Response("No site here.", { status: 404 }),
+            new Response("Too many requests.", { status: 429 }),
+            new Response("{}", { status: 503 }),
+            new Response(broken, { status: 200 }),
+          ],
+          GOOD_HTML
+        ),
+        mine,
+        pause
+      )
+    ).toEqual({ ok: true })
+    expect(waits).toHaveLength(4)
+    // A newer deployment's page is never judged and never waited for.
+    waits.length = 0
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router(
+          [new Response(broken, { status: 200, headers: tag(NEWER, 3) })],
+          GOOD_HTML
+        ),
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: `${NEWER}@3` })
+    expect(waits).toEqual([])
+    // One that never serves this version is not judged: after its tries the
+    // probe fails as not served, never on the page, and a fetch that throws
+    // counts the same way.
+    expect(
+      await probeHost(
+        "x",
+        null,
+        router(new Array(50).fill(null).map(older), broken),
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: `${OLDER}@1` })
+    expect(waits).toHaveLength(SERVE_TRIES - 1)
+    expect(
+      await probeHost(
+        "x",
+        null,
+        (async () => {
+          throw new Error("down")
+        }) as unknown as typeof fetch,
+        mine,
+        pause
+      )
+    ).toMatchObject({ ok: false, not_served: "fetch failed: down" })
+  })
+
+  it("keeps every wait and fetch inside one step's timeout, and long enough for the edge to catch up", async () => {
+    // Workflows' default step timeout is 10 minutes per attempt. KV takes up
+    // to a minute to reach every location, and the router believes a pointer
+    // it read from Postgres for another minute (BELIEVED_FOR).
+    const worst =
+      (SERVE_TRIES - 1) * SERVE_WAIT_MS + SERVE_TRIES * FETCH_TIMEOUT_MS
+    expect(worst).toBeLessThan(10 * 60_000)
+    expect((SERVE_TRIES - 1) * SERVE_WAIT_MS).toBeGreaterThanOrEqual(120_000)
+    let signal: AbortSignal | undefined
+    await probeHost("x", null, (async (_: string, init: RequestInit) => {
+      signal = init.signal ?? undefined
+      return new Response(GOOD_HTML)
+    }) as unknown as typeof fetch)
+    expect(signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it("points the host at what Postgres says is live, whatever KV holds", async () => {
+    const store = storage()
+    const site = "10000001-0000-4000-8000-000000000001"
+    const newest = {
+      id: "d3",
+      siteId: site,
+      revisionId: "10000001-0000-4000-8000-000000000003",
+      configVersion: 3,
+    }
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => ({ orderBy: () => ({ limit: async () => [newest] }) }),
+        }),
+      }),
+    }
+    const env = { ROUTES: store.ROUTES } as unknown as Env
+    store.pointers.set("host:h", "not a pointer")
+    await writePointer(env, db as never, site, site, "h")
+    expect(JSON.parse(store.pointers.get("host:h") ?? "{}")).toEqual({
+      org_id: site,
+      site_id: site,
+      revision_id: newest.revisionId,
+      config_version: 3,
+    })
+  })
+
+  it("finds a deployment no longer live and records it once, the same way everywhere", async () => {
+    const inserted: {
+      assignmentId: unknown
+      type: string
+      payload: unknown
+    }[] = []
+    const current = [{ id: "d3", revisionId: "v2" }]
+    const db = {
+      execute: async () => undefined,
+      select: () => ({
+        from: () => ({
+          where: () => ({ orderBy: () => ({ limit: async () => current }) }),
+        }),
+      }),
+      insert: () => ({
+        values: async (row: (typeof inserted)[number]) => {
+          inserted.push(row)
+        },
+      }),
+    }
+    const target = { site_id: "s", revision_id: "v2", assignment_id: "a" }
+    expect(await stillLive(db as never, "org", target, "d3", "probe 5")).toBe(
+      true
+    )
+    expect(inserted).toEqual([])
+    // The same revision, rolled back to under another deployment, is not this one's.
+    expect(await stillLive(db as never, "org", target, "d2", "probe 5")).toBe(
+      false
+    )
+    expect(inserted).toEqual([
+      expect.objectContaining({
+        assignmentId: "a",
+        type: "publish.superseded",
+        payload: {
+          step: "probe 5",
+          revision_id: "v2",
+          live_deployment_id: "d3",
+          live_revision_id: "v2",
+        },
+      }),
+    ])
+  })
+
   it("keeps the routing KV binding inside publish.ts", () => {
     const dir = new URL("../src/", import.meta.url)
     const offenders = readdirSync(dir, { recursive: true })
@@ -386,6 +689,36 @@ describe("the artifact check and the probe", () => {
       .filter((f) => f.endsWith(".ts") && f !== "publish.ts")
       .filter((f) => /\bROUTES\b/.test(readFileSync(new URL(f, dir), "utf8")))
     expect(offenders).toEqual([])
+  })
+
+  it("activates nothing over a deployment other than the one it names", async () => {
+    const inserted: unknown[] = []
+    const current = [{ id: "d3", revisionId: "v1", configVersion: 3 }]
+    // Its own row is not there; the site's newest is another activation's.
+    const where = () =>
+      Object.assign(Promise.resolve([]), {
+        orderBy: () => ({ limit: async () => current }),
+      })
+    const db = {
+      // The site lock, which a fake has no one to share with.
+      execute: async () => undefined,
+      select: () => ({ from: () => ({ where }) }),
+      insert: () => ({
+        values: async (row: unknown) => {
+          inserted.push(row)
+        },
+      }),
+    }
+    expect(
+      await activate(db as never, "org", {
+        id: "d4",
+        siteId: "site",
+        revisionId: "v1",
+        kind: "rollback",
+        over: "d2",
+      })
+    ).toBeNull()
+    expect(inserted).toEqual([])
   })
 })
 
@@ -399,6 +732,43 @@ live("the publish workflow", () => {
     })
     return { ...built, approvalId: decision.approval_id }
   }
+
+  /** Another build on the same site, approved: its facts are the org's as they stand now. */
+  async function approveNext(
+    store: ReturnType<typeof storage>,
+    orgId: string,
+    html = GOOD_HTML
+  ) {
+    const ids = await newAssignment(kit, orgId)
+    for (const to of TO_PREVIEW) await advance(kit, ids, to)
+    const revisionId = await addRevision(store, orgId, ids.assignmentId, html)
+    await kit.withOrg({ orgId }, (db) => takeSnapshot(db, ids, []))
+    await requestReview(kit, ids)
+    const { decision } = await decideApproval(kit, ids, {
+      revisionId,
+      decidedBy: { kind: "console" },
+    })
+    return { ids, revisionId, approvalId: decision.approval_id }
+  }
+
+  const publish = (
+    env: Env,
+    payload: Record<string, unknown>,
+    step: ReturnType<typeof fakeStep> = fakeStep([])
+  ) => new PublishWorkflow({} as never, env).run({ payload } as never, step)
+
+  const liveNow = (orgId: string) =>
+    kit.withOrg({ orgId }, (db) => activeDeployment(db, orgId))
+
+  const superseded = (orgId: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.orgId} = ${orgId} and ${events.type} = 'publish.superseded'`
+        )
+    )
 
   it("publishes an approved revision: activates, points the host, probes four times, redrives", async () => {
     const store = storage()
@@ -630,6 +1000,383 @@ live("the publish workflow", () => {
         fakeStep([])
       )
     ).rejects.toThrow("rollback.nothing_previous")
+  })
+
+  it("stops a late probe once a newer version is live: no alert, no rollback, and the newer one probes itself", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    // While the second sleeps to minute 5, a third goes live with a price
+    // only its own facts hold, as v2 did under v1's probe on a staging run.
+    let third: Awaited<ReturnType<typeof approveNext>> | null = null
+    const thirdNames: string[] = []
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: second.approvalId },
+      fakeStep(names, {
+        "until minute 5": async () => {
+          await kit.withOrg({ orgId }, (db) =>
+            supersedeFact(db, {
+              orgId,
+              key: "pricing.standard_clean_hourly",
+              factType: "pricing",
+              value: { currency: "USD", amount_minor: 4000 },
+              provenance: { source: "owner_stated", confidence: 1 },
+            })
+          )
+          third = await approveNext(
+            store,
+            orgId,
+            GOOD_HTML.replace("$35", "$40")
+          )
+          await publish(
+            env,
+            { org_id: orgId, approval_id: third.approvalId },
+            fakeStep(thirdNames)
+          )
+        },
+      })
+    )
+    vi.unstubAllGlobals()
+    if (!third) throw new Error("the third version never published")
+    const { ids: thirdIds, revisionId: rev3 } = third
+    expect(outcome).toMatchObject({
+      outcome: "superseded",
+      revision_id: second.revisionId,
+    })
+    expect(names).toEqual(steps.PublishWorkflow.superseded)
+    expect(thirdNames).toEqual(steps.PublishWorkflow.publish)
+    expect(await eventsOf(thirdIds, "publish.probed")).toHaveLength(4)
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "publish",
+      revisionId: rev3,
+      configVersion: 3,
+    })
+    const slug = `state-test-${orgId.slice(0, 8)}`
+    expect(
+      JSON.parse(store.pointers.get(`host:${slug}${SUFFIX}`) ?? "{}")
+    ).toMatchObject({ revision_id: rev3, config_version: 3 })
+    expect(await eventsOf(second.ids, "alert.raised")).toHaveLength(0)
+    expect(await eventsOf(second.ids, "publish.probed")).toHaveLength(2)
+    const [event] = await eventsOf(second.ids, "publish.superseded")
+    expect(event?.payload).toEqual({
+      step: "probe 5",
+      revision_id: second.revisionId,
+      live_deployment_id: expect.any(String),
+      live_revision_id: rev3,
+    })
+  })
+
+  it("rolls back only over the version its probe checked", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    // The second's minute-2 probe fails, and a third goes live before its rollback.
+    let third: Awaited<ReturnType<typeof approveNext>> | null = null
+    let probes = 0
+    vi.stubGlobal(
+      "fetch",
+      serveFromPointer(store, () =>
+        ++probes === 2 ? new Response("<html></html>", { status: 200 }) : null
+      )
+    )
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: second.approvalId },
+      fakeStep(names, {
+        "roll back": async () => {
+          third = await approveNext(store, orgId)
+          await publish(env, { org_id: orgId, approval_id: third.approvalId })
+        },
+      })
+    )
+    vi.unstubAllGlobals()
+    if (!third) throw new Error("the third version never published")
+    const { revisionId: rev3 } = third
+    expect(outcome).toMatchObject({ outcome: "superseded" })
+    expect(names).toEqual(steps.PublishWorkflow["rollback superseded"])
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "publish",
+      revisionId: rev3,
+      configVersion: 3,
+    })
+    expect(await eventsOf(second.ids, "alert.raised")).toHaveLength(0)
+    expect(await superseded(orgId)).toMatchObject([
+      {
+        payload: {
+          revision_id: second.revisionId,
+          live_revision_id: rev3,
+        },
+      },
+    ])
+  })
+
+  it("refuses a rollback request once a newer version is live in place of the one it would replace", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    await publish(env, { org_id: orgId, approval_id: second.approvalId })
+    const third = await approveNext(store, orgId)
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, site_id: orgId, rollback: { key: "k", reason: "x" } },
+      fakeStep(names, {
+        activate: () =>
+          publish(env, { org_id: orgId, approval_id: third.approvalId }),
+      })
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "superseded" })
+    expect(names).toEqual(steps.PublishWorkflow["rollback request superseded"])
+    expect(await liveNow(orgId)).toMatchObject({
+      revisionId: third.revisionId,
+      configVersion: 3,
+    })
+    expect(await superseded(orgId)).toMatchObject([
+      {
+        payload: {
+          step: "activate",
+          revision_id: first.revisionId,
+          live_revision_id: third.revisionId,
+        },
+      },
+    ])
+  })
+
+  it("stops probing when its revision is live again under a newer deployment", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    const names: string[] = []
+    // A third goes live and the owner rolls it back, so the second's revision
+    // serves again, from the owner's rollback and not from this instance.
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: second.approvalId },
+      fakeStep(names, {
+        "until minute 5": async () => {
+          const third = await approveNext(store, orgId)
+          await publish(env, { org_id: orgId, approval_id: third.approvalId })
+          await publish(env, {
+            org_id: orgId,
+            site_id: orgId,
+            rollback: { key: "k", reason: "owner asked" },
+          })
+        },
+      })
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "superseded" })
+    expect(names).toEqual(steps.PublishWorkflow.superseded)
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "rollback",
+      revisionId: second.revisionId,
+      configVersion: 4,
+    })
+    expect(await eventsOf(second.ids, "alert.raised")).toHaveLength(0)
+  })
+
+  it("rolls back to what its own activation replaced, not what it read before", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    await publish(env, { org_id: orgId, approval_id: second.approvalId })
+    const third = await approveNext(store, orgId)
+    // The owner rolls the second back between this publish reading its
+    // target and activating; then this publish's minute-2 probe fails.
+    let armed = false
+    let probes = 0
+    vi.stubGlobal(
+      "fetch",
+      serveFromPointer(store, () =>
+        armed && ++probes === 2
+          ? new Response("<html></html>", { status: 200 })
+          : null
+      )
+    )
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: third.approvalId },
+      fakeStep(names, {
+        activate: () =>
+          publish(env, {
+            org_id: orgId,
+            site_id: orgId,
+            rollback: { key: "k", reason: "owner asked" },
+          }),
+        "probe 0": async () => {
+          armed = true
+        },
+      })
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({
+      outcome: "rolled_back",
+      revision_id: third.revisionId,
+    })
+    expect(names).toEqual(steps.PublishWorkflow["probe failure rolled back"])
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "rollback",
+      revisionId: first.revisionId,
+      configVersion: 5,
+    })
+  })
+
+  it("raises no alert for a failed probe once a newer version is live, with nothing earlier to restore", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    let probes = 0
+    vi.stubGlobal(
+      "fetch",
+      serveFromPointer(store, () =>
+        ++probes === 1 ? new Response("<html></html>", { status: 200 }) : null
+      )
+    )
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: first.approvalId },
+      fakeStep(names, {
+        alert: async () => {
+          const second = await approveNext(store, orgId)
+          await publish(env, { org_id: orgId, approval_id: second.approvalId })
+        },
+      })
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "superseded" })
+    expect(names).toEqual(steps.PublishWorkflow["alert superseded"])
+    expect(await eventsOf(first.ids, "alert.raised")).toHaveLength(0)
+    const [event] = await eventsOf(first.ids, "publish.superseded")
+    expect(event?.payload).toMatchObject({
+      step: "alert",
+      revision_id: first.revisionId,
+    })
+  })
+
+  it("keeps the id it minted when an activation is retried after its result was lost", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    await publish(env, { org_id: orgId, approval_id: second.approvalId })
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, site_id: orgId, rollback: { key: "k", reason: "x" } },
+      fakeStep(names, {}, ["activate"])
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({
+      outcome: "published",
+      revision_id: first.revisionId,
+    })
+    expect(names).toEqual(steps.PublishWorkflow.rollback)
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.select().from(deployments).where(eq(deployments.siteId, orgId))
+    )
+    expect(rows).toHaveLength(3)
+  })
+
+  it("alerts on a failed probe with nothing earlier to restore, and says so", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { env } = workflowEnv(store)
+    vi.stubGlobal(
+      "fetch",
+      serveFromPointer(
+        store,
+        () => new Response("<html></html>", { status: 200 })
+      )
+    )
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: first.orgId, approval_id: first.approvalId },
+      fakeStep(names)
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "alerted" })
+    expect(names).toEqual(steps.PublishWorkflow["probe failure alerted"])
+    const [alert] = await eventsOf(first.ids, "alert.raised")
+    expect(alert?.payload).toMatchObject({ kind: "publish.probe_failed" })
+  })
+
+  it("alerts and never rolls back when the router never serves its version", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    // KV stuck on the first version: every answer carries its tag, and its
+    // page would fail the second's facts if it were ever judged.
+    const stuck = store.pointers.get(
+      `host:state-test-${orgId.slice(0, 8)}${SUFFIX}`
+    )
+    const { revision_id, config_version } = JSON.parse(stuck ?? "{}")
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response("<html></html>", {
+          status: 200,
+          headers: {
+            [SITE_REVISION_HEADER]: `${revision_id}@${config_version}`,
+          },
+        })
+    )
+    // The waits between tries, taken at once.
+    const wait = setTimeout
+    vi.stubGlobal("setTimeout", ((fn: () => void, ms?: number) =>
+      wait(fn, ms === 15_000 ? 0 : ms)) as typeof setTimeout)
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: second.approvalId },
+      fakeStep(names)
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "unconfirmed" })
+    expect(names).toEqual(steps.PublishWorkflow["not served"])
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "publish",
+      revisionId: second.revisionId,
+    })
+    const [alert] = await eventsOf(second.ids, "alert.raised")
+    expect(alert?.payload).toMatchObject({
+      kind: "publish.not_served",
+      served: `${revision_id}@${config_version}`,
+    })
   })
 
   it("leaves a running queued instance alone when redriving", async () => {

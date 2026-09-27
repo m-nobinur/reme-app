@@ -224,6 +224,68 @@
       "probe 10",
       "retire others",
       "redrive queued"
+    ],
+    "superseded": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "until minute 2",
+      "probe 2",
+      "until minute 5",
+      "probe 5",
+      "retire others",
+      "redrive queued"
+    ],
+    "rollback superseded": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "until minute 2",
+      "probe 2",
+      "roll back",
+      "retire others",
+      "redrive queued"
+    ],
+    "rollback request superseded": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "retire others",
+      "redrive queued"
+    ],
+    "alert superseded": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
+    ],
+    "probe failure alerted": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
+    ],
+    "not served": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
     ]
   },
   "SweepWorkflow": {

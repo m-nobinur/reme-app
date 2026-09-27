@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto"
-import type { AssignmentState } from "@workspace/contracts"
+import {
+  type AssignmentState,
+  formatSiteRevision,
+  SITE_REVISION_HEADER,
+} from "@workspace/contracts"
 import {
   assignments,
   eq,
@@ -196,15 +200,32 @@ export const eventsOf = (
       )
   )
 
-/** A recording step: names in order, every callback run at once, sleeps skipped. */
-export function fakeStep(names: string[]) {
+/**
+ * A recording step: names in order, every callback run at once, sleeps
+ * skipped. `before` runs something else first, such as another publish
+ * landing while this one sleeps. A step named in `retry` has its result lost
+ * once after its body ran and is run again, as Workflows retries it; a step
+ * already done returns its stored result, as a resumed instance does.
+ */
+export function fakeStep(
+  names: string[],
+  before: Record<string, () => Promise<unknown>> = {},
+  retry: string[] = []
+) {
+  const done = new Map<string, unknown>()
   return {
     do: async (name: string, a: unknown, b?: unknown) => {
+      await before[name]?.()
       names.push(name)
+      if (done.has(name)) return done.get(name)
       const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>
-      return fn()
+      if (retry.includes(name)) await fn()
+      const result = await fn()
+      done.set(name, result)
+      return result
     },
     sleep: async (name: string) => {
+      await before[name]?.()
       names.push(name)
     },
   } as never
@@ -237,17 +258,29 @@ export function serveFromPointer(
   override?: () => Response | null
 ) {
   return vi.fn(async (input: string | URL | Request) => {
-    const forced = override?.()
-    if (forced) return forced
     const host = new URL(String(input)).hostname
     const raw = store.pointers.get(`host:${host}`)
     if (!raw) return new Response("No site here.", { status: 404 })
-    const pointer = JSON.parse(raw) as { site_id: string; revision_id: string }
+    const pointer = JSON.parse(raw) as {
+      site_id: string
+      revision_id: string
+      config_version: number
+    }
+    // A forced answer is still the pointed revision's page, tagged as the router tags it.
+    const forced = override?.()
+    if (forced) {
+      forced.headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
+      return forced
+    }
     const object = store.objects.get(
       `sites/${pointer.site_id}/${pointer.revision_id}/dist/index.html`
     )
+    const served = { [SITE_REVISION_HEADER]: formatSiteRevision(pointer) }
     return object
-      ? new Response(new TextDecoder().decode(object), { status: 200 })
+      ? new Response(new TextDecoder().decode(object), {
+          status: 200,
+          headers: served,
+        })
       : new Response("", { status: 404 })
   })
 }

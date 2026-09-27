@@ -38,6 +38,7 @@ import {
   readTarget,
   redriveQueued,
   requestReview,
+  stillLive,
   verifyArtifact,
   writePointer,
 } from "./publish.ts"
@@ -549,11 +550,15 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
     const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
     const rollback = "rollback" in params
 
-    const target = await step.do("read target", () =>
-      run((kit) =>
+    // The ids this instance's activations take, minted once and kept with
+    // the step, so a retried activation finds its own row and no other.
+    const target = await step.do("read target", async () => ({
+      ...(await run((kit) =>
         kit.withOrg({ orgId }, (db) => readTarget(db, this.env, params))
-      )
-    )
+      )),
+      activation_id: crypto.randomUUID(),
+      rollback_id: crypto.randomUUID(),
+    }))
 
     const artifact = await step.do("verify artifact", () =>
       verifyArtifact(this.env.SITES, target.site_id, target.revision_id)
@@ -576,6 +581,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       run((kit) =>
         kit.withOrg({ orgId }, async (db) => {
           const row = await activate(db, orgId, {
+            id: target.activation_id,
             siteId: target.site_id,
             revisionId: target.revision_id,
             kind: rollback ? "rollback" : "publish",
@@ -583,28 +589,49 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
               "approval_id" in params ? params.approval_id : undefined,
             assignmentId: target.assignment_id ?? undefined,
             reason: "rollback" in params ? params.rollback.reason : undefined,
+            // A rollback replaces the deployment it read as live, or nothing.
+            over: target.live_deployment_id ?? undefined,
           })
-          return { deployment_id: row.id, config_version: row.configVersion }
+          if (!row) {
+            await stillLive(
+              db,
+              orgId,
+              target,
+              target.live_deployment_id,
+              "activate"
+            )
+            return null
+          }
+          return {
+            deployment_id: row.id,
+            config_version: row.configVersion,
+            previous_revision_id: row.previousRevisionId,
+          }
         })
       )
     )
 
-    await step.do("pointer", () =>
-      run(() =>
-        writePointer(this.env, target.host, {
-          org_id: orgId,
-          site_id: target.site_id,
-          revision_id: target.revision_id,
-          config_version: deployment.config_version,
-        })
+    // A rollback request that found a newer deployment activated nothing:
+    // no pointer and no probes, and the same ending as every other path.
+    let superseded = !deployment
+    const point = () =>
+      run((kit) =>
+        kit.withOrg({ orgId }, (db) =>
+          writePointer(this.env, db, orgId, target.site_id, target.host)
+        )
       )
-    )
+    if (deployment) await step.do("pointer", point)
 
     // The content gate runs on the live HTML with the facts the assignment
     // was validated against; a rollback has no assignment and takes the
-    // 5xx and blank-page checks alone.
-    let failed: { minute: number; reason: string } | null = null
+    // 5xx and blank-page checks alone. A page the router served from another
+    // revision is never judged. Once another deployment holds the site, this
+    // instance stops: it neither alerts nor rolls back, and the newer one
+    // probes itself.
+    let failed: { minute: number; reason: string; not_served?: string } | null =
+      null
     for (const [i, minute] of PROBE_MINUTES.entries()) {
+      if (!deployment) break
       if (i > 0) {
         const previous = PROBE_MINUTES[i - 1] ?? 0
         await step.sleep(
@@ -617,35 +644,74 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
         const factRecords = assignmentId
           ? await run((kit) => assignmentFacts(kit, { orgId, assignmentId }))
           : null
-        const probe = await probeHost(target.host, factRecords)
-        await run((kit) =>
-          appendAudit(
-            kit,
-            { orgId, assignmentId: target.assignment_id },
-            "publish.probed",
-            { minute, revision_id: target.revision_id, ...probe }
-          )
+        const probe = await probeHost(target.host, factRecords, undefined, {
+          revision_id: target.revision_id,
+          config_version: deployment.config_version,
+        })
+        return run((kit) =>
+          kit.withOrg({ orgId }, async (db) => {
+            const at = `probe ${minute}`
+            if (
+              !(await stillLive(
+                db,
+                orgId,
+                target,
+                deployment.deployment_id,
+                at
+              ))
+            ) {
+              return { superseded: true as const }
+            }
+            await appendEvent(db, {
+              orgId,
+              assignmentId: target.assignment_id,
+              staffId: null,
+              type: "publish.probed",
+              payload: { minute, revision_id: target.revision_id, ...probe },
+            })
+            return probe
+          })
         )
-        return probe
       })
+      if ("superseded" in result) {
+        superseded = true
+        break
+      }
       if (!result.ok) {
-        failed = { minute, reason: result.reason }
+        failed = { minute, ...result }
         break
       }
     }
 
-    if (failed && !rollback && target.previous_revision_id) {
-      const back = target.previous_revision_id
+    // A rollback restores what this instance's own row replaced, only while
+    // that row is still live.
+    // A version the router never served is not known to be broken: an
+    // alert, never a rollback.
+    const back = deployment?.previous_revision_id
+    let rolledBack = false
+    if (failed && !failed.not_served && !rollback && deployment && back) {
       const why = failed
       const undone = await step.do("roll back", () =>
         run((kit) =>
           kit.withOrg({ orgId }, async (db) => {
             const row = await activate(db, orgId, {
+              id: target.rollback_id,
               siteId: target.site_id,
               revisionId: back,
               kind: "rollback",
               reason: `probe ${why.minute}: ${why.reason}`,
+              over: deployment.deployment_id,
             })
+            if (!row) {
+              await stillLive(
+                db,
+                orgId,
+                target,
+                deployment.deployment_id,
+                "roll back"
+              )
+              return null
+            }
             await appendEvent(db, {
               orgId,
               assignmentId: target.assignment_id,
@@ -659,37 +725,50 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
                 reason: why.reason,
               },
             })
-            return { config_version: row.configVersion }
+            return true
           })
         )
       )
-      await step.do("pointer after rollback", () =>
-        run(() =>
-          writePointer(this.env, target.host, {
-            org_id: orgId,
-            site_id: target.site_id,
-            revision_id: back,
-            config_version: undone.config_version,
-          })
-        )
-      )
-    } else if (failed) {
+      if (undone) {
+        await step.do("pointer after rollback", point)
+        rolledBack = true
+      } else superseded = true
+    } else if (failed && deployment) {
       const why = failed
-      await step.do("alert", () =>
+      const alerted = await step.do("alert", () =>
         run((kit) =>
-          appendAudit(
-            kit,
-            { orgId, assignmentId: target.assignment_id },
-            "alert.raised",
-            {
-              kind: "publish.probe_failed",
-              revision_id: target.revision_id,
-              minute: why.minute,
-              reason: why.reason,
+          kit.withOrg({ orgId }, async (db) => {
+            if (
+              !(await stillLive(
+                db,
+                orgId,
+                target,
+                deployment.deployment_id,
+                "alert"
+              ))
+            ) {
+              return false
             }
-          )
+            await appendEvent(db, {
+              orgId,
+              assignmentId: target.assignment_id,
+              staffId: null,
+              type: "alert.raised",
+              payload: {
+                kind: why.not_served
+                  ? "publish.not_served"
+                  : "publish.probe_failed",
+                revision_id: target.revision_id,
+                minute: why.minute,
+                reason: why.reason,
+                ...(why.not_served ? { served: why.not_served } : {}),
+              },
+            })
+            return true
+          })
         )
       )
+      if (!alerted) superseded = true
     }
 
     // Retention (ADR-031), after the probes and any rollback so the active
@@ -709,7 +788,15 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       run((kit) => redriveQueued(this.env, kit, orgId))
     )
     return {
-      outcome: failed ? "rolled_back" : "published",
+      outcome: superseded
+        ? "superseded"
+        : !failed
+          ? "published"
+          : failed.not_served
+            ? "unconfirmed"
+            : rolledBack
+              ? "rolled_back"
+              : "alerted",
       revision_id: target.revision_id,
       redriven,
     }
