@@ -329,4 +329,68 @@ describe("the bridge", () => {
     )
     expect(removed).toHaveBeenCalledWith("abort", expect.any(Function))
   })
+
+  it.each([
+    [
+      "a timeout",
+      () => new Promise<never>(() => undefined),
+      "orchestrator.timeout",
+    ],
+    [
+      "a rejected call",
+      () => Promise.reject(new TypeError("Network connection lost.")),
+      "orchestrator.unavailable",
+    ],
+    [
+      "a bare 500",
+      async () => new Response("upstream broke", { status: 500 }),
+      "orchestrator.unavailable",
+    ],
+    [
+      "an enveloped 5xx",
+      async () =>
+        Response.json(
+          {
+            class: "provider",
+            code: "sandbox.down",
+            message: "Down.",
+            detail: {},
+            occurred_at: new Date().toISOString(),
+          },
+          { status: 502 }
+        ),
+      "sandbox.down",
+    ],
+  ] as const)(
+    "logs %s by its code, route and build, and nothing else",
+    async (_name, answer, code) => {
+      const timeout = AbortSignal.timeout.bind(AbortSignal)
+      const spy = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockImplementation(() => timeout(20))
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        await bridge(
+          { ORCHESTRATOR: { fetch: answer } } as unknown as Env,
+          owner,
+          `/${A}/cancel`,
+          { key: "k" }
+        )
+        expect(logged.mock.calls).toEqual([
+          [
+            JSON.stringify({
+              code,
+              route: "/assignments/:id/cancel",
+              assignment_id: A,
+            }),
+          ],
+        ])
+      } finally {
+        logged.mockRestore()
+        spy.mockRestore()
+      }
+    }
+  )
 })

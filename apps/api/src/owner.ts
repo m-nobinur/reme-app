@@ -143,7 +143,7 @@ export async function bridge(
   if (init.key) headers.set("idempotency-key", init.key)
   if (init.body !== undefined) headers.set("content-type", "application/json")
   const signal = init.signal ?? AbortSignal.timeout(BRIDGE_TIMEOUT_MS)
-  return within(
+  const result = await within(
     signal,
     async () => {
       const response = await env.ORCHESTRATOR.fetch(
@@ -161,6 +161,25 @@ export async function bridge(
       }
     },
     () => unreachable("orchestrator.timeout")
+  )
+  if (result.status >= 500) unknownOutcome(path, result)
+  return result
+}
+
+/**
+ * A call whose outcome nobody knows, logged by its code, the orchestrator
+ * route and the build it named, and nothing else. ADR-034's triggers read
+ * these, the first `orchestrator.timeout` on a replace among them.
+ */
+function unknownOutcome(path: string, result: Bridged) {
+  const refusal = ErrorEnvelope.safeParse(result.body)
+  const [, id, verb] = path.split("/")
+  console.error(
+    JSON.stringify({
+      code: refusal.success ? refusal.data.code : "orchestrator.unavailable",
+      route: verb ? `/assignments/:id/${verb}` : "/assignments/",
+      assignment_id: id || null,
+    })
   )
 }
 
@@ -195,9 +214,10 @@ function relay(result: Bridged, parse: (body: unknown) => unknown): Response {
       detail: {},
     })
   }
-  if (refusal.success) return unknown(refusal.data.code)
-  noted("orchestrator.unavailable", result.status)
-  return unknown("orchestrator.unavailable")
+  // Logged by `bridge`, which knows the route.
+  return unknown(
+    refusal.success ? refusal.data.code : "orchestrator.unavailable"
+  )
 }
 
 /** An outcome nobody can vouch for, under the code that says why. */

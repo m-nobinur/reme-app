@@ -656,6 +656,14 @@ it("sends a change in the owner's words, and says why one is refused", async () 
   })
 })
 
+it("says a cancelled change was cancelled, not that the page is stale", async () => {
+  answers["POST /changes"] = refusal(409, "change.cancelled")
+  expect(await apiSource.requestChange(ORG, "Bigger logo", "k-3")).toEqual({
+    done: false,
+    reason: "That change was cancelled. Ask for it again.",
+  })
+})
+
 it("lists, fetches and creates conversations over the contract", async () => {
   answers["GET /conversations"] = { conversations: [conversation] }
   answers[`GET /conversations/${CONVERSATION}`] = conversation

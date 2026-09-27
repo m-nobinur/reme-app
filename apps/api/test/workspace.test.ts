@@ -11,13 +11,22 @@ import {
   approvals as approvalRows,
   assignments,
   eq,
+  sql,
   staff,
   steerKeyHash,
   supersedeFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { startChange } from "../src/owner.ts"
 import { readQuestions, readWorkspace } from "../src/workspace.ts"
 import {
@@ -532,6 +541,20 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   })
 
   describe("changes", () => {
+    // Every case here builds on an org with nothing unfinished, so a case
+    // that fails before its own clean-up must not leave a build behind for
+    // the next one to route around.
+    afterEach(() =>
+      kit.withOrg({ orgId: changes.orgId }, (db) =>
+        db
+          .update(assignments)
+          .set({ state: "cancelled", updatedAt: new Date() })
+          .where(
+            sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+          )
+      )
+    )
+
     const creating = (who: Owner) =>
       stubOrchestrator(async (request) => {
         if (/\/(reject|cancel)$/.test(new URL(request.url).pathname)) {
