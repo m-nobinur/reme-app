@@ -1,6 +1,12 @@
-import { supersedeFact, type Tenancy, tenancy, waitedOn } from "@workspace/db"
+import {
+  appendEvent,
+  supersedeFact,
+  type Tenancy,
+  tenancy,
+  waitedOn,
+} from "@workspace/db"
 import { afterAll, describe, expect, it } from "vitest"
-import { advance, appendEvent } from "../src/state.ts"
+import { advance } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
 
 // `waitedOn` against a database: which question a build waits on, as the

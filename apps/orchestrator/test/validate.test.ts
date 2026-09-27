@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { CompletionReport, InformationAnswer } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -13,7 +14,7 @@ import {
 } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { takeSnapshot } from "../src/brief.ts"
-import { advance, appendEvent } from "../src/state.ts"
+import { advance } from "../src/state.ts"
 import { validateRevision } from "../src/validate.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
 

@@ -323,6 +323,9 @@ importers:
       postgres:
         specifier: 3.4.9
         version: 3.4.9
+      ulid:
+        specifier: 3.0.2
+        version: 3.0.2
     devDependencies:
       '@types/node':
         specifier: ^22

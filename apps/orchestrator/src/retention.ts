@@ -1,4 +1,5 @@
 import {
+  appendEvent,
   approvals,
   assignments,
   events,
@@ -8,13 +9,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { activeDeployment, redriveQueued } from "./publish.ts"
-import {
-  appendEvent,
-  lockRow,
-  retireAfter,
-  TransitionError,
-  transition,
-} from "./state.ts"
+import { lockRow, retireAfter, TransitionError, transition } from "./state.ts"
 
 /**
  * Retention (ADR-031, ADR-032): two revisions per site stay, the rest are
