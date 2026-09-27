@@ -21,7 +21,6 @@ import {
   assignments,
   eq,
   type OrgScopedDb,
-  sql,
   supersedeFact,
   type Tenancy,
   toAssignment,
@@ -44,7 +43,6 @@ import {
   readApprovals,
   readBuilds,
   readFacts,
-  readQuestions,
   readSite,
   readWorkspace,
   unchanged,
@@ -451,34 +449,21 @@ export async function startChange(
   }
 }
 
-type Given = { answer: unknown; value: unknown } | null
-
 /**
  * Whether the org holds this row. RLS answers: another org's id finds
- * nothing. Given a `requestId`, also the answer it already has, if any,
- * with the fact value that answer wrote.
+ * nothing.
  */
 async function holds(
   kit: Tenancy,
   orgId: string,
   table: typeof assignments | typeof approvals,
-  id: string,
-  requestId?: string
-): Promise<{ assignmentId: string | null; given?: Given } | null> {
+  id: string
+): Promise<{ assignmentId: string | null } | null> {
   if (!Uuid.safeParse(id).success) return null
   const [row] = await kit.withOrg({ orgId }, (db) =>
     table === assignments
       ? db
-          .select({
-            assignmentId: assignments.id,
-            ...(requestId === undefined
-              ? {}
-              : {
-                  // Written out: in a one-table select drizzle drops the
-                  // table name.
-                  given: sql<Given>`(select json_build_object('answer', e.payload, 'value', f.value) from events e left join facts f on f.id = (e.payload->>'fact_id')::uuid where e.assignment_id = assignments.id and e.type = 'information.answered' and e.payload->>'request_id' = ${requestId} limit 1)`,
-                }),
-          })
+          .select({ assignmentId: assignments.id })
           .from(assignments)
           .where(eq(assignments.id, id))
       : db
@@ -507,39 +492,12 @@ async function buildAction(
     if (!parsed.success) return invalid(parsed.error.issues)
     body = parsed.data
   }
-  const found = await holds(kit, owner.orgId, assignments, id, body?.request_id)
+  // Which question an answer may reach, and whether it repeats one already
+  // given, is the orchestrator's to say, under the build's row lock. Whether
+  // the org holds the build is checked here, so another org's id never
+  // reaches the binding (the tenancy gate holds that).
+  const found = await holds(kit, owner.orgId, assignments, id)
   if (!found) return notFound("assignment")
-  // ponytail: checked here and written by the orchestrator, so two answers
-  // sent at the same moment can both pass. The orchestrator's state check
-  // narrows it to the moment before the Workflow wakes.
-  if (found.given) {
-    // The same answer again is a retry, and gets the first one's receipt.
-    const receipt = InformationAnswer.safeParse(found.given.answer)
-    if (receipt.success && canon(found.given.value) === canon(body?.value)) {
-      return Response.json(receipt.data, { status: 202 })
-    }
-    return failure(409, {
-      class: "validation",
-      code: "answer.already_given",
-      message: "That question has been answered.",
-      detail: { request_id: body?.request_id ?? null },
-    })
-  }
-  // Only the question the build waits on, the one `/workspace` shows: an
-  // earlier question the build moved past is not there to answer.
-  if (body) {
-    const [waiting] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-      readQuestions(db, id)
-    )
-    if (waiting?.request.request_id !== body.request_id) {
-      return failure(404, {
-        class: "resource",
-        code: "request.not_found",
-        message: "This build is not waiting on that question.",
-        detail: { request_id: body.request_id },
-      })
-    }
-  }
   const result = await bridge(env, owner, `/${id}/${action}`, {
     method: method === "GET" ? "GET" : "POST",
     body,

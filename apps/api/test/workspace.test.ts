@@ -9,7 +9,7 @@ import {
 } from "@workspace/contracts"
 import { eq, staff, supersedeFact, type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { readWorkspace } from "../src/workspace.ts"
+import { readQuestions, readWorkspace } from "../src/workspace.ts"
 import {
   type Owner,
   owner,
@@ -294,6 +294,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const asked = question(resumed, build)
     await r.event(build, "information.requested", asked)
     await r.blocked(build, asked.request_id, 3)
+    // Asked later and never blocked on: not the question the build waits on.
+    await r.event(
+      build,
+      "information.requested",
+      question(resumed, build, "business.email")
+    )
     await r.transition(build, "blocked_on_information", "paused", 4)
     await r.transition(build, "paused", "blocked_on_information", 5)
     const body = WorkspaceStatus.parse(await (await workspace(resumed)).json())
@@ -855,31 +861,30 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(body.code).toBe("orchestrator.off_contract")
     })
 
-    it("refuses an answer to a question the build no longer waits on", async () => {
-      const twice = await owner(kit, url as string, "stale")
-      const t = seed(kit, twice)
-      const build = await t.assignment("blocked_on_information")
-      const first = question(twice, build)
-      const second = question(twice, build)
-      await t.event(build, "information.requested", first)
-      await t.blocked(build, first.request_id, 3)
-      await t.event(build, "information.requested", second)
-      await t.blocked(build, second.request_id, 5)
-      const stub = stubOrchestrator()
-      const stale = await twice.call(
+    // Which question an answer reaches, and whether it repeats one, is the
+    // orchestrator's call under the build's row lock. The api only relays it.
+    const refusal = (status: number, code: string) => () =>
+      Response.json(
+        {
+          class: status === 404 ? "resource" : "validation",
+          code,
+          message: "The orchestrator refused.",
+          detail: {},
+          occurred_at: new Date().toISOString(),
+        },
+        { status }
+      )
+
+    it("relays the builder's refusal of a question the build no longer waits on", async () => {
+      const stub = stubOrchestrator(refusal(404, "request.not_found"))
+      const stale = await asker.call(
         stub,
-        `/builds/${build}/answer`,
-        json({ request_id: first.request_id, value: "x" })
+        `/builds/${askIds.asking}/answer`,
+        json({ request_id: askIds.answered, value: "x" })
       )
       expect(stale.status).toBe(404)
       expect(ErrorEnvelope.parse(await stale.json()).code).toBe(
         "request.not_found"
-      )
-      expect(stub.calls).toHaveLength(0)
-      await twice.call(
-        stub,
-        `/builds/${build}/answer`,
-        json({ request_id: second.request_id, value: "x" })
       )
       expect(stub.calls).toHaveLength(1)
     })
@@ -911,8 +916,18 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       )
     })
 
-    it("replays an answer given again with the same value", async () => {
-      const stub = stubOrchestrator()
+    it("sends an answer given again to the builder, which replays it", async () => {
+      const receipt = {
+        answer_id: crypto.randomUUID(),
+        org_id: asker.orgId,
+        assignment_id: askIds.asking,
+        request_id: askIds.answered,
+        fact_id: crypto.randomUUID(),
+        answered_at: new Date().toISOString(),
+      }
+      const stub = stubOrchestrator(() =>
+        Response.json(receipt, { status: 202 })
+      )
       const response = await asker.call(
         stub,
         `/builds/${askIds.asking}/answer`,
@@ -922,9 +937,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         })
       )
       expect(response.status).toBe(202)
-      const answer = InformationAnswer.parse(await response.json())
-      expect(answer.request_id).toBe(askIds.answered)
-      expect(stub.calls).toHaveLength(0)
+      expect(InformationAnswer.parse(await response.json())).toEqual(receipt)
+      expect(stub.calls).toHaveLength(1)
     })
 
     it("answers 502 when the builder fails outside the envelope", async () => {
@@ -943,8 +957,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       ])
     })
 
-    it("refuses a different answer to a question already answered", async () => {
-      const stub = stubOrchestrator()
+    it("relays the builder's refusal of a different answer to an answered question", async () => {
+      const stub = stubOrchestrator(refusal(409, "answer.already_given"))
       const response = await asker.call(
         stub,
         `/builds/${askIds.asking}/answer`,
@@ -954,7 +968,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(ErrorEnvelope.parse(await response.json()).code).toBe(
         "answer.already_given"
       )
-      expect(stub.calls).toHaveLength(0)
+      expect(stub.calls).toHaveLength(1)
     })
 
     it("needs an idempotency key to answer or cancel", async () => {
@@ -1007,5 +1021,48 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(response.status).toBe(404)
       expect(stub.calls).toHaveLength(0)
     })
+  })
+})
+
+describe("the questions on /workspace", () => {
+  // The query leaves answered questions out and sorts by when each was asked,
+  // then by build (packages/db's own tests hold it to that); readQuestions
+  // takes its rows as they come.
+  it("reads every blocked build's question in one query, in the query's order", async () => {
+    const request = (n: number) => ({
+      request_id: crypto.randomUUID(),
+      org_id: crypto.randomUUID(),
+      assignment_id: crypto.randomUUID(),
+      requested_by_staff_id: crypto.randomUUID(),
+      field: "business.parking",
+      why: "The contact page names where to park.",
+      answer_schema: { type: "string" },
+      options: null,
+      blocking: true,
+      requested_at: `2026-09-2${n}T09:00:00.000Z`,
+      expires_at: null,
+    })
+    // Whatever order the rows arrive in is the one shown; no second sort.
+    const [first, second] = [request(7), request(5)]
+    const rows = [first, second].map((asked) => ({
+      assignment_id: asked.assignment_id,
+      request: asked,
+      answer: null,
+      value: null,
+      fact_id: null,
+    }))
+    const queries: unknown[] = []
+    const db = {
+      execute: async (query: unknown) => {
+        queries.push(query)
+        return rows
+      },
+    }
+    const questions = await readQuestions(db as never)
+    expect(queries).toHaveLength(1)
+    expect(questions.map((q) => q.request.request_id)).toEqual([
+      first.request_id,
+      second.request_id,
+    ])
   })
 })
