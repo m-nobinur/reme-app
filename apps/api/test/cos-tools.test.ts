@@ -212,6 +212,35 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       }
     )
 
+    it("shows an org with nothing yet an empty workspace", async () => {
+      const fresh = await owner(kit, url as string, "cos-empty")
+      const output = kept(
+        "get_workspace",
+        await getWorkspace(context(fresh), {})
+      )
+      expect(output).toEqual({
+        site: { host: null, live_version: null },
+        builds: [],
+        questions: [],
+        approvals: [],
+        missing_facts: expect.any(Array),
+      })
+      expect(output.missing_facts.length).toBeGreaterThan(0)
+    })
+
+    it("cuts a why at a character, never through one", async () => {
+      const s = seed(kit, me)
+      const asking = await s.assignment("blocked_on_information")
+      const request = {
+        ...question(me, asking),
+        why: `${"x".repeat(499)}\u{1F600}tail`,
+      }
+      await s.event(asking, "information.requested", request)
+      await s.blocked(asking, request.request_id, 4)
+      const output = kept("get_workspace", await getWorkspace(context(me), {}))
+      expect(output.questions[0]?.why).toBe("x".repeat(499))
+    })
+
     it("shows another org nothing of this one's", async () => {
       const s = seed(kit, me)
       const mine = await s.assignment("queued")
@@ -670,6 +699,32 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(
         stub.calls.map((c) => c.request.headers.get("idempotency-key"))
       ).toEqual([approval, approval])
+      await s.state(asking, "cancelled")
+    })
+
+    it("throws, never refuses, on a bare 500 from the orchestrator", async () => {
+      const { s, asking, waited } = await blocked(me)
+      const stub = stubOrchestrator(
+        () => new Response("upstream broke", { status: 500 })
+      )
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      let failed: unknown
+      try {
+        failed = await answerQuestion(
+          context(me, stub),
+          { request_id: waited.request_id, value: PHONE },
+          crypto.randomUUID()
+        ).catch((error: unknown) => error)
+      } finally {
+        logged.mockRestore()
+      }
+      expect(failed).toBeInstanceOf(ToolFailed)
+      expect(failed).toMatchObject({
+        status: 503,
+        error: { class: "transient", code: "orchestrator.unavailable" },
+      })
       await s.state(asking, "cancelled")
     })
 

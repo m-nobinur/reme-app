@@ -59,6 +59,16 @@ type Refused = Extract<GetPreviewOutput, { outcome: "refused" }>
 /** Another agent's text, and any message, is capped where the model reads it. */
 const TEXT_MAX = 500
 
+/**
+ * `text` in at most `TEXT_MAX` UTF-16 units, the unit the contracts count.
+ * A cut through a surrogate pair drops its first half, since a lone
+ * surrogate is not well-formed and some providers refuse the JSON.
+ */
+export function cut(text: string): string {
+  const head = text.slice(0, TEXT_MAX)
+  return /[\uD800-\uDBFF]$/.test(head) ? head.slice(0, -1) : head
+}
+
 /** A call whose outcome nobody can vouch for, cut to what a log may hold. */
 export class ToolFailed extends Error {
   constructor(
@@ -78,7 +88,7 @@ async function refused(response: Response): Promise<Refused> {
   const error = {
     class: envelope.class,
     code: envelope.code,
-    message: envelope.message.slice(0, TEXT_MAX),
+    message: cut(envelope.message),
   }
   if (response.status >= 500) throw new ToolFailed(response.status, error)
   return { outcome: "refused", error }
@@ -126,8 +136,8 @@ export async function getWorkspace(
       .slice(0, 10)
       .map((r) => ({
         request_id: r.request_id,
-        field: r.field.slice(0, TEXT_MAX),
-        why: r.why.slice(0, TEXT_MAX),
+        field: cut(r.field),
+        why: cut(r.why),
         options: optionsOf(r.request_id, r.options),
         blocking: r.blocking,
       })),
