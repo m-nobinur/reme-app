@@ -97,8 +97,11 @@ const DELETE_BATCH = 1000
  * passed, and it is neither what the site serves nor what a rollback would
  * restore. Everything under `sites/{site}/{rev}/` goes, the source snapshot
  * included: a revise restores from the published revision, never a retired
- * one (ADR-031). One event names the keys; an empty prefix appends nothing,
- * so a second run deletes nothing and says nothing.
+ * one (ADR-031). One event names the keys. An empty prefix appends one only
+ * when the revision has none yet: a run cut off after its deletes and before
+ * its event (the idle limit, a lost connection) would otherwise leave the
+ * revision due, and listed, for good. A second run deletes nothing and says
+ * nothing.
  */
 export async function deleteRevisionFiles(
   sites: Deletable,
@@ -128,7 +131,14 @@ export async function deleteRevisionFiles(
   for (let i = 0; i < keys.length; i += DELETE_BATCH) {
     await sites.delete(keys.slice(i, i + DELETE_BATCH))
   }
-  if (keys.length > 0) {
+  const settled =
+    keys.length === 0 &&
+    (
+      await db.execute(
+        sql`select 1 from ${events} where ${events.type} = 'revision.files_deleted' and ${events.payload}->>'revision_id' = ${revision.id}::text limit 1`
+      )
+    ).length > 0
+  if (!settled) {
     await appendEvent(db, {
       orgId: revision.orgId,
       assignmentId: revision.assignmentId,

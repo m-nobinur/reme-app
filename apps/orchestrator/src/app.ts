@@ -12,6 +12,7 @@ import {
   eq,
   events,
   facts,
+  failureCode,
   orgs,
   resolveOrgBySlug,
   siteRevisions,
@@ -1314,7 +1315,7 @@ const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
   console.error(
     JSON.stringify({
       at: new URL(c.req.url).pathname,
-      code: (error as { code?: string }).code ?? error.name,
+      code: failureCode(error),
     })
   )
   return failure(c, 503, {

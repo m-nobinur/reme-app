@@ -10,6 +10,7 @@ import {
   assignments,
   eq,
   facts,
+  failureCode,
   listOrgIds,
   type Tenancy,
   tenancy,
@@ -649,9 +650,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
     let superseded = !deployment
     const point = () =>
       run((kit) =>
-        kit.withOrg({ orgId }, (db) =>
-          writePointer(this.env, db, orgId, target.site_id, target.host)
-        )
+        writePointer(this.env, kit, orgId, target.site_id, target.host)
       )
     if (deployment) await step.do("pointer", point)
 
@@ -896,8 +895,7 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
                 JSON.stringify({
                   sweep: event.payload.hour,
                   org_id: orgId,
-                  code:
-                    (error as { code?: string }).code ?? (error as Error).name,
+                  code: failureCode(error),
                 })
               )
             }

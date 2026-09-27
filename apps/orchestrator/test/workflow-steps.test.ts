@@ -93,6 +93,7 @@ vi.mock("@workspace/db", () => ({
       },
     ]
   },
+  failureCode: () => "unknown",
   toFactRecord: (row: unknown) => ({
     ...(row as object),
     key: "business.phone",

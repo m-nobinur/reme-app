@@ -18,8 +18,10 @@ export type {
 // repo is a decision someone makes rather than whatever happens to be exported.
 export {
   closeTenancy,
+  failureCode,
   listOrgIds,
   ORG_SETTING,
+  pgCode,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,

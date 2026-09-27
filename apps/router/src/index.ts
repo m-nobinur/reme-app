@@ -5,7 +5,13 @@ import {
   SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
-import { deployments, resolveOrgBySlug, sql, tenancy } from "@workspace/db"
+import {
+  deployments,
+  failureCode,
+  resolveOrgBySlug,
+  sql,
+  tenancy,
+} from "@workspace/db"
 import { resolveSitePath } from "@workspace/gates"
 import {
   PREVIEW_COOKIE,
@@ -432,7 +438,7 @@ app.onError((error, c) => {
   console.error(
     JSON.stringify({
       host: new URL(c.req.url).hostname,
-      code: (error as { code?: string }).code ?? error.name,
+      code: failureCode(error),
     })
   )
   return envelope(c, 503, {

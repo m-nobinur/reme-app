@@ -23,7 +23,9 @@ import * as schema from "./schema.ts"
  * and no type error. See `revocable` below for why that used to be worse than
  * useless and what closes it.
  *
- * Two things happen inside the transaction and both have to be transaction-local.
+ * Two statements open the transaction, the role and then four settings (the
+ * org, the user and two time limits), and every one of them has to be
+ * transaction-local.
  */
 
 /**
@@ -85,10 +87,11 @@ export type TenantContext = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
- * The two statements that open a tenant-scoped transaction, built here rather
- * than inline so the suite can assert their shape without a database.
+ * The two statements that open a tenant-scoped transaction, the role and the
+ * four settings, built here rather than inline so the suite can assert their
+ * shape without a database.
  *
- * Both are `LOCAL`, and on a direct connection that is unobservable: a session
+ * All are `LOCAL`, and on a direct connection that is unobservable: a session
  * setting and a transaction setting read back identically when no proxy is
  * reassigning backends underneath. The difference only appears through a
  * transaction pooler, which is why `tenancy/pooler.test.ts` measures it against
@@ -96,13 +99,32 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  */
 export const ENTER_APP_ROLE = sql.raw(`set local role ${APP_ROLE}`)
 
+/** The two limits `setContext` sets, each changed here and nowhere else. */
+export const LIMITS = { statement: "5s", idle: "15s" } as const
+
 /**
- * Both settings in one statement, so the second GUC costs no extra round trip.
- * `is_local = true` is the third argument, and it is the whole story.
+ * The org and user settings in one statement, so the second GUC costs no extra
+ * round trip. `is_local = true` is the third argument, and it is the whole
+ * story.
+ *
+ * The same statement sets the two limits every tenant transaction runs under
+ * (ADR-034), local for the same reason: Hyperdrive pools per transaction and
+ * `RESET`s a connection on its way back, so neither a session setting nor a
+ * startup parameter reaches the next transaction on that backend. A statement
+ * that runs past `LIMITS.statement` is cancelled with 57014. A transaction
+ * left idle past `LIMITS.idle`, which is a call to something other than the
+ * database made while it holds a lock, has its session ended: the server's
+ * 25P03 arrives while no query is waiting, so the caller sees the driver's
+ * `CONNECTION_CLOSED` on its next statement instead.
+ * Both are guesses, and ADR-034 names the measurement that replaces each. The
+ * three resolvers below do not set them: each runs one statement, and setting
+ * a limit first would cost a round trip on every request.
  */
 export const setContext = (ctx: TenantContext) =>
   sql`select set_config(${ORG_SETTING}, ${ctx.orgId}, true),
-             set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true)`
+             set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true),
+             set_config('statement_timeout', ${LIMITS.statement}, true),
+             set_config('idle_in_transaction_session_timeout', ${LIMITS.idle}, true)`
 
 /**
  * Wraps the transaction handle so it stops working the moment `withOrg`
@@ -191,6 +213,33 @@ async function run<T>(
       revoke()
     }
   })
+}
+
+/**
+ * The code a failed statement carries: Postgres's SQLSTATE (57014 for the
+ * statement limit) or the driver's own (`CONNECTION_CLOSED` for the idle
+ * limit, measured in `tenancy/rls.test.ts`). drizzle wraps the driver's
+ * error, so the code can be on the cause. Null when neither has one.
+ */
+export function pgCode(error: unknown): string | null {
+  const { code, cause } = (error ?? {}) as {
+    code?: unknown
+    cause?: { code?: unknown }
+  }
+  for (const found of [code, cause?.code]) {
+    if (typeof found === "string") return found
+  }
+  return null
+}
+
+/**
+ * What a catch-all logs for an error it answers: the code `pgCode` finds, or
+ * else the error's class, so a failure that is not the database's still says
+ * what it was. `unknown` only when there is neither.
+ */
+export function failureCode(error: unknown): string {
+  const name = (error as { name?: unknown } | null | undefined)?.name
+  return pgCode(error) ?? (typeof name === "string" ? name : "unknown")
 }
 
 /**
