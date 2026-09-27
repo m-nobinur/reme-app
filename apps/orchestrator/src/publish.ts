@@ -358,6 +358,8 @@ export type Activation = {
   /** The assignment a publish moves to `published`; a rollback moves none. */
   assignmentId?: string
   reason?: string
+  /** The revision that must still be live, or nothing is activated: a rollback names the one it replaces. */
+  over?: string
 }
 
 /**
@@ -366,15 +368,43 @@ export type Activation = {
  * for a publish the assignment moved to `published`. Retried after its
  * commit it finds the row it wrote and returns it. `reme_app` cannot update
  * or delete a deployment, so a race is an insert conflict, which is
- * transient and retried.
+ * transient and retried. With `over`, a newer version live in its place
+ * means null and a `publish.superseded` event: the config version read here
+ * is the one the insert takes, so the check cannot go stale.
  */
 export async function activate(
   db: OrgScopedDb,
   orgId: string,
+  input: Activation & { over?: undefined }
+): Promise<DeploymentRow>
+export async function activate(
+  db: OrgScopedDb,
+  orgId: string,
   input: Activation
-): Promise<DeploymentRow> {
+): Promise<DeploymentRow | null>
+export async function activate(
+  db: OrgScopedDb,
+  orgId: string,
+  input: Activation
+): Promise<DeploymentRow | null> {
   const active = await activeDeployment(db, input.siteId)
   if (active?.revisionId === input.revisionId) return active
+  if (input.over && active?.revisionId !== input.over) {
+    await appendEvent(db, {
+      orgId,
+      assignmentId: null,
+      staffId: null,
+      type: "publish.superseded",
+      payload: {
+        site_id: input.siteId,
+        revision_id: input.over,
+        live_revision_id: active?.revisionId ?? null,
+        kind: input.kind,
+        reason: input.reason ?? null,
+      },
+    })
+    return null
+  }
   let inserted: DeploymentRow | undefined
   try {
     ;[inserted] = await db

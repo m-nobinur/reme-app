@@ -196,15 +196,24 @@ export const eventsOf = (
       )
   )
 
-/** A recording step: names in order, every callback run at once, sleeps skipped. */
-export function fakeStep(names: string[]) {
+/**
+ * A recording step: names in order, every callback run at once, sleeps
+ * skipped. `before` runs something else first, such as another publish
+ * landing while this one sleeps.
+ */
+export function fakeStep(
+  names: string[],
+  before: Record<string, () => Promise<unknown>> = {}
+) {
   return {
     do: async (name: string, a: unknown, b?: unknown) => {
+      await before[name]?.()
       names.push(name)
       const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>
       return fn()
     },
     sleep: async (name: string) => {
+      await before[name]?.()
       names.push(name)
     },
   } as never
