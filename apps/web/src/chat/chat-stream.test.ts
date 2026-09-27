@@ -505,7 +505,9 @@ const SETTLED = [
 /**
  * How the api answers the results turn. The model: the settled calls right
  * after `start`, then its own steps, here a reply and a last step that is a
- * read at the step limit. The fallback: a new step, then the settled calls.
+ * read at the step limit. The fallback: a new step, then the settled calls,
+ * so its last step is empty and the SDK's own checks never send again; only
+ * the model's answer can show the owner-result check at work.
  */
 const RESOLVED = {
   "the model": frames(
@@ -611,6 +613,27 @@ it("the question card holds its yes the same way", async () => {
     chat.querySelector('[data-slot="approval-held"][role="status"]')
       ?.textContent
   ).toBe(HELD)
+})
+
+it("a held not now says so on either card", async () => {
+  const NOT_NOW = "You said not now. Sent once you answer the other cards."
+  const first = await open(COS_HISTORY)
+  await press(first, "Not now")
+  expect(await decided(1)).toEqual([false])
+  expect(changeCard(first)?.querySelector('[role="status"]')?.textContent).toBe(
+    NOT_NOW
+  )
+
+  const second = await open(COS_HISTORY)
+  const question = second.querySelector<HTMLElement>(
+    '[data-slot="approval-request"]'
+  )
+  if (!question) throw new Error("no question card")
+  await act(async () => button(question, "Decline").click())
+  expect(await decided(2)).toEqual([false, false])
+  expect(second.querySelector('[data-slot="approval-held"]')?.textContent).toBe(
+    NOT_NOW
+  )
 })
 
 it("a message typed while a yes is held cancels it, as the api stores it", async () => {

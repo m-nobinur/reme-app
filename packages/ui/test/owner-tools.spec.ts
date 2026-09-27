@@ -67,7 +67,7 @@ test("the change card is one tap either way, and waits for the server", async ({
 }) => {
   await open(page, "RequestChange")
   const cards = page.locator('[data-slot="request-change"]')
-  await expect(cards).toHaveCount(11)
+  await expect(cards).toHaveCount(13)
   const asked = cards.nth(0)
   await expect(asked.getByRole("heading")).toHaveText(
     "Build my website from the details I gave you."
@@ -93,12 +93,17 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(held.getByRole("button", { name: "Approve" })).toBeDisabled()
   await expect(held.getByRole("button", { name: "Starting" })).toHaveCount(0)
   await expect(held.locator('[aria-busy="true"]')).toHaveCount(0)
-  await expect(page.locator('[data-slot="approval-held"]')).toHaveText(HELD)
+  const heldQuestions = page.locator('[data-slot="approval-held"]')
+  await expect(heldQuestions.nth(0)).toHaveText(HELD)
   await expect(
     cards.nth(9).getByRole("button", { name: "Approve" })
   ).toBeEnabled()
+  // And a no, on either card.
+  const NOT_NOW = "You said not now. Sent once you answer the other cards."
+  await expect(cards.nth(10).getByRole("status")).toHaveText(NOT_NOW)
+  await expect(heldQuestions.nth(1)).toHaveText(NOT_NOW)
   // A yes already sent, with no other card in its step, is starting.
-  const sent = cards.nth(10)
+  const sent = cards.nth(12)
   await expect(sent.getByRole("button", { name: "Starting" })).toBeDisabled()
   await expect(sent.getByRole("status")).toHaveCount(0)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)

@@ -416,6 +416,26 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: WAITING,
   },
+  // The same two steps, each held answer a no.
+  {
+    content: [
+      ...(requestChange("held_no", "Add Saturday hours, 9 to 1.", {
+        approved: false,
+      }).content as ToolCallContent[]),
+      answerQuestion("held_no_other", undefined),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      answerQuestion("held_no_question", false),
+      ...(requestChange("held_no_waiting", "Add Saturday hours, 9 to 1.")
+        .content as ToolCallContent[]),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
   // A yes already sent, loaded while its turn runs: no other card waits.
   {
     ...requestChange("sent", "Add Saturday hours, 9 to 1.", { approved: true }),

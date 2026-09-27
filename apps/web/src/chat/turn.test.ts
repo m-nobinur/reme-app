@@ -312,20 +312,22 @@ it("waits for every card in the step, then sends them as one turn", () => {
 })
 
 it("never sends a step the server finished by itself", () => {
-  // A read at the step cap, and a results turn the fallback resolved with no
-  // step after it: every call has its output, and none of it is the owner's.
-  for (const parts of [
-    [read],
-    [
-      read,
-      change("output-available", {
-        approval: { id: "appr_1", approved: true },
-        output: { outcome: "refused" },
-      }),
-    ],
-  ]) {
-    expect(sendsOn({ messages: [assistant(...parts)] })).toBe(false)
-  }
+  const settled = change("output-available", {
+    approval: { id: "appr_1", approved: true },
+    output: { outcome: "refused" },
+  })
+  // A results turn the model answered and ended on a read at its step
+  // limit: the last step's only call is the read, which has its output.
+  // This is the case the owner-result check exists for.
+  expect(
+    sendsOn({ messages: [assistant(settled, { type: "step-start" }, read)] })
+  ).toBe(false)
+  // One the fallback answered. `apps/api` opens a new step before the
+  // settled calls and stores it (`stream` and `fallbackTurn` in chat.ts), so
+  // the last step is empty and the SDK's own checks already say no.
+  expect(
+    sendsOn({ messages: [assistant(read, settled, { type: "step-start" })] })
+  ).toBe(false)
 })
 
 afterEach(() => {
