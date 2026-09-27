@@ -119,6 +119,18 @@
                 },
                 "patterns": [
                   {
+                    // Both import conversationMessages, so reaching them from
+                    // here goes round the ban above, and chat.ts will import
+                    // this directory. Shared helpers live in ../http.ts.
+                    "group": [
+                      "../chat",
+                      "../chat.ts",
+                      "../conversations",
+                      "../conversations.ts"
+                    ],
+                    "message": "cos/ must not import chat.ts or conversations.ts: both read conversation_messages (ADR-034), and chat.ts will import cos/. Take shared helpers from ../http.ts."
+                  },
+                  {
                     "group": ["**/packages/*/**"],
                     "message": "Import a package by name. A relative path into another package skips its exports and this check."
                   },

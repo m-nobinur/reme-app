@@ -17,6 +17,9 @@ const BANNED =
   'import { conversationMessages } from "@workspace/db"\n\nexport const x = conversationMessages\n'
 const ALLOWED =
   'import { events } from "@workspace/db"\n\nexport const x = events\n'
+/** A module that imports `from`, in the shape the rule reads. */
+const importing = (from: string) =>
+  `import { x } from "${from}"\n\nexport const y = x\n`
 
 let dir = ""
 
@@ -59,6 +62,11 @@ beforeAll(() => {
     "apps/api/src/cos/banned.ts": BANNED,
     "apps/api/src/cos/allowed.ts": ALLOWED,
     "apps/api/src/outside.ts": BANNED,
+    "apps/api/src/cos/chat.ts": importing("../chat.ts"),
+    "apps/api/src/cos/chat-bare.ts": importing("../chat"),
+    "apps/api/src/cos/conversations.ts": importing("../conversations.ts"),
+    "apps/api/src/cos/http.ts": importing("../http.ts"),
+    "apps/api/src/owner.ts": importing("./chat.ts"),
   }
   for (const [path, source] of Object.entries(probes)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
@@ -69,7 +77,12 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe("the conversationMessages ban in cos/", () => {
-  it("fails lint on the import inside cos/ and nowhere else", () => {
-    expect(flagged()).toEqual(["apps/api/src/cos/banned.ts"])
+  it("fails lint on the table's import, and on the modules that import it, inside cos/ only", () => {
+    expect(flagged()).toEqual([
+      "apps/api/src/cos/banned.ts",
+      "apps/api/src/cos/chat-bare.ts",
+      "apps/api/src/cos/chat.ts",
+      "apps/api/src/cos/conversations.ts",
+    ])
   })
 })
