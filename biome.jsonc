@@ -123,16 +123,21 @@
                 },
                 "patterns": [
                   {
-                    // Both import conversationMessages, so reaching them from
-                    // here goes round the ban above, and chat.ts will import
-                    // this directory. Shared helpers live in ../http.ts.
+                    // Each imports conversationMessages or a module that does,
+                    // so reaching them from here goes round the ban above, and
+                    // chat.ts will import this directory. The change path lives
+                    // in ../changes.ts and shared helpers in ../http.ts.
                     "group": [
                       "../chat",
                       "../chat.ts",
                       "../conversations",
-                      "../conversations.ts"
+                      "../conversations.ts",
+                      "../owner",
+                      "../owner.ts",
+                      "../org",
+                      "../org.ts"
                     ],
-                    "message": "cos/ must not import chat.ts or conversations.ts: both read conversation_messages (ADR-034), and chat.ts will import cos/. Take shared helpers from ../http.ts."
+                    "message": "cos/ must not import chat.ts, conversations.ts, owner.ts or org.ts: each reaches conversation_messages (ADR-034), and chat.ts will import cos/. Take the change path from ../changes.ts and shared helpers from ../http.ts."
                   },
                   {
                     "group": ["**/packages/*/**"],

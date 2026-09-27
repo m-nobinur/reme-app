@@ -72,6 +72,9 @@ beforeAll(() => {
     "apps/api/src/cos/chat-bare.ts": importing("../chat"),
     "apps/api/src/cos/conversations.ts": importing("../conversations.ts"),
     "apps/api/src/cos/http.ts": importing("../http.ts"),
+    "apps/api/src/cos/owner.ts": importing("../owner.ts"),
+    "apps/api/src/cos/org-bare.ts": importing("../org"),
+    "apps/api/src/cos/changes.ts": importing("../changes.ts"),
     "apps/api/src/owner.ts": importing("./chat.ts"),
   }
   for (const [path, source] of Object.entries(probes)) {
@@ -90,6 +93,8 @@ describe("the conversationMessages ban in cos/", () => {
       "apps/api/src/cos/chat-bare.ts",
       "apps/api/src/cos/chat.ts",
       "apps/api/src/cos/conversations.ts",
+      "apps/api/src/cos/org-bare.ts",
+      "apps/api/src/cos/owner.ts",
       "apps/api/src/cos/schema.ts",
     ])
   })
