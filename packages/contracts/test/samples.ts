@@ -350,6 +350,11 @@ export const samples: Record<ContractName, unknown> = {
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
   },
+  CreateReminderOutput: { outcome: "created", due_at: LATER },
+  CreateReminderRequest: {
+    title: "Call the window cleaner about the Friday slot",
+    due_at: LATER,
+  },
   DecisionRequest: {
     decision: "approved",
     revision_id: REVISION,
@@ -372,6 +377,12 @@ export const samples: Record<ContractName, unknown> = {
       "_astro/index.B3kXq2.css": SHA,
     },
     built_at: NOW,
+  },
+  DerivedReminder: {
+    rule: "approval_expiring",
+    approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
+    version: 4,
+    expires_at: LATER,
   },
   ErrorEnvelope: {
     class: "permission",
@@ -541,6 +552,17 @@ export const samples: Record<ContractName, unknown> = {
     phase: "build",
     metrics: { files_changed: 2, build_seconds: 4.2 },
   },
+  Reminder: {
+    id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+    title: "Send the Saturday price list to the new client",
+    due_at: LATER,
+    done_at: null,
+    source: "assistant",
+    conversation_id: CONVERSATION,
+    created_at: NOW,
+    updated_at: NOW,
+  },
+  ReminderPatch: { done: true },
   RequestChangeOutput: {
     outcome: "started",
     build: {
@@ -688,6 +710,34 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
     missing_facts: ["business.email"],
+    reminders: {
+      notes: [
+        {
+          id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+          title: "Order more microfibre cloths",
+          due_at: null,
+          done_at: null,
+          source: "owner",
+          conversation_id: null,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+      ],
+      derived: [
+        {
+          rule: "approval_expiring",
+          approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
+          version: 4,
+          expires_at: LATER,
+        },
+        {
+          rule: "question_waiting",
+          request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",
+        },
+        { rule: "preview_unpublished", assignment_id: ASSIGNMENT, version: 4 },
+        { rule: "facts_missing", keys: ["business.email"] },
+      ],
+    },
   },
   TextAnswerSchema: { type: "string", maxLength: 254, format: "email" },
   ValidationReport: {

@@ -147,6 +147,7 @@ const workspace = {
   builds: [],
   attention: [approval, question, alert, report],
   missing_facts: [],
+  reminders: { notes: [], derived: [] },
 }
 const staff = {
   staff: [
@@ -499,6 +500,7 @@ it("reads a changed workspace with its tag, builds and missing facts", async () 
       builds: [building],
       attention: [],
       missing_facts: ["business.phone"],
+      reminders: { notes: [], derived: [] },
     },
     { headers: { etag: '"b2"' } }
   )

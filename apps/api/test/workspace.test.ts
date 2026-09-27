@@ -254,6 +254,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
+      reminders: { notes: [], derived: [] },
     })
   })
 

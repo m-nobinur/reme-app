@@ -198,6 +198,72 @@ export const ActivityFeed = z.strictObject({
   items: z.array(z.discriminatedUnion("kind", [ReportItem, AlertItem])).max(50),
 })
 
+/**
+ * A reminder someone wrote down: the owner through `POST /reminders`, or the
+ * Chief of Staff through `create_reminder`. The route sets `source`, so it is
+ * never on a request. `conversation_id` is the conversation an assistant
+ * reminder came from, and null for the owner's own.
+ */
+export const Reminder = z.strictObject({
+  id: Uuid,
+  /**
+   * The owner's text, or the CoS's restatement of it. If it ever reaches a
+   * prompt, it goes in as quoted data, never as instructions.
+   */
+  title: Text(200),
+  due_at: Timestamp.nullable(),
+  done_at: Timestamp.nullable(),
+  source: z.enum(["owner", "assistant"]),
+  conversation_id: Uuid.nullable(),
+  created_at: Timestamp,
+  updated_at: Timestamp,
+})
+
+/**
+ * `POST /reminders`, and the `create_reminder` tool's input. `due_at` is
+ * required and nullable rather than optional, because a provider's strict
+ * tool mode wants every property named in `required`.
+ */
+export const CreateReminderRequest = z.strictObject({
+  title: Reminder.shape.title,
+  due_at: Timestamp.nullable(),
+})
+
+/** `PATCH /reminders/:id`: complete a reminder, or reopen it. */
+export const ReminderPatch = z.strictObject({ done: z.boolean() })
+
+/**
+ * A reminder the api derives from a row that waits on the owner. It carries
+ * facts, never copy: the UI writes the words. It has no id and no done state
+ * of its own, because it clears when the row it points at resolves.
+ *
+ * - `approval_expiring`: a review within 24 hours of its expiry.
+ * - `question_waiting`: a question open for more than 12 hours.
+ * - `preview_unpublished`: a build's preview that was never published.
+ * - `facts_missing`: the required facts still to ask for, as `missing_facts`.
+ */
+export const DerivedReminder = z.discriminatedUnion("rule", [
+  z.strictObject({
+    rule: z.literal("approval_expiring"),
+    approval_id: Uuid,
+    version: z.int().positive(),
+    expires_at: Timestamp,
+  }),
+  z.strictObject({ rule: z.literal("question_waiting"), request_id: Uuid }),
+  z.strictObject({
+    rule: z.literal("preview_unpublished"),
+    assignment_id: Uuid,
+    version: z.int().positive(),
+  }),
+  z.strictObject({
+    rule: z.literal("facts_missing"),
+    keys: z.array(FactValueKey).min(1),
+  }),
+])
+
+/** The most open reminders `/workspace` lists. */
+export const REMINDER_NOTES_MAX = 20
+
 /** `GET /workspace`: everything the owner's panel polls for. */
 export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
@@ -210,6 +276,11 @@ export const WorkspaceStatus = z.strictObject({
   attention: z.array(AttentionItem),
   /** The required facts still to ask for. */
   missing_facts: z.array(FactValueKey),
+  reminders: z.strictObject({
+    /** Open ones only: soonest due first, undated after, then newest first. */
+    notes: z.array(Reminder).max(REMINDER_NOTES_MAX),
+    derived: z.array(DerivedReminder),
+  }),
 })
 
 export type FactValue = z.infer<typeof FactValue>
@@ -222,4 +293,8 @@ export type PreviewLink = z.infer<typeof PreviewLink>
 export type BuildSummary = z.infer<typeof BuildSummary>
 export type AttentionItem = z.infer<typeof AttentionItem>
 export type ActivityFeed = z.infer<typeof ActivityFeed>
+export type Reminder = z.infer<typeof Reminder>
+export type CreateReminderRequest = z.infer<typeof CreateReminderRequest>
+export type ReminderPatch = z.infer<typeof ReminderPatch>
+export type DerivedReminder = z.infer<typeof DerivedReminder>
 export type WorkspaceStatus = z.infer<typeof WorkspaceStatus>

@@ -9,9 +9,10 @@ import {
   CosToolResult,
   CosTurn,
   CosWorkspace,
+  CreateReminderOutput,
   GetPreviewOutput,
 } from "../src/cos.ts"
-import { ANSWER_TEXT_MAX } from "../src/owner.ts"
+import { ANSWER_TEXT_MAX, CreateReminderRequest } from "../src/owner.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -221,6 +222,7 @@ describe("the refusal a tool shows the model", () => {
     ["RequestChangeOutput", RequestChangeOutput],
     ["AnswerQuestionOutput", AnswerQuestionOutput],
     ["GetPreviewOutput", GetPreviewOutput],
+    ["CreateReminderOutput", CreateReminderOutput],
   ] as const)("%s takes code, class and message only", (name, schema) => {
     expect(verdict(name, schema, refusal)).toEqual(ACCEPTED)
     const leaky = {
@@ -233,6 +235,52 @@ describe("the refusal a tool shows the model", () => {
       error: { ...refusal.error, message: "a".repeat(501) },
     }
     expect(verdict(name, schema, long)).toEqual(REFUSED)
+  })
+})
+
+// `create_reminder` joins COS_TOOLS with its implementation, so the checks
+// above do not reach it yet. These hold its schemas to the same rules now.
+describe("create_reminder", () => {
+  it("takes an object at its root", () => {
+    const schema = z.toJSONSchema(CreateReminderRequest) as Record<
+      string,
+      unknown
+    >
+    expect(schema.type).toBe("object")
+    expect(schema).not.toHaveProperty("anyOf")
+    expect(schema).not.toHaveProperty("oneOf")
+    expect(schema).not.toHaveProperty("allOf")
+  })
+
+  it("names every input property as required, for strict tool modes", () => {
+    const schema = z.toJSONSchema(CreateReminderRequest) as {
+      properties: object
+      required: string[]
+    }
+    expect(new Set(schema.required)).toEqual(
+      new Set(Object.keys(schema.properties))
+    )
+  })
+
+  it("shows the model no id, URL or open object", () => {
+    const { keys, formats, open } = walk(z.toJSONSchema(CreateReminderOutput), {
+      keys: [],
+      formats: [],
+      open: 0,
+    })
+    expect(open).toBe(0)
+    expect(keys.filter((k) => k === "id" || k.endsWith("_id"))).toEqual([])
+    expect(formats.filter((f) => f === "uri")).toEqual([])
+  })
+
+  it("refuses an output that carries the reminder's id", () => {
+    const withId = {
+      ...(samples.CreateReminderOutput as object),
+      id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+    }
+    expect(
+      verdict("CreateReminderOutput", CreateReminderOutput, withId)
+    ).toEqual(REFUSED)
   })
 })
 

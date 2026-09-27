@@ -1287,6 +1287,34 @@ export interface components {
     CreateOrgRequest: {
       name: string
     }
+    CreateReminderOutput:
+      | {
+          /** @constant */
+          outcome: "created"
+          due_at: string | null
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
+    CreateReminderRequest: {
+      title: string
+      due_at: string | null
+    }
     DecisionRequest: {
       /** @enum {string} */
       decision: "approved" | "rejected"
@@ -1313,6 +1341,42 @@ export interface components {
       /** Format: date-time */
       built_at: string
     }
+    DerivedReminder:
+      | {
+          /** @constant */
+          rule: "approval_expiring"
+          /** Format: uuid */
+          approval_id: string
+          version: number
+          /** Format: date-time */
+          expires_at: string
+        }
+      | {
+          /** @constant */
+          rule: "question_waiting"
+          /** Format: uuid */
+          request_id: string
+        }
+      | {
+          /** @constant */
+          rule: "preview_unpublished"
+          /** Format: uuid */
+          assignment_id: string
+          version: number
+        }
+      | {
+          /** @constant */
+          rule: "facts_missing"
+          keys: (
+            | "business.name"
+            | "business.phone"
+            | "business.email"
+            | "hours.weekday"
+            | "service_area.radius"
+            | "pricing.standard_clean_hourly"
+            | "business.tagline"
+          )[]
+        }
     ErrorEnvelope: {
       /** @enum {string} */
       class:
@@ -1645,6 +1709,23 @@ export interface components {
       metrics: {
         [key: string]: number
       }
+    }
+    Reminder: {
+      /** Format: uuid */
+      id: string
+      title: string
+      due_at: string | null
+      done_at: string | null
+      /** @enum {string} */
+      source: "owner" | "assistant"
+      conversation_id: string | null
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
+    ReminderPatch: {
+      done: boolean
     }
     RequestChangeOutput:
       | {
@@ -2103,6 +2184,59 @@ export interface components {
         | "pricing.standard_clean_hourly"
         | "business.tagline"
       )[]
+      reminders: {
+        notes: {
+          /** Format: uuid */
+          id: string
+          title: string
+          due_at: string | null
+          done_at: string | null
+          /** @enum {string} */
+          source: "owner" | "assistant"
+          conversation_id: string | null
+          /** Format: date-time */
+          created_at: string
+          /** Format: date-time */
+          updated_at: string
+        }[]
+        derived: (
+          | {
+              /** @constant */
+              rule: "approval_expiring"
+              /** Format: uuid */
+              approval_id: string
+              version: number
+              /** Format: date-time */
+              expires_at: string
+            }
+          | {
+              /** @constant */
+              rule: "question_waiting"
+              /** Format: uuid */
+              request_id: string
+            }
+          | {
+              /** @constant */
+              rule: "preview_unpublished"
+              /** Format: uuid */
+              assignment_id: string
+              version: number
+            }
+          | {
+              /** @constant */
+              rule: "facts_missing"
+              keys: (
+                | "business.name"
+                | "business.phone"
+                | "business.email"
+                | "hours.weekday"
+                | "service_area.radius"
+                | "pricing.standard_clean_hourly"
+                | "business.tagline"
+              )[]
+            }
+        )[]
+      }
     }
   }
   responses: never
