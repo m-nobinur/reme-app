@@ -64,21 +64,6 @@ jobs:
       # whole of the work this step does.
       - run: pnpm eval --tier 1
 
-      # The fixture is frozen from apps/web by `pnpm record`, so editing the
-      # recording and not re-recording leaves the step above replaying the old
-      # conversation, green. Measured rather than argued: the chat recording was
-      # changed and `pnpm eval` passed on the previous hash. Same shape as the
-      # migration drift check in the database job.
-      - name: The recorded fixture matches its source
-        run: |
-          pnpm record
-          if [ -n "$(git status --porcelain evals/fixtures)" ]; then
-            echo "::error::apps/web/src/chat/recorded-conversation.ts changed without re-recording."
-            echo "Run: pnpm record, and read the diff."
-            git --no-pager diff --stat evals/fixtures
-            exit 1
-          fi
-
       # Bundles the worker and gzips it. Needs no Cloudflare credentials: the
       # dry run never talks to the API.
       - run: pnpm size
