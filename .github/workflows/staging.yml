@@ -151,7 +151,7 @@ jobs:
           fi
           live=0
           for name in reme-assignment reme-publish; do
-            for status in running queued paused; do
+            for status in running queued paused waiting waitingForPause; do
               out=$(pnpm --filter orchestrator exec wrangler workflows instances list "$name" --status "$status" 2>&1 || true)
               # wrangler says "No instances ... matched the provided filters" for
               # an empty filtered list and "There are no instances" for an empty
