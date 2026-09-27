@@ -132,8 +132,10 @@ jobs:
       # one thing that can break a resumed instance is a changed step list.
       # `apps/orchestrator/test/workflow-steps.json` is that list, committed
       # by a test that drives every path; when it differs from the commit
-      # staging runs, this refuses while any instance is running, queued or
-      # paused, and an unchanged list deploys freely.
+      # staging runs, this refuses while any instance is running, queued,
+      # paused, waiting or waitingForPause, and an unchanged list deploys
+      # freely. `waiting` is a build parked in waitForEvent or sleep, such as
+      # one blocked on an owner's question.
       - name: Refuse to change the Workflow steps under a live instance
         run: |
           deployed=$(pnpm --filter orchestrator exec wrangler deployments list \
