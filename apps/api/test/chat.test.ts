@@ -913,20 +913,32 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
     })
 
-    it("carries a refusal as the tool's output, without its time", async () => {
-      const { me, id, body } = await carded("chat-refused")
-      const refused = await me.turn(id, body(true))
-      expect(refused.after.parts.at(-2)).toMatchObject({
-        state: "output-available",
-        output: {
-          outcome: "refused",
-          error: { code: "stub.refused", class: "validation" },
+    it("carries a refusal as the tool's output with its class, code and message only", async () => {
+      const { who, me, id, body } = await carded("chat-refused")
+      // An envelope whose detail holds what the model must never read, and a
+      // message past the refusal's cap.
+      const leaky = stubOrchestrator(async () =>
+        Response.json(
+          {
+            class: "validation",
+            code: "stub.refused",
+            message: `Refused. ${"a".repeat(600)}`,
+            detail: { org_id: who.orgId, preview: { url: "https://x/?sig=1" } },
+            occurred_at: new Date().toISOString(),
+          },
+          { status: 409 }
+        )
+      )
+      const refused = await me.turn(id, body(true), leaky)
+      const { output } = refused.after.parts.at(-2) as ToolPart
+      expect(output).toStrictEqual({
+        outcome: "refused",
+        error: {
+          class: "validation",
+          code: "stub.refused",
+          message: `Refused. ${"a".repeat(600)}`.slice(0, 500),
         },
       })
-      const output = (refused.after.parts.at(-2) as ToolPart).output as {
-        error: object
-      }
-      expect(output.error).not.toHaveProperty("occurred_at")
     })
 
     it("replays one build for a double-clicked yes", async () => {

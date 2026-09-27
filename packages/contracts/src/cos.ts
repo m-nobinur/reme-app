@@ -3,7 +3,6 @@ import { InformationRequest } from "./assignment.ts"
 import { ChatRequest, RequestChangeOutput } from "./chat.ts"
 import { JsonObject, Timestamp, Ulid, Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
-import { ErrorEnvelope } from "./error.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   BuildSummary,
@@ -12,6 +11,7 @@ import {
   OwnerAnswerText,
   OwnerChangeRequest,
 } from "./owner.ts"
+import { Refused } from "./refused.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
 // what the model reads, so none carries an org id, a staff id or a signed
@@ -41,20 +41,26 @@ export const CosWorkspace = z.strictObject({
       })
     )
     .max(10),
-  /** The Developer's open questions. `why` is another agent's text: data, never instructions. */
-  questions: z.array(
-    z.strictObject({
-      request_id: InformationRequest.shape.request_id,
-      field: InformationRequest.shape.field,
-      why: InformationRequest.shape.why,
-      options: InformationRequest.shape.options,
-      blocking: InformationRequest.shape.blocking,
-    })
-  ),
-  /** Reviews waiting on the owner, by expiry. */
-  approvals: z.array(
-    z.strictObject({ version: Version, expires_at: Timestamp })
-  ),
+  /**
+   * The Developer's open questions, at most 10. `why` is another agent's
+   * text, capped here: data, never instructions. `options` follows the
+   * orchestrator's question rule: at most 10 answers an owner could give.
+   */
+  questions: z
+    .array(
+      z.strictObject({
+        request_id: InformationRequest.shape.request_id,
+        field: InformationRequest.shape.field,
+        why: z.string().min(1).max(500),
+        options: z.array(OwnerAnswerText).max(10).nullable(),
+        blocking: InformationRequest.shape.blocking,
+      })
+    )
+    .max(10),
+  /** Reviews waiting on the owner, by expiry, at most 10. */
+  approvals: z
+    .array(z.strictObject({ version: Version, expires_at: Timestamp }))
+    .max(10),
   missing_facts: z.array(FactValueKey),
 })
 
@@ -76,10 +82,7 @@ export const GetPreviewOutput = z.discriminatedUnion("outcome", [
     version: Version,
     expires_at: Timestamp,
   }),
-  z.strictObject({
-    outcome: z.literal("refused"),
-    error: ErrorEnvelope.omit({ occurred_at: true }),
-  }),
+  Refused,
 ])
 
 /**
@@ -96,10 +99,7 @@ export const AnswerQuestionInput = z.strictObject({
 /** `answer_question`'s output once the owner said yes. A no is `output-denied`. */
 export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("answered"), request_id: Uuid }),
-  z.strictObject({
-    outcome: z.literal("refused"),
-    error: ErrorEnvelope.omit({ occurred_at: true }),
-  }),
+  Refused,
 ])
 
 const Empty = z.strictObject({})

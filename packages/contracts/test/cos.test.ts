@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { RequestChangeOutput } from "../src/chat.ts"
 import {
   AnswerQuestionInput,
+  AnswerQuestionOutput,
   COS_TOOLS,
   CosToolName,
   CosToolResult,
   CosTurn,
+  CosWorkspace,
   GetPreviewOutput,
 } from "../src/cos.ts"
 import { ANSWER_TEXT_MAX } from "../src/owner.ts"
@@ -14,15 +17,24 @@ import { samples } from "./samples.ts"
 
 const tools = Object.entries(COS_TOOLS)
 
-/** Every property name and string format anywhere in a JSON Schema. */
-function walk(node: unknown, found: { keys: string[]; formats: string[] }) {
+type Found = { keys: string[]; formats: string[]; open: number }
+
+/**
+ * Every property name and string format anywhere in a JSON Schema, and how
+ * many objects take keys they do not name.
+ */
+function walk(node: unknown, found: Found) {
   if (Array.isArray(node)) {
     for (const item of node) walk(item, found)
   } else if (typeof node === "object" && node !== null) {
-    const { properties, format } = node as Record<string, unknown>
+    const { type, properties, additionalProperties, format } = node as Record<
+      string,
+      unknown
+    >
     if (typeof properties === "object" && properties !== null) {
       found.keys.push(...Object.keys(properties))
     }
+    if (type === "object" && additionalProperties !== false) found.open++
     if (typeof format === "string") found.formats.push(format)
     for (const value of Object.values(node)) walk(value, found)
   }
@@ -54,14 +66,17 @@ describe("COS_TOOLS", () => {
   })
 
   // The model never sees a tenancy id, and a signed link is a bearer
-  // capability the tool UI fetches for itself.
+  // capability the tool UI fetches for itself. An open object could carry
+  // either, so every object names its keys.
   it.each(tools)(
-    "%s shows the model no org id, staff id or URL",
+    "%s shows the model no org id, staff id, URL or open object",
     (_name, { output }) => {
-      const { keys, formats } = walk(z.toJSONSchema(output), {
+      const { keys, formats, open } = walk(z.toJSONSchema(output), {
         keys: [],
         formats: [],
+        open: 0,
       })
+      expect(open).toBe(0)
       expect(
         keys.filter((k) => k === "org_id" || k.endsWith("_staff_id"))
       ).toStrictEqual([])
@@ -131,7 +146,6 @@ describe("GetPreviewOutput", () => {
           class: "validation",
           code: "preview.not_ready",
           message: "This build has no preview yet.",
-          detail: {},
         },
       },
     ],
@@ -151,6 +165,74 @@ describe("GetPreviewOutput", () => {
     expect(verdict("GetPreviewOutput", GetPreviewOutput, output)).toEqual(
       REFUSED
     )
+  })
+})
+
+describe("CosWorkspace", () => {
+  const workspace = samples.CosWorkspace as {
+    questions: Record<string, unknown>[]
+    approvals: unknown[]
+  }
+  const [question] = workspace.questions
+  const withQuestion = (over: object) => ({
+    ...workspace,
+    questions: [{ ...question, ...over }],
+  })
+
+  it.each([
+    ["a why at the cap", withQuestion({ why: "a".repeat(500) })],
+    [
+      "ten options at the answer cap",
+      withQuestion({ options: Array(10).fill("a".repeat(ANSWER_TEXT_MAX)) }),
+    ],
+  ])("accepts %s", (_name, value) => {
+    expect(verdict("CosWorkspace", CosWorkspace, value)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["a why over the cap", withQuestion({ why: "a".repeat(501) })],
+    ["eleven options", withQuestion({ options: Array(11).fill("Weekly") })],
+    [
+      "an option over the answer cap",
+      withQuestion({ options: ["a".repeat(ANSWER_TEXT_MAX + 1)] }),
+    ],
+    ["a blank option", withQuestion({ options: ["  "] })],
+    ["eleven questions", { ...workspace, questions: Array(11).fill(question) }],
+    [
+      "eleven approvals",
+      { ...workspace, approvals: Array(11).fill(workspace.approvals[0]) },
+    ],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosWorkspace", CosWorkspace, value)).toEqual(REFUSED)
+  })
+})
+
+describe("the refusal a tool shows the model", () => {
+  const refusal = {
+    outcome: "refused",
+    error: {
+      class: "validation",
+      code: "change.question_open",
+      message: "Answer the open question first.",
+    },
+  }
+
+  it.each([
+    ["RequestChangeOutput", RequestChangeOutput],
+    ["AnswerQuestionOutput", AnswerQuestionOutput],
+    ["GetPreviewOutput", GetPreviewOutput],
+  ] as const)("%s takes code, class and message only", (name, schema) => {
+    expect(verdict(name, schema, refusal)).toEqual(ACCEPTED)
+    const leaky = {
+      ...refusal,
+      error: { ...refusal.error, detail: { org_id: "o", url: "https://x" } },
+    }
+    expect(verdict(name, schema, leaky)).toEqual(REFUSED)
+    const long = {
+      ...refusal,
+      error: { ...refusal.error, message: "a".repeat(501) },
+    }
+    expect(verdict(name, schema, long)).toEqual(REFUSED)
   })
 })
 

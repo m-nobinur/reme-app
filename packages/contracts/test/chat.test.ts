@@ -132,7 +132,6 @@ describe("RequestChangeOutput", () => {
       class: "validation",
       code: "change.question_open",
       message: "Answer the open question first.",
-      detail: {},
     },
   }
 

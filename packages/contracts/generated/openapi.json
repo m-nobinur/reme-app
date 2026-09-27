@@ -381,17 +381,11 @@
                   },
                   "message": {
                     "type": "string",
-                    "minLength": 1
-                  },
-                  "detail": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
+                    "minLength": 1,
+                    "maxLength": 500
                   }
                 },
-                "required": ["class", "code", "message", "detail"],
+                "required": ["class", "code", "message"],
                 "additionalProperties": false
               }
             },
@@ -3208,6 +3202,7 @@
                     }
                   },
                   "questions": {
+                    "maxItems": 10,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -3223,15 +3218,19 @@
                         },
                         "why": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "maxLength": 500
                         },
                         "options": {
                           "anyOf": [
                             {
+                              "maxItems": 10,
                               "type": "array",
                               "items": {
                                 "type": "string",
-                                "minLength": 1
+                                "minLength": 1,
+                                "maxLength": 500,
+                                "pattern": "\\S"
                               }
                             },
                             {
@@ -3254,6 +3253,7 @@
                     }
                   },
                   "approvals": {
+                    "maxItems": 10,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -3588,17 +3588,11 @@
                           },
                           "message": {
                             "type": "string",
-                            "minLength": 1
-                          },
-                          "detail": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {}
+                            "minLength": 1,
+                            "maxLength": 500
                           }
                         },
-                        "required": ["class", "code", "message", "detail"],
+                        "required": ["class", "code", "message"],
                         "additionalProperties": false
                       }
                     },
@@ -3752,17 +3746,11 @@
                           },
                           "message": {
                             "type": "string",
-                            "minLength": 1
-                          },
-                          "detail": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {}
+                            "minLength": 1,
+                            "maxLength": 500
                           }
                         },
-                        "required": ["class", "code", "message", "detail"],
+                        "required": ["class", "code", "message"],
                         "additionalProperties": false
                       }
                     },
@@ -3837,17 +3825,11 @@
                           },
                           "message": {
                             "type": "string",
-                            "minLength": 1
-                          },
-                          "detail": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {}
+                            "minLength": 1,
+                            "maxLength": 500
                           }
                         },
-                        "required": ["class", "code", "message", "detail"],
+                        "required": ["class", "code", "message"],
                         "additionalProperties": false
                       }
                     },
@@ -4340,6 +4322,7 @@
             }
           },
           "questions": {
+            "maxItems": 10,
             "type": "array",
             "items": {
               "type": "object",
@@ -4355,15 +4338,19 @@
                 },
                 "why": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 500
                 },
                 "options": {
                   "anyOf": [
                     {
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "minLength": 1
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "\\S"
                       }
                     },
                     {
@@ -4380,6 +4367,7 @@
             }
           },
           "approvals": {
+            "maxItems": 10,
             "type": "array",
             "items": {
               "type": "object",
@@ -5480,17 +5468,11 @@
                   },
                   "message": {
                     "type": "string",
-                    "minLength": 1
-                  },
-                  "detail": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
+                    "minLength": 1,
+                    "maxLength": 500
                   }
                 },
-                "required": ["class", "code", "message", "detail"],
+                "required": ["class", "code", "message"],
                 "additionalProperties": false
               }
             },
@@ -5920,17 +5902,11 @@
                   },
                   "message": {
                     "type": "string",
-                    "minLength": 1
-                  },
-                  "detail": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
+                    "minLength": 1,
+                    "maxLength": 500
                   }
                 },
-                "required": ["class", "code", "message", "detail"],
+                "required": ["class", "code", "message"],
                 "additionalProperties": false
               }
             },

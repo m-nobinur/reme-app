@@ -1,9 +1,9 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
-import { ErrorEnvelope } from "./error.ts"
 import { ToolCallId } from "./ids.ts"
 import { ANSWER_TEXT_MAX, BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
+import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
 
 const MessageId = ConversationMessage.shape.id
@@ -62,10 +62,7 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
  */
 export const RequestChangeOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("started"), build: BuildSummary }),
-  z.strictObject({
-    outcome: z.literal("refused"),
-    error: ErrorEnvelope.omit({ occurred_at: true }),
-  }),
+  Refused,
 ])
 
 /**

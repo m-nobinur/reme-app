@@ -670,9 +670,18 @@ async function changed(
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }
   }
-  const { occurred_at: _, ...error } = ErrorEnvelope.parse(body)
+  const error = ErrorEnvelope.parse(body)
   if (!KEPT.includes(error.class)) return response
-  return RequestChangeOutput.parse({ outcome: "refused", error })
+  // The model reads this output, so only the class, the code and the capped
+  // message cross; `detail` can hold ids and links and never does.
+  return RequestChangeOutput.parse({
+    outcome: "refused",
+    error: {
+      class: error.class,
+      code: error.code,
+      message: error.message.slice(0, 500),
+    },
+  })
 }
 
 /**

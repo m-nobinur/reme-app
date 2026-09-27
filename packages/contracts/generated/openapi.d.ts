@@ -121,9 +121,6 @@ export interface components {
               | "budgetary"
             code: string
             message: string
-            detail: {
-              [key: string]: unknown
-            }
           }
         }
     AnswerRequest: {
@@ -1042,9 +1039,6 @@ export interface components {
                     | "budgetary"
                   code: string
                   message: string
-                  detail: {
-                    [key: string]: unknown
-                  }
                 }
               }
         }
@@ -1108,9 +1102,6 @@ export interface components {
                     | "budgetary"
                   code: string
                   message: string
-                  detail: {
-                    [key: string]: unknown
-                  }
                 }
               }
         }
@@ -1142,9 +1133,6 @@ export interface components {
                     | "budgetary"
                   code: string
                   message: string
-                  detail: {
-                    [key: string]: unknown
-                  }
                 }
               }
         }
@@ -1566,9 +1554,6 @@ export interface components {
               | "budgetary"
             code: string
             message: string
-            detail: {
-              [key: string]: unknown
-            }
           }
         }
     InformationAnswer: {
@@ -1716,9 +1701,6 @@ export interface components {
               | "budgetary"
             code: string
             message: string
-            detail: {
-              [key: string]: unknown
-            }
           }
         }
     RuntimeSpec: {
