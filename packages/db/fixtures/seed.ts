@@ -12,6 +12,7 @@ import {
   facts,
   memberships,
   orgs,
+  reminders,
   roles,
   siteRevisions,
   staff,
@@ -107,7 +108,9 @@ export async function clearOrgs(
   await tx
     .delete(assignmentTransitions)
     .where(inArray(assignmentTransitions.orgId, ids))
-  // A message cites its conversation, and a conversation its creator.
+  // A reminder and a message cite their conversation, and a conversation its
+  // creator.
+  await tx.delete(reminders).where(inArray(reminders.orgId, ids))
   await tx
     .delete(conversationMessages)
     .where(inArray(conversationMessages.orgId, ids))

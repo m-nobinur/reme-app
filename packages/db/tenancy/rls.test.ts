@@ -1494,3 +1494,85 @@ describe("conversations hold their shape", () => {
     }
   })
 })
+
+describe("reminders hold their shape", () => {
+  /** Org A's owner and conversation, and org B's, from `fixtures.ts`. */
+  const OWNER_A = "00000000-0000-4000-a000-000000000004"
+  const OWNER_B = "00000000-0000-4000-b000-000000000004"
+  const CONVERSATION_A = "00000000-0000-4000-a000-000000000015"
+  const CONVERSATION_B = "00000000-0000-4000-b000-000000000015"
+  const KEY_A = "tenancy_reminder_a"
+
+  const reminder = (
+    tx: TransactionSql,
+    options: {
+      org?: string
+      title?: string
+      by?: string
+      conversation?: string | null
+      key?: string | null
+    }
+  ) => tx`
+    insert into reminders (org_id, title, source, conversation_id,
+      created_by_staff_id, idempotency_key)
+    values (${options.org ?? ORG_A}, ${options.title ?? "Call the supplier"},
+      'owner', ${options.conversation ?? null},
+      ${options.by ?? (options.org === ORG_B ? OWNER_B : OWNER_A)},
+      ${options.key ?? null})`
+
+  it("takes a title of 1 to 200 characters with something in them", async () => {
+    for (const title of ["a".repeat(200), "\u0085"]) {
+      expect(
+        await inTransaction((tx) => reminder(tx, { title })),
+        JSON.stringify(title)
+      ).toBeUndefined()
+    }
+    for (const title of ["", "   ", " \t\n\v\f\r", "a".repeat(201)]) {
+      expect(
+        await inTransaction((tx) => reminder(tx, { title })),
+        JSON.stringify(title)
+      ).toBe(CHECK)
+    }
+  })
+
+  it("refuses a creator from another org", async () => {
+    expect(await inTransaction((tx) => reminder(tx, { by: OWNER_B }))).toBe(
+      FOREIGN_KEY
+    )
+  })
+
+  it("takes an idempotency key of 1 to 255 characters", async () => {
+    expect(
+      await inTransaction((tx) => reminder(tx, { key: "k".repeat(255) }))
+    ).toBeUndefined()
+    for (const key of ["", "k".repeat(256)]) {
+      expect(
+        await inTransaction((tx) => reminder(tx, { key })),
+        `${key.length} characters`
+      ).toBe(CHECK)
+    }
+  })
+
+  it("makes one reminder per idempotency key in an org", async () => {
+    expect(await inTransaction((tx) => reminder(tx, { key: KEY_A }))).toBe(
+      UNIQUE
+    )
+    expect(
+      await inTransaction((tx) => reminder(tx, { org: ORG_B, key: KEY_A }))
+    ).toBeUndefined()
+  })
+
+  it("takes no conversation, or one from its own org only", async () => {
+    for (const conversation of [null, CONVERSATION_A]) {
+      expect(
+        await inTransaction((tx) => reminder(tx, { conversation })),
+        String(conversation)
+      ).toBeUndefined()
+    }
+    expect(
+      await inTransaction((tx) =>
+        reminder(tx, { conversation: CONVERSATION_B })
+      )
+    ).toBe(FOREIGN_KEY)
+  })
+})
