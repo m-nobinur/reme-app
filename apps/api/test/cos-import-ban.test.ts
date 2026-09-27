@@ -61,6 +61,12 @@ beforeAll(() => {
   const probes = {
     "apps/api/src/cos/banned.ts": BANNED,
     "apps/api/src/cos/allowed.ts": ALLOWED,
+    "apps/api/src/cos/aliased.ts":
+      'import { conversationMessages as rows } from "@workspace/db"\n\nexport const x = rows\n',
+    "apps/api/src/cos/schema.ts":
+      'import { conversationMessages } from "@workspace/db/schema"\n\nexport const x = conversationMessages\n',
+    "apps/api/src/cos/schema-events.ts":
+      'import { events } from "@workspace/db/schema"\n\nexport const x = events\n',
     "apps/api/src/outside.ts": BANNED,
     "apps/api/src/cos/chat.ts": importing("../chat.ts"),
     "apps/api/src/cos/chat-bare.ts": importing("../chat"),
@@ -79,10 +85,12 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 describe("the conversationMessages ban in cos/", () => {
   it("fails lint on the table's import, and on the modules that import it, inside cos/ only", () => {
     expect(flagged()).toEqual([
+      "apps/api/src/cos/aliased.ts",
       "apps/api/src/cos/banned.ts",
       "apps/api/src/cos/chat-bare.ts",
       "apps/api/src/cos/chat.ts",
       "apps/api/src/cos/conversations.ts",
+      "apps/api/src/cos/schema.ts",
     ])
   })
 })

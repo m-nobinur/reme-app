@@ -115,6 +115,10 @@
                   "@workspace/db": {
                     "importNames": ["conversationMessages"],
                     "message": "The CoS reads its history from the event log only (ADR-034). conversation_messages is what the screen shows and never reaches the model."
+                  },
+                  "@workspace/db/schema": {
+                    "importNames": ["conversationMessages"],
+                    "message": "The CoS reads its history from the event log only (ADR-034). conversation_messages is what the screen shows and never reaches the model."
                   }
                 },
                 "patterns": [
