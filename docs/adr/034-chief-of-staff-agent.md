@@ -4,7 +4,8 @@ Status: accepted, 2026-09-27. Applies to `apps/api`, the chat in `apps/web`, `pa
 and `packages/db`. Changes no DR. It makes one scoped exception to §6.3 and DR-9 for the Chief of
 Staff (CoS). It ends on whichever trigger in the first item under "Change if" fires first.
 Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
-Amended again the same day: the budget lock and the stream.
+Amended again the same day: the budget lock and the stream. Brought in line with the tools, the
+event appends and the history derivation as built, 2026-09-28.
 
 ## Context
 
@@ -88,8 +89,10 @@ to use the tool and when not to. Each output is a compact summary.
 
 A conversation is a session in `events`. Its rows carry `session_id` equal to the conversation id,
 `staff_id` equal to the org's CoS staff row, and a `seq` that `apps/api` allocates as the stream's
-single writer. The `(session_id, seq)` unique index refuses a second writer. `appendEvent` moves
-into `packages/db` first, which gives the api a ULID source.
+single writer. The `(session_id, seq)` unique index refuses a second writer. `appendSessionEvent`
+in `packages/db` reads the last seq and writes the next one in the same statement. `newUlid()`
+from `@workspace/db` is the api's only ULID source, turn ids included, from the same monotonic
+factory the appenders use. `apps/api` takes no `ulid` dependency of its own.
 
 - `cos.prefix`, once per session per prefix version: the instructions and tool definitions as
   sent, with the version and its SHA-256.
@@ -108,12 +111,24 @@ such as a question's `why` or a build goal restated by the Developer, is `inferr
 `cos.context` and `cos.tool_result` carry both labels whenever their text includes both.
 
 `deriveCosMessages(events, policy)` takes events only and returns the messages for a call. For a
-turn's first call it takes the last `cos.message` for each id in order of first appearance, applies
-every `cos.tool_result` to its call by id, and puts the turn's `cos.context` text just before the
-owner's latest message. For each later step it appends the `cos.step` messages logged so far. The
-SDK's `convertToModelMessages` and the policy's pruning, the last 12 turns kept and tool outputs
-older than two turns trimmed, are applied at every step as the SDK carries them forward. It reads no
-clock and no environment. The derived messages pass `validateUIMessages` with the agent's tools.
+turn's first call it takes the last `cos.message` for each id in order of first appearance. It
+applies a `cos.tool_result` only to a call that was approved and still waiting to run, as the log
+stood when the result was written. That is the one state in which a result reaches the log before
+the message that shows it. A call in any other state is never changed, a denied one included, so
+a provider that reuses a call id in a later turn cannot rewrite an earlier call. The turn's
+`cos.context` text goes in a user-role message, id `context-<turn_id>`, just before the owner's
+latest message. It never goes in a system message, because it carries owner and agent text.
+
+The derivation returns the UI messages and, separately, the `cos.step` messages the turn has
+logged so far. The agent's code runs the SDK's `convertToModelMessages`, appends the steps and
+hashes the result, so the derivation imports only types from `ai`. The policy keeps the last 12
+turns, a turn being an owner message and the replies after it. In turns older than the newest two
+it drops tool parts, the call and its output together, since a placeholder output would fail
+`validateUIMessages`. A message left with nothing but step boundaries is dropped. The policy is
+an api-local type, version `"1"`. Only its version crosses a boundary, in `cos.context`, and a
+changed policy takes a new version, because a log written under one version does not derive under
+another. The derivation reads no clock and no environment. The derived messages pass
+`validateUIMessages` with the agent's tools.
 
 **The check that refuses a mismatch.** `prepareStep` is awaited before every model call
 (`dist/index.js:10015`), and a throw there ends the stream without a call. Before each call it reads
@@ -133,18 +148,24 @@ This meets §10.6 at every call, not only the first: the model receives code log
 `conversation_messages` stays the rows assistant-ui reads. The server writes them in the same
 transactions as the events, and may still rewrite the tail. They cannot reach the model, because
 whatever the api passes, the call is refused unless its messages equal the ones derived from the
-log. The agent, the derivation and the tools live in `apps/api/src/cos/`, and a Biome override on
-that directory restricts the `conversationMessages` import from `@workspace/db`. That rule is a
-tripwire. The check is the boundary.
+log. The agent, the derivation and the tools live in `apps/api/src/cos/`. A Biome override on that
+directory bans the `conversationMessages` import from `@workspace/db`. It also bans every module in
+`apps/api/src` that imports that table, directly or through another module. Today those are
+`chat.ts`, `conversations.ts`, `owner.ts` and `org.ts`. So `cos/` takes shared code only from
+leaves that import no table of the conversation, such as `http.ts`, `changes.ts` and `staff.ts`.
+A module that starts importing the table joins the ban in the same PR. The ban also keeps `chat.ts`,
+which imports the agent, out of a cycle with `cos/`. That rule is a tripwire. The check is the
+boundary.
 
 ### A turn
 
-1. A first transaction takes the conversation's lock (key 2), then the org's budget lock (key 3).
-   It refuses with 409 `chat.busy` while another turn is open, validates the request, reserves
-   spend, and appends `cos.prefix` when the version is new, `cos.message` for the owner's input,
-   and `cos.context`. It writes the owner's row and commits. Every turn routed to the CoS writes
-   `cos.context`, one that falls back included, so every such turn holds a token and ends with a
-   `cos.turn`.
+1. A first transaction takes the conversation's lock (key 2), then the org's budget lock (key 3). It
+   refuses with 409 `chat.busy` while another turn is open, or when another writer appended to the
+   session while it was opening (`SessionBusy` from `closeLapsedTurn`). It validates the request,
+   reserves spend, and appends `cos.prefix` when the version is new, `cos.message` for the owner's
+   input, and `cos.context`. It writes the owner's row and commits. Every turn routed to the CoS
+   writes `cos.context`, one that falls back included, so every such turn holds a token and ends
+   with a `cos.turn`.
 2. The agent streams outside any lock. The api buffers chunks until the first content chunk, text,
    reasoning or tool input, or an error. `start` does not count, because `streamText` emits it
    before any provider call (`dist/index.js:9662`) and a provider error arrives later as an error
@@ -261,7 +282,8 @@ The agent's PR, each red once by mutation:
 - Derivation is deterministic: the same events give the same hash twice, and a clock read in the
   derivation turns it red.
 - A dropped `cos.step` write makes the next `prepareStep` refuse with no model call.
-- The import ban fails `pnpm lint` on a deliberate `conversationMessages` import in `cos/`.
+- The import ban fails `pnpm lint` on a deliberate `conversationMessages` import in `cos/`, and
+  on an import of any module that reaches that table.
 - `answer_question` with a value that parses as `FactValue` still ends in `approval-requested`, and
   every act tool does.
 - A second turn while one is open gets 409 `chat.busy`; after `totalMs` plus 30 s the next turn
@@ -295,7 +317,7 @@ The agent's PR, each red once by mutation:
 - A steer replays by key, as that amendment says.
 - A recorded staging turn from the chosen model and provider, committed as an api test fixture,
   shows that its tool-call ids pass the new pattern.
-- The contracts PR and `appendEvent` in `packages/db` are merged.
+- The contracts PR and `appendSessionEvent` in `packages/db` are merged.
 
 ## What was rejected
 
