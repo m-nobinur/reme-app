@@ -20,6 +20,7 @@ export {
   closeTenancy,
   listOrgIds,
   ORG_SETTING,
+  pgCode,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,

@@ -1,16 +1,20 @@
 import { Conversation } from "@workspace/contracts"
 import { type SQL, sql } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
-import type { TransactionSql } from "postgres"
+import type { Sql, TransactionSql } from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { connect } from "../src/client.ts"
+import { connect, connectionString } from "../src/client.ts"
 import {
   APP_ROLE,
   ENTER_APP_ROLE,
+  LIMITS,
   listOrgIds,
   ORG_SETTING,
   type OrgScopedDb,
+  resolveOrg,
+  resolveOrgBySlug,
   setContext,
+  type Tenancy,
   tenancy,
   USER_SETTING,
   withOrg,
@@ -717,15 +721,95 @@ describe("the reading transaction runs as a role that cannot bypass", () => {
     const context = dialect.sqlToQuery(
       setContext({ orgId: ORG_A, workosUserId: "user_probe" })
     )
+    // The two limits ride in the same statement, local like the rest.
     expect(context.sql.replace(/\s+/g, " ")).toBe(
-      "select set_config($1, $2, true), set_config($3, $4, true)"
+      "select set_config($1, $2, true), set_config($3, $4, true), set_config('statement_timeout', $5, true), set_config('idle_in_transaction_session_timeout', $6, true)"
     )
     expect(context.params).toEqual([
       ORG_SETTING,
       ORG_A,
       USER_SETTING,
       "user_probe",
+      LIMITS.statement,
+      LIMITS.idle,
     ])
+  })
+})
+
+describe("a tenant transaction runs under the statement and idle limits", () => {
+  // One connection, so the second transaction is on the backend the first
+  // one used, and every statement the kit sends is seen on the wire.
+  let kit: Tenancy
+  let client: Sql
+  let sent: string[] = []
+  const LIMIT =
+    "select current_setting('statement_timeout') as statement, current_setting('idle_in_transaction_session_timeout') as idle, pg_backend_pid() as pid"
+
+  beforeAll(() => {
+    kit = tenancy(connectionString(), { max: 1 })
+    // The kit's own client, reached the way nothing outside a test would:
+    // its one symbol key. postgres.js reads `debug` per query.
+    const [key] = Object.getOwnPropertySymbols(kit)
+    client = (kit as unknown as Record<symbol, { $client: Sql }>)[key as symbol]
+      ?.$client as Sql
+    // The type lookup postgres.js runs once per new connection is not the
+    // kit's, so it is left out of the count.
+    client.options.debug = (_id, query) => {
+      if (!query.includes("pg_catalog.pg_type")) {
+        sent.push(query.replace(/\s+/g, " ").trim())
+      }
+    }
+  })
+
+  afterAll(async () => {
+    await kit.close()
+  })
+
+  const read = (rows: Record<string, unknown>[]) =>
+    rows[0] as { statement: string; idle: string; pid: number }
+
+  it("reads its limits inside withOrg, and the defaults in the next transaction", async () => {
+    const inside = await kit.withOrg({ orgId: ORG_A }, async (db) =>
+      read(await db.execute(sql.raw(LIMIT)))
+    )
+    expect(inside).toMatchObject({ statement: "5s", idle: "15s" })
+    const after = read(await client.begin((tx) => tx.unsafe(LIMIT)))
+    expect(after.pid, "the same backend").toBe(inside.pid)
+    expect(after).toMatchObject({ statement: "0", idle: "0" })
+  })
+
+  it("sends as many statements as it did before the limits", async () => {
+    sent = []
+    await kit.withOrg({ orgId: ORG_A }, (db) => db.execute(sql`select 1`))
+    // The context carries both limits, so no round trip was added for them.
+    expect(sent).toEqual([
+      "begin",
+      `set local role ${APP_ROLE}`,
+      expect.stringMatching(/statement_timeout.*idle_in_transaction/),
+      "select 1",
+      "commit",
+    ])
+  })
+
+  it("leaves the limits out of the single-statement resolvers", async () => {
+    for (const resolve of [
+      () =>
+        resolveOrg(kit, {
+          workosUserId: WORKOS_USER_OF.a,
+          workosOrganizationId: WORKOS_ORG_OF.a,
+        }),
+      () => resolveOrgBySlug(kit, "tenancy-probe-a"),
+      () => listOrgIds(kit),
+    ]) {
+      sent = []
+      expect(await resolve()).toBeTruthy()
+      expect(sent).toEqual([
+        "begin",
+        `set local role ${APP_ROLE}`,
+        expect.stringMatching(/^select public\./),
+        "commit",
+      ])
+    }
   })
 })
 

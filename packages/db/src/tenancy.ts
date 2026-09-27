@@ -96,13 +96,29 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  */
 export const ENTER_APP_ROLE = sql.raw(`set local role ${APP_ROLE}`)
 
+/** The two limits `setContext` sets, each changed here and nowhere else. */
+export const LIMITS = { statement: "5s", idle: "15s" } as const
+
 /**
  * Both settings in one statement, so the second GUC costs no extra round trip.
  * `is_local = true` is the third argument, and it is the whole story.
+ *
+ * The same statement sets the two limits every tenant transaction runs under
+ * (ADR-034), local for the same reason: Hyperdrive pools per transaction and
+ * `RESET`s a connection on its way back, so neither a session setting nor a
+ * startup parameter reaches the next transaction on that backend. A statement
+ * that runs past `LIMITS.statement` is cancelled with 57014; a transaction left
+ * idle past `LIMITS.idle`, which is a call to something other than the
+ * database made while it holds a lock, has its session ended with 25P03.
+ * Both are guesses, and ADR-034 names the measurement that replaces each. The
+ * three resolvers below do not set them: each runs one statement, and setting
+ * a limit first would cost a round trip on every request.
  */
 export const setContext = (ctx: TenantContext) =>
   sql`select set_config(${ORG_SETTING}, ${ctx.orgId}, true),
-             set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true)`
+             set_config(${USER_SETTING}, ${ctx.workosUserId ?? ""}, true),
+             set_config('statement_timeout', ${LIMITS.statement}, true),
+             set_config('idle_in_transaction_session_timeout', ${LIMITS.idle}, true)`
 
 /**
  * Wraps the transaction handle so it stops working the moment `withOrg`
@@ -191,6 +207,23 @@ async function run<T>(
       revoke()
     }
   })
+}
+
+/**
+ * The code a failed statement carries, for a log line: Postgres's SQLSTATE
+ * (57014 for the statement limit, 25P03 for the idle one) or the driver's own.
+ * drizzle wraps the driver's error, so the code is on the cause. Null when
+ * neither has one.
+ */
+export function pgCode(error: unknown): string | null {
+  const { code, cause } = (error ?? {}) as {
+    code?: unknown
+    cause?: { code?: unknown }
+  }
+  for (const found of [code, cause?.code]) {
+    if (typeof found === "string") return found
+  }
+  return null
 }
 
 /**

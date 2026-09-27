@@ -13,6 +13,7 @@ import {
   events,
   facts,
   orgs,
+  pgCode,
   resolveOrgBySlug,
   siteRevisions,
   sql,
@@ -1314,7 +1315,7 @@ const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
   console.error(
     JSON.stringify({
       at: new URL(c.req.url).pathname,
-      code: (error as { code?: string }).code ?? error.name,
+      code: pgCode(error) ?? "unknown",
     })
   )
   return failure(c, 503, {

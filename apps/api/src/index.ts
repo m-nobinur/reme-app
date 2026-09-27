@@ -1,5 +1,5 @@
 import { CreateOrgRequest } from "@workspace/contracts"
-import { resolveOrg, type Tenancy, tenancy } from "@workspace/db"
+import { pgCode, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -206,7 +206,7 @@ export default {
       console.error(
         JSON.stringify({
           at: new URL(request.url).pathname,
-          code: (error as { code?: string }).code ?? "unknown",
+          code: pgCode(error) ?? "unknown",
         })
       )
       return failure(503, {
