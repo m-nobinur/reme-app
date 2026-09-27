@@ -44,14 +44,138 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
     }
   }, [stableComponents])
 
+  // No images, by any syntax. The text is a model's, and an injected prompt
+  // can make it write an image whose URL carries workspace data, which the
+  // browser fetches on render. Dropped from the tree, so no `components`
+  // override can bring one back. Raw HTML already renders as text, and the
+  // default `urlTransform` already blanks `javascript:` and `data:` links.
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeExternalLinks]}
       className="aui-md"
       components={markdownComponents}
+      disallowedElements={["img"]}
       defer
     />
   )
+}
+
+/** The part of a hast node this file reads and writes. */
+type HastNode = {
+  type: string
+  tagName?: string
+  value?: string
+  properties?: Record<string, unknown>
+  children?: HastNode[]
+}
+
+/** A link's text as a reader sees it: images are dropped, so they add none. */
+const linkText = (node: HastNode): string =>
+  node.type === "text"
+    ? (node.value ?? "")
+    : node.tagName === "img"
+      ? ""
+      : (node.children ?? []).map(linkText).join("")
+
+/** Controls that reorder text on screen, so a link's text can't use them. */
+const BIDI = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
+
+const stripBidi = (node: HastNode) => {
+  if (node.type === "text") node.value = (node.value ?? "").replace(BIDI, "")
+  for (const child of node.children ?? []) stripBidi(child)
+}
+
+/**
+ * Where a link goes when the browser resolves it from an https page, or
+ * null when that is this app: `//host` and `http:host` leave it too.
+ */
+function outside(href: string): URL | null {
+  try {
+    const url = new URL(href, "https://base.invalid/")
+    return /^https?:$/.test(url.protocol) && url.hostname !== "base.invalid"
+      ? url
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The text already says where the link goes: plain ASCII equal to the host
+ * or to the href as written. Never for a host with a punycode label, which
+ * can look like another, or for an href with userinfo, which reads as a
+ * host it is not.
+ */
+const saysWhere = (text: string, href: string, url: URL) =>
+  /^[\x21-\x7e]+$/.test(text) &&
+  (text === url.hostname || text === href.toLowerCase()) &&
+  !url.username &&
+  !url.password &&
+  !url.hostname.split(".").some((label) => label.startsWith("xn--"))
+
+const host = (url: URL): HastNode => ({
+  type: "element",
+  tagName: "bdi",
+  properties: { dir: "ltr" },
+  children: [{ type: "text", value: url.hostname }],
+})
+
+/**
+ * Every link that leaves the app opens in a new tab with no opener or
+ * referrer, and tells a screen reader so. Link text is the model's, so
+ * "Open your new site" could point anywhere: the host follows the text in
+ * a muted span that markdown cannot write, isolated so the text's
+ * direction cannot reverse it, unless the text already says where it goes.
+ * The text loses any bidi controls. A link whose only content was an image
+ * is named by its host. Footnotes, mailto and the blank href a blocked
+ * scheme leaves stay as they are. Written into the tree rather than the
+ * `a` component, so a caller's `a` still gets it.
+ */
+function rehypeExternalLinks() {
+  const visit = (node: HastNode) => {
+    for (const child of node.children ?? []) visit(child)
+    const href = String(node.properties?.href ?? "")
+    const url = node.tagName === "a" ? outside(href) : null
+    if (!url) return
+    stripBidi(node)
+    const text = linkText(node).trim().toLowerCase()
+    node.properties = {
+      ...node.properties,
+      target: "_blank",
+      rel: ["noopener", "noreferrer"],
+    }
+    node.children = !text
+      ? [host(url)]
+      : saysWhere(text, href, url)
+        ? (node.children ?? [])
+        : [
+            ...(node.children ?? []),
+            {
+              type: "element",
+              tagName: "span",
+              properties: {
+                className: [
+                  "aui-md-a-host",
+                  "inline-block",
+                  "text-muted-foreground",
+                ],
+              },
+              children: [
+                { type: "text", value: "\u00a0(" },
+                host(url),
+                { type: "text", value: ")" },
+              ],
+            },
+          ]
+    node.children.push({
+      type: "element",
+      tagName: "span",
+      properties: { className: ["sr-only"] },
+      children: [{ type: "text", value: " (opens in a new tab)" }],
+    })
+  }
+  return visit
 }
 
 export const MarkdownText = memo(MarkdownTextImpl)

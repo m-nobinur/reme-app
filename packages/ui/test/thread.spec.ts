@@ -279,3 +279,40 @@ for (const theme of ["light", "dark"] as const) {
     })
   }
 }
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [name, width] of Object.entries({
+    phone: 390,
+    tablet: 768,
+    desktop: 1440,
+  })) {
+    test(`a reply's markdown image never loads, and an outside link names its host, on a ${name} in ${theme}`, async ({
+      page,
+    }) => {
+      const fetched: string[] = []
+      page.on("request", (request) => {
+        if (request.url().startsWith("https://example.net/")) {
+          fetched.push(request.url())
+        }
+      })
+      await open(page, "MarkdownText", width, theme)
+      const reply = page.locator('[data-entry="MarkdownText"] .aui-md')
+      await expect(reply).toContainText("Photos of the shop front")
+      await expect(reply.locator("img")).toHaveCount(0)
+      const outside = reply.getByRole("link", {
+        name: "the site (example.net) (opens in a new tab)",
+      })
+      await expect(outside).toHaveAttribute("target", "_blank")
+      await expect(outside).toHaveAttribute("rel", "noopener noreferrer")
+      // The host is the app's, set apart from the text the model wrote.
+      await expect(outside.locator(".aui-md-a-host bdi[dir='ltr']")).toHaveText(
+        "example.net"
+      )
+      // An in-page link stays in the tab.
+      const inPage = reply.getByRole("link", { name: "revision", exact: true })
+      await expect(inPage).not.toHaveAttribute("target", /./)
+      await axe(page, `MarkdownText ${theme} ${name}`)
+      expect(fetched).toEqual([])
+    })
+  }
+}

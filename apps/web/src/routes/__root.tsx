@@ -21,6 +21,19 @@ export const Route = createRootRoute({
       {
         title: "Reme",
       },
+      // Images load only from the app, data URLs (the MFA QR code) and any
+      // host on remeai.co.uk. That zone holds the signed preview hosts the
+      // screenshots come from, but also every tenant site and the api hosts,
+      // all of them ours. A backstop for the chat's markdown, which drops
+      // images itself. Unsafe once a tenant site answers
+      // `{slug}.remeai.co.uk/api/*` (Phase 3, reserved in
+      // apps/router/src/index.ts), since an image request could then deliver
+      // what its URL carries to that site's API. Screenshots must then come
+      // from one fixed host or through 'self', and this narrows to match.
+      {
+        httpEquiv: "Content-Security-Policy",
+        content: "img-src 'self' data: https://*.remeai.co.uk",
+      },
     ],
     links: [
       {
