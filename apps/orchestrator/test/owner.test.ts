@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto"
 import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
-import { assignments, events, facts, sql, supersedeFact } from "@workspace/db"
+import {
+  appendEvent,
+  assignments,
+  events,
+  facts,
+  sql,
+  supersedeFact,
+} from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment, ownerOrg } from "./fixture.ts"
 
 // The entrypoint base comes from workerd; here it is the two fields

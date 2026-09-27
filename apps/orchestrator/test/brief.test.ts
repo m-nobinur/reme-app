@@ -1,5 +1,6 @@
 import type { EventEnvelope } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -20,7 +21,6 @@ import {
   updateFacts,
 } from "../src/brief.ts"
 import { eventSink, SeqGapError } from "../src/sink.ts"
-import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment } from "./fixture.ts"
 
 // The brief names the registry host the sandbox module owns, and that module

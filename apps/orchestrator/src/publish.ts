@@ -8,6 +8,7 @@ import {
   SitePointer,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   approvals,
   assignments,
   deployments,
@@ -22,7 +23,6 @@ import {
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
 import { siteHost } from "./seed.ts"
 import {
-  appendEvent,
   enteredFrom,
   type Ids,
   lockRow,

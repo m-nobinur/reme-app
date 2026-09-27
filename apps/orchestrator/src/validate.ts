@@ -7,6 +7,7 @@ import {
   ValidationReport,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -19,7 +20,7 @@ import {
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
 import { siteHost } from "./seed.ts"
-import { appendEvent, type Ids, TransitionError, transition } from "./state.ts"
+import { type Ids, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
 export type Artifacts = {

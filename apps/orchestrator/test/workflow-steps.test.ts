@@ -75,6 +75,7 @@ const ROW = {
 }
 const orgList: string[] = []
 vi.mock("@workspace/db", () => ({
+  appendEvent: async () => "e",
   assignments: {},
   facts: {},
   eq: () => ({}),
@@ -179,7 +180,6 @@ vi.mock("../src/state.ts", () => ({
     if (options?.payload?.fact_id) resumedOn.push(options.payload)
     return {}
   },
-  appendEvent: async () => "e",
   parkForBudget: async () => ({}),
   claim: async () =>
     script.claims.shift() ?? { claimed: true, superseded: null },

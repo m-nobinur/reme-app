@@ -1,5 +1,6 @@
-import type { AssignmentState, TaintLabel } from "@workspace/contracts"
+import type { AssignmentState } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   assignmentTransitions,
   eq,
@@ -9,7 +10,6 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { ulid } from "ulid"
 
 /**
  * The §8.4 state machine, as data. State truth is the `assignments` row and
@@ -160,42 +160,6 @@ export async function assignmentCost(
       sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'runtime.turn'`
     )
   return Number(row?.usd ?? 0)
-}
-
-export type AppendEvent = {
-  orgId: string
-  /** Null for an org-level row that belongs to no assignment (a probe). */
-  assignmentId: string | null
-  staffId: string | null
-  type: string
-  payload: Record<string, unknown>
-  taint?: TaintLabel[]
-}
-
-/**
- * One row in `events`, belonging to no session (ADR-028). A fresh ULID is safe
- * as the idempotency key only because every caller appends inside the same
- * transaction as the write it describes: the two commit or roll back together.
- */
-export async function appendEvent(
-  db: OrgScopedDb,
-  event: AppendEvent
-): Promise<string> {
-  const eventId = ulid()
-  await db.insert(events).values({
-    eventId,
-    orgId: event.orgId,
-    staffId: event.staffId,
-    assignmentId: event.assignmentId,
-    sessionId: null,
-    seq: null,
-    type: event.type,
-    occurredAt: new Date(),
-    idempotencyKey: ulid(),
-    taint: event.taint ?? [],
-    payload: event.payload,
-  })
-  return eventId
 }
 
 export type TransitionInput = Ids & {

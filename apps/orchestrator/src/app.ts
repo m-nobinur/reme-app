@@ -8,6 +8,7 @@ import {
   Uuid,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -58,13 +59,7 @@ import { answers } from "./question.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, probe } from "./sandbox.ts"
 import { previewHost, siteHost } from "./seed.ts"
-import {
-  appendEvent,
-  assignmentCost,
-  cancel,
-  lockRow,
-  TransitionError,
-} from "./state.ts"
+import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
  * One route tree, two callers (ADR-032 amendment). The console reaches it with

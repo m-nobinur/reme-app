@@ -550,10 +550,12 @@ export const events = pgTable(
     /**
      * The position in the session's stream, and NULL for an event that belongs
      * to no session (ADR-028). The aggregate is the session because §10.6
-     * replays a session. It is allocated by the single writer of that stream
-     * rather than by the database, so there is no counter row to serialise on;
-     * the unique index below refuses a duplicate, and refusing the out-of-order
-     * append §13 asks for is one probe on that same index.
+     * replays a session. There is no counter row to serialise on. A runtime
+     * session's seq comes from the facade's tee; a conversation's comes from
+     * `appendSessionEvent`, which reads the session's last seq inside its own
+     * insert. Either way the unique index below refuses a second writer's
+     * duplicate, and refusing the out-of-order append §13 asks for is one probe
+     * on that same index.
      */
     seq: integer("seq"),
     /** Dotted event key, e.g. `assignment.state_changed`. */

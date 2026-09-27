@@ -1,5 +1,6 @@
 import { FactSnapshot, type RuntimeSpec } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -18,7 +19,7 @@ import {
 } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
-import { appendEvent, type Ids } from "./state.ts"
+import type { Ids } from "./state.ts"
 
 /** The owner's decision: model spend is capped at $1 per assignment. */
 export const ASSIGNMENT_CAP_USD = 1
