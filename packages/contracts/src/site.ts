@@ -169,6 +169,13 @@ export const SitePointer = z.strictObject({
   config_version: z.int().positive(),
 })
 
+/**
+ * The header the router puts on every file it serves for a published host:
+ * `<revision_id>@<config_version>`, from the pointer it served by, so the
+ * publisher's probe can tell which version answered before judging it.
+ */
+export const SITE_REVISION_HEADER = "x-reme-revision"
+
 export type ComponentManifest = z.infer<typeof ComponentManifest>
 export type PreviewClaim = z.infer<typeof PreviewClaim>
 export type SitePointer = z.infer<typeof SitePointer>
