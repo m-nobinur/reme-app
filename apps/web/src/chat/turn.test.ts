@@ -6,7 +6,7 @@ import {
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import type { UIMessage } from "ai"
 import { afterEach, expect, it, vi } from "vitest"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn } from "./turn"
+import { cancelOvertaken, chatFetch, chatTurn, sendsOn, turnBody } from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
 
@@ -173,6 +173,42 @@ it("a typed message cancels what waits on the owner, as the api does", () => {
     ask("output-error", { errorText: CANCELLED }),
     change("output-error", { errorText: CANCELLED }),
   ])
+})
+
+it("a typed message cancels a yes or no held back and never sent", () => {
+  for (const approved of [true, false]) {
+    const cancelled = cancelOvertaken([
+      assistant(
+        change("approval-responded", { approval: { id: "appr_1", approved } }),
+        answerQuestion("approval-requested", { approval: { id: "appr_2" } })
+      ),
+    ])
+    expect(cancelled.at(-1)?.parts.slice(1)).toEqual([
+      change("output-error", { errorText: CANCELLED }),
+      answerQuestion("output-error", { errorText: CANCELLED }),
+    ])
+  }
+})
+
+it("a send records its own message before it waits on anything", async () => {
+  const earlier: UIMessage = {
+    id: "msg_earlier",
+    role: "user",
+    parts: [{ type: "text", text: "Earlier" }],
+  }
+  const now: UIMessage = {
+    id: "msg_now",
+    role: "user",
+    parts: [{ type: "text", text: "Now" }],
+  }
+  const sending = { current: earlier as UIMessage | undefined }
+  const body = turnBody(
+    () => Promise.reject(new Error("The conversation could not be opened.")),
+    () => "act",
+    sending
+  )
+  await expect(body({ messages: [now] })).rejects.toThrow()
+  expect(sending.current).toBe(now)
 })
 
 it("a not now stays not now when the owner types next", () => {

@@ -96,10 +96,12 @@ function ownerResults(last: UIMessage | undefined): ChatResult[] {
 /**
  * A typed message overtakes the calls still waiting on the owner, the way
  * `apps/api` cancels them in the stored row: an unanswered question or an
- * undecided change becomes cancelled, and anything the owner already
- * decided, a "not now" included, stays as it was. assistant-ui's own
- * `cancelPendingToolCallsOnSend` also turns a "not now" into cancelled,
- * which a reload would then contradict.
+ * undecided change becomes cancelled. So does a yes or no held back while
+ * another card in its step waited: it was never sent, so the stored row
+ * still has the call undecided and the api cancels it. A decision the
+ * server already has, a "not now" included, stays as it was.
+ * assistant-ui's own `cancelPendingToolCallsOnSend` also turns that "not
+ * now" into cancelled, which a reload would then contradict.
  */
 export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
   const last = messages.at(-1)
@@ -108,7 +110,9 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
   const parts = last.parts.map((part) => {
     if (
       !isToolUIPart(part) ||
-      (part.state !== "input-available" && part.state !== "approval-requested")
+      (part.state !== "input-available" &&
+        part.state !== "approval-requested" &&
+        part.state !== "approval-responded")
     ) {
       return part
     }
@@ -132,6 +136,23 @@ export const sendsOn = ({ messages }: { messages: UIMessage[] }) =>
   ownerResults(messages.at(-1)).length > 0 &&
   (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
     lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
+
+/**
+ * The transport's request body, which is the turn. It records the message
+ * being sent before anything it awaits, so a send that fails at any point
+ * restores this message, never one from an earlier send.
+ */
+export const turnBody =
+  (
+    initialize: () => Promise<{ remoteId: string }>,
+    mode: () => ChatRequest["mode"],
+    sending: { current: UIMessage | undefined }
+  ) =>
+  async ({ messages }: { messages: UIMessage[] }) => {
+    sending.current = messages.at(-1)
+    const { remoteId } = await initialize()
+    return { body: chatTurn(remoteId, mode(), messages) }
+  }
 
 /**
  * A refusal as the owner reads it: the api's envelope message, which it

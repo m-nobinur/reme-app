@@ -12,7 +12,7 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import { useRef, useState } from "react"
 import { getConversationMessages } from "@/lib/api/server"
 import { toUIMessage } from "./history"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn, textOf } from "./turn"
+import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -47,11 +47,11 @@ export function useConversationRuntime({
         fetch: chatFetch,
         // The whole body is the turn: no history, system prompt or tools
         // ever leave the browser.
-        prepareSendMessagesRequest: async ({ messages }) => {
-          const { remoteId } = await aui.threadListItem.initialize()
-          sending.current = messages.at(-1)
-          return { body: chatTurn(remoteId, mode(), messages) }
-        },
+        prepareSendMessagesRequest: turnBody(
+          () => aui.threadListItem.initialize(),
+          mode,
+          sending
+        ),
       })
   )
   // A failed turn leaves the screen ahead of the stored row: the answer or
