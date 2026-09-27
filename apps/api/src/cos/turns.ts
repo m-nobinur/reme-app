@@ -9,11 +9,14 @@ import {
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
+  conversations,
+  eq,
   events,
   type OrgScopedDb,
   sql,
 } from "@workspace/db"
 import { constraint } from "../http.ts"
+import { stepMessages } from "./history.ts"
 
 /**
  * One writer per turn, by token (ADR-034). A turn is open from its
@@ -52,14 +55,33 @@ export class TurnClosed extends Error {
 }
 
 /**
+ * For a turn's first transaction: another writer appended to the session
+ * while this turn was opening. Nothing was written, and the caller answers
+ * 409 `chat.busy`.
+ */
+export class SessionBusy extends Error {
+  constructor(readonly sessionId: string) {
+    super("cos.session_busy")
+  }
+}
+
+/** The session is no conversation this org can see. The caller answers 404. */
+export class NoSuchSession extends Error {
+  constructor(readonly sessionId: string) {
+    super("cos.no_such_session")
+  }
+}
+
+/**
  * An event a turn writes after its first transaction. Taint is the
- * caller's to say from what the payload carries; `cos.call` and `cos.turn`
- * carry no text and no label.
+ * caller's to say from what the payload carries. A step is the model's
+ * output, so it is always `inferred`; `cos.call` and `cos.turn` carry no
+ * text and no label.
  */
 export type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
   | { type: "cos.tool_result"; payload: CosToolResult; taint: TaintLabel[] }
-  | { type: "cos.step"; payload: CosStep; taint: TaintLabel[] }
+  | { type: "cos.step"; payload: CosStep }
   | { type: "cos.call"; payload: CosCall }
   | { type: "cos.turn"; payload: CosTurn }
 
@@ -70,6 +92,43 @@ const SCHEMAS = {
   "cos.call": CosCall,
   "cos.turn": CosTurn,
 } as const
+
+type Checked = {
+  type: TurnEvent["type"]
+  payload: { turn_id: string } & Record<string, unknown>
+  taint: TaintLabel[]
+}
+
+/**
+ * The whole batch checked before anything is written: each payload against
+ * its contract and naming `turnId`, a step holding only the model's
+ * messages, at most one result per call, and nothing after a `cos.turn`.
+ */
+function checked(turnId: string, writes: TurnEvent[]): Checked[] {
+  const calls = new Set<string>()
+  return writes.map((write, i) => {
+    const payload = SCHEMAS[write.type].parse(write.payload)
+    if (payload.turn_id !== turnId) {
+      throw new Error(`cos.turns: a ${write.type} for another turn`)
+    }
+    if (write.type === "cos.turn" && i < writes.length - 1) {
+      throw new Error("cos.turns: a write after the turn's cos.turn")
+    }
+    if (write.type === "cos.step") stepMessages(payload as CosStep)
+    if (write.type === "cos.tool_result") {
+      const id = (payload as CosToolResult).tool_call_id
+      if (calls.has(id)) throw new Error(`cos.turns: a second result for ${id}`)
+      calls.add(id)
+    }
+    const taint: TaintLabel[] =
+      write.type === "cos.step"
+        ? ["inferred"]
+        : "taint" in write
+          ? write.taint
+          : []
+    return { type: write.type, payload, taint }
+  })
+}
 
 /**
  * The conversation's turn lock (ADR-034), the same two-key lock a turn's
@@ -83,25 +142,55 @@ async function lock(db: OrgScopedDb, sessionId: string): Promise<void> {
   )
 }
 
-type Latest = {
+/** Whether the session's latest `cos.context` is `turn`'s, with no `cos.turn` after it. */
+async function holdsToken(db: OrgScopedDb, turn: Turn): Promise<boolean> {
+  const [row] = await db.execute<{ held: boolean }>(sql`
+    select c.payload->>'turn_id' = ${turn.turnId} and not exists (
+        select 1 from ${events} t
+        where t.session_id = c.session_id and t.type = 'cos.turn'
+          and t.payload->>'turn_id' = c.payload->>'turn_id'
+      ) as held
+    from ${events} c
+    where c.session_id = ${turn.sessionId} and c.type = 'cos.context'
+    order by c.seq desc
+    limit 1`)
+  return row?.held === true
+}
+
+/** The call ids `turn` has logged a result for, among `ids`. */
+async function resultsLogged(
+  db: OrgScopedDb,
+  turn: Turn,
+  ids: string[]
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const rows = await db.execute<{ id: string }>(sql`
+    select payload->>'tool_call_id' as id from ${events}
+    where session_id = ${turn.sessionId} and type = 'cos.tool_result'
+      and payload->>'turn_id' = ${turn.turnId}
+      and payload->>'tool_call_id' in ${ids}`)
+  return rows.map((row) => row.id)
+}
+
+type Open = {
   context: CosContext
-  closed: boolean
   lapsed: boolean
   /** What the turn's `cos.step` rows logged, in USD. */
   logged: number
 }
 
 /**
- * The session's latest turn: its `cos.context`, whether a `cos.turn` closed
- * it, whether `afterMs` has passed since the context was recorded, and its
- * logged spend. Both times are the database's, so a Worker's clock never
- * decides it. Null when the session has no turn.
+ * The session's open turn, for the paths that may abandon it: its
+ * `cos.context`, whether `afterMs` has passed since that was recorded, and
+ * its logged spend. Both times are the database's, so a Worker's clock
+ * never decides it. Null when the session has no turn or its latest is
+ * closed.
  */
-async function latest(
+async function openTurn(
   db: OrgScopedDb,
   sessionId: string,
   afterMs: number
-): Promise<Latest | null> {
+): Promise<Open | null> {
   const [row] = await db.execute<{
     payload: unknown
     closed: boolean
@@ -125,80 +214,82 @@ async function latest(
     where c.session_id = ${sessionId} and c.type = 'cos.context'
     order by c.seq desc
     limit 1`)
-  if (!row) return null
+  if (!row || row.closed) return null
   return {
     context: CosContext.parse(row.payload),
-    closed: row.closed,
     lapsed: row.lapsed,
     logged: Number(row.logged),
   }
 }
 
-const holds = (found: Latest | null, turn: Turn): found is Latest =>
-  found?.context.turn_id === turn.turnId && !found.closed
-
-const abandoned = (found: Latest): CosTurn => ({
-  outcome: "abandoned",
-  turn_id: found.context.turn_id,
-  logged_usd: found.logged,
-  reserved_usd: found.context.reserved_usd,
+const abandoned = (found: Open): Checked => ({
+  type: "cos.turn",
+  payload: CosTurn.parse({
+    outcome: "abandoned",
+    turn_id: found.context.turn_id,
+    logged_usd: found.logged,
+    reserved_usd: found.context.reserved_usd,
+  }) as Checked["payload"],
+  taint: [],
 })
 
-/** One event at the session's next seq, as the turn's CoS staff row. */
+/**
+ * One event at the session's next seq, as the turn's CoS staff row. Null
+ * when a second writer took that seq, which only a writer skipping the lock
+ * can do; the caller says what that means for it. The key and the id are
+ * fresh per append, so a clash on either is a fault and goes up as it is.
+ */
 async function append(
   db: OrgScopedDb,
-  turn: Turn,
-  type: string,
-  payload: Record<string, unknown>,
-  taint: TaintLabel[] = []
-): Promise<number> {
+  turn: Omit<Turn, "turnId">,
+  write: Checked
+): Promise<number | null> {
   try {
     const { seq } = await appendSessionEvent(db, {
       orgId: turn.orgId,
       staffId: turn.staffId,
       assignmentId: null,
       sessionId: turn.sessionId,
-      type,
-      payload,
-      taint,
+      type: write.type,
+      payload: write.payload,
+      taint: write.taint,
     })
     return seq
   } catch (error) {
-    // A second writer took this seq, which only a writer skipping the lock
-    // can do: this write loses. The key and the id are fresh per append, so
-    // a clash on either is a fault, not a race, and goes up as it is.
     const { code, name } = constraint(error)
-    if (code === "23505" && name === "events_session_seq_key") {
-      throw new TurnClosed(turn.turnId)
-    }
+    if (code === "23505" && name === "events_session_seq_key") return null
     throw error
   }
 }
 
 /**
  * Appends `writes` in order as `turn`, under the conversation's lock, and
- * returns their seqs. Throws `TurnClosed`, having written nothing that
- * commits, when the turn no longer holds the token; the caller aborts the
- * turn's stream. Each payload is checked against its contract and must name
- * this turn.
+ * returns their seqs. The whole batch is checked before the lock is taken,
+ * so a bad write leaves nothing behind. Throws `TurnClosed`, having written
+ * nothing that commits, when the turn no longer holds the token or another
+ * writer took a seq; the caller aborts the turn's stream. A result for a
+ * call the turn already logged one for is refused.
  */
 export async function writeAsTurn(
   db: OrgScopedDb,
   turn: Turn,
   writes: TurnEvent[]
 ): Promise<number[]> {
+  const batch = checked(turn.turnId, writes)
   await lock(db, turn.sessionId)
-  if (!holds(await latest(db, turn.sessionId, 0), turn)) {
-    throw new TurnClosed(turn.turnId)
+  if (!(await holdsToken(db, turn))) throw new TurnClosed(turn.turnId)
+  const ids = batch.flatMap((w) =>
+    w.type === "cos.tool_result" ? [String(w.payload.tool_call_id)] : []
+  )
+  const twice = await resultsLogged(db, turn, ids)
+  if (twice.length > 0) {
+    throw new Error(`cos.turns: a second result for ${twice.join(", ")}`)
   }
   const seqs: number[] = []
-  for (const write of writes) {
-    const payload = SCHEMAS[write.type].parse(write.payload)
-    if (payload.turn_id !== turn.turnId) {
-      throw new Error(`cos.turns: a ${write.type} for another turn`)
-    }
-    const taint = "taint" in write ? write.taint : []
-    seqs.push(await append(db, turn, write.type, payload, taint))
+  for (const write of batch) {
+    const seq = await append(db, turn, write)
+    if (seq === null) throw new TurnClosed(turn.turnId)
+    seqs.push(seq)
   }
   return seqs
 }
@@ -210,9 +301,13 @@ export async function writeAsTurn(
  */
 export async function abandonTurn(db: OrgScopedDb, turn: Turn): Promise<void> {
   await lock(db, turn.sessionId)
-  const found = await latest(db, turn.sessionId, 0)
-  if (!holds(found, turn)) throw new TurnClosed(turn.turnId)
-  await append(db, turn, "cos.turn", abandoned(found))
+  const found = await openTurn(db, turn.sessionId, 0)
+  if (found?.context.turn_id !== turn.turnId) {
+    throw new TurnClosed(turn.turnId)
+  }
+  if ((await append(db, turn, abandoned(found))) === null) {
+    throw new TurnClosed(turn.turnId)
+  }
 }
 
 /**
@@ -220,17 +315,25 @@ export async function abandonTurn(db: OrgScopedDb, turn: Turn): Promise<void> {
  * open. A turn open for longer than `totalMs` plus `GRACE_MS` since its
  * `cos.context` is closed here as `abandoned`, which also takes its token,
  * and the answer is false. True means the caller answers `chat.busy`.
+ * Throws `NoSuchSession` when the org cannot see the conversation, and
+ * `SessionBusy` when another writer appended meanwhile.
  */
 export async function closeLapsedTurn(
   db: OrgScopedDb,
   session: Omit<Turn, "turnId">,
   totalMs: number
 ): Promise<boolean> {
+  const [held] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.id, session.sessionId))
+  if (!held) throw new NoSuchSession(session.sessionId)
   await lock(db, session.sessionId)
-  const found = await latest(db, session.sessionId, totalMs + GRACE_MS)
-  if (!found || found.closed) return false
+  const found = await openTurn(db, session.sessionId, totalMs + GRACE_MS)
+  if (!found) return false
   if (!found.lapsed) return true
-  const turn = { ...session, turnId: found.context.turn_id }
-  await append(db, turn, "cos.turn", abandoned(found))
+  if ((await append(db, session, abandoned(found))) === null) {
+    throw new SessionBusy(session.sessionId)
+  }
   return false
 }
