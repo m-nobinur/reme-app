@@ -4,6 +4,7 @@ Status: accepted, 2026-09-27. Applies to `apps/api`, the chat in `apps/web`, `pa
 and `packages/db`. Changes no DR. It makes one scoped exception to §6.3 and DR-9 for the Chief of
 Staff (CoS). It ends on whichever trigger in the first item under "Change if" fires first.
 Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
+Amended again the same day: the budget lock, how the stream is built, and five tools at first.
 
 ## Context
 
@@ -55,7 +56,8 @@ given where it matters.
   reaches it through OpenRouter with `OPENROUTER_API_KEY`, a wrangler secret on the api. The
   provider package is chosen with `npm view` in the agent's PR.
 - The stream goes out on the same `/chat` with `UI_MESSAGE_STREAM_HEADERS`, the framing the script
-  already writes, so the web transport does not change. The api now carries the `ai` runtime and a
+  already writes, so the web transport does not change. The second amendment of 2026-09-27 says
+  how the api builds it. The api now carries the `ai` runtime and a
   provider package; the agent's PR moves the ADR-027 baseline with measured numbers.
 
 This model call does not go through the facade or the transport ladder, and OpenRouter is its only
@@ -137,7 +139,7 @@ tripwire. The check is the boundary.
 
 ### A turn
 
-1. A first transaction takes the conversation's row lock, then the org's row lock for the budget.
+1. A first transaction takes the conversation's row lock, then the org's budget lock.
    It refuses with 409 `chat.busy` while another turn is open, validates the request, reserves
    spend, and appends `cos.prefix` when the version is new, `cos.message` for the owner's input,
    and `cos.context`. It writes the owner's row and commits. Every turn routed to the CoS writes
@@ -200,7 +202,7 @@ the open-turn rule.
 
 ### Caps and cost
 
-The cap is $1 per org per UTC day of CoS spend. The first transaction holds the org's row lock
+The cap is $1 per org per UTC day of CoS spend. The first transaction holds the org's budget lock
 while it sums the day's spend: settled cost for closed turns, the reservation for open ones, and the
 full reservation for abandoned ones, whose last step's usage is lost. It then adds this turn's
 reservation, or falls back if that would pass $1. Concurrent turns in five conversations therefore
@@ -269,10 +271,10 @@ The agent's PR, each red once by mutation:
 - Taint labels: a turn whose context carries owner text and a question's `why` labels
   `cos.context` and the `get_workspace` result `untrusted_input` and `inferred`, and an owner
   message alone labels its `cos.message` `untrusted_input` only.
-- With no key, one results turn approving `request_change` and `answer_question` and denying
-  `create_reminder` makes no model call, runs each approved tool once under its approval id in
-  order, logs two `cos.tool_result` rows and one `cos.message`, and stores the denial as
-  `output-denied`.
+- With no key, one results turn approving one `request_change` and one `answer_question` and
+  denying a second `request_change` makes no model call, runs each approved tool once under its
+  approval id in order, logs two `cos.tool_result` rows and one `cos.message`, and stores the
+  denial as `output-denied`. The PR that ships reminders adds a denied `create_reminder`.
 - With the second transaction held open, the client receives no `finish` chunk until it commits,
   and a follow-up request sent on `finish` never gets `chat.busy`.
 - A provider error before content gives the fallback, not a 5xx, and one after content gives an
@@ -422,7 +424,8 @@ inside the sweep's transaction, so a stalled R2 call now ends that transaction a
 step retries, and every part of the sweep is idempotent. The fix moves the R2 work out of the
 transaction: the guards read in one transaction, the event naming the keys is written in its own,
 and the list and delete run with no transaction open. It is built on the first sweep that fails
-with 25P03.
+with `CONNECTION_CLOSED`, which is how an idle kill reaches the driver: the server's 25P03 arrives
+while no query is waiting.
 
 **A steer replays by key.** "Tools" says every act tool's side effect replays under its approval
 id. A steer does not. The orchestrator records nothing a retry could find, so a steer that timed
@@ -448,6 +451,46 @@ Change if:
 
 - The first `orchestrator.timeout` on a replace, or an owner report of a build left queued. Build
   the one-call replace.
-- A 25P03 in any worker's log. Find the gap, then fix the code that made it or move the limit.
+- A `CONNECTION_CLOSED` in any worker's log. It is the idle limit's kill, or a lost connection.
+  Find the gap, then fix the code that made it or move the limit.
 - A 57014 on a statement that was not waiting on a lock. Read its plan in `pg_stat_statements`,
   then fix the query or move the limit with that measurement.
+
+## Amendment, 2026-09-27: the budget lock, the stream, and five tools at first
+
+**The budget lock.** The decision said the first transaction takes "the org's row lock". As
+`SELECT ... FOR UPDATE` on `orgs`, that lock conflicts with the `FOR KEY SHARE` lock every insert
+with a foreign key to `orgs` takes. Events, conversation messages and assignments all have one,
+the orchestrator's event stream included. A turn reserving spend would wait on each of those
+writers, and they on it, the same fault the first amendment fixed for conversations.
+
+The first transaction takes `pg_advisory_xact_lock(3, hashtext(org_id::text))` instead, always
+after the conversation's lock (key 2) and never before it, so two turns cannot take the pair in
+opposite orders. It waits rather than tries. Its holders are the short reservation transactions,
+and the 5 s statement limit bounds the wait. Key 3 is free. The site lock in
+`apps/orchestrator/src/publish.ts`, the seed lock and the migration lock all use the one-key form,
+which Postgres keeps apart from the two-key form, and nothing else takes key 3. Two orgs whose ids
+hash alike wait on each other's reservation, which lasts one short transaction.
+
+Rejected: `FOR NO KEY UPDATE` on the org's row. It does not conflict with a foreign-key insert.
+It does conflict with every `UPDATE` of the row and every `FOR SHARE`, so the budget would queue
+behind any write to the org, and whoever writes to `orgs` next would change who waits on it.
+
+**The stream.** The api builds the response from `createAgentUIStream`, which returns the UI
+message chunks without a response around them. It pipes them through its own transform, which
+buffers until the first content chunk and holds `finish` until the second transaction commits,
+then through `JsonToSseTransformStream` and `TextEncoderStream`, and sends that with
+`UI_MESSAGE_STREAM_HEADERS`. That is what `createUIMessageStreamResponse` does inside
+(`dist/index.js:6561` in 7.0.83), with the api's transform added.
+
+Rejected: `createAgentUIStreamResponse`. It goes from the agent to a `Response` in one call, so the
+api has no point at which to buffer until the first content, answer an early provider error with
+the fallback, or hold `finish` until the commit.
+
+**Five tools at first.** The agent's PR ships `get_workspace`, `get_facts`, `get_preview`,
+`request_change` and `answer_question`. `create_reminder` arrives with reminders, as "Tools" says,
+so the fallback proof denies a second `request_change` until then.
+
+**The idle trigger.** An idle kill reaches postgres.js as `CONNECTION_CLOSED`, not as 25P03,
+because the server sends 25P03 while no query is waiting. The first amendment's sweep fix and its
+trigger now name `CONNECTION_CLOSED`.
