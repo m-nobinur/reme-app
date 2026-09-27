@@ -1359,6 +1359,68 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
+  it("keeps a provider's reasoning metadata out of the owner's stream and rows, and in the log and the next prompt", async () => {
+    const secret = (n: number) => ({
+      openrouter: {
+        reasoning_details: [
+          { type: "reasoning.text", text: `SECRET-REASONING-${n}` },
+        ],
+      },
+    })
+    const id = await conversation(me)
+    const { model, sent } = scripted(
+      [
+        { type: "stream-start", warnings: [] },
+        {
+          type: "tool-call",
+          toolCallId: "call_ws",
+          toolName: "get_workspace",
+          input: "{}",
+          providerMetadata: secret(1),
+        },
+        {
+          type: "finish",
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          usage: usage(),
+          providerMetadata: secret(2),
+        },
+      ],
+      [
+        { type: "stream-start", warnings: [] },
+        { type: "text-start", id: "t1", providerMetadata: secret(3) },
+        {
+          type: "text-delta",
+          id: "t1",
+          delta: "All quiet.",
+          providerMetadata: secret(4),
+        },
+        { type: "text-end", id: "t1", providerMetadata: secret(5) },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: usage(),
+          providerMetadata: secret(6),
+        },
+      ]
+    )
+    const done = await turn(me, typed(id, "Anything new?", "ask"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(done.text).not.toContain("SECRET-REASONING")
+    expect(JSON.stringify(await rowsOf(me, id))).not.toContain(
+      "SECRET-REASONING"
+    )
+    // The log keeps it, and the step after the call sends it back.
+    const log = JSON.stringify(await logOf(id))
+    expect(log).toContain("SECRET-REASONING-1")
+    // A text part keeps what its last chunk carried.
+    expect(log).toContain("SECRET-REASONING-5")
+    expect(JSON.stringify(sent[1]?.prompt)).toContain("SECRET-REASONING-1")
+    // So does the next turn, from the logged reply.
+    const next = scripted(said("Still quiet."))
+    await turn(me, typed(id, "And now?", "ask"), { model: next.model })
+    expect(JSON.stringify(next.sent[0]?.prompt)).toContain("SECRET-REASONING-5")
+  })
+
   it("counts a turn's spend on the day the database recorded it, not the day the Worker says", async () => {
     const who = await owner(kit, url as string, "cos-day")
     const room = await conversation(who)

@@ -54,6 +54,7 @@ import {
   ranTurn,
   settle,
   streamTurn,
+  withoutProviderData,
 } from "./cos/run.ts"
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
@@ -990,9 +991,14 @@ function cancelParts<P extends { type: string }>(parts: P[]): P[] {
   })
 }
 
-/** What a stored row shows of a message: everything but its reasoning. */
+/**
+ * What a stored row shows of a message: everything but its reasoning,
+ * whether as a part or as a provider's data on one.
+ */
 const shown = <P extends { type: string }>(parts: P[]): P[] =>
-  parts.filter((p) => !p.type.startsWith("reasoning"))
+  parts
+    .filter((p) => !p.type.startsWith("reasoning"))
+    .map((p) => withoutProviderData(p))
 
 /**
  * The tail with every pending call cancelled, the way assistant-ui's
