@@ -20,7 +20,6 @@
     "@workspace/gates": "workspace:*",
     "@workspace/starter-site": "workspace:*",
     "hono": "4.13.7",
-    "ulid": "3.0.2",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -30,6 +29,7 @@
     "@types/node": "^22",
     "fast-check": "^4.9.0",
     "typescript": "^6",
+    "ulid": "3.0.2",
     "vite": "8.3.0",
     "vitest": "^4.1.11",
     "wrangler": "4.131.2"
