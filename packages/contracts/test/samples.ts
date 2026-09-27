@@ -306,7 +306,12 @@ export const samples: Record<ContractName, unknown> = {
     turn_id: ULID,
     tool_call_id: "functions.get_preview:0",
     tool: "get_preview",
-    output: { assignment_id: ASSIGNMENT, version: 3, expires_at: LATER },
+    output: {
+      outcome: "ready",
+      assignment_id: ASSIGNMENT,
+      version: 3,
+      expires_at: LATER,
+    },
   },
   CosTurn: {
     outcome: "fallback",
@@ -474,6 +479,7 @@ export const samples: Record<ContractName, unknown> = {
   },
   GetPreviewInput: { assignment_id: ASSIGNMENT },
   GetPreviewOutput: {
+    outcome: "ready",
     assignment_id: ASSIGNMENT,
     version: 3,
     expires_at: LATER,

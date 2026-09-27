@@ -125,3 +125,4 @@ export type AskFactInput = z.infer<typeof AskFactInput>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>
 export type ChatRequest = z.infer<typeof ChatRequest>
+export type ChatResult = z.infer<typeof ChatResult>

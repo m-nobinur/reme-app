@@ -3,6 +3,7 @@ import {
   AskFactOutput,
   BuildSummary,
   ChatRequest,
+  type ChatResult,
   ErrorEnvelope,
   FactValue,
   type FactValueKey,
@@ -516,15 +517,21 @@ function callIn(
   if (tail?.id !== messageId || tail.content.role !== "assistant") {
     return stale()
   }
-  const call = tail.content.parts.find(
-    (p): p is ToolPart => isTool(p) && match(p)
-  )
-  return call ? { tail, call } : stale()
+  const { parts } = tail.content
+  const call = parts.find((p): p is ToolPart => isTool(p) && match(p))
+  if (!call) return stale()
+  // A pending call is answered only as the last step's one waiting call;
+  // a resolved one falls through to its caller's replay.
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  const waiting = last.filter((p) => isTool(p) && pending(p))
+  return !pending(call) || (waiting.length === 1 && waiting[0] === call)
+    ? { tail, call }
+    : stale()
 }
 
 /** One result of a results turn, with the message that holds its call. */
-type Resolved<K extends "answer" | "approval"> = Extract<
-  Extract<ChatRequest["turn"], { kind: "results" }>["results"][number],
+type Resolved<K extends ChatResult["kind"]> = Extract<
+  ChatResult,
   { kind: K }
 > & { message_id: string }
 

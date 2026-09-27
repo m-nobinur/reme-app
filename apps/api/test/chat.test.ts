@@ -588,6 +588,48 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(await me.rows(id)).toEqual(before)
     })
 
+    it("refuses an answer to a call that is not the last step's only pending call", async () => {
+      const other = await owner(kit, url as string, "chat-steps")
+      const them = talker(other)
+      const conversation = await them.onboarding()
+      const at = await them.tail(conversation)
+      const call = pendingCall(at)
+      const store = (parts: unknown[]) =>
+        kit.withOrg({ orgId: other.orgId }, (db) =>
+          db
+            .update(conversationMessages)
+            .set({ content: { role: "assistant", parts } })
+            .where(eq(conversationMessages.id, at.id))
+        )
+      for (const parts of [
+        // A second call waits in the same step.
+        [...at.parts, { ...call, toolCallId: "call_second" }],
+        // The call is pending, but a later step opened after it.
+        [...at.parts, { type: "step-start" }],
+      ]) {
+        await store(parts)
+        const before = await them.rows(conversation)
+        const { response, text } = await them.send({
+          conversation_id: conversation,
+          mode: "ask",
+          turn: {
+            kind: "results",
+            message_id: at.id,
+            results: [
+              {
+                kind: "answer",
+                tool_call_id: call.toolCallId,
+                output: { answer: "skipped" },
+              },
+            ],
+          },
+        })
+        expect(response.status, text).toBe(409)
+        expect(ErrorEnvelope.parse(JSON.parse(text)).code).toBe("chat.stale")
+        expect(await them.rows(conversation)).toEqual(before)
+      }
+    })
+
     it("states the fact as the owner's, replays a retry and refuses a change of mind", async () => {
       const at = await me.tail(id)
       const call = pendingCall(at)

@@ -3,6 +3,7 @@ import {
   AskFactInput,
   AskFactOutput,
   ChatRequest,
+  type ChatResult,
   RequestChangeOutput,
 } from "../src/chat.ts"
 import {
@@ -161,6 +162,12 @@ describe("RequestChangeOutput", () => {
 })
 
 describe("ChatRequest", () => {
+  it("names one result as ChatResult", () => {
+    expectTypeOf<ChatResult>().toEqualTypeOf<
+      Extract<ChatRequest["turn"], { kind: "results" }>["results"][number]
+    >()
+  })
+
   const results = (...list: unknown[]) => ({
     conversation_id: CONVERSATION,
     mode: "act",

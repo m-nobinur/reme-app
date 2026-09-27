@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
   AnswerQuestionInput,
@@ -6,7 +6,7 @@ import {
   CosToolName,
   CosToolResult,
   CosTurn,
-  type GetPreviewOutput,
+  GetPreviewOutput,
 } from "../src/cos.ts"
 import { ANSWER_TEXT_MAX } from "../src/owner.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
@@ -30,8 +30,17 @@ function walk(node: unknown, found: { keys: string[]; formats: string[] }) {
 }
 
 describe("COS_TOOLS", () => {
-  it("names exactly the tools CosToolName lists", () => {
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(CosToolName.options)
+  // A tool added or dropped is a decision, so the list is written out.
+  it("has exactly the five tools, in order", () => {
+    const five = [
+      "get_workspace",
+      "get_facts",
+      "get_preview",
+      "request_change",
+      "answer_question",
+    ]
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(five)
+    expect(CosToolName.options).toStrictEqual(five)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -94,16 +103,54 @@ describe("AnswerQuestionInput", () => {
 })
 
 describe("CosToolResult", () => {
-  // The branches come from a cast over COS_TOOLS, so the cast is checked.
-  it("types each branch's output by its tool", () => {
-    expectTypeOf<
-      Extract<CosToolResult, { tool: "get_preview" }>["output"]
-    >().toEqualTypeOf<GetPreviewOutput>()
+  // The branches are written out, so each is checked against its tool.
+  it("has one branch per tool, each with that tool's output", () => {
+    const branches = CosToolResult.options.map((o) => o.shape)
+    expect(branches.map((b) => b.tool.value)).toStrictEqual(
+      Object.keys(COS_TOOLS)
+    )
+    for (const b of branches) {
+      expect(b.output).toBe(COS_TOOLS[b.tool.value].output)
+    }
   })
 
   it("refuses one tool's output under another tool's name", () => {
     const crossed = { ...(samples.CosToolResult as object), tool: "get_facts" }
     expect(verdict("CosToolResult", CosToolResult, crossed)).toEqual(REFUSED)
+  })
+})
+
+describe("GetPreviewOutput", () => {
+  it.each([
+    ["a ready preview", samples.GetPreviewOutput],
+    [
+      "a refusal",
+      {
+        outcome: "refused",
+        error: {
+          class: "validation",
+          code: "preview.not_ready",
+          message: "This build has no preview yet.",
+          detail: {},
+        },
+      },
+    ],
+  ])("accepts %s", (_name, output) => {
+    expect(verdict("GetPreviewOutput", GetPreviewOutput, output)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    [
+      "a ready preview with a link",
+      { ...(samples.GetPreviewOutput as object), url: "https://example.com" },
+    ],
+    ["a refusal with no error", { outcome: "refused" }],
+  ])("refuses %s", (_name, output) => {
+    expect(verdict("GetPreviewOutput", GetPreviewOutput, output)).toEqual(
+      REFUSED
+    )
   })
 })
 

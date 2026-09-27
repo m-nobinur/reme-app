@@ -1016,13 +1016,37 @@ export interface components {
           tool_call_id: string
           /** @constant */
           tool: "get_preview"
-          output: {
-            /** Format: uuid */
-            assignment_id: string
-            version: number
-            /** Format: date-time */
-            expires_at: string
-          }
+          output:
+            | {
+                /** @constant */
+                outcome: "ready"
+                /** Format: uuid */
+                assignment_id: string
+                version: number
+                /** Format: date-time */
+                expires_at: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                  detail: {
+                    [key: string]: unknown
+                  }
+                }
+              }
         }
       | {
           turn_id: string
@@ -1516,13 +1540,37 @@ export interface components {
       /** Format: uuid */
       assignment_id: string
     }
-    GetPreviewOutput: {
-      /** Format: uuid */
-      assignment_id: string
-      version: number
-      /** Format: date-time */
-      expires_at: string
-    }
+    GetPreviewOutput:
+      | {
+          /** @constant */
+          outcome: "ready"
+          /** Format: uuid */
+          assignment_id: string
+          version: number
+          /** Format: date-time */
+          expires_at: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+            detail: {
+              [key: string]: unknown
+            }
+          }
+        }
     InformationAnswer: {
       /** Format: uuid */
       answer_id: string

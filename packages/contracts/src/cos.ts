@@ -64,12 +64,23 @@ export const CosFacts = z.strictObject({ facts: z.array(FactValue) })
 /** `get_preview`'s input: the build whose preview to check. */
 export const GetPreviewInput = z.strictObject({ assignment_id: Uuid })
 
-/** `get_preview`'s output. No URLs: the tool UI fetches the signed links. */
-export const GetPreviewOutput = z.strictObject({
-  assignment_id: Uuid,
-  version: Version,
-  expires_at: Timestamp,
-})
+/**
+ * `get_preview`'s output: the preview's version and expiry, or why there is
+ * none, such as a build with no preview yet. No URLs: the tool UI fetches
+ * the signed links.
+ */
+export const GetPreviewOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("ready"),
+    assignment_id: Uuid,
+    version: Version,
+    expires_at: Timestamp,
+  }),
+  z.strictObject({
+    outcome: z.literal("refused"),
+    error: ErrorEnvelope.omit({ occurred_at: true }),
+  }),
+])
 
 /**
  * `answer_question`'s input. The api finds the build from the request and
@@ -191,33 +202,39 @@ export const CosMessage = z.strictObject({
   }),
 })
 
+const Called = { turn_id: Ulid, tool_call_id: ToolCallId }
+
 /**
  * The `cos.tool_result` payload, one branch per tool so each output is typed.
  * Labelled like `cos.context`, by the text the output carries.
  */
-export const CosToolResult = z.discriminatedUnion(
-  "tool",
-  Object.entries(COS_TOOLS).map(([tool, { output }]) =>
-    z.strictObject({
-      turn_id: Ulid,
-      tool_call_id: ToolCallId,
-      tool: z.literal(tool),
-      output,
-    })
-  ) as unknown as [ToolResult, ...ToolResult[]]
-)
-
-type ToolResult = {
-  [K in CosToolName]: z.ZodObject<
-    {
-      turn_id: typeof Ulid
-      tool_call_id: typeof ToolCallId
-      tool: z.ZodLiteral<K>
-      output: (typeof COS_TOOLS)[K]["output"]
-    },
-    z.core.$strict
-  >
-}[CosToolName]
+export const CosToolResult = z.discriminatedUnion("tool", [
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_workspace"),
+    output: COS_TOOLS.get_workspace.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_facts"),
+    output: COS_TOOLS.get_facts.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_preview"),
+    output: COS_TOOLS.get_preview.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("request_change"),
+    output: COS_TOOLS.request_change.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("answer_question"),
+    output: COS_TOOLS.answer_question.output,
+  }),
+])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
 export const CosStep = z.strictObject({

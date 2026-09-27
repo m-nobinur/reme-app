@@ -1,5 +1,7 @@
 import {
+  ANSWER_TEXT_MAX,
   type ChatRequest,
+  type ChatResult,
   ErrorEnvelope,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -17,16 +19,11 @@ export const textOf = (message: UIMessage) =>
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n")
 
-type Result = Extract<
-  ChatRequest["turn"],
-  { kind: "results" }
->["results"][number]
-
 /**
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
- * message, or every answer to `ask_fact` and every yes or no on
- * `request_change` in the last step, as the SDK sends them together.
+ * message, or every answer to `ask_fact` and every yes or no on a tool in
+ * the last step, as the SDK sends them together.
  */
 export function chatTurn(
   conversationId: string,
@@ -48,28 +45,31 @@ export function chatTurn(
   const step = parts.slice(
     parts.map((part) => part.type).lastIndexOf("step-start") + 1
   )
-  const results = step.flatMap((part): Result[] => {
+  const results = step.flatMap((part): ChatResult[] => {
     if (!isToolUIPart(part)) return []
     if (part.type === "tool-ask_fact" && part.state === "output-available") {
       return [
         {
           kind: "answer",
           tool_call_id: part.toolCallId,
-          output: part.output as Extract<Result, { kind: "answer" }>["output"],
+          output: part.output as Extract<
+            ChatResult,
+            { kind: "answer" }
+          >["output"],
         },
       ]
     }
-    if (
-      part.type === "tool-request_change" &&
-      part.state === "approval-responded"
-    ) {
-      const { id, approved, reason } = part.approval
+    if (part.state === "approval-responded") {
+      const { id, approved } = part.approval
+      // The SDK takes any reason; the contract takes non-blank text up to
+      // the answer cap, so one long or blank reason cannot fail the turn.
+      const reason = part.approval.reason?.trim().slice(0, ANSWER_TEXT_MAX)
       return [
         {
           kind: "approval",
           approval_id: id,
           approved,
-          ...(reason === undefined ? {} : { reason }),
+          ...(reason ? { reason } : {}),
         },
       ]
     }
