@@ -261,7 +261,8 @@ the bill is at or under the logged sum, with the gap reported, abandoned turns r
 logged spend and at reservation, and the bill between the two. The cap is a ceiling,
 not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if every org spends it. The
 measurement after the agent's PR records typical cost per turn and first-chunk p95 over 20
-staging turns, a T2 exit item with a $10 cap shared with T4's tier-2 evals.
+staging turns. That staging measurement is an exit item of the agent's work, with a $10 cap
+shared with the tier-2 evals.
 
 ### Contract changes, in one contracts PR before the agent
 
@@ -284,7 +285,7 @@ staging turns, a T2 exit item with a $10 cap shared with T4's tier-2 evals.
 - The payloads of the six model-facing `cos.*` events, which the eval replay reads.
 - The web builds its message type from these schemas, and an api type test checks
   `InferAgentUIMessage<typeof cosAgent>` against the same schemas. The web's typed message lands
-  with T3's first tool-UI PR, where typed outputs first change what renders. Until then the web
+  with the first tool-UI PR, where typed outputs first change what renders. Until then the web
   keeps its casts inside its history code and adds none elsewhere.
 
 ### Proofs each PR owes
@@ -578,27 +579,31 @@ never executes an act tool. If it did, it would send the approval response and t
 tool messages, while the derivation yields one, so the hash would never match. One path serves the
 model, the fallback and the dead-turn repair.
 
-**A failed tool is never a refusal.** A tool that throws writes no `cos.tool_result`. The model
-reads a fixed line with the error's code and nothing from a driver or the orchestrator. For an
-answer off the contract (class `integrity`), the line says nothing was done. For anything else it
-says the outcome is unknown. During settle, an `integrity` failure closes the call as
-`output-error`, and the turn goes on. Any other failure ends the turn with outcome `error` and
-answers with its status, 503, leaving the approved call for the next CoS turn to settle again.
+**A failed tool is never a refusal.** A tool that throws writes no `cos.tool_result`, and the
+model reads a fixed line with nothing from a driver or the orchestrator. A `ToolFailed`, which a
+tool throws for any orchestrator answer of 500 or above, puts its code in the line. For an answer
+off the contract (class `integrity`), the line says nothing was done. For any other `ToolFailed`
+it says the outcome is unknown. Any other throw gets a fixed line with no code.
+
+During settle, an `integrity` failure closes the call as `output-error`, and the turn goes on. Any
+other `ToolFailed` ends the turn with outcome `error` and answers with the tool's own status,
+leaving the approved call for the next CoS turn to settle again. Any other throw also closes the
+turn as `error`, and the error propagates.
 
 **A typed message cancels only calls still waiting on the owner.** Those are calls in
-`input-available` or `approval-requested`. The tail is logged again with them cancelled. An
-approved call waiting to settle is not cancelled.
+`input-available` or `approval-requested`. When the CoS made the tail, it is logged again with
+them cancelled. An approved call waiting to settle is not cancelled.
 
 **The CoS's staff row.** An org with no COS-001 row gets its starting team in the turn's first
 transaction, through the same idempotent path a change uses. Only if the row is still missing does
 the script answer, with an error code in the Worker's log.
 
 **Taint, by what the text carries.**
-- Build goals are the owner's words: `untrusted_input`.
+- Build goals are the owner's words, or the CoS's restatement of them: `untrusted_input` and
+  `inferred`. A started `request_change` carries its goal, so it gets both labels too.
 - A question's field, reason and options are another agent's: `inferred`.
-- A non-empty `get_facts` result and a started `request_change` echo the owner's words:
-  `untrusted_input`. When a fact can come from anyone but the owner, facts are labelled by
-  provenance.
+- A non-empty `get_facts` result is the owner's business details: `untrusted_input`. When a fact
+  can come from anyone but the owner, facts are labelled by provenance.
 - A CoS message is `inferred`, plus `untrusted_input` once it carries an approval reason or a tool
   output.
 
@@ -618,9 +623,9 @@ session logs `cos.prefix` whenever it lacks this prefix's SHA-256, so an edit th
 the version still reaches the log (R7).
 
 **The limits and the measurement.** The agent merged with this ADR's guessed limits. They are
-ceilings, so a wrong one shows as fallbacks, not overspend. The 20-turn staging measurement and
-the bridge deadline over 20 approvals, 5 of them replacing a review, are a T2 exit item. They set
-`LIMITS` and the deadline in their own PR.
+ceilings, so a wrong one shows as fallbacks, not overspend. The 20-turn staging measurement and the
+bridge deadline over 20 approvals, 5 of them replacing a review, are an exit item of the agent's
+work, the staging measurement. They set `LIMITS` and the deadline in their own PR.
 
 Rejected:
 
