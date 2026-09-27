@@ -7,9 +7,11 @@ import {
   ErrorEnvelope,
   type FactRecord,
   FactValue,
+  FactValueKey,
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
+  OwnerAnswerText,
   type OwnerChangeRequest,
   PreviewLink,
   RequestChangeOutput,
@@ -21,7 +23,6 @@ import {
   siteRevisions,
   sql,
   type Tenancy,
-  waitedOn,
 } from "@workspace/db"
 import { failure } from "../http.ts"
 import {
@@ -42,6 +43,12 @@ import { readFacts, readWorkspace } from "../workspace.ts"
  * `{class, code, message}`. Each opens its own `withOrg`, outside any
  * conversation lock. The act tools take the approval id as their key, so
  * running one twice replays the first run.
+ *
+ * A refusal is only a definite no: a 4xx, from the api or from the
+ * orchestrator's envelope. An answer at 5xx, a timeout, a lost call or an
+ * answer off the contract, leaves the outcome unknown (ADR-034), so it is
+ * thrown as `ToolFailed`, never returned: a stored refusal would close the
+ * approved call, and the repair could no longer rerun it under its key.
  */
 
 export type ToolContext = { env: Env; kit: Tenancy; owner: Owner }
@@ -52,17 +59,49 @@ type Refused = Extract<GetPreviewOutput, { outcome: "refused" }>
 /** Another agent's text, and any message, is capped where the model reads it. */
 const TEXT_MAX = 500
 
-/** An api refusal as the model reads it: its class, code and message, nothing else. */
-async function refused(response: Response): Promise<Refused> {
-  const error = ErrorEnvelope.parse(await response.json())
-  return {
-    outcome: "refused",
-    error: {
-      class: error.class,
-      code: error.code,
-      message: error.message.slice(0, TEXT_MAX),
-    },
+/** A call whose outcome nobody can vouch for, cut to what a log may hold. */
+export class ToolFailed extends Error {
+  constructor(
+    readonly status: number,
+    readonly error: Refused["error"]
+  ) {
+    super(error.code)
   }
+}
+
+/**
+ * An api answer as the model reads it: its class, code and message, nothing
+ * else. Thrown as `ToolFailed` unless it is a definite no.
+ */
+async function refused(response: Response): Promise<Refused> {
+  const envelope = ErrorEnvelope.parse(await response.json())
+  const error = {
+    class: envelope.class,
+    code: envelope.code,
+    message: envelope.message.slice(0, TEXT_MAX),
+  }
+  if (response.status >= 500) throw new ToolFailed(response.status, error)
+  return { outcome: "refused", error }
+}
+
+/**
+ * A stored question's options, when they still fit the closed list the model
+ * reads: at most 10, each an answer an owner could give. A list stored before
+ * that rule is dropped whole and logged, since part of a closed list would
+ * read as all of it.
+ */
+function optionsOf(requestId: string, options: string[] | null) {
+  if (
+    options === null ||
+    (options.length <= 10 &&
+      options.every((o) => OwnerAnswerText.safeParse(o).success))
+  ) {
+    return options
+  }
+  console.warn(
+    JSON.stringify({ code: "cos.options_skipped", request_id: requestId })
+  )
+  return null
 }
 
 export async function getWorkspace(
@@ -87,9 +126,9 @@ export async function getWorkspace(
       .slice(0, 10)
       .map((r) => ({
         request_id: r.request_id,
-        field: r.field,
+        field: r.field.slice(0, TEXT_MAX),
         why: r.why.slice(0, TEXT_MAX),
-        options: r.options,
+        options: optionsOf(r.request_id, r.options),
         blocking: r.blocking,
       })),
     approvals: status.attention
@@ -161,7 +200,15 @@ export async function getPreview(
       .from(siteRevisions)
       .where(eq(siteRevisions.id, link.revision_id))
   )
-  if (!revision) return refused(notFound("assignment"))
+  // The orchestrator named a revision this org does not hold: a mismatch
+  // between the two sides, not a no.
+  if (!revision) {
+    throw new ToolFailed(502, {
+      class: "integrity",
+      code: "orchestrator.off_contract",
+      message: "The builder named a preview this business does not hold.",
+    })
+  }
   return GetPreviewOutput.parse({
     outcome: "ready",
     assignment_id: id,
@@ -188,44 +235,63 @@ const noQuestion = () =>
   failure(404, {
     class: "resource",
     code: "request.not_found",
-    message: "No build is waiting on that question.",
+    message: "No build asked that question.",
+    detail: {},
+  })
+
+const answerInvalid = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.invalid",
+    message: "That answer does not fit the question.",
     detail: {},
   })
 
 /**
  * The owner's answer, sent through the orchestrator's `/answer` keyed by the
- * approval. The build is the one that asked, and it has to be waiting on this
- * question (`waitedOn`), answered or not, since the orchestrator replays a
- * repeat and refuses a change of mind. Any other question, another org's
- * included, is refused here and never reaches the orchestrator.
+ * approval. The id is looked up only to find the build that asked, which
+ * the bridge's path needs; an id the org never asked, another org's
+ * included, is refused here and never reaches the orchestrator. Which
+ * question may be answered is the orchestrator's to say, as on the owner's
+ * route: it refuses any but the one the build waits on, and replays the
+ * stored receipt to a retry under the same key even after the build has
+ * moved on to a newer question.
  *
- * ponytail: the asking build is found by scanning the org's
- * `information.requested` events for the id; an expression index on
- * `payload->>'request_id'` when that shows in the slow log.
+ * The value goes as the orchestrator reads it for the question's field: a
+ * fact's inner value, for a fact the question names, or the owner's text.
+ * A fact for another key, or text for a fact, is refused here.
+ *
+ * ponytail: the lookup scans the org's `information.requested` events; a
+ * partial expression index on `(org_id, payload->>'request_id') where type =
+ * 'information.requested'` when that scan shows in the slow log.
  */
 export async function answerQuestion(
   { env, kit, owner }: ToolContext,
   input: AnswerQuestionInput,
   approvalId: string
 ): Promise<AnswerQuestionOutput> {
-  const asking = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
-    const [asked] = await db
-      .select({ assignmentId: events.assignmentId })
+  const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({
+        assignmentId: events.assignmentId,
+        field: sql<string>`${events.payload}->>'field'`,
+      })
       .from(events)
       .where(
         sql`${events.type} = 'information.requested' and ${events.payload}->>'request_id' = ${input.request_id}`
       )
       .limit(1)
-    if (!asked?.assignmentId) return null
-    const [waited] = await waitedOn(db, asked.assignmentId)
-    return waited?.request.request_id === input.request_id
-      ? asked.assignmentId
-      : null
-  })
-  if (!asking) return refused(noQuestion())
+  )
+  if (!asked?.assignmentId) return refused(noQuestion())
+  const { value } = input
+  const fact = typeof value === "object" ? value : null
+  const wantsFact = FactValueKey.safeParse(asked.field).success
+  if (wantsFact ? fact?.key !== asked.field : fact !== null) {
+    return refused(answerInvalid())
+  }
   const answered = relay(
-    await bridge(env, owner, `/${asking}/answer`, {
-      body: { request_id: input.request_id, value: input.value },
+    await bridge(env, owner, `/${asked.assignmentId}/answer`, {
+      body: { request_id: input.request_id, value: fact ? fact.value : value },
       key: approvalId,
     }),
     InformationAnswer.parse
