@@ -14,6 +14,7 @@ import {
   type Tenancy,
   tenancy,
   toFactRecord,
+  waitedOn,
 } from "@workspace/db"
 import {
   AgentInstanceExistsError,
@@ -121,8 +122,18 @@ type DeveloperEvent =
   | { kind: "budget"; cap_usd: number; spent_usd: number }
   | { kind: "interrupted"; reason: string }
 
-/** What the console's `/answer` sends: the request it answers and the fact it wrote. */
-type AnswerEvent = { request_id: string; fact_id: string }
+/**
+ * How long a round waits for its answer, from the block, and how long one
+ * wait lasts before the round looks again. The looks, not the `answer`
+ * events, find the answer: an event is only a nudge to look now, and the
+ * timeout recovers a nudge that never arrived. With no nudges a round takes
+ * 28 six-hour waits and 29 looks, one more if a timer fires early, and each
+ * nudge adds a look and a wait: about 60 steps a round, 1,200 over the 20
+ * rounds, inside the 10,000 steps an instance gets on Workers Paid (Workers
+ * Free allows 1,024).
+ */
+const ANSWER_DEADLINE_MS = 7 * 24 * 60 * 60 * 1000
+const LOOK_EVERY_MS = 6 * 60 * 60 * 1000
 
 /** How long a queued assignment waits for the site lock: 20 × 30 s. */
 const CLAIM_ATTEMPTS = 20
@@ -466,16 +477,44 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       // ran. An answer could not resume this build, so end it here rather
       // than leave the owner waiting on a question that leads nowhere.
       if (!saved.taken) return fail(`lost ${round}`, "sandbox.site_lost")
-      let answer: { payload: AnswerEvent }
-      try {
-        answer = await step.waitForEvent<AnswerEvent>(`answer ${round}`, {
-          type: "answer",
-          timeout: "7 days",
+      // One deadline for the round, from a step so a replay reads the same.
+      const deadline = await step.do(
+        `deadline ${round}`,
+        async () => Date.now() + ANSWER_DEADLINE_MS
+      )
+      let factId = ""
+      for (let look = 1; ; look++) {
+        // The clock is read inside the step too, so a replay takes the same
+        // branch below.
+        const seen = await step.do(`look ${round}.${look}`, async () => {
+          const [waited] = await run((kit) =>
+            kit.withOrg({ orgId: ids.orgId }, (db) =>
+              waitedOn(db, ids.assignmentId)
+            )
+          )
+          // The answered fact's current version: an edit made since the
+          // answer is what the Developer should see.
+          const answered =
+            waited?.request.request_id === payload.request_id
+              ? (waited.fact_id ?? "")
+              : ""
+          return { factId: answered, left: deadline - Date.now() }
         })
-      } catch {
+        factId = seen.factId
+        if (factId) break
         // Seven days with no answer. `fail` releases the site lock and takes
         // the checkpoint out of R2 with the container.
-        return fail(`unanswered ${round}`, "information.unanswered")
+        if (seen.left <= 0) {
+          return fail(`unanswered ${round}`, "information.unanswered")
+        }
+        try {
+          await step.waitForEvent(`answer ${round}.${look}`, {
+            type: "answer",
+            timeout: Math.min(LOOK_EVERY_MS, seen.left),
+          })
+        } catch {
+          // No nudge in time: look anyway.
+        }
       }
       await step.do(`rehydrate ${round}`, async () => {
         const result = await rehydrate(this.env, ids)
@@ -488,17 +527,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             const [row] = await db
               .select()
               .from(facts)
-              .where(eq(facts.id, answer.payload.fact_id))
+              .where(eq(facts.id, factId))
             if (!row) throw new NonRetryableError("fact.not_found")
             return toFactRecord(row)
           })
         )
         await run((kit) =>
           advance(kit, ids, "implementing", {
-            payload: {
-              request_id: answer.payload.request_id,
-              fact_id: answer.payload.fact_id,
-            },
+            payload: { request_id: payload.request_id, fact_id: factId },
           })
         )
         // The Developer never sees "the owner said"; it sees a fact record.
@@ -506,10 +542,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           message: {
             kind: "signal",
             type: "information.answered",
-            body: JSON.stringify({
-              request_id: answer.payload.request_id,
-              fact,
-            }),
+            body: JSON.stringify({ request_id: payload.request_id, fact }),
             attributes: { field: fact.key },
           },
         })

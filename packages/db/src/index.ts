@@ -5,6 +5,7 @@
 export { asc, eq, sql } from "drizzle-orm"
 export { supersedeFact } from "./facts.ts"
 export * from "./map.ts"
+export { type Waited, waitedOn } from "./questions.ts"
 export * from "./schema.ts"
 export type {
   Identity,
