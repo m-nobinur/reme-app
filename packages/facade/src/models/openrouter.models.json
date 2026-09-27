@@ -37,7 +37,16 @@
       "input": 4.2,
       "output": 12.6,
       "cacheRead": 2,
-      "cacheWrite": 0
+      "cacheWrite": 0,
+      "tiers": [
+        {
+          "inputTokensAbove": 199999,
+          "input": 8.4,
+          "output": 25.2,
+          "cacheRead": 2.1,
+          "cacheWrite": 0
+        }
+      ]
     },
     "contextWindow": 500000,
     "maxTokens": 450000,

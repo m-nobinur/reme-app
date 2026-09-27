@@ -1,3 +1,4 @@
+import { calculateCost, type Model } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import {
   type Endpoint,
@@ -132,13 +133,36 @@ describe("a generated OpenRouter entry", () => {
       prompt: 4.2,
       completion: 12.6,
     })
+    // Over the tier's threshold the log prices at 2.1 times the tier, which
+    // pi-ai's `calculateCost` applies to the whole request. From 200,000
+    // tokens, since the tier starts there and pi-ai tests "above".
     expect(entry.cost).toEqual({
       input: 4.2,
       output: 12.6,
       cacheRead: 2,
       cacheWrite: 0,
+      tiers: [
+        {
+          inputTokensAbove: 199_999,
+          input: 8.4,
+          output: 25.2,
+          cacheRead: 2.1,
+          cacheWrite: 0,
+        },
+      ],
     })
     expect(live).toBe(2)
+    // pi-ai reads the tier: 250,000 input tokens cost 8.4 per million.
+    const usage = {
+      input: 250_000,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 250_000,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    }
+    calculateCost(entry as unknown as Model<"openai-completions">, usage)
+    expect(usage.cost.input).toBeCloseTo(2.1, 10)
   })
 })
 

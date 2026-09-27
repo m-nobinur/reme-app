@@ -76,6 +76,34 @@ const blocks = (pricing: Pricing | undefined): Rates[] => [
 const rate = (key: string) => (r: Rates) => perMillion(r[key])
 
 /**
+ * pi-ai's cost tiers for a model's long-context overrides, each at the factor
+ * times the tier's rates, so a long request is logged at the most it can be
+ * billed as well. pi-ai applies a tier to requests whose input is above
+ * `inputTokensAbove`; an override applies from `min_prompt_tokens`, so the
+ * threshold is one under it.
+ */
+const longContextTiers = (pricing: Pricing | undefined) => {
+  const overrides = (pricing?.overrides ?? []).filter(
+    (o) => typeof o.min_prompt_tokens === "number"
+  )
+  const thresholds = [
+    ...new Set(overrides.map((o) => o.min_prompt_tokens as number)),
+  ].sort((a, b) => a - b)
+  return thresholds.map((from) => {
+    const at = overrides.filter((o) => o.min_prompt_tokens === from)
+    const capped = (key: string) =>
+      rounded(Math.max(...at.map(rate(key))) * ROUTING_CAP_FACTOR)
+    return {
+      inputTokensAbove: from - 1,
+      input: capped("prompt"),
+      output: capped("completion"),
+      cacheRead: capped("input_cache_read"),
+      cacheWrite: 0,
+    }
+  })
+}
+
+/**
  * A generated entry in Pi's `Model` shape, and how many distinct live
  * providers its routing cap admits.
  *
@@ -106,6 +134,7 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
         rate("completion")(r) <= cap.completion
     )
   )
+  const tiers = longContextTiers(model.pricing)
   const least = (values: (number | null | undefined)[]) => {
     const known = values.filter((v): v is number => typeof v === "number")
     return known.length > 0 ? Math.min(...known) : undefined
@@ -130,6 +159,7 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
         )
       ),
       cacheWrite: 0,
+      ...(tiers.length > 0 ? { tiers } : {}),
     },
     contextWindow:
       least(admitted.map((e) => e.context_length)) ?? model.context_length,
