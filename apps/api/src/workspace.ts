@@ -26,6 +26,7 @@ import {
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
 import { sha256Hex } from "./http.ts"
+import { readReminderNotes } from "./reminders.ts"
 
 /**
  * What the owner's panel polls: attention derived from `assignments`,
@@ -265,7 +266,7 @@ export async function readWorkspace(
   return kit.withOrg({ orgId }, async (db) => {
     // Issued together, so postgres.js pipelines them on the transaction's one
     // connection instead of paying a round trip each.
-    const [builds, approvalItems, questions, feed, current, site] =
+    const [builds, approvalItems, questions, feed, current, site, notes] =
       await Promise.all([
         readBuilds(db),
         readApprovals(db),
@@ -273,13 +274,14 @@ export async function readWorkspace(
         readFeed(db, PANEL_HOURS, 10),
         readFacts(db),
         readSite(db, suffix),
+        readReminderNotes(db),
       ])
     return WorkspaceStatus.parse({
       site,
       builds,
       attention: orderAttention(approvalItems, questions, feed),
       missing_facts: missingFacts(current),
-      reminders: { notes: [], derived: [] },
+      reminders: { notes, derived: [] },
     })
   })
 }
