@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import { assignments, events, facts, sql, supersedeFact } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -32,19 +33,46 @@ vi.mock("../src/sandbox.ts", () => ({
   sandboxFor: () => ({ destroy: async () => undefined }),
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
-// A steer dispatches to the Developer's Durable Object; here it only records.
-const { dispatched } = vi.hoisted(() => ({
-  dispatched: [] as { message: unknown }[],
+// A steer dispatches to the Developer's Durable Object; here it only records,
+// keeping flue's keyed admission (`DispatchRequest.idempotencyKey`): a key
+// seen before with the same submission gets its first receipt back and
+// delivers nothing, and with any other submission throws
+// `SubmissionConflictError`, as flue does.
+const { dispatched, admitted, attempts } = vi.hoisted(() => ({
+  dispatched: [] as { message: unknown; idempotencyKey?: string }[],
+  admitted: new Map<string, { message: string; submissionId: string }>(),
+  /** Every dispatch call, admitted or not. */
+  attempts: { count: 0 },
 }))
-vi.mock("@workspace/facade", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@workspace/facade")>()),
-  init: () => ({
-    dispatch: async (request: { message: unknown }) => {
-      dispatched.push(request)
-      return { submissionId: "s" }
-    },
-  }),
-}))
+vi.mock("@workspace/facade", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@workspace/facade")>()
+  return {
+    ...real,
+    init: () => ({
+      dispatch: async (request: {
+        message: unknown
+        idempotencyKey?: string
+      }) => {
+        attempts.count++
+        const key = request.idempotencyKey
+        const message = real.canonical(request.message)
+        const first = key ? admitted.get(key) : undefined
+        if (first && first.message !== message) {
+          throw new real.SubmissionConflictError({
+            submissionId: first.submissionId,
+          })
+        }
+        if (first) {
+          return { submissionId: first.submissionId, deduplicated: true }
+        }
+        dispatched.push(request)
+        const submissionId = `s-${dispatched.length}`
+        if (key) admitted.set(key, { message, submissionId })
+        return { submissionId }
+      },
+    }),
+  }
+})
 
 const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
@@ -187,7 +215,10 @@ live("an owner starting a build", () => {
       `/assignments/${ids.assignmentId}/steer?org=${slug}`,
       {
         method: "POST",
-        headers: { authorization: "Bearer test-token" },
+        headers: {
+          authorization: "Bearer test-token",
+          "idempotency-key": crypto.randomUUID(),
+        },
         body: JSON.stringify({ message: "Use the brand blue" }),
       },
       env
@@ -204,10 +235,19 @@ live("an owner starting a build", () => {
     )
     expect(rows).toEqual([
       {
-        payload: { message: "Make the header green" },
+        payload: {
+          message: "Make the header green",
+          key_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
         taint: ["untrusted_input"],
       },
-      { payload: { message: "Use the brand blue" }, taint: [] },
+      {
+        payload: {
+          message: "Use the brand blue",
+          key_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        taint: [],
+      },
     ])
     // What reaches the Developer: the owner's words only as a tainted signal.
     expect(dispatched.map((d) => d.message)).toEqual([
@@ -219,6 +259,100 @@ live("an owner starting a build", () => {
       },
       { kind: "user", body: "Use the brand blue" },
     ])
+  })
+
+  it("delivers a steer once for its key, and gives a retry the same receipt", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    dispatched.length = 0
+    const key = crypto.randomUUID()
+    const steer = (message: string) =>
+      owner(
+        orgId,
+        `/${ids.assignmentId}/steer`,
+        { message },
+        {
+          "idempotency-key": key,
+        }
+      )
+    const first = await steer("Make the header green")
+    expect(first.status).toBe(202)
+    const receipt = await first.json()
+    // The bridge call timed out after the steer landed, so the api retries.
+    const again = await steer("Make the header green")
+    expect(again.status).toBe(202)
+    expect(await again.json()).toEqual(receipt)
+    expect(dispatched).toHaveLength(1)
+    // The same key with other words is a different request, and refused.
+    const other = await steer("Make the header red")
+    expect(other.status).toBe(409)
+    expect(await other.json()).toMatchObject({
+      class: "validation",
+      code: "steer.key_reused",
+    })
+    expect(dispatched).toHaveLength(1)
+    const logged = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.steered'`
+        )
+    )
+    // The key's hash, never the key: the console and activity read payloads.
+    expect(logged).toEqual([
+      {
+        payload: {
+          message: "Make the header green",
+          key_sha256: createHash("sha256").update(key).digest("hex"),
+        },
+      },
+    ])
+  })
+
+  it("refuses a key another caller used, and a key flue holds for another steer", async () => {
+    const { orgId, slug } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    dispatched.length = 0
+    const key = crypto.randomUUID()
+    const first = await owner(
+      orgId,
+      `/${ids.assignmentId}/steer`,
+      { message: "Make the header green" },
+      { "idempotency-key": key }
+    )
+    expect(first.status).toBe(202)
+    // The console sends the same words under the owner's key: a user turn,
+    // not the owner's signal, so it is another steer, refused before flue.
+    const tried = attempts.count
+    const byConsole = await consoleApp.request(
+      `/assignments/${ids.assignmentId}/steer?org=${slug}`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "idempotency-key": key },
+        body: JSON.stringify({ message: "Make the header green" }),
+      },
+      env
+    )
+    expect(byConsole.status).toBe(409)
+    expect(await byConsole.json()).toMatchObject({ code: "steer.key_reused" })
+    expect(attempts.count).toBe(tried)
+    // flue already admitted this key for other words, with nothing in the
+    // log: its conflict is a 409, not a 500.
+    const held = crypto.randomUUID()
+    admitted.set(held, { message: "other", submissionId: "s-held" })
+    const conflicted = await owner(
+      orgId,
+      `/${ids.assignmentId}/steer`,
+      { message: "Make the header green" },
+      { "idempotency-key": held }
+    )
+    expect(conflicted.status).toBe(409)
+    expect(await conflicted.json()).toMatchObject({
+      class: "validation",
+      code: "steer.key_reused",
+    })
+    expect(dispatched).toHaveLength(1)
   })
 
   it("acts on the header's org, whatever ?org= and the bearer say", async () => {

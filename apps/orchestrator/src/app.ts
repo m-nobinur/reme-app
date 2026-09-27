@@ -17,6 +17,8 @@ import {
   siteRevisions,
   sql,
   staff,
+  steerByKey,
+  steerKeyHash,
   supersedeFact,
   type Tenancy,
   tenancy,
@@ -26,7 +28,7 @@ import {
   toSiteRevision,
   waitedOn,
 } from "@workspace/db"
-import { canonical, init } from "@workspace/facade"
+import { canonical, init, SubmissionConflictError } from "@workspace/facade"
 import {
   PREVIEW_TTL_S,
   SCREENSHOTS,
@@ -59,6 +61,7 @@ import {
   appendEvent,
   assignmentCost,
   cancel,
+  lockRow,
   TransitionError,
 } from "./state.ts"
 
@@ -913,6 +916,8 @@ bridge.post("/:id/answer", async (c) => {
 bridge.post("/:id/steer", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { message?: unknown }
   const message = typeof body.message === "string" ? body.message.trim() : ""
   if (!message) {
@@ -932,35 +937,86 @@ bridge.post("/:id/steer", async (c) => {
       detail: { length: message.length, max: GOAL_MAX },
     })
   }
-  const row = await c.get("kit").withOrg({ orgId }, async (db) => {
-    const [found] = await db
-      .select()
-      .from(assignments)
-      .where(eq(assignments.id, id))
-    if (!found) return null
+  const taint: TaintLabel[] = byOwner(c) ? ["untrusted_input"] : []
+  const reused = () =>
+    failure(c, 409, {
+      class: "validation",
+      code: "steer.key_reused",
+      message: "This Idempotency-Key already carried a different steer.",
+      detail: {},
+    })
+  // Stored under its key's hash, so a retry after a timeout finds it
+  // (ADR-034's amendment). The same build, words and caller log nothing new;
+  // anything else under the key is another request, and refused.
+  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
+    // Locked first, so two sends of one key queue here.
+    let found: Awaited<ReturnType<typeof lockRow>>
+    try {
+      found = await lockRow(db, id)
+    } catch (error) {
+      if (
+        error instanceof TransitionError &&
+        error.code === "assignment.not_found"
+      ) {
+        return { missing: true as const }
+      }
+      throw error
+    }
+    const steered = await steerByKey(db, key)
+    if (steered) {
+      const same =
+        steered.assignment_id === id &&
+        steered.message === message &&
+        canonical(steered.taint) === canonical(taint)
+      return same ? { replayed: true as const } : { reused: true as const }
+    }
     await appendEvent(db, {
       orgId,
       assignmentId: id,
       staffId: found.createdByStaffId,
       type: "assignment.steered",
-      payload: { message },
-      taint: byOwner(c) ? ["untrusted_input"] : [],
+      payload: { message, key_sha256: steerKeyHash(key) },
+      taint,
     })
-    return found
+    return { logged: true as const }
   })
-  if (!row) return notFound(c, id)
+  if ("missing" in result) return notFound(c, id)
+  if ("reused" in result) return reused()
   // An owner's words reach the model the way a change request does: as a
   // tainted signal, never as a user turn (§28.3). The console's stay a turn.
-  const receipt = await init(Developer, { id }).dispatch({
-    message: byOwner(c)
-      ? {
-          kind: "signal",
-          type: "site.change_requested",
-          body: message,
-          attributes: { taint: "untrusted_input" },
-        }
-      : { kind: "user", body: message },
-  })
+  // Delivered under the same key, so flue admits it once and a replay gets
+  // the first receipt back without a second turn.
+  let receipt: { submissionId: string }
+  try {
+    receipt = await init(Developer, { id }).dispatch({
+      message: byOwner(c)
+        ? {
+            kind: "signal",
+            type: "site.change_requested",
+            body: message,
+            attributes: { taint: "untrusted_input" },
+          }
+        : { kind: "user", body: message },
+      idempotencyKey: key,
+    })
+  } catch (error) {
+    // flue holds this key for another submission.
+    if (error instanceof SubmissionConflictError) return reused()
+    // Logged but not delivered: a retry under the key delivers it.
+    console.error(
+      JSON.stringify({
+        code: "steer.undelivered",
+        assignment_id: id,
+        error: error instanceof Error ? error.name : "unknown",
+      })
+    )
+    return failure(c, 503, {
+      class: "transient",
+      code: "steer.undelivered",
+      message: "The steer is saved but did not reach the build. Try again.",
+      detail: {},
+    })
+  }
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })
 
