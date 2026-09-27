@@ -24,6 +24,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./cloudflare": "./src/cloudflare.ts"
+    "./cloudflare": "./src/cloudflare.ts",
+    "./models/openrouter.ids.json": "./src/models/openrouter.ids.json",
+    "./models/openrouter.models.json": "./src/models/openrouter.models.json"
   }
 }

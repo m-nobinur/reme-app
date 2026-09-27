@@ -8,9 +8,9 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.3,
-      "output": 1.2,
-      "cacheRead": 0.03,
+      "input": 0.035,
+      "output": 0.29,
+      "cacheRead": 0.001,
       "cacheWrite": 0
     },
     "contextWindow": 1048576,
@@ -19,8 +19,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.3,
-          "completion": 1.2
+          "prompt": 0.035,
+          "completion": 0.29
         }
       }
     }
@@ -60,19 +60,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.09,
-      "output": 0.3,
-      "cacheRead": 0.02,
+      "input": 0.045,
+      "output": 0.14,
+      "cacheRead": 0.01,
       "cacheWrite": 0
     },
     "contextWindow": 1310720,
-    "maxTokens": 131072,
+    "maxTokens": 128000,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.09,
-          "completion": 0.3
+          "prompt": 0.045,
+          "completion": 0.14
         }
       }
     }
