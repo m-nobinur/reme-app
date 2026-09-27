@@ -1,3 +1,4 @@
+import { SITE_REVISION_HEADER } from "@workspace/contracts"
 import { signPreview } from "@workspace/gates/preview"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import app from "../src/index.ts"
@@ -674,6 +675,14 @@ describe("a published host", () => {
     const head = await get(SITE_HOST, "/contact/", { method: "HEAD" })
     expect(head.status).toBe(200)
     expect(await head.text()).toBe("")
+  })
+
+  it("tags every file it serves with the revision and config version it served by", async () => {
+    pointers.set(`host:${SITE_HOST}`, pointer)
+    const home = await get(SITE_HOST, "/")
+    expect(home.headers.get(SITE_REVISION_HEADER)).toBe(`${REV}@2`)
+    const css = await get(SITE_HOST, "/_astro/index.C1.css")
+    expect(css.headers.get(SITE_REVISION_HEADER)).toBe(`${REV}@2`)
   })
 
   it("serves nothing the manifest does not list, screenshots included", async () => {

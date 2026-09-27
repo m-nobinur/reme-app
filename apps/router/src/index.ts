@@ -1,6 +1,7 @@
 import {
   DeploymentManifest,
   type ErrorEnvelope,
+  SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
 import { deployments, resolveOrgBySlug, sql, tenancy } from "@workspace/db"
@@ -415,12 +416,13 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
-  return serve(
-    c,
-    host,
-    `${found.base}dist/${file}`,
-    previewHeaders(found.manifest.headers, file, cacheFor(file))
+  const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
+  // Which version answered, so the publisher's probe judges only its own.
+  headers.set(
+    SITE_REVISION_HEADER,
+    `${pointer.revision_id}@${pointer.config_version}`
   )
+  return serve(c, host, `${found.base}dist/${file}`, headers)
 })
 
 app.notFound(notHere)
