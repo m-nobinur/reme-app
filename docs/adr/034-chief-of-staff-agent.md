@@ -4,7 +4,7 @@ Status: accepted, 2026-09-27. Applies to `apps/api`, the chat in `apps/web`, `pa
 and `packages/db`. Changes no DR. It makes one scoped exception to §6.3 and DR-9 for the Chief of
 Staff (CoS). It ends on whichever trigger in the first item under "Change if" fires first.
 Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
-Amended again the same day: the budget lock, how the stream is built, and five tools at first.
+Amended again the same day: the budget lock and the stream.
 
 ## Context
 
@@ -56,8 +56,8 @@ given where it matters.
   reaches it through OpenRouter with `OPENROUTER_API_KEY`, a wrangler secret on the api. The
   provider package is chosen with `npm view` in the agent's PR.
 - The stream goes out on the same `/chat` with `UI_MESSAGE_STREAM_HEADERS`, the framing the script
-  already writes, so the web transport does not change. The second amendment of 2026-09-27 says
-  how the api builds it. The api now carries the `ai` runtime and a
+  already writes, so the web transport does not change. How the api builds it is in
+  the amendment "the budget lock and the stream". The api now carries the `ai` runtime and a
   provider package; the agent's PR moves the ADR-027 baseline with measured numbers.
 
 This model call does not go through the facade or the transport ladder, and OpenRouter is its only
@@ -80,9 +80,9 @@ would store a model's guess as `owner_stated`, from where it can reach the site,
 
 Every act tool's side effect is keyed by its approval id, as `request_change` already is through
 `startChange`, so running it twice replays the first run. A steer is the exception until the
-amendment of 2026-09-27 closes it. Tools run inside the agent's stream,
-outside any conversation lock, and open their own `withOrg`. Each description says when to use the
-tool and when not to. Each output is a compact summary.
+amendment "a timed-out bridge call has an unknown outcome" closes it. Tools run inside the agent's
+stream, outside any conversation lock, and open their own `withOrg`. Each description says when
+to use the tool and when not to. Each output is a compact summary.
 
 ### The model's history comes from the event log
 
@@ -139,7 +139,7 @@ tripwire. The check is the boundary.
 
 ### A turn
 
-1. A first transaction takes the conversation's row lock, then the org's budget lock.
+1. A first transaction takes the conversation's lock (key 2), then the org's budget lock (key 3).
    It refuses with 409 `chat.busy` while another turn is open, validates the request, reserves
    spend, and appends `cos.prefix` when the version is new, `cos.message` for the owner's input,
    and `cos.context`. It writes the owner's row and commits. Every turn routed to the CoS writes
@@ -149,16 +149,18 @@ tripwire. The check is the boundary.
    reasoning or tool input, or an error. `start` does not count, because `streamText` emits it
    before any provider call (`dist/index.js:9662`) and a provider error arrives later as an error
    chunk. An error before content becomes the fallback below. Afterwards the stream passes through.
-3. `onFinish` runs under `ctx.waitUntil` with `consumeStream`. A second transaction appends the
-   response's `cos.message` and `cos.turn` and writes the rows. The api forwards the `finish` chunk
+3. `onFinish` runs under `ctx.waitUntil`, on the branch that the amendment "the budget lock and
+   the stream" tees off. A second transaction appends the response's `cos.message` and `cos.turn`
+   and writes the rows. The api forwards the `finish` chunk
    only after that transaction commits. The next request an approval triggers therefore arrives
    after the turn has closed, and `chat.busy` reaches only a second tab. The web shows its message
    there and does not retry.
 
 **One writer per turn, by token.** Every write a turn makes after its first transaction, including
 `cos.tool_result`, `cos.step` and `cos.call`, runs in a short transaction that takes the
-conversation's row lock and checks that the session's latest `cos.context` carries its turn id and
-has no `cos.turn`. A turn that fails the check has its write refused and its stream aborted.
+conversation's lock (key 2) and checks that the session's latest `cos.context` carries its turn
+id and has no `cos.turn`. A turn that fails the check has its write refused and its stream
+aborted.
 
 **Abandonment.** A turn is open from its `cos.context` to its `cos.turn`. The clock starts at
 `cos.context`, which is before the SDK starts its own. A turn is abandoned `totalMs` plus 30 s after
@@ -265,6 +267,11 @@ The agent's PR, each red once by mutation:
   appends `abandoned` and runs, and the old turn's next write is refused.
 - A stored message id gets 409 `chat.message_exists`.
 - Five concurrent turns in five conversations of one org never reserve past $1.
+- With a reservation's transaction held open on an org, inserts into `events`, `assignments` and
+  `conversation_messages` for that org commit without waiting. The proof fails if the budget lock
+  is `FOR UPDATE` on `orgs`.
+- A client that disconnects mid-turn does not stop the model run: the turn still ends with
+  `answered`, and its `cos.turn` is written before `totalMs` passes.
 - A turn killed after an approved `request_change` ran leaves the next turn to append exactly one
   `cos.tool_result` under its own token, and the orchestrator holds one build for that approval id.
 - A conversation with an `integrity` outcome takes only the fallback on every later turn.
@@ -282,8 +289,8 @@ The agent's PR, each red once by mutation:
 
 ### Before the agent's PR merges
 
-- The bridge deadline and the database limits in the amendment of 2026-09-27, which replaces the
-  two bullets that stood here.
+- The bridge deadline and the database limits in the amendment "a timed-out bridge call has an
+  unknown outcome", which replaces the two bullets that stood here.
 - A steer replays by key, as that amendment says.
 - A recorded staging turn from the chosen model and provider, committed as an api test fixture,
   shows that its tool-call ids pass the new pattern.
@@ -423,9 +430,8 @@ transaction, with its bound. One is known. `deleteRevisionFiles` lists and delet
 inside the sweep's transaction, so a stalled R2 call now ends that transaction at 15 s. The sweep
 step retries, and every part of the sweep is idempotent. The fix moves the R2 work out of the
 transaction: the guards read in one transaction, the event naming the keys is written in its own,
-and the list and delete run with no transaction open. It is built on the first sweep that fails
-with `CONNECTION_CLOSED`, which is how an idle kill reaches the driver: the server's 25P03 arrives
-while no query is waiting.
+and the list and delete run with no transaction open. It is built on the first sweep that the
+idle limit kills, by the trigger below.
 
 **A steer replays by key.** "Tools" says every act tool's side effect replays under its approval
 id. A steer does not. The orchestrator records nothing a retry could find, so a steer that timed
@@ -451,12 +457,16 @@ Change if:
 
 - The first `orchestrator.timeout` on a replace, or an owner report of a build left queued. Build
   the one-call replace.
-- A `CONNECTION_CLOSED` in any worker's log. It is the idle limit's kill, or a lost connection.
-  Find the gap, then fix the code that made it or move the limit.
-- A 57014 on a statement that was not waiting on a lock. Read its plan in `pg_stat_statements`,
-  then fix the query or move the limit with that measurement.
+- A 25P03 in Neon's Postgres log, which only the idle limit writes. Find the gap, then fix the
+  code that made it or move the limit. A `CONNECTION_CLOSED` in a Worker's log is a hint to look,
+  not the trigger, since an ordinary dropped connection gives the same code. That code was
+  measured on a direct connection; what a Worker sees through Hyperdrive is to be confirmed on
+  staging.
+- A 57014 on a statement that was not waiting on a lock, or on one waiting on the budget lock
+  (key 3), since that means a reservation transaction ran past 5 s. Read the plan in
+  `pg_stat_statements`, then fix the query or move the limit with that measurement.
 
-## Amendment, 2026-09-27: the budget lock, the stream, and five tools at first
+## Amendment, 2026-09-27: the budget lock and the stream
 
 **The budget lock.** The decision said the first transaction takes "the org's row lock". As
 `SELECT ... FOR UPDATE` on `orgs`, that lock conflicts with the `FOR KEY SHARE` lock every insert
@@ -472,25 +482,42 @@ and the 5 s statement limit bounds the wait. Key 3 is free. The site lock in
 which Postgres keeps apart from the two-key form, and nothing else takes key 3. Two orgs whose ids
 hash alike wait on each other's reservation, which lasts one short transaction.
 
+When the wait passes the statement limit, Postgres cancels it with 57014. The first transaction
+rolls back, nothing is stored, and the api's catch-all answers 503 `transient`, which the owner can
+send again. It is not `chat.busy`: the conversation has no open turn.
+
 Rejected: `FOR NO KEY UPDATE` on the org's row. It does not conflict with a foreign-key insert.
 It does conflict with every `UPDATE` of the row and every `FOR SHARE`, so the budget would queue
 behind any write to the org, and whoever writes to `orgs` next would change who waits on it.
 
-**The stream.** The api builds the response from `createAgentUIStream`, which returns the UI
-message chunks without a response around them. It pipes them through its own transform, which
-buffers until the first content chunk and holds `finish` until the second transaction commits,
-then through `JsonToSseTransformStream` and `TextEncoderStream`, and sends that with
-`UI_MESSAGE_STREAM_HEADERS`. That is what `createUIMessageStreamResponse` does inside
-(`dist/index.js:6561` in 7.0.83), with the api's transform added.
+**The stream.** `createAgentUIStream` gives the UI message chunks with no response around them.
+The api pipes them through its own transform, which buffers until the first content chunk and
+holds `finish` until the second transaction commits. It hands the result to
+`createUIMessageStreamResponse` with a `consumeSseStream` that passes its branch to
+`ctx.waitUntil` and reads it to the end. That function tees the SSE stream there
+(`dist/index.js:6561` in 7.0.83), and a tee cancels its source only when both branches cancel. So a
+closed tab cancels the response's branch while the waitUntil branch keeps reading, and the model
+run goes on to its `onFinish`. The agent's `abortSignal` is never the request's signal. The 30 s
+grace after a disconnect still applies, as "Abandonment" says.
 
-Rejected: `createAgentUIStreamResponse`. It goes from the agent to a `Response` in one call, so the
-api has no point at which to buffer until the first content, answer an early provider error with
-the fallback, or hold `finish` until the commit.
+A run that does abort, from the turn's own token check or its `timeout`, ends in the stream's
+`onEnd` with `isAborted` true. That `onEnd` closes the turn at once: under the turn's own token it
+appends `cos.turn` with outcome `abandoned`, the spend its `cos.step` rows logged and the
+reservation, and it writes no response message. The next turn does not wait `totalMs` plus 30 s
+for it. Only a Worker killed before `onEnd` runs leaves the turn to that timer.
+
+Rejected:
+
+- **`createAgentUIStreamResponse`.** It goes from the agent to a `Response` in one call, so the
+  api has no point at which to buffer until the first content, answer an early provider error with
+  the fallback, or hold `finish` until the commit.
+- **Building the SSE pipeline by hand** from `JsonToSseTransformStream` and `TextEncoderStream`.
+  It drops the `consumeSseStream` tee, so a closed tab aborts the model run.
 
 **Five tools at first.** The agent's PR ships `get_workspace`, `get_facts`, `get_preview`,
 `request_change` and `answer_question`. `create_reminder` arrives with reminders, as "Tools" says,
 so the fallback proof denies a second `request_change` until then.
 
-**The idle trigger.** An idle kill reaches postgres.js as `CONNECTION_CLOSED`, not as 25P03,
-because the server sends 25P03 while no query is waiting. The first amendment's sweep fix and its
-trigger now name `CONNECTION_CLOSED`.
+**The idle trigger.** The server writes 25P03 to its own log when the idle limit kills a
+session, and that is the trigger in the first amendment. The driver sees only a closed
+connection.
