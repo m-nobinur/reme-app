@@ -184,6 +184,11 @@ describe("ChatRequest", () => {
     ...extra,
   })
 
+  const zone = (time_zone: string) => ({
+    ...text("Add Saturday hours"),
+    time_zone,
+  })
+
   it.each([
     ["a typed message", text("Add Saturday hours")],
     ["every result of a step", samples.ChatRequest],
@@ -196,6 +201,11 @@ describe("ChatRequest", () => {
       results(approval({ reason: "a".repeat(ANSWER_TEXT_MAX) })),
     ],
     ["a message at the goal cap", text("a".repeat(GOAL_MAX))],
+    ["no time zone", text("Add Saturday hours")],
+    ["a zone", zone("Europe/London")],
+    ["a nested zone", zone("America/Argentina/Buenos_Aires")],
+    ["an offset zone", zone("Etc/GMT-14")],
+    ["a zone at 64 characters", zone(`A${"b".repeat(63)}`)],
   ])("accepts %s", (_name, request) => {
     expect(verdict("ChatRequest", ChatRequest, request)).toEqual(ACCEPTED)
   })
@@ -209,6 +219,13 @@ describe("ChatRequest", () => {
     ["blank text", text("   ")],
     ["text over the goal cap", text("a".repeat(GOAL_MAX + 1))],
     ["a mode it does not know", { ...turn, mode: "agent" }],
+    ["an empty time zone", { ...turn, time_zone: "" }],
+    [
+      "a time zone over 64 characters",
+      { ...turn, time_zone: `A${"b".repeat(64)}` },
+    ],
+    ["a time zone with a space", { ...turn, time_zone: "Europe/London x" }],
+    ["a time zone climbing a path", { ...turn, time_zone: "../etc" }],
     [
       "a conversation id that is not a UUID",
       { ...turn, conversation_id: "c1" },

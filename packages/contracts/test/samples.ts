@@ -142,6 +142,7 @@ export const samples: Record<ContractName, unknown> = {
   ChatRequest: {
     conversation_id: CONVERSATION,
     mode: "act",
+    time_zone: "Europe/London",
     turn: {
       kind: "results",
       message_id: "a_7Kd2Lm9Q",

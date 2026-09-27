@@ -549,6 +549,7 @@ export interface components {
       conversation_id: string
       /** @enum {string} */
       mode: "ask" | "act"
+      time_zone?: string
       turn:
         | {
             /** @constant */
