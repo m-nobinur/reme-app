@@ -398,9 +398,8 @@ export async function startChange(
         detail: { assignment_id: route.assignment_id },
       })
     case "steer": {
-      // ponytail: a steer makes no row the key could find, so a retried
-      // steer delivers the message twice. A keyed-results table (R5) if an
-      // owner ever sees it.
+      // The orchestrator stores the steer under this key and delivers it
+      // once, so a retry after a timeout replays the first receipt.
       const result = await bridge(env, owner, `/${route.assignment_id}/steer`, {
         body: { message: text },
         key,

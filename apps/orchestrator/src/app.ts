@@ -932,25 +932,53 @@ bridge.post("/:id/steer", async (c) => {
       detail: { length: message.length, max: GOAL_MAX },
     })
   }
-  const row = await c.get("kit").withOrg({ orgId }, async (db) => {
+  const key = idempotencyKey(c)
+  if (!key) return keyMissing(c)
+  // Stored under its key, so a retry after a timeout finds it (ADR-034's
+  // amendment): the same words log nothing new, other words are refused.
+  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
+    // Locked first, so two sends of one key queue here.
     const [found] = await db
       .select()
       .from(assignments)
       .where(eq(assignments.id, id))
-    if (!found) return null
+      .for("update")
+    if (!found) return { missing: true as const }
+    const [steered] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${id} and ${events.type} = 'assignment.steered' and ${events.payload}->>'key' = ${key}`
+      )
+      .limit(1)
+    if (steered) {
+      return steered.payload.message === message
+        ? { replayed: true as const }
+        : { reused: true as const }
+    }
     await appendEvent(db, {
       orgId,
       assignmentId: id,
       staffId: found.createdByStaffId,
       type: "assignment.steered",
-      payload: { message },
+      payload: { message, key },
       taint: byOwner(c) ? ["untrusted_input"] : [],
     })
-    return found
+    return { logged: true as const }
   })
-  if (!row) return notFound(c, id)
+  if ("missing" in result) return notFound(c, id)
+  if ("reused" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "steer.key_reused",
+      message: "This Idempotency-Key already carried a different steer.",
+      detail: {},
+    })
+  }
   // An owner's words reach the model the way a change request does: as a
   // tainted signal, never as a user turn (§28.3). The console's stay a turn.
+  // Delivered under the same key, so flue admits it once and a replay gets
+  // the first receipt back without a second turn.
   const receipt = await init(Developer, { id }).dispatch({
     message: byOwner(c)
       ? {
@@ -960,6 +988,7 @@ bridge.post("/:id/steer", async (c) => {
           attributes: { taint: "untrusted_input" },
         }
       : { kind: "user", body: message },
+    idempotencyKey: key,
   })
   return c.json({ assignment_id: id, submission_id: receipt.submissionId }, 202)
 })

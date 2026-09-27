@@ -32,16 +32,27 @@ vi.mock("../src/sandbox.ts", () => ({
   sandboxFor: () => ({ destroy: async () => undefined }),
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
-// A steer dispatches to the Developer's Durable Object; here it only records.
-const { dispatched } = vi.hoisted(() => ({
-  dispatched: [] as { message: unknown }[],
+// A steer dispatches to the Developer's Durable Object; here it only records,
+// keeping flue's keyed admission: a key seen before gets its first receipt
+// back and delivers nothing (flue's `DispatchRequest.idempotencyKey`).
+const { dispatched, admitted } = vi.hoisted(() => ({
+  dispatched: [] as { message: unknown; idempotencyKey?: string }[],
+  admitted: new Map<string, { submissionId: string }>(),
 }))
 vi.mock("@workspace/facade", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@workspace/facade")>()),
   init: () => ({
-    dispatch: async (request: { message: unknown }) => {
+    dispatch: async (request: {
+      message: unknown
+      idempotencyKey?: string
+    }) => {
+      const key = request.idempotencyKey
+      const first = key ? admitted.get(key) : undefined
+      if (first) return { ...first, deduplicated: true }
       dispatched.push(request)
-      return { submissionId: "s" }
+      const receipt = { submissionId: `s-${dispatched.length}` }
+      if (key) admitted.set(key, receipt)
+      return receipt
     },
   }),
 }))
@@ -187,7 +198,10 @@ live("an owner starting a build", () => {
       `/assignments/${ids.assignmentId}/steer?org=${slug}`,
       {
         method: "POST",
-        headers: { authorization: "Bearer test-token" },
+        headers: {
+          authorization: "Bearer test-token",
+          "idempotency-key": crypto.randomUUID(),
+        },
         body: JSON.stringify({ message: "Use the brand blue" }),
       },
       env
@@ -204,10 +218,13 @@ live("an owner starting a build", () => {
     )
     expect(rows).toEqual([
       {
-        payload: { message: "Make the header green" },
+        payload: { message: "Make the header green", key: expect.any(String) },
         taint: ["untrusted_input"],
       },
-      { payload: { message: "Use the brand blue" }, taint: [] },
+      {
+        payload: { message: "Use the brand blue", key: expect.any(String) },
+        taint: [],
+      },
     ])
     // What reaches the Developer: the owner's words only as a tainted signal.
     expect(dispatched.map((d) => d.message)).toEqual([
@@ -218,6 +235,49 @@ live("an owner starting a build", () => {
         attributes: { taint: "untrusted_input" },
       },
       { kind: "user", body: "Use the brand blue" },
+    ])
+  })
+
+  it("delivers a steer once for its key, and gives a retry the same receipt", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    dispatched.length = 0
+    const key = crypto.randomUUID()
+    const steer = (message: string) =>
+      owner(
+        orgId,
+        `/${ids.assignmentId}/steer`,
+        { message },
+        {
+          "idempotency-key": key,
+        }
+      )
+    const first = await steer("Make the header green")
+    expect(first.status).toBe(202)
+    const receipt = await first.json()
+    // The bridge call timed out after the steer landed, so the api retries.
+    const again = await steer("Make the header green")
+    expect(again.status).toBe(202)
+    expect(await again.json()).toEqual(receipt)
+    expect(dispatched).toHaveLength(1)
+    // The same key with other words is a different request, and refused.
+    const other = await steer("Make the header red")
+    expect(other.status).toBe(409)
+    expect(await other.json()).toMatchObject({
+      class: "validation",
+      code: "steer.key_reused",
+    })
+    expect(dispatched).toHaveLength(1)
+    const logged = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.steered'`
+        )
+    )
+    expect(logged).toEqual([
+      { payload: { message: "Make the header green", key } },
     ])
   })
 
