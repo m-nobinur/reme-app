@@ -253,7 +253,19 @@
     "rollback request superseded": [
       "read target",
       "verify artifact",
-      "activate"
+      "activate",
+      "retire others",
+      "redrive queued"
+    ],
+    "alert superseded": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
     ]
   },
   "SweepWorkflow": {

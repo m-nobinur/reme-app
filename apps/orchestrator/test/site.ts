@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto"
-import type { AssignmentState } from "@workspace/contracts"
+import {
+  type AssignmentState,
+  SITE_REVISION_HEADER,
+} from "@workspace/contracts"
 import {
   assignments,
   eq,
@@ -251,12 +254,22 @@ export function serveFromPointer(
     const host = new URL(String(input)).hostname
     const raw = store.pointers.get(`host:${host}`)
     if (!raw) return new Response("No site here.", { status: 404 })
-    const pointer = JSON.parse(raw) as { site_id: string; revision_id: string }
+    const pointer = JSON.parse(raw) as {
+      site_id: string
+      revision_id: string
+      config_version: number
+    }
     const object = store.objects.get(
       `sites/${pointer.site_id}/${pointer.revision_id}/dist/index.html`
     )
+    const served = {
+      [SITE_REVISION_HEADER]: `${pointer.revision_id}@${pointer.config_version}`,
+    }
     return object
-      ? new Response(new TextDecoder().decode(object), { status: 200 })
+      ? new Response(new TextDecoder().decode(object), {
+          status: 200,
+          headers: served,
+        })
       : new Response("", { status: 404 })
   })
 }
