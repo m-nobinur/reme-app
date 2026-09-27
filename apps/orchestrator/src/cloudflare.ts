@@ -614,18 +614,13 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
     // A rollback request that found a newer deployment activated nothing:
     // no pointer and no probes, and the same ending as every other path.
     let superseded = !deployment
-    if (deployment) {
-      await step.do("pointer", () =>
-        run(() =>
-          writePointer(this.env, target.host, {
-            org_id: orgId,
-            site_id: target.site_id,
-            revision_id: target.revision_id,
-            config_version: deployment.config_version,
-          })
+    const point = () =>
+      run((kit) =>
+        kit.withOrg({ orgId }, (db) =>
+          writePointer(this.env, db, orgId, target.site_id, target.host)
         )
       )
-    }
+    if (deployment) await step.do("pointer", point)
 
     // The content gate runs on the live HTML with the facts the assignment
     // was validated against; a rollback has no assignment and takes the
@@ -633,7 +628,8 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
     // revision is never judged. Once another deployment holds the site, this
     // instance stops: it neither alerts nor rolls back, and the newer one
     // probes itself.
-    let failed: { minute: number; reason: string } | null = null
+    let failed: { minute: number; reason: string; not_served?: string } | null =
+      null
     for (const [i, minute] of PROBE_MINUTES.entries()) {
       if (!deployment) break
       if (i > 0) {
@@ -682,15 +678,18 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
         break
       }
       if (!result.ok) {
-        failed = { minute, reason: result.reason }
+        failed = { minute, ...result }
         break
       }
     }
 
     // A rollback restores what this instance's own row replaced, only while
     // that row is still live.
+    // A version the router never served is not known to be broken: an
+    // alert, never a rollback.
     const back = deployment?.previous_revision_id
-    if (failed && !rollback && deployment && back) {
+    let rolledBack = false
+    if (failed && !failed.not_served && !rollback && deployment && back) {
       const why = failed
       const undone = await step.do("roll back", () =>
         run((kit) =>
@@ -726,21 +725,13 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
                 reason: why.reason,
               },
             })
-            return { config_version: row.configVersion }
+            return true
           })
         )
       )
       if (undone) {
-        await step.do("pointer after rollback", () =>
-          run(() =>
-            writePointer(this.env, target.host, {
-              org_id: orgId,
-              site_id: target.site_id,
-              revision_id: back,
-              config_version: undone.config_version,
-            })
-          )
-        )
+        await step.do("pointer after rollback", point)
+        rolledBack = true
       } else superseded = true
     } else if (failed && deployment) {
       const why = failed
@@ -764,10 +755,13 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
               staffId: null,
               type: "alert.raised",
               payload: {
-                kind: "publish.probe_failed",
+                kind: why.not_served
+                  ? "publish.not_served"
+                  : "publish.probe_failed",
                 revision_id: target.revision_id,
                 minute: why.minute,
                 reason: why.reason,
+                ...(why.not_served ? { served: why.not_served } : {}),
               },
             })
             return true
@@ -794,7 +788,15 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       run((kit) => redriveQueued(this.env, kit, orgId))
     )
     return {
-      outcome: superseded ? "superseded" : failed ? "rolled_back" : "published",
+      outcome: superseded
+        ? "superseded"
+        : !failed
+          ? "published"
+          : failed.not_served
+            ? "unconfirmed"
+            : rolledBack
+              ? "rolled_back"
+              : "alerted",
       revision_id: target.revision_id,
       redriven,
     }

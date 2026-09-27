@@ -292,6 +292,23 @@ live("activation", () => {
     ).rejects.toThrow()
   })
 
+  it("adds no row for a revision that is already live", async () => {
+    const { orgId, revisionId } = await previewed()
+    const input = {
+      siteId: orgId,
+      revisionId,
+      kind: "rollback" as const,
+      reason: "setup",
+    }
+    const first = await activated(orgId, { ...input, id: crypto.randomUUID() })
+    const again = await activated(orgId, { ...input, id: crypto.randomUUID() })
+    expect(again.id).toBe(first.id)
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.select().from(deployments).where(eq(deployments.siteId, orgId))
+    )
+    expect(rows).toHaveLength(1)
+  })
+
   it("replays only its own row: another activation of the same revision is not one", async () => {
     const { orgId, ids, revisionId, store } = await previewed()
     const first = await activated(orgId, {
@@ -455,9 +472,10 @@ describe("the artifact check and the probe", () => {
     waits.length = 0
     expect(
       await probeHost("x", null, router(["newer@3"], broken), mine, pause)
-    ).toEqual({ ok: true, not_served: "newer@3" })
+    ).toMatchObject({ ok: false, not_served: "newer@3" })
     expect(waits).toEqual([])
-    // An older one that never moves is not judged either, after its tries.
+    // An older one that never moves is not judged either: after its tries
+    // the probe fails as not served, never as the page.
     expect(
       await probeHost(
         "x",
@@ -466,27 +484,34 @@ describe("the artifact check and the probe", () => {
         mine,
         pause
       )
-    ).toEqual({ ok: true, not_served: "older@1" })
+    ).toMatchObject({ ok: false, not_served: "older@1" })
     expect(waits.length).toBeGreaterThan(2)
   })
 
-  it("keeps a newer pointer when an older write arrives late", async () => {
+  it("points the host at what Postgres says is live, whatever KV holds", async () => {
     const store = storage()
-    const at = (config_version: number) => ({
-      org_id: "10000001-0000-4000-8000-000000000001",
-      site_id: "10000001-0000-4000-8000-000000000001",
-      revision_id: "10000001-0000-4000-8000-000000000002",
-      config_version,
-    })
+    const site = "10000001-0000-4000-8000-000000000001"
+    const newest = {
+      id: "d3",
+      siteId: site,
+      revisionId: "10000001-0000-4000-8000-000000000003",
+      configVersion: 3,
+    }
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => ({ orderBy: () => ({ limit: async () => [newest] }) }),
+        }),
+      }),
+    }
     const env = { ROUTES: store.ROUTES } as unknown as Env
-    await writePointer(env, "h", at(3))
-    await writePointer(env, "h", at(2))
-    expect(JSON.parse(store.pointers.get("host:h") ?? "{}")).toMatchObject({
+    store.pointers.set("host:h", "not a pointer")
+    await writePointer(env, db as never, site, site, "h")
+    expect(JSON.parse(store.pointers.get("host:h") ?? "{}")).toEqual({
+      org_id: site,
+      site_id: site,
+      revision_id: newest.revisionId,
       config_version: 3,
-    })
-    await writePointer(env, "h", at(4))
-    expect(JSON.parse(store.pointers.get("host:h") ?? "{}")).toMatchObject({
-      config_version: 4,
     })
   })
 
@@ -1125,6 +1150,78 @@ live("the publish workflow", () => {
     expect(event?.payload).toMatchObject({
       step: "alert",
       revision_id: first.revisionId,
+    })
+  })
+
+  it("alerts on a failed probe with nothing earlier to restore, and says so", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { env } = workflowEnv(store)
+    vi.stubGlobal(
+      "fetch",
+      serveFromPointer(
+        store,
+        () => new Response("<html></html>", { status: 200 })
+      )
+    )
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: first.orgId, approval_id: first.approvalId },
+      fakeStep(names)
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "alerted" })
+    expect(names).toEqual(steps.PublishWorkflow["probe failure alerted"])
+    const [alert] = await eventsOf(first.ids, "alert.raised")
+    expect(alert?.payload).toMatchObject({ kind: "publish.probe_failed" })
+  })
+
+  it("alerts and never rolls back when the router never serves its version", async () => {
+    const store = storage()
+    const first = await approved(store)
+    const { orgId } = first
+    const { env } = workflowEnv(store)
+    vi.stubGlobal("fetch", serveFromPointer(store))
+    await publish(env, { org_id: orgId, approval_id: first.approvalId })
+    const second = await approveNext(store, orgId)
+    // KV stuck on the first version: every answer carries its tag, and its
+    // page would fail the second's facts if it were ever judged.
+    const stuck = store.pointers.get(
+      `host:state-test-${orgId.slice(0, 8)}${SUFFIX}`
+    )
+    const { revision_id, config_version } = JSON.parse(stuck ?? "{}")
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response("<html></html>", {
+          status: 200,
+          headers: {
+            [SITE_REVISION_HEADER]: `${revision_id}@${config_version}`,
+          },
+        })
+    )
+    // The waits between tries, taken at once.
+    const wait = setTimeout
+    vi.stubGlobal("setTimeout", ((fn: () => void, ms?: number) =>
+      wait(fn, ms === 15_000 ? 0 : ms)) as typeof setTimeout)
+    const names: string[] = []
+    const outcome = await publish(
+      env,
+      { org_id: orgId, approval_id: second.approvalId },
+      fakeStep(names)
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "unconfirmed" })
+    expect(names).toEqual(steps.PublishWorkflow["not served"])
+    expect(await liveNow(orgId)).toMatchObject({
+      kind: "publish",
+      revisionId: second.revisionId,
+    })
+    const [alert] = await eventsOf(second.ids, "alert.raised")
+    expect(alert?.payload).toMatchObject({
+      kind: "publish.not_served",
+      served: `${revision_id}@${config_version}`,
     })
   })
 

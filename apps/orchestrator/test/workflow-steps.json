@@ -266,6 +266,26 @@
       "alert",
       "retire others",
       "redrive queued"
+    ],
+    "probe failure alerted": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
+    ],
+    "not served": [
+      "read target",
+      "verify artifact",
+      "activate",
+      "pointer",
+      "probe 0",
+      "alert",
+      "retire others",
+      "redrive queued"
     ]
   },
   "SweepWorkflow": {

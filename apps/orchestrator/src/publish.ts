@@ -387,6 +387,7 @@ export async function activate(
   if (mine) return mine
   const active = await activeDeployment(db, input.siteId)
   if (input.over && active?.id !== input.over) return null
+  if (active?.revisionId === input.revisionId) return active
   let inserted: DeploymentRow | undefined
   try {
     ;[inserted] = await db
@@ -518,8 +519,8 @@ const SERVE_WAIT_MS = 15_000
  * The live host's answer, judged the way the gates would (§11.1.7). With
  * `expected`, a page the router tagged as another revision's is not this
  * one's to judge: an older deployment's is waited out and asked again, a
- * newer one's ends it, and either way it says `not_served` rather than fail.
- * An untagged answer is judged.
+ * newer one's ends it, and either way the probe fails as `not_served`, never
+ * on that page. An untagged answer is judged.
  */
 export async function probeHost(
   host: string,
@@ -527,11 +528,7 @@ export async function probeHost(
   fetcher: typeof fetch = fetch,
   expected?: Pick<SitePointer, "revision_id" | "config_version">,
   pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
-): Promise<
-  | { ok: true }
-  | { ok: false; reason: string }
-  | { ok: true; not_served: string }
-> {
+): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
   let res: Response
   for (let attempt = 1; ; attempt++) {
     try {
@@ -546,7 +543,7 @@ export async function probeHost(
     if (!expected || !served || revision === expected.revision_id) break
     await res.body?.cancel()
     if (Number(version) > expected.config_version || attempt >= SERVE_TRIES) {
-      return { ok: true, not_served: served }
+      return { ok: false, reason: `served ${served}`, not_served: served }
     }
     await pause(SERVE_WAIT_MS)
   }
@@ -726,31 +723,33 @@ export async function readTarget(
 }
 
 /**
- * The routing pointer (§11.1.3): KV is the cache and this row is what the
- * router serves. The binding is optional in the generated types because
- * production has no namespace yet; a publish without one is a configuration
- * error, not a retry. A pointer from a newer deployment already there is
- * kept, so a late or retried write never moves the host back.
- *
- * ponytail: read then put, not atomic, so two writes in the same instant
- * can still cross. KV has no compare-and-set; a Durable Object holding the
- * pointer is the upgrade if that is ever seen.
+ * The routing pointer (§11.1.3): KV is the cache and Postgres the truth, so
+ * every write puts the site's newest deployment as Postgres has it now, and a
+ * late or retried write can only repeat what is live. The binding is
+ * optional in the generated types because production has no namespace yet;
+ * a publish without one is a configuration error, not a retry.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
-  host: string,
-  pointer: SitePointer
+  db: OrgScopedDb,
+  orgId: string,
+  siteId: string,
+  host: string
 ): Promise<{ host: string }> {
   if (!env.ROUTES)
     throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
-  const key = `host:${host}`
-  const stored = await env.ROUTES.get(key)
-  if (
-    stored &&
-    (JSON.parse(stored) as SitePointer).config_version > pointer.config_version
-  ) {
-    return { host }
-  }
-  await env.ROUTES.put(key, JSON.stringify(SitePointer.parse(pointer)))
+  const live = await activeDeployment(db, siteId)
+  if (!live) throw new Error("no deployment to point at")
+  await env.ROUTES.put(
+    `host:${host}`,
+    JSON.stringify(
+      SitePointer.parse({
+        org_id: orgId,
+        site_id: siteId,
+        revision_id: live.revisionId,
+        config_version: live.configVersion,
+      })
+    )
+  )
   return { host }
 }
