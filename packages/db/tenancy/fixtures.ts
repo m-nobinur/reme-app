@@ -13,6 +13,7 @@ import {
   facts,
   memberships,
   orgs,
+  reminders,
   roles,
   siteRevisions,
   staff,
@@ -299,6 +300,16 @@ export async function seedTwoOrgs() {
         },
       },
     ])
+    // A reminder the assistant made in that conversation.
+    await db.insert(reminders).values({
+      id: per(tag, 16),
+      orgId: org,
+      title: "Tenancy probe",
+      source: "assistant",
+      conversationId: per(tag, 15),
+      createdByStaffId: per(tag, 4),
+      idempotencyKey: `tenancy_reminder_${tag}`,
+    })
   }
   await sql.end()
 }

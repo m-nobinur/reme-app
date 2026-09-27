@@ -1048,3 +1048,60 @@ export const conversationMessages = pgTable(
     orgIsolation("conversation_messages"),
   ]
 )
+
+/** `Reminder.source`: the owner wrote it, or the assistant made it with the owner's yes. */
+export const reminderSource = pgEnum("reminder_source", ["owner", "assistant"])
+
+/**
+ * A reminder the owner set, or one the assistant made in a conversation.
+ * Reminders derived from open items are computed, never stored here. A create
+ * carries its request's key as `idempotency_key`, so a retried create returns
+ * the same row. A conversation is never deleted, only archived, so the
+ * conversation key has no `on delete set null`: that would null `org_id` too,
+ * which the key shares.
+ */
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Owner text, 1 to 200 characters with something in them. */
+    title: text("title").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    source: reminderSource("source").notNull(),
+    conversationId: uuid("conversation_id"),
+    createdByStaffId: uuid("created_by_staff_id").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("reminders_org_idempotency_key").on(t.orgId, t.idempotencyKey),
+    foreignKey({
+      name: "reminders_conversation_fk",
+      columns: [t.conversationId, t.orgId],
+      foreignColumns: [conversations.id, conversations.orgId],
+    }),
+    foreignKey({
+      name: "reminders_created_by_fk",
+      columns: [t.createdByStaffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    // The list: open ones first, soonest due first.
+    index("reminders_org_done_due_idx").on(t.orgId, t.doneAt, t.dueAt),
+    // A header past the btree's row limit would fail the index as a 500.
+    check(
+      "reminders_idempotency_key_length",
+      sql`char_length(idempotency_key) between 1 and 255`
+    ),
+    check(
+      "reminders_title_text",
+      // The same ASCII whitespace as `conversations_title_text`, for the same reason.
+      sql`char_length(title) between 1 and 200 and title ~ '[^ \\t\\n\\v\\f\\r]'`
+    ),
+    orgIsolation("reminders"),
+  ]
+)
