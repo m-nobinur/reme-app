@@ -304,6 +304,10 @@ for (const theme of ["light", "dark"] as const) {
       })
       await expect(outside).toHaveAttribute("target", "_blank")
       await expect(outside).toHaveAttribute("rel", "noopener noreferrer")
+      // The host is the app's, set apart from the text the model wrote.
+      await expect(outside.locator(".aui-md-a-host bdi[dir='ltr']")).toHaveText(
+        "example.net"
+      )
       // An in-page link stays in the tab.
       const inPage = reply.getByRole("link", { name: "revision", exact: true })
       await expect(inPage).not.toHaveAttribute("target", /./)
