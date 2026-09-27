@@ -7,7 +7,7 @@ import {
 import { eq, events, type OrgScopedDb } from "@workspace/db"
 // Types only, so `ai` stays out of the bundle until the agent brings it.
 import type { ModelMessage, UIMessage } from "ai"
-import { sortedKeys } from "../http.ts"
+import { sha256Hex, sortedKeys } from "../http.ts"
 
 /**
  * The model's history, derived from a session's events and nothing else
@@ -163,12 +163,6 @@ function pruned(messages: Message[], policy: ContextPolicy): Message[] {
  * depth, as lowercase hex. jsonb keeps its own key order, so a value read
  * back from the log hashes the same as the one written.
  */
-export async function sha256(value: unknown): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(JSON.stringify(value, sortedKeys))
-  )
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
+export function sha256(value: unknown): Promise<string> {
+  return sha256Hex(JSON.stringify(value, sortedKeys))
 }

@@ -176,6 +176,9 @@ describe("the workspace tag", () => {
     expect(await etag('{"a":1}')).toBe(one)
     expect(await etag('{"a":2}')).not.toBe(one)
     expect(one).toMatch(/^"[0-9a-f]{32}"$/)
+    // The first 32 hex digits of the body's SHA-256, pinned so a change to
+    // the hashing changes every tag a browser holds only on purpose.
+    expect(one).toBe('"015abd7f5cc57a2dd94b7590f04ad808"')
   })
 
   it("matches If-None-Match lists and weak forms, and nothing else", () => {
