@@ -8,19 +8,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.3,
-      "output": 1.2,
-      "cacheRead": 0.03,
+      "input": 0.0735,
+      "output": 0.609,
+      "cacheRead": 0.045,
       "cacheWrite": 0
     },
-    "contextWindow": 1048576,
+    "contextWindow": 1040000,
     "maxTokens": 384000,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.3,
-          "completion": 1.2
+          "prompt": 0.0735,
+          "completion": 0.609
         }
       }
     }
@@ -34,10 +34,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 4,
-      "output": 12,
-      "cacheRead": 1,
-      "cacheWrite": 0
+      "input": 4.2,
+      "output": 12.6,
+      "cacheRead": 2,
+      "cacheWrite": 0,
+      "tiers": [
+        {
+          "inputTokensAbove": 199999,
+          "input": 8.4,
+          "output": 25.2,
+          "cacheRead": 2.1,
+          "cacheWrite": 0
+        }
+      ]
     },
     "contextWindow": 500000,
     "maxTokens": 450000,
@@ -45,8 +54,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 4,
-          "completion": 12
+          "prompt": 4.2,
+          "completion": 12.6
         }
       }
     }
@@ -60,19 +69,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.09,
-      "output": 0.3,
-      "cacheRead": 0.02,
+      "input": 0.0945,
+      "output": 0.294,
+      "cacheRead": 0.015,
       "cacheWrite": 0
     },
-    "contextWindow": 1310720,
-    "maxTokens": 131072,
+    "contextWindow": 1048576,
+    "maxTokens": 128000,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.09,
-          "completion": 0.3
+          "prompt": 0.0945,
+          "completion": 0.294
         }
       }
     }

@@ -5,13 +5,20 @@ import type { ErrorEnvelope } from "@workspace/contracts"
  * travels; `message` is for a log and never for a model.
  */
 export class FacadeError extends Error {
+  readonly code: string
+  readonly errorClass: ErrorEnvelope["class"]
+  readonly detail: Record<string, unknown>
+
   constructor(
-    readonly code: string,
-    readonly errorClass: ErrorEnvelope["class"],
+    code: string,
+    errorClass: ErrorEnvelope["class"],
     message: string,
-    readonly detail: Record<string, unknown> = {}
+    detail: Record<string, unknown> = {}
   ) {
     super(message)
     this.name = "FacadeError"
+    this.code = code
+    this.errorClass = errorClass
+    this.detail = detail
   }
 }
