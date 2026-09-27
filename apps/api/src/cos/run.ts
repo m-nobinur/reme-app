@@ -305,8 +305,9 @@ export async function unsettled(run: AgentTurn): Promise<Call[]> {
 
 /**
  * Runs each unsettled call under its approval id, which replays a run that
- * already happened, and logs its `cos.tool_result` under this turn's token
- * (ADR-034, "an approved call with no result"). A `ToolFailed` of class
+ * already happened, logs its `cos.tool_result` under this turn's token
+ * (ADR-034, "an approved call with no result") and rewrites the stored row
+ * of the message that holds it, so a reload shows the outcome. A `ToolFailed` of class
  * `integrity` is an answer off the contract, which committed nothing and
  * would fail the same way again, so the call is closed as `output-error`
  * with the text the model reads for it. Any other `ToolFailed` leaves the
@@ -318,6 +319,7 @@ export async function settle(
   rows: Rows
 ): Promise<ToolFailed | null> {
   for (const call of await unsettled(run)) {
+    let failed: ToolFailed | null = null
     try {
       await runTool(
         run,
@@ -329,9 +331,19 @@ export async function settle(
     } catch (error) {
       if (!(error instanceof ToolFailed)) throw error
       if (error.error.class !== "integrity") return error
-      // Read again: an earlier call in the same message may have a result by now.
-      const current = (await logged(run)).find((m) => m.id === call.messageId)
-      if (!current) throw error
+      failed = error
+    }
+    // Read again: the result, or an earlier call's in the same message, is
+    // in the log by now.
+    const current = (await logged(run)).find((m) => m.id === call.messageId)
+    if (!current)
+      throw failed ?? new Error("cos.run: a settled call's message is gone")
+    await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
+      if (!failed) {
+        // The result is logged; the stored row shows it too.
+        await rows(db, current)
+        return
+      }
       const message = {
         ...current,
         parts: current.parts.map((part) =>
@@ -339,22 +351,20 @@ export async function settle(
             ? {
                 ...part,
                 state: "output-error",
-                errorText: toolErrorText(error),
+                errorText: toolErrorText(failed),
               }
             : part
         ),
       } as UIMessage
-      await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
-        await writeAsTurn(db, run.turn, [
-          {
-            type: "cos.message",
-            payload: { turn_id: run.turn.turnId, message: message as never },
-            taint: messageTaint(message),
-          },
-        ])
-        await rows(db, message)
-      })
-    }
+      await writeAsTurn(db, run.turn, [
+        {
+          type: "cos.message",
+          payload: { turn_id: run.turn.turnId, message: message as never },
+          taint: messageTaint(message),
+        },
+      ])
+      await rows(db, message)
+    })
   }
   return null
 }

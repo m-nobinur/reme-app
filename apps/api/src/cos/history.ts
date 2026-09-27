@@ -57,8 +57,12 @@ export type ContextPolicy = {
   toolTurns: number
 }
 
+/**
+ * Version 2 escapes `<` in the context's workspace data, so the text inside
+ * cannot close its `<data>` tag. Its numbers are version 1's.
+ */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "1",
+  version: "2",
   turns: 12,
   toolTurns: 2,
 }

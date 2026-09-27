@@ -34,7 +34,6 @@ import {
   type Part,
   readScript,
   type Script,
-  STREAM_HEADERS,
   type ToolPart,
 } from "../src/chat.ts"
 import {
@@ -198,10 +197,6 @@ describe("the onboarding script", () => {
         parts: [{ type: "step-start" }, ...nextStep(script())],
       },
     })
-  })
-
-  it("streams with the AI SDK's headers", () => {
-    expect(STREAM_HEADERS).toEqual(UI_MESSAGE_STREAM_HEADERS)
   })
 })
 

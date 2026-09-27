@@ -77,13 +77,13 @@ export class NoSuchSession extends Error {
 /**
  * An event a turn writes after its first transaction. Taint is the
  * caller's to say from what the payload carries. A step is the model's
- * output, so it is always `inferred`; `cos.call` and `cos.turn` carry no
- * text and no label.
+ * output, so it is always `inferred`, plus the labels of the tool outputs
+ * it carries; `cos.call` and `cos.turn` carry no text and no label.
  */
 export type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
   | { type: "cos.tool_result"; payload: CosToolResult; taint: TaintLabel[] }
-  | { type: "cos.step"; payload: CosStep }
+  | { type: "cos.step"; payload: CosStep; taint?: TaintLabel[] }
   | { type: "cos.call"; payload: CosCall }
   | { type: "cos.turn"; payload: CosTurn }
 
@@ -124,7 +124,7 @@ function checked(turnId: string, writes: TurnEvent[]): Checked[] {
     }
     const taint: TaintLabel[] =
       write.type === "cos.step"
-        ? ["inferred"]
+        ? [...new Set<TaintLabel>(["inferred", ...(write.taint ?? [])])]
         : "taint" in write
           ? write.taint
           : []
@@ -380,7 +380,8 @@ export const DAILY_CAP_USD = 1
  * conversation's (key 2), and holds it to the end of the transaction, so a
  * second turn in another conversation sums after this one has reserved.
  * Closed turns count their cost, open ones their reservation, and abandoned
- * ones their whole reservation, since their last step's usage is lost. A
+ * ones the greater of their logged spend and their reservation, since their
+ * last step's usage is lost. A
  * turn counts on the UTC day its `cos.context` was recorded, by the
  * database's clock, the same clock that decides when a turn lapses. A
  * wait on the lock past the statement limit ends in 57014, which the api
@@ -397,7 +398,8 @@ export async function withinCap(
   const [row] = await db.execute<{ spent: number }>(sql`
     select coalesce(sum(case
         when t.payload is null then (c.payload->>'reserved_usd')::float8
-        when t.payload->>'outcome' = 'abandoned' then (t.payload->>'reserved_usd')::float8
+        when t.payload->>'outcome' = 'abandoned' then greatest(
+          (t.payload->>'logged_usd')::float8, (t.payload->>'reserved_usd')::float8)
         else (t.payload->>'cost_usd')::float8
       end), 0) as spent
     from ${events} c

@@ -21,7 +21,12 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import type { LanguageModel, UIMessage, UIMessageChunk } from "ai"
+import {
+  type LanguageModel,
+  UI_MESSAGE_STREAM_HEADERS,
+  type UIMessage,
+  type UIMessageChunk,
+} from "ai"
 import { type Owner, startChange, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
@@ -104,15 +109,6 @@ export const CANCELLED = TOOL_CALL_CANCELLED
 
 /** `format` on every row: `aiSDKV6FormatAdapter.format`, v6 even on ai 7. */
 const FORMAT = "ai-sdk/v6"
-
-/** ai 7.0.83's `UI_MESSAGE_STREAM_HEADERS`, copied because only its types are imported. */
-export const STREAM_HEADERS = {
-  "content-type": "text/event-stream",
-  "cache-control": "no-cache",
-  connection: "keep-alive",
-  "x-vercel-ai-ui-message-stream": "v1",
-  "x-accel-buffering": "no",
-}
 
 export type ToolPart = {
   type: "tool-ask_fact" | "tool-request_change"
@@ -275,7 +271,7 @@ function stream(
     (chunk) => `data: ${JSON.stringify(chunk, sortedKeys)}\n\n`
   )
   return new Response(`${frames.join("")}data: [DONE]\n\n`, {
-    headers: STREAM_HEADERS,
+    headers: UI_MESSAGE_STREAM_HEADERS,
   })
 }
 
@@ -532,7 +528,12 @@ export async function chat(
           parts: [{ type: "text", text: turn.text }],
         })
       }
-      return { turn: cosTurn, fallback, tail: opening.tail }
+      return {
+        turn: cosTurn,
+        fallback,
+        reserved: fallback ? 0 : reserve,
+        tail: opening.tail,
+      }
     })
   } catch (error) {
     if (error instanceof Refusal) return error.response
@@ -546,6 +547,7 @@ export async function chat(
     kit,
     tools,
     price: price ?? { input: 0, output: 0, cacheRead: 0 },
+    reserved: opened.reserved,
     state: newRunState(),
     abort: new AbortController(),
   }
@@ -587,6 +589,7 @@ type Fallback = "provider" | "budgetary" | "resource"
 type Opened = {
   turn: Turn
   fallback: Fallback | null
+  reserved: number
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
 }
@@ -851,10 +854,23 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
     return failure(failed.status, { ...failed.error, detail: {} })
   }
   if (streamed instanceof Response) return streamed
+  if (streamed && run.state.readFailed) {
+    await closeTurn(run, ended("error"), null, rows)
+    return failure(503, {
+      class: "transient",
+      code: "cos.read_failed",
+      message: "We could not read this conversation. Try again.",
+      detail: {},
+    })
+  }
   if (streamed && run.state.integrity) {
     return fallbackTurn(run, a, rows, ended("integrity"))
   }
-  const fallback = streamed ? "provider" : a.opened.fallback
+  const fallback = streamed
+    ? run.state.overBudget
+      ? "budgetary"
+      : "provider"
+    : a.opened.fallback
   return fallbackTurn(run, a, rows, ended("fallback", fallback ?? "resource"))
 }
 
