@@ -6,6 +6,7 @@ import {
   AssistantRuntimeProvider,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
+import { ChatRequest } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement } from "react"
@@ -336,7 +337,12 @@ it("offers the build, keeps a not now, and a typed change after it", async () =>
   // The no stays a no on screen, as it does in the stored row.
   await matches(chat, FIXTURE.histories.change)
   expect(
-    sent.map((body) => (body as { turn: { kind: string } }).turn.kind)
+    sent.flatMap((body) => {
+      const { turn } = ChatRequest.parse(body)
+      return turn.kind === "results"
+        ? turn.results.map((r) => r.kind)
+        : turn.kind
+    })
   ).toEqual(["answer", "approval", "message"])
 })
 

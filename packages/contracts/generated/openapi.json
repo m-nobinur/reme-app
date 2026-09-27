@@ -130,6 +130,276 @@
         "required": ["items"],
         "additionalProperties": false
       },
+      "AnswerQuestionInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.name"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["name"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.phone"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "e164": {
+                            "type": "string",
+                            "pattern": "^\\+[1-9]\\d{6,14}$"
+                          }
+                        },
+                        "required": ["e164"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.email"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string",
+                            "maxLength": 254,
+                            "format": "email",
+                            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          }
+                        },
+                        "required": ["address"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "hours.weekday"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "open": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          },
+                          "close": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          }
+                        },
+                        "required": ["open", "close"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "service_area.radius"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "centre": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "radius_km": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 200
+                          }
+                        },
+                        "required": ["centre", "radius_km"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "pricing.standard_clean_hourly"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "amount_minor": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "currency": {
+                            "type": "string",
+                            "enum": ["GBP", "USD", "EUR"]
+                          }
+                        },
+                        "required": ["amount_minor", "currency"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.tagline"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "tagline": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["tagline"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "\\S"
+              }
+            ]
+          }
+        },
+        "required": ["request_id", "value"],
+        "additionalProperties": false
+      },
+      "AnswerQuestionOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "answered"
+              },
+              "request_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": ["outcome", "request_id"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "detail": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["class", "code", "message", "detail"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["outcome", "error"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "AnswerRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -1613,246 +1883,273 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "const": "answer"
+                    "const": "results"
                   },
                   "message_id": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{1,64}$"
                   },
-                  "tool_call_id": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                  },
-                  "output": {
-                    "oneOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "answer": {
-                            "type": "string",
-                            "const": "stated"
+                  "results": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "answer"
+                            },
+                            "tool_call_id": {
+                              "type": "string",
+                              "pattern": "^[\\x21-\\x7E]{1,128}$"
+                            },
+                            "output": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "answer": {
+                                      "type": "string",
+                                      "const": "stated"
+                                    },
+                                    "fact": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "business.name"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "name": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 120,
+                                                  "pattern": "\\S"
+                                                }
+                                              },
+                                              "required": ["name"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "business.phone"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "e164": {
+                                                  "type": "string",
+                                                  "pattern": "^\\+[1-9]\\d{6,14}$"
+                                                }
+                                              },
+                                              "required": ["e164"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "business.email"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "address": {
+                                                  "type": "string",
+                                                  "maxLength": 254,
+                                                  "format": "email",
+                                                  "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                                                }
+                                              },
+                                              "required": ["address"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "hours.weekday"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "open": {
+                                                  "type": "string",
+                                                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                                },
+                                                "close": {
+                                                  "type": "string",
+                                                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                                }
+                                              },
+                                              "required": ["open", "close"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "service_area.radius"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "centre": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 80,
+                                                  "pattern": "\\S"
+                                                },
+                                                "radius_km": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 200
+                                                }
+                                              },
+                                              "required": [
+                                                "centre",
+                                                "radius_km"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "pricing.standard_clean_hourly"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "amount_minor": {
+                                                  "type": "integer",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "currency": {
+                                                  "type": "string",
+                                                  "enum": ["GBP", "USD", "EUR"]
+                                                }
+                                              },
+                                              "required": [
+                                                "amount_minor",
+                                                "currency"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string",
+                                              "const": "business.tagline"
+                                            },
+                                            "value": {
+                                              "type": "object",
+                                              "properties": {
+                                                "tagline": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 120,
+                                                  "pattern": "\\S"
+                                                }
+                                              },
+                                              "required": ["tagline"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["key", "value"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["answer", "fact"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "answer": {
+                                      "type": "string",
+                                      "const": "skipped"
+                                    }
+                                  },
+                                  "required": ["answer"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
                           },
-                          "fact": {
-                            "oneOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "business.name"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 120,
-                                        "pattern": "\\S"
-                                      }
-                                    },
-                                    "required": ["name"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "business.phone"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "e164": {
-                                        "type": "string",
-                                        "pattern": "^\\+[1-9]\\d{6,14}$"
-                                      }
-                                    },
-                                    "required": ["e164"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "business.email"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "address": {
-                                        "type": "string",
-                                        "maxLength": 254,
-                                        "format": "email",
-                                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-                                      }
-                                    },
-                                    "required": ["address"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "hours.weekday"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "open": {
-                                        "type": "string",
-                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
-                                      },
-                                      "close": {
-                                        "type": "string",
-                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
-                                      }
-                                    },
-                                    "required": ["open", "close"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "service_area.radius"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "centre": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 80,
-                                        "pattern": "\\S"
-                                      },
-                                      "radius_km": {
-                                        "type": "number",
-                                        "exclusiveMinimum": 0,
-                                        "maximum": 200
-                                      }
-                                    },
-                                    "required": ["centre", "radius_km"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "pricing.standard_clean_hourly"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "amount_minor": {
-                                        "type": "integer",
-                                        "exclusiveMinimum": 0,
-                                        "maximum": 9007199254740991
-                                      },
-                                      "currency": {
-                                        "type": "string",
-                                        "enum": ["GBP", "USD", "EUR"]
-                                      }
-                                    },
-                                    "required": ["amount_minor", "currency"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "key": {
-                                    "type": "string",
-                                    "const": "business.tagline"
-                                  },
-                                  "value": {
-                                    "type": "object",
-                                    "properties": {
-                                      "tagline": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 120,
-                                        "pattern": "\\S"
-                                      }
-                                    },
-                                    "required": ["tagline"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["key", "value"],
-                                "additionalProperties": false
-                              }
-                            ]
-                          }
+                          "required": ["kind", "tool_call_id", "output"],
+                          "additionalProperties": false
                         },
-                        "required": ["answer", "fact"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "answer": {
-                            "type": "string",
-                            "const": "skipped"
-                          }
-                        },
-                        "required": ["answer"],
-                        "additionalProperties": false
-                      }
-                    ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "approval"
+                            },
+                            "approval_id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                            },
+                            "approved": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["kind", "approval_id", "approved"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
                   }
                 },
-                "required": ["kind", "message_id", "tool_call_id", "output"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "approval"
-                  },
-                  "message_id": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                  },
-                  "approval_id": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
-                  },
-                  "approved": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["kind", "message_id", "approval_id", "approved"],
+                "required": ["kind", "message_id", "results"],
                 "additionalProperties": false
               }
             ]
@@ -2379,6 +2676,1694 @@
             "additionalProperties": false
           }
         ]
+      },
+      "CosCall": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": ["turn_id", "step", "sha256"],
+        "additionalProperties": false
+      },
+      "CosContext": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "prefix_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "context_policy_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["ask", "act"]
+          },
+          "active_tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "get_workspace",
+                "get_facts",
+                "get_preview",
+                "request_change",
+                "answer_question"
+              ]
+            }
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reserved_usd": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "turn_id",
+          "prefix_sha256",
+          "context_policy_version",
+          "mode",
+          "active_tools",
+          "text",
+          "reserved_usd"
+        ],
+        "additionalProperties": false
+      },
+      "CosFacts": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "facts": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.name"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["name"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.phone"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "e164": {
+                          "type": "string",
+                          "pattern": "^\\+[1-9]\\d{6,14}$"
+                        }
+                      },
+                      "required": ["e164"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.email"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string",
+                          "maxLength": 254,
+                          "format": "email",
+                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        }
+                      },
+                      "required": ["address"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "hours.weekday"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "open": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                        },
+                        "close": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                        }
+                      },
+                      "required": ["open", "close"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "service_area.radius"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "centre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "radius_km": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 200
+                        }
+                      },
+                      "required": ["centre", "radius_km"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "pricing.standard_clean_hourly"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "amount_minor": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": ["GBP", "USD", "EUR"]
+                        }
+                      },
+                      "required": ["amount_minor", "currency"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.tagline"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "tagline": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["tagline"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": ["facts"],
+        "additionalProperties": false
+      },
+      "CosMessage": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "message": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              },
+              "role": {
+                "type": "string",
+                "enum": ["user", "assistant"]
+              },
+              "parts": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": ["id", "role", "parts"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["turn_id", "message"],
+        "additionalProperties": false
+      },
+      "CosPrefix": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "instructions": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question"
+                  ]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input_schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["name", "description", "input_schema"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["version", "sha256", "instructions", "tools"],
+        "additionalProperties": false
+      },
+      "CosStep": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "input_tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cached_input_tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "output_tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "input_tokens",
+              "cached_input_tokens",
+              "output_tokens"
+            ],
+            "additionalProperties": false
+          },
+          "cost_usd": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["turn_id", "step", "messages", "usage", "cost_usd"],
+        "additionalProperties": false
+      },
+      "CosToolResult": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "get_workspace"
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "site": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "live_version": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["host", "live_version"],
+                    "additionalProperties": false
+                  },
+                  "builds": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "assignment_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["site.build", "site.revise"]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "briefing",
+                            "planning",
+                            "implementing",
+                            "validating",
+                            "preview_ready",
+                            "awaiting_review",
+                            "revising",
+                            "release_candidate",
+                            "published",
+                            "blocked_on_information",
+                            "blocked_on_approval",
+                            "repairing",
+                            "paused",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "goal": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "version": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "assignment_id",
+                        "kind",
+                        "state",
+                        "goal",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "questions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "why": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "options": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "blocking": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "request_id",
+                        "field",
+                        "why",
+                        "options",
+                        "blocking"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "approvals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        }
+                      },
+                      "required": ["version", "expires_at"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "missing_facts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "business.name",
+                        "business.phone",
+                        "business.email",
+                        "hours.weekday",
+                        "service_area.radius",
+                        "pricing.standard_clean_hourly",
+                        "business.tagline"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "site",
+                  "builds",
+                  "questions",
+                  "approvals",
+                  "missing_facts"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["turn_id", "tool_call_id", "tool", "output"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "get_facts"
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "facts": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.name"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": ["name"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.phone"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "e164": {
+                                  "type": "string",
+                                  "pattern": "^\\+[1-9]\\d{6,14}$"
+                                }
+                              },
+                              "required": ["e164"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.email"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "address": {
+                                  "type": "string",
+                                  "maxLength": 254,
+                                  "format": "email",
+                                  "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                                }
+                              },
+                              "required": ["address"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "hours.weekday"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "open": {
+                                  "type": "string",
+                                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                },
+                                "close": {
+                                  "type": "string",
+                                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                }
+                              },
+                              "required": ["open", "close"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "service_area.radius"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "centre": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "radius_km": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 200
+                                }
+                              },
+                              "required": ["centre", "radius_km"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "pricing.standard_clean_hourly"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "amount_minor": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "currency": {
+                                  "type": "string",
+                                  "enum": ["GBP", "USD", "EUR"]
+                                }
+                              },
+                              "required": ["amount_minor", "currency"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.tagline"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "tagline": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": ["tagline"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["facts"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["turn_id", "tool_call_id", "tool", "output"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "get_preview"
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "assignment_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": ["assignment_id", "version", "expires_at"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["turn_id", "tool_call_id", "tool", "output"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "request_change"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "started"
+                      },
+                      "build": {
+                        "type": "object",
+                        "properties": {
+                          "assignment_id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["site.build", "site.revise"]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "briefing",
+                              "planning",
+                              "implementing",
+                              "validating",
+                              "preview_ready",
+                              "awaiting_review",
+                              "revising",
+                              "release_candidate",
+                              "published",
+                              "blocked_on_information",
+                              "blocked_on_approval",
+                              "repairing",
+                              "paused",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "goal": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "revision": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "revision_id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": ["revision_id", "version"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          }
+                        },
+                        "required": [
+                          "assignment_id",
+                          "kind",
+                          "state",
+                          "goal",
+                          "revision",
+                          "created_at",
+                          "updated_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["outcome", "build"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "detail": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": ["class", "code", "message", "detail"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["outcome", "error"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": ["turn_id", "tool_call_id", "tool", "output"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "answer_question"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "answered"
+                      },
+                      "request_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "required": ["outcome", "request_id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "detail": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": ["class", "code", "message", "detail"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["outcome", "error"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": ["turn_id", "tool_call_id", "tool", "output"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CosTurn": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "answered"
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cached_input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "cached_input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              "cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question"
+                  ]
+                }
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "first_chunk_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "turn_id",
+              "model",
+              "usage",
+              "cost_usd",
+              "tools",
+              "steps",
+              "first_chunk_ms"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "fallback"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["provider", "budgetary", "resource"]
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cached_input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "cached_input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              "cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question"
+                  ]
+                }
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "first_chunk_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "reason",
+              "turn_id",
+              "model",
+              "usage",
+              "cost_usd",
+              "tools",
+              "steps",
+              "first_chunk_ms"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "error"
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cached_input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "cached_input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              "cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question"
+                  ]
+                }
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "first_chunk_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "turn_id",
+              "model",
+              "usage",
+              "cost_usd",
+              "tools",
+              "steps",
+              "first_chunk_ms"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "integrity"
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cached_input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "cached_input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              "cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question"
+                  ]
+                }
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "first_chunk_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "turn_id",
+              "model",
+              "usage",
+              "cost_usd",
+              "tools",
+              "steps",
+              "first_chunk_ms"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "abandoned"
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "logged_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "reserved_usd": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": ["outcome", "turn_id", "logged_usd", "reserved_usd"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CosWorkspace": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "live_version": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["host", "live_version"],
+            "additionalProperties": false
+          },
+          "builds": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "assignment_id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["site.build", "site.revise"]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "queued",
+                    "briefing",
+                    "planning",
+                    "implementing",
+                    "validating",
+                    "preview_ready",
+                    "awaiting_review",
+                    "revising",
+                    "release_candidate",
+                    "published",
+                    "blocked_on_information",
+                    "blocked_on_approval",
+                    "repairing",
+                    "paused",
+                    "failed",
+                    "cancelled"
+                  ]
+                },
+                "goal": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "version": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["assignment_id", "kind", "state", "goal", "version"],
+              "additionalProperties": false
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "field": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "why": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "options": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "blocking": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["request_id", "field", "why", "options", "blocking"],
+              "additionalProperties": false
+            }
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "expires_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                }
+              },
+              "required": ["version", "expires_at"],
+              "additionalProperties": false
+            }
+          },
+          "missing_facts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "business.name",
+                "business.phone",
+                "business.email",
+                "hours.weekday",
+                "service_area.radius",
+                "pricing.standard_clean_hourly",
+                "business.tagline"
+              ]
+            }
+          }
+        },
+        "required": [
+          "site",
+          "builds",
+          "questions",
+          "approvals",
+          "missing_facts"
+        ],
+        "additionalProperties": false
       },
       "CreateOrgRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3363,6 +5348,42 @@
           "attempt",
           "reported_at"
         ],
+        "additionalProperties": false
+      },
+      "GetPreviewInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "assignment_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": ["assignment_id"],
+        "additionalProperties": false
+      },
+      "GetPreviewOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "assignment_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": ["assignment_id", "version", "expires_at"],
         "additionalProperties": false
       },
       "InformationAnswer": {

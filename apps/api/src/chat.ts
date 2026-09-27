@@ -413,10 +413,16 @@ export async function chat(
           newId
         )
       }
-      if (turn.kind === "answer") {
-        return answer(db, owner, held, id, turn, newId)
+      // The script's steps each wait on one call, so its results turn
+      // resolves exactly one; any other set is not what it is waiting on.
+      // The script has no model, so an approval's reason is not kept.
+      const [result, ...more] = turn.results
+      if (!result || more.length > 0) return stale()
+      const one = { message_id: turn.message_id, ...result }
+      if (one.kind === "answer") {
+        return answer(db, owner, held, id, one, newId)
       }
-      return approve(db, env, kit, owner, held, id, turn)
+      return approve(db, env, kit, owner, held, id, one)
     })
   } catch (error) {
     if (error instanceof Refusal) return error.response
@@ -516,13 +522,19 @@ function callIn(
   return call ? { tail, call } : stale()
 }
 
+/** One result of a results turn, with the message that holds its call. */
+type Resolved<K extends "answer" | "approval"> = Extract<
+  Extract<ChatRequest["turn"], { kind: "results" }>["results"][number],
+  { kind: K }
+> & { message_id: string }
+
 /** An answer to `ask_fact`: the fact is stated, or the key skipped. */
 async function answer(
   db: OrgScopedDb,
   owner: Owner,
   held: Read,
   id: string,
-  turn: Extract<ChatRequest["turn"], { kind: "answer" }>,
+  turn: Resolved<"answer">,
   newId: () => string
 ): Promise<Response> {
   const found = callIn(
@@ -587,7 +599,7 @@ async function approve(
   owner: Owner,
   held: Read,
   id: string,
-  turn: Extract<ChatRequest["turn"], { kind: "approval" }>
+  turn: Resolved<"approval">
 ): Promise<Response> {
   const matches = (p: ToolPart) =>
     p.type === "tool-request_change" && p.approval?.id === turn.approval_id

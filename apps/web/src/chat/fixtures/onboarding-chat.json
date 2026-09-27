@@ -1161,18 +1161,23 @@
         "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
         "mode": "act",
         "turn": {
-          "kind": "answer",
+          "kind": "results",
           "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
-          "tool_call_id": "24190632-9fdb-4b63-b42c-08df82bff496",
-          "output": {
-            "answer": "stated",
-            "fact": {
-              "key": "business.name",
-              "value": {
-                "name": "Fixture Cleaning Co"
+          "results": [
+            {
+              "kind": "answer",
+              "tool_call_id": "24190632-9fdb-4b63-b42c-08df82bff496",
+              "output": {
+                "answer": "stated",
+                "fact": {
+                  "key": "business.name",
+                  "value": {
+                    "name": "Fixture Cleaning Co"
+                  }
+                }
               }
             }
-          }
+          ]
         }
       },
       "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"stated\",\"fact\":{\"key\":\"business.name\",\"value\":{\"name\":\"Fixture Cleaning Co\"}}},\"toolCallId\":\"24190632-9fdb-4b63-b42c-08df82bff496\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"key\":\"business.phone\",\"prefill\":null,\"skippable\":false},\"toolCallId\":\"757d0820-4934-4faa-b188-2f4c6bff9282\",\"toolName\":\"ask_fact\",\"type\":\"tool-input-available\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
@@ -1182,12 +1187,17 @@
         "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
         "mode": "act",
         "turn": {
-          "kind": "answer",
+          "kind": "results",
           "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
-          "tool_call_id": "6decf863-fd2b-48dc-948e-e395299d91a8",
-          "output": {
-            "answer": "skipped"
-          }
+          "results": [
+            {
+              "kind": "answer",
+              "tool_call_id": "6decf863-fd2b-48dc-948e-e395299d91a8",
+              "output": {
+                "answer": "skipped"
+              }
+            }
+          ]
         }
       },
       "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"skipped\"},\"toolCallId\":\"6decf863-fd2b-48dc-948e-e395299d91a8\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"text\":\"Build my website from the details I gave you.\"},\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"toolName\":\"request_change\",\"type\":\"tool-input-available\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-approval-request\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
@@ -1197,10 +1207,15 @@
         "conversation_id": "5d5e14fb-643c-4d8c-87d1-edaedc68ad7a",
         "mode": "act",
         "turn": {
-          "kind": "approval",
+          "kind": "results",
           "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
-          "approval_id": "5488c5b4-43a2-4134-9f45-8901ab8404c0",
-          "approved": false
+          "results": [
+            {
+              "kind": "approval",
+              "approval_id": "5488c5b4-43a2-4134-9f45-8901ab8404c0",
+              "approved": false
+            }
+          ]
         }
       },
       "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"approved\":false,\"type\":\"tool-approval-response\"}\n\ndata: {\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-output-denied\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"

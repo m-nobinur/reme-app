@@ -36,6 +36,96 @@ export interface components {
           }
       )[]
     }
+    AnswerQuestionInput: {
+      /** Format: uuid */
+      request_id: string
+      value:
+        | (
+            | {
+                /** @constant */
+                key: "business.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.phone"
+                value: {
+                  e164: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.email"
+                value: {
+                  /** Format: email */
+                  address: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "hours.weekday"
+                value: {
+                  open: string
+                  close: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.radius"
+                value: {
+                  centre: string
+                  radius_km: number
+                }
+              }
+            | {
+                /** @constant */
+                key: "pricing.standard_clean_hourly"
+                value: {
+                  amount_minor: number
+                  /** @enum {string} */
+                  currency: "GBP" | "USD" | "EUR"
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.tagline"
+                value: {
+                  tagline: string
+                }
+              }
+          )
+        | string
+    }
+    AnswerQuestionOutput:
+      | {
+          /** @constant */
+          outcome: "answered"
+          /** Format: uuid */
+          request_id: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+            detail: {
+              [key: string]: unknown
+            }
+          }
+        }
     AnswerRequest: {
       /** Format: uuid */
       request_id: string
@@ -471,80 +561,86 @@ export interface components {
           }
         | {
             /** @constant */
-            kind: "answer"
+            kind: "results"
             message_id: string
-            tool_call_id: string
-            output:
+            results: (
               | {
                   /** @constant */
-                  answer: "stated"
-                  fact:
+                  kind: "answer"
+                  tool_call_id: string
+                  output:
                     | {
                         /** @constant */
-                        key: "business.name"
-                        value: {
-                          name: string
-                        }
+                        answer: "stated"
+                        fact:
+                          | {
+                              /** @constant */
+                              key: "business.name"
+                              value: {
+                                name: string
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "business.phone"
+                              value: {
+                                e164: string
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "business.email"
+                              value: {
+                                /** Format: email */
+                                address: string
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "hours.weekday"
+                              value: {
+                                open: string
+                                close: string
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "service_area.radius"
+                              value: {
+                                centre: string
+                                radius_km: number
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "pricing.standard_clean_hourly"
+                              value: {
+                                amount_minor: number
+                                /** @enum {string} */
+                                currency: "GBP" | "USD" | "EUR"
+                              }
+                            }
+                          | {
+                              /** @constant */
+                              key: "business.tagline"
+                              value: {
+                                tagline: string
+                              }
+                            }
                       }
                     | {
                         /** @constant */
-                        key: "business.phone"
-                        value: {
-                          e164: string
-                        }
-                      }
-                    | {
-                        /** @constant */
-                        key: "business.email"
-                        value: {
-                          /** Format: email */
-                          address: string
-                        }
-                      }
-                    | {
-                        /** @constant */
-                        key: "hours.weekday"
-                        value: {
-                          open: string
-                          close: string
-                        }
-                      }
-                    | {
-                        /** @constant */
-                        key: "service_area.radius"
-                        value: {
-                          centre: string
-                          radius_km: number
-                        }
-                      }
-                    | {
-                        /** @constant */
-                        key: "pricing.standard_clean_hourly"
-                        value: {
-                          amount_minor: number
-                          /** @enum {string} */
-                          currency: "GBP" | "USD" | "EUR"
-                        }
-                      }
-                    | {
-                        /** @constant */
-                        key: "business.tagline"
-                        value: {
-                          tagline: string
-                        }
+                        answer: "skipped"
                       }
                 }
               | {
                   /** @constant */
-                  answer: "skipped"
+                  kind: "approval"
+                  approval_id: string
+                  approved: boolean
+                  reason?: string
                 }
-          }
-        | {
-            /** @constant */
-            kind: "approval"
-            message_id: string
-            approval_id: string
-            approved: boolean
+            )[]
           }
     }
     CompletionReport: {
@@ -667,6 +763,515 @@ export interface components {
       | {
           archived: boolean
         }
+    CosCall: {
+      turn_id: string
+      step: number
+      sha256: string
+    }
+    CosContext: {
+      turn_id: string
+      prefix_sha256: string
+      context_policy_version: string
+      /** @enum {string} */
+      mode: "ask" | "act"
+      active_tools: (
+        | "get_workspace"
+        | "get_facts"
+        | "get_preview"
+        | "request_change"
+        | "answer_question"
+      )[]
+      text: string
+      reserved_usd: number
+    }
+    CosFacts: {
+      facts: (
+        | {
+            /** @constant */
+            key: "business.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.phone"
+            value: {
+              e164: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.email"
+            value: {
+              /** Format: email */
+              address: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "hours.weekday"
+            value: {
+              open: string
+              close: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.radius"
+            value: {
+              centre: string
+              radius_km: number
+            }
+          }
+        | {
+            /** @constant */
+            key: "pricing.standard_clean_hourly"
+            value: {
+              amount_minor: number
+              /** @enum {string} */
+              currency: "GBP" | "USD" | "EUR"
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.tagline"
+            value: {
+              tagline: string
+            }
+          }
+      )[]
+    }
+    CosMessage: {
+      turn_id: string
+      message: {
+        id: string
+        /** @enum {string} */
+        role: "user" | "assistant"
+        parts: ({
+          type: string
+        } & {
+          [key: string]: unknown
+        })[]
+      }
+    }
+    CosPrefix: {
+      version: string
+      sha256: string
+      instructions: string
+      tools: {
+        /** @enum {string} */
+        name:
+          | "get_workspace"
+          | "get_facts"
+          | "get_preview"
+          | "request_change"
+          | "answer_question"
+        description: string
+        input_schema: {
+          [key: string]: unknown
+        }
+      }[]
+    }
+    CosStep: {
+      turn_id: string
+      step: number
+      messages: {
+        [key: string]: unknown
+      }[]
+      usage: {
+        input_tokens: number
+        cached_input_tokens: number
+        output_tokens: number
+      }
+      cost_usd: number
+    }
+    CosToolResult:
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_workspace"
+          output: {
+            site: {
+              host: string | null
+              live_version: number | null
+            }
+            builds: {
+              /** Format: uuid */
+              assignment_id: string
+              /** @enum {string} */
+              kind: "site.build" | "site.revise"
+              /** @enum {string} */
+              state:
+                | "queued"
+                | "briefing"
+                | "planning"
+                | "implementing"
+                | "validating"
+                | "preview_ready"
+                | "awaiting_review"
+                | "revising"
+                | "release_candidate"
+                | "published"
+                | "blocked_on_information"
+                | "blocked_on_approval"
+                | "repairing"
+                | "paused"
+                | "failed"
+                | "cancelled"
+              goal: string
+              version: number | null
+            }[]
+            questions: {
+              /** Format: uuid */
+              request_id: string
+              field: string
+              why: string
+              options: string[] | null
+              blocking: boolean
+            }[]
+            approvals: {
+              version: number
+              /** Format: date-time */
+              expires_at: string
+            }[]
+            missing_facts: (
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "pricing.standard_clean_hourly"
+              | "business.tagline"
+            )[]
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_facts"
+          output: {
+            facts: (
+              | {
+                  /** @constant */
+                  key: "business.name"
+                  value: {
+                    name: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.phone"
+                  value: {
+                    e164: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.email"
+                  value: {
+                    /** Format: email */
+                    address: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "hours.weekday"
+                  value: {
+                    open: string
+                    close: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "service_area.radius"
+                  value: {
+                    centre: string
+                    radius_km: number
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "pricing.standard_clean_hourly"
+                  value: {
+                    amount_minor: number
+                    /** @enum {string} */
+                    currency: "GBP" | "USD" | "EUR"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.tagline"
+                  value: {
+                    tagline: string
+                  }
+                }
+            )[]
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_preview"
+          output: {
+            /** Format: uuid */
+            assignment_id: string
+            version: number
+            /** Format: date-time */
+            expires_at: string
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "request_change"
+          output:
+            | {
+                /** @constant */
+                outcome: "started"
+                build: {
+                  /** Format: uuid */
+                  assignment_id: string
+                  /** @enum {string} */
+                  kind: "site.build" | "site.revise"
+                  /** @enum {string} */
+                  state:
+                    | "queued"
+                    | "briefing"
+                    | "planning"
+                    | "implementing"
+                    | "validating"
+                    | "preview_ready"
+                    | "awaiting_review"
+                    | "revising"
+                    | "release_candidate"
+                    | "published"
+                    | "blocked_on_information"
+                    | "blocked_on_approval"
+                    | "repairing"
+                    | "paused"
+                    | "failed"
+                    | "cancelled"
+                  goal: string
+                  revision: {
+                    /** Format: uuid */
+                    revision_id: string
+                    version: number
+                  } | null
+                  /** Format: date-time */
+                  created_at: string
+                  /** Format: date-time */
+                  updated_at: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                  detail: {
+                    [key: string]: unknown
+                  }
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "answer_question"
+          output:
+            | {
+                /** @constant */
+                outcome: "answered"
+                /** Format: uuid */
+                request_id: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                  detail: {
+                    [key: string]: unknown
+                  }
+                }
+              }
+        }
+    CosTurn:
+      | {
+          /** @constant */
+          outcome: "answered"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "fallback"
+          /** @enum {string} */
+          reason: "provider" | "budgetary" | "resource"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "error"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "integrity"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "abandoned"
+          turn_id: string
+          logged_usd: number
+          reserved_usd: number
+        }
+    CosWorkspace: {
+      site: {
+        host: string | null
+        live_version: number | null
+      }
+      builds: {
+        /** Format: uuid */
+        assignment_id: string
+        /** @enum {string} */
+        kind: "site.build" | "site.revise"
+        /** @enum {string} */
+        state:
+          | "queued"
+          | "briefing"
+          | "planning"
+          | "implementing"
+          | "validating"
+          | "preview_ready"
+          | "awaiting_review"
+          | "revising"
+          | "release_candidate"
+          | "published"
+          | "blocked_on_information"
+          | "blocked_on_approval"
+          | "repairing"
+          | "paused"
+          | "failed"
+          | "cancelled"
+        goal: string
+        version: number | null
+      }[]
+      questions: {
+        /** Format: uuid */
+        request_id: string
+        field: string
+        why: string
+        options: string[] | null
+        blocking: boolean
+      }[]
+      approvals: {
+        version: number
+        /** Format: date-time */
+        expires_at: string
+      }[]
+      missing_facts: (
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "pricing.standard_clean_hourly"
+        | "business.tagline"
+      )[]
+    }
     CreateOrgRequest: {
       name: string
     }
@@ -906,6 +1511,17 @@ export interface components {
       attempt: number
       /** Format: date-time */
       reported_at: string
+    }
+    GetPreviewInput: {
+      /** Format: uuid */
+      assignment_id: string
+    }
+    GetPreviewOutput: {
+      /** Format: uuid */
+      assignment_id: string
+      version: number
+      /** Format: date-time */
+      expires_at: string
     }
     InformationAnswer: {
       /** Format: uuid */

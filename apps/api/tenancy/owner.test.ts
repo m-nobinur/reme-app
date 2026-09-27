@@ -317,16 +317,22 @@ describe("another org's conversation is 404 and never written to", () => {
     for (const turn of [
       { kind: "message", message_id: "u_cross", text: "Build it" },
       {
-        kind: "answer",
+        kind: "results",
         message_id: tail?.id,
-        tool_call_id: call.toolCallId,
-        output: { answer: "skipped" },
+        results: [
+          {
+            kind: "answer",
+            tool_call_id: call.toolCallId,
+            output: { answer: "skipped" },
+          },
+        ],
       },
       {
-        kind: "approval",
+        kind: "results",
         message_id: tail?.id,
-        approval_id: call.toolCallId,
-        approved: true,
+        results: [
+          { kind: "approval", approval_id: call.toolCallId, approved: true },
+        ],
       },
     ]) {
       const stub = stubOrchestrator()
@@ -334,7 +340,7 @@ describe("another org's conversation is 404 and never written to", () => {
         method: "POST",
         body: JSON.stringify({ conversation_id: theirId, mode: "act", turn }),
       })
-      expect(refused.status, turn.kind).toBe(404)
+      expect(refused.status, JSON.stringify(turn)).toBe(404)
       expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
         "conversation.not_found"
       )

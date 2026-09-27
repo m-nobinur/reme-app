@@ -17,10 +17,16 @@ export const textOf = (message: UIMessage) =>
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n")
 
+type Result = Extract<
+  ChatRequest["turn"],
+  { kind: "results" }
+>["results"][number]
+
 /**
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
- * message, an answer to `ask_fact`, or a yes or no on `request_change`.
+ * message, or every answer to `ask_fact` and every yes or no on
+ * `request_change` in the last step, as the SDK sends them together.
  */
 export function chatTurn(
   conversationId: string,
@@ -35,47 +41,48 @@ export function chatTurn(
       turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
-  // The server opens a new step after every call it resolves, so the last
-  // step holds only calls it is waiting on, and the one resolved here is
-  // the turn.
+  // The server opens a new step after the calls it resolves, so the last
+  // step holds only calls it is waiting on, and those resolved here are the
+  // turn.
   const parts = last?.parts ?? []
   const step = parts.slice(
     parts.map((part) => part.type).lastIndexOf("step-start") + 1
   )
-  for (const part of step) {
-    if (!last || !isToolUIPart(part)) continue
+  const results = step.flatMap((part): Result[] => {
+    if (!isToolUIPart(part)) return []
     if (part.type === "tool-ask_fact" && part.state === "output-available") {
-      return {
-        conversation_id: conversationId,
-        mode,
-        turn: {
+      return [
+        {
           kind: "answer",
-          message_id: last.id,
           tool_call_id: part.toolCallId,
-          output: part.output as Extract<
-            ChatRequest["turn"],
-            { kind: "answer" }
-          >["output"],
+          output: part.output as Extract<Result, { kind: "answer" }>["output"],
         },
-      }
+      ]
     }
     if (
       part.type === "tool-request_change" &&
       part.state === "approval-responded"
     ) {
-      return {
-        conversation_id: conversationId,
-        mode,
-        turn: {
+      const { id, approved, reason } = part.approval
+      return [
+        {
           kind: "approval",
-          message_id: last.id,
-          approval_id: part.approval.id,
-          approved: part.approval.approved,
+          approval_id: id,
+          approved,
+          ...(reason === undefined ? {} : { reason }),
         },
-      }
+      ]
     }
+    return []
+  })
+  if (!last || results.length === 0) {
+    throw new Error("There is nothing new in this conversation to send.")
   }
-  throw new Error("There is nothing new in this conversation to send.")
+  return {
+    conversation_id: conversationId,
+    mode,
+    turn: { kind: "results", message_id: last.id, results },
+  }
 }
 
 /**
