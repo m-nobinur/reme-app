@@ -3,6 +3,7 @@
 Status: accepted, 2026-09-27. Applies to `apps/api`, the chat in `apps/web`, `packages/contracts`
 and `packages/db`. Changes no DR. It makes one scoped exception to §6.3 and DR-9 for the Chief of
 Staff (CoS). It ends on whichever trigger in the first item under "Change if" fires first.
+Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
 
 ## Context
 
@@ -76,7 +77,8 @@ publish tool. Publishing stays the owner's button on a bound version.
 would store a model's guess as `owner_stated`, from where it can reach the site, which R8 forbids.
 
 Every act tool's side effect is keyed by its approval id, as `request_change` already is through
-`startChange`, so running it twice replays the first run. Tools run inside the agent's stream,
+`startChange`, so running it twice replays the first run. A steer is the exception until the
+amendment of 2026-09-27 closes it. Tools run inside the agent's stream,
 outside any conversation lock, and open their own `withOrg`. Each description says when to use the
 tool and when not to. Each output is a compact summary.
 
@@ -278,15 +280,9 @@ The agent's PR, each red once by mutation:
 
 ### Before the agent's PR merges
 
-- Every `bridge()` call gets `AbortSignal.timeout(10_000)`. A timeout answers 503 `transient`, which
-  the chat does not store, so the card's retry replays under the approval id. Ten seconds is a
-  guess from one measured `POST /changes` of 1,330 ms, 7.5 times it. The agent's PR records the p95
-  of 20 staging approvals and sets the timeout to three times that p95.
-- Every transaction the api opens sets `statement_timeout` to 5 s and
-  `idle_in_transaction_session_timeout` to 15 s with `SET LOCAL`, so a hung bridge call inside the
-  script's lock ends before a connection is held past 15 s. Both are guesses. The statement timeout
-  becomes ten times the slowest api statement's p99 in Neon's `pg_stat_statements` over a week of
-  staging. The idle timeout becomes the measured bridge timeout above plus 5 s.
+- The bridge deadline and the database limits in the amendment of 2026-09-27, which replaces the
+  two bullets that stood here.
+- A steer replays by key, as that amendment says.
 - A recorded staging turn from the chosen model and provider, committed as an api test fixture,
   shows that its tool-call ids pass the new pattern.
 - The contracts PR and `appendEvent` in `packages/db` are merged.
@@ -343,3 +339,115 @@ The agent's PR, each red once by mutation:
 - Any caller other than the owner's own turn takes the conversation lock, a model call runs inside
   it, the approval turn's p95 passes 5 s, or a Hyperdrive connection-count alarm fires. Build the
   two-transaction approval.
+
+## Amendment, 2026-09-27: a timed-out bridge call has an unknown outcome
+
+The review of the timeout PR found that the two bullets that stood under "Before the agent's PR
+merges" read a timeout as a refusal and gave each bridge call its own clock. A 5 s statement limit
+also cut short the wait on the conversation's row lock, which the approval holds while
+`startChange` reads and calls the orchestrator. This section replaces those bullets.
+
+**What an answer from the orchestrator means.** Only a 4xx with an envelope that parses is a
+refusal. A timeout, a 5xx and an off-contract answer all mean the outcome is unknown: the call may
+have committed. On an unknown outcome the api answers 503 `transient` and makes no further call for
+that request. It never cancels or reports a refusal because of one. This holds for every
+`bridge()` call: the answer, cancel and preview routes and the approval decision included.
+
+**A retry re-drives the steps left.** `startChange` answers a retry from its key lookup, which
+finds the build the key made. That lookup now decides what is left to do, from the builds' states,
+with no stored step:
+
+- No build under the key: route and run as a first attempt.
+- The key's build is `cancelled`: answer 409, class `validation`, code `change.cancelled`, with
+  the build's `assignment_id` in `detail`. The chat keeps a `validation` refusal as the card's
+  answer, so the owner asks again with a new key. The code is new, but `ErrorEnvelope.code` is a
+  pattern, not a list, so the contracts do not change. The web adds its copy.
+- The key's build is `queued` and routing the org's other builds would still replace one: end that
+  one under the key, as a first attempt would.
+- Anything else: answer the build's summary.
+
+On the replace path, a first attempt or a re-drive runs these steps:
+
+- The create's outcome is unknown: answer 503 and leave the old review alone.
+- Ending the old review has an unknown outcome: answer 503 and leave the new build alone.
+- Ending the old review is refused: cancel the new build and answer the refusal. If the cancel's
+  outcome is unknown, answer 503, and the retry finds the new build still queued and tries again.
+
+A new build that the owner never retries stays queued behind the old review until the review
+expires, 72 hours at most. That is accepted. The fix is one keyed call in the orchestrator that
+ends the old review and creates the new build in one transaction.
+
+**One deadline per change.** `startChange` creates one `AbortSignal.timeout(10_000)` on entry. It
+races its own `withOrg` reads against that signal and passes the signal to every bridge call it
+makes, so everything it awaits ends within 10 s. A read the race gives up on runs to its own
+statement limit on its own connection. The one write among them, `ownerStaffId`, finds the row
+it would create, so letting it finish after the race is harmless. `bridge()` makes its own 10 s
+signal when its caller passes none. Ten seconds is 7.5 times one measured `POST /changes` of
+1,330 ms. The agent's PR records 20 staging approvals, at least 5 of them replacing an open
+review, and sets the deadline to three times the p95 of the replacing ones.
+
+**Only a turn takes the turn's lock.** A row lock on the conversation also collides with renaming
+and archiving it, since an `UPDATE` takes the row, and with inserting its messages, since the
+foreign key takes a share lock on it. So a turn no longer locks the conversation's row. It reads
+the row under RLS, and a missing row answers 404 as now. Then it takes
+`pg_try_advisory_xact_lock(2, hashtext(conversation_id::text))`. Postgres keeps the two-key form
+apart from the one-key form, so it never meets the site lock in `apps/orchestrator/src/publish.ts`,
+and the first key leaves room for other two-key locks. When the call returns false, the api
+answers 409 `chat.busy`, the answer this ADR already gives a concurrent turn. Only turns take this
+lock, so a false means a turn is open or closing. Every place this ADR says a transaction takes
+the conversation's row lock, it now means this lock. The token writes and the abandonment take it
+with `pg_advisory_xact_lock`, which waits. The statement limit bounds that wait, and their holders
+are short. No `lock_timeout` is set. Two conversations whose ids hash alike answer `chat.busy`
+only when their turns overlap.
+
+**The database limits.** Every transaction `withOrg` opens sets `statement_timeout` to 5 s and
+`idle_in_transaction_session_timeout` to 15 s, transaction-locally, in the select that already
+sets the org context, so they cost no round trip.
+
+The idle limit is the deadline plus 5 s. A turn holding the lock sits idle only while it awaits
+`startChange`, and the deadline ends that wait at 10 s, reads included. The idle limit becomes the
+measured deadline plus 5 s. The statement limit becomes ten times the slowest statement's p99 in
+Neon's `pg_stat_statements` over a week of staging.
+
+The org resolvers (`resolveOrg`, `resolveOrgBySlug`, `listOrgIds`) set neither limit. Each sends
+`set local role` and then one select, with nothing awaited between the two but the database, so
+there is no idle gap to limit. A setting also cannot govern the statement that sets it, so
+carrying the limits would cost a third round trip on every request. `resolveOrg` and
+`resolveOrgBySlug` look up one unique key, and `listOrgIds` reads the orgs once an hour.
+
+The tenancy kit is shared, so the limits reach the orchestrator and the router too. The PR lists
+every `withOrg` in those workers that awaits something other than the database inside the
+transaction, with its bound. One is known. `deleteRevisionFiles` lists and deletes R2 objects
+inside the sweep's transaction, so a stalled R2 call now ends that transaction at 15 s. The sweep
+step retries, and every part of the sweep is idempotent. The fix moves the R2 work out of the
+transaction: the guards read in one transaction, the event naming the keys is written in its own,
+and the list and delete run with no transaction open. It is built on the first sweep that fails
+with 25P03.
+
+**A steer replays by key.** "Tools" says every act tool's side effect replays under its approval
+id. A steer does not. The orchestrator records nothing a retry could find, so a steer that timed
+out after it was delivered is delivered twice. Before the agent's PR merges, the orchestrator
+stores each steer under its idempotency key, and a replay returns the first result without
+delivering the message again.
+
+Rejected:
+
+- **A turn waiting on the lock**, through a `lock_timeout` or a statement limit above the
+  deadline. Each waiting turn holds a second connection for up to the whole deadline, and learns
+  nothing a 409 would not tell it.
+- **`for update nowait` on the conversation's row.** Renaming, archiving and writing messages take
+  the same row, so a turn would get `chat.busy` with no turn open, and the web does not retry it.
+- **A deadline per bridge call.** The replace path makes three calls, so the idle limit would need
+  3 × 10 s, plus the reads, plus 5 s: over 40 s. A hung orchestrator would hold the lock for 30 s
+  instead of 10.
+- **Cancelling on an unknown outcome.** The call may have committed, and the cancel then throws
+  away the owner's change.
+- **A table of replace steps per key.** The builds' states already say which steps are done.
+
+Change if:
+
+- The first `orchestrator.timeout` on a replace, or an owner report of a build left queued. Build
+  the one-call replace.
+- A 25P03 in any worker's log. Find the gap, then fix the code that made it or move the limit.
+- A 57014 on a statement that was not waiting on a lock. Read its plan in `pg_stat_statements`,
+  then fix the query or move the limit with that measurement.
