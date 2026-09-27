@@ -1,0 +1,51 @@
+{
+  "_": "One recorded CoS conversation through OpenRouter (ADR-034), kept for the tool-call ids the provider emits. Recorded 2026-09-27 from a local run of the api code against OpenRouter, not from staging. The business is fictional and has no facts.",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "providers": ["Wafer"],
+  "wire_tool_call_ids": [
+    "call_81a1d2d8144143768bba913d",
+    "call_f95c13d21f6d4666876663f1",
+    "call_033f85dfac7e4140ba76f31a"
+  ],
+  "chunks": [
+    {
+      "type": "tool-input-start",
+      "toolCallId": "call_033f85dfac7e4140ba76f31a",
+      "toolName": "request_change"
+    },
+    {
+      "type": "tool-input-available",
+      "toolCallId": "call_033f85dfac7e4140ba76f31a",
+      "toolName": "request_change",
+      "input": {
+        "text": "Add a Saturday morning slot to the booking section, 9am to 12pm."
+      }
+    },
+    {
+      "type": "tool-approval-request",
+      "approvalId": "aitxt-ZWhRxAZy2eiSJtmVmPNfsgpN",
+      "toolCallId": "call_033f85dfac7e4140ba76f31a"
+    },
+    {
+      "type": "tool-approval-response",
+      "approvalId": "aitxt-ZWhRxAZy2eiSJtmVmPNfsgpN",
+      "approved": true
+    },
+    {
+      "type": "tool-output-available",
+      "toolCallId": "call_033f85dfac7e4140ba76f31a",
+      "output": {
+        "outcome": "started",
+        "build": {
+          "assignment_id": "95fd1bdc-35a5-433b-85ea-a53cd74848e9",
+          "kind": "site.build",
+          "state": "queued",
+          "goal": "Add a Saturday morning slot to the booking section, 9am to 12pm.",
+          "revision": null,
+          "created_at": "2026-09-27T16:31:26.591Z",
+          "updated_at": "2026-09-27T16:31:26.591Z"
+        }
+      }
+    }
+  ]
+}

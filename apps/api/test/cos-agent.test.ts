@@ -1,4 +1,9 @@
-import { type COS_TOOLS, CosTurn } from "@workspace/contracts"
+import {
+  ChatRequest,
+  type COS_TOOLS,
+  CosToolResult,
+  CosTurn,
+} from "@workspace/contracts"
 import {
   assignments,
   conversationMessages,
@@ -45,6 +50,7 @@ import {
   toolErrorText,
 } from "../src/cos/agent.ts"
 import { GRACE_MS, withinCap } from "../src/cos/turns.ts"
+import recorded from "./cos-recorded-turn.json" with { type: "json" }
 import {
   type Owner,
   owner,
@@ -256,6 +262,33 @@ describe("the CoS's model and price", () => {
     expectTypeOf<InputOf<"get_preview">>().toEqualTypeOf<
       z.infer<typeof COS_TOOLS.get_preview.input>
     >()
+  })
+})
+
+describe("a recorded turn from the chosen model and provider", () => {
+  it("emits tool-call ids the contract accepts, from the wire to the stream", () => {
+    const callIds = [
+      ...recorded.wire_tool_call_ids,
+      ...recorded.chunks.flatMap((c) =>
+        "toolCallId" in c ? [c.toolCallId as string] : []
+      ),
+    ]
+    expect(callIds.length).toBeGreaterThan(0)
+    // `ToolCallId`, as the log holds a call id.
+    const ToolCallId = CosToolResult.options[0].shape.tool_call_id
+    for (const callId of callIds) {
+      expect(ToolCallId.parse(callId)).toBe(callId)
+    }
+    // The web sends an approval id back in a results turn.
+    for (const chunk of recorded.chunks) {
+      if ("approvalId" in chunk) {
+        expect(
+          ChatRequest.shape.turn.options[1].shape.results.element.options[1].shape.approval_id.safeParse(
+            chunk.approvalId
+          ).success
+        ).toBe(true)
+      }
+    }
   })
 })
 
@@ -500,6 +533,29 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       done.chunks.filter((c) => c.type === "tool-approval-request")
     ).toHaveLength(2)
     await s.state(asking, "cancelled")
+  })
+
+  it("cancels a pending CoS call when the owner types instead, so the model never gets a call without a result", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: { text: "Add a Saturday slot." },
+        })
+      ).model,
+    })
+    const { model, sent } = scripted(said("Understood, I dropped it."))
+    const done = await turn(me, typed(id, "Actually, never mind."), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(sent).toHaveLength(1)
+    const prompt = JSON.stringify(sent[0]?.prompt)
+    expect(prompt).toContain("User cancelled tool call")
+    expect((await turnsOf(id)).map((t) => t.outcome)).toEqual([
+      "answered",
+      "answered",
+    ])
   })
 
   it("refuses the next call with no model call when a step was not logged, and freezes the conversation", async () => {
