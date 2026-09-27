@@ -19,8 +19,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.035,
-          "completion": 0.29
+          "prompt": 0.07,
+          "completion": 0.58
         }
       }
     }
@@ -36,7 +36,7 @@
     "cost": {
       "input": 4,
       "output": 12,
-      "cacheRead": 1,
+      "cacheRead": 2,
       "cacheWrite": 0
     },
     "contextWindow": 500000,
@@ -45,8 +45,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 4,
-          "completion": 12
+          "prompt": 8,
+          "completion": 24
         }
       }
     }
@@ -62,7 +62,7 @@
     "cost": {
       "input": 0.045,
       "output": 0.14,
-      "cacheRead": 0.01,
+      "cacheRead": 0.015,
       "cacheWrite": 0
     },
     "contextWindow": 1310720,
@@ -71,8 +71,8 @@
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.045,
-          "completion": 0.14
+          "prompt": 0.09,
+          "completion": 0.28
         }
       }
     }

@@ -21,7 +21,10 @@ describe("the generated OpenRouter models", () => {
     }
   })
 
-  it("route only to providers at or under the rate the log charges", () => {
+  // The owner's rule (2026-09-27): route under twice the list price, so
+  // several providers qualify, while the logged cost stays the list price.
+  // `ROUTING_CAP_FACTOR` in scripts/openrouter-models.mjs.
+  it("route under twice the rate the log charges", () => {
     for (const id of OPENROUTER_IDS) {
       const model = openrouterModels().find((m) => m.id === id)
       // A model the catalog has no price for would ceil at zero, which no
@@ -33,8 +36,8 @@ describe("the generated OpenRouter models", () => {
       expect(model?.compat, id).toMatchObject({
         openRouterRouting: {
           max_price: {
-            prompt: model?.cost.input,
-            completion: model?.cost.output,
+            prompt: (model?.cost.input ?? 0) * 2,
+            completion: (model?.cost.output ?? 0) * 2,
           },
         },
       })

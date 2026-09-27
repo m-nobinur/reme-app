@@ -34,6 +34,15 @@ const peak = (pricing, key) =>
     ...(pricing?.overrides ?? []).map((o) => perMillion(o[key]))
   )
 
+/**
+ * How far over the list price OpenRouter may route. The owner's decision of
+ * 2026-09-27: availability over the cheapest single provider. OpenRouter's
+ * list price is its cheapest provider's, so a cap at the list price admitted
+ * one provider per model, and its outage sent every call to the fallback
+ * model. The logged cost stays the list price.
+ */
+const ROUTING_CAP_FACTOR = 2
+
 /** Every provider serving `id`, with its own pricing (one request per id). */
 async function endpoints(id) {
   const r = await fetch(`https://openrouter.ai/api/v1/models/${id}/endpoints`)
@@ -45,6 +54,8 @@ async function endpoints(id) {
 }
 
 const models = []
+/** How many providers each model's cap admits, printed for the reviewer. */
+const admittedBy = new Map()
 const missing = []
 for (const id of ids) {
   const m = byId.get(id)
@@ -61,14 +72,21 @@ for (const id of ids) {
     cacheRead: 0,
     cacheWrite: 0,
   }
+  const cap = {
+    prompt: cost.input * ROUTING_CAP_FACTOR,
+    completion: cost.output * ROUTING_CAP_FACTOR,
+  }
+  let admitted = 0
   for (const e of await endpoints(id)) {
-    if (peak(e.pricing, "prompt") > cost.input) continue
-    if (peak(e.pricing, "completion") > cost.output) continue
+    if (peak(e.pricing, "prompt") > cap.prompt) continue
+    if (peak(e.pricing, "completion") > cap.completion) continue
+    admitted++
     cost.cacheRead = Math.max(
       cost.cacheRead,
       peak(e.pricing, "input_cache_read")
     )
   }
+  admittedBy.set(id, admitted)
   models.push({
     id,
     name: m.name,
@@ -84,14 +102,14 @@ for (const id of ids) {
     maxTokens: m.top_provider?.max_completion_tokens ?? 0,
     compat: {
       thinkingFormat: "openrouter",
-      // The rate above is a ceiling OpenRouter routes under, so what it bills
-      // for a turn is never more than the log says the turn cost, and the
-      // budget cap summed from the log holds (§29.2). Measured 2026-09-17:
-      // unbounded, a turn went to a provider 5% under the list rate, and
-      // two others serving this model charge up to 25% over it.
-      openRouterRouting: {
-        max_price: { prompt: cost.input, completion: cost.output },
-      },
+      // OpenRouter routes under this ceiling, which is ROUTING_CAP_FACTOR
+      // times the rate logged above. What it bills for a turn can therefore
+      // be up to that factor over what the log says the turn cost, so a
+      // budget cap summed from the log can undercount (§29.2) until the log
+      // prices each turn at what the provider charged. Measured 2026-09-17:
+      // unbounded, a turn went to a provider 5% under the list rate, and two
+      // others serving this model charge up to 25% over it.
+      openRouterRouting: { max_price: cap },
     },
   })
 }
@@ -108,6 +126,6 @@ execFileSync("pnpm", ["exec", "biome", "format", "--write", out], {
 })
 for (const m of models) {
   console.log(
-    `${m.id}  in $${m.cost.input}/M  out $${m.cost.output}/M  context ${m.contextWindow}`
+    `${m.id}  in $${m.cost.input}/M  out $${m.cost.output}/M  context ${m.contextWindow}  providers under the cap ${admittedBy.get(m.id)}`
   )
 }
