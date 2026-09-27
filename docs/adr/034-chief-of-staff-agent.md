@@ -6,7 +6,7 @@ Staff (CoS). It ends on whichever trigger in the first item under "Change if" fi
 Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
 Amended again the same day: the budget lock and the stream. Brought in line with the tools, the
 event appends and the history derivation on 2026-09-28, and marked where the agent's PR adds the
-rest.
+rest. Amended 2026-09-28: the agent as built.
 
 ## Context
 
@@ -40,19 +40,21 @@ given where it matters.
 
 `apps/api/src/cos/agent.ts` is a `ToolLoopAgent` from `ai` 7.0.83, pinned exactly.
 
-- `callOptionsSchema` takes the mode (`ask` or `act`), the turn's context text, and the session's
-  org, user, session and conversation ids. `prepareCall` sets `activeTools`, places the context
-  message, and moves the ids into `runtimeContext`. It reads nothing itself. The ids never enter
-  instructions, messages or a tool input, so the model has no way to name another tenant.
+- The agent is built per turn, and its tools close over the turn's org, user, session and
+  conversation ids. There is no `callOptionsSchema`, `prepareCall` or `runtimeContext`: in 7.0.83 a
+  tool's `execute` gets `toolsContext`, not `runtimeContext`. The mode sets `activeTools`, and
+  `deriveCosMessages` places the context message. The ids never enter instructions, messages or a
+  tool input, so the model has no way to name another tenant.
 - Ask mode gets the read tools only. Act gets all of them.
 - `toolApproval` is set on the agent as a map keyed by tool name, as `index.d.ts:3071` and `:5056`
   define it. The tool-level `needsApproval` is not used.
-- `stopWhen: isStepCount(6)` and a per-step `maxOutputTokens` of 1,000, a guess that the agent's
-  PR replaces with three times the measured p95 output of 20 staging turns.
+- `stopWhen: isStepCount(6)`, plus the budget stop in "Caps and cost", and a per-step
+  `maxOutputTokens` of 1,000. That is a guess, which the measurement after the agent's PR replaces
+  with three times the measured p95 output of 20 staging turns.
 - `timeout: {totalMs: 60_000, firstChunkMs: 10_000}`. Both are guesses: six steps of about ten
-  seconds, and ten seconds to a step's first chunk. The agent's PR sets `firstChunkMs` to three
-  times the measured first-chunk p95 and `totalMs` to six times that. `firstChunkMs` applies to
-  every step, not only the first.
+  seconds, and ten seconds to a step's first chunk. The measurement after the agent's PR sets
+  `firstChunkMs` to three times the measured first-chunk p95 and `totalMs` to six times that.
+  `firstChunkMs` applies to every step, not only the first.
 - The model comes from `COS_MODEL`, default `deepseek/deepseek-v4.1-flash`. That id is in
   `packages/facade/src/models/openrouter.ids.json` today, and a unit test keeps it there. The agent
   reaches it through OpenRouter with `OPENROUTER_API_KEY`, a wrangler secret on the api. The
@@ -81,10 +83,11 @@ publish tool. Publishing stays the owner's button on a bound version.
 would store a model's guess as `owner_stated`, from where it can reach the site, which R8 forbids.
 
 Every act tool's side effect is keyed by its approval id, as `request_change` already is through
-`startChange`, so running it twice replays the first run. A steer is the exception until the
-amendment "a timed-out bridge call has an unknown outcome" closes it. Tools run inside the agent's
-stream, outside any conversation lock, and open their own `withOrg`. Each description says when
-to use the tool and when not to. Each output is a compact summary.
+`startChange`, so running it twice replays the first run. A steer replays by key as well, since the
+orchestrator stores each steer under its key. The model's run executes only read tools. An approved
+act call runs before any model call, in the api's settle step described in the amendment "the agent
+as built". Every tool runs outside any conversation lock and opens its own `withOrg`. Each
+description says when to use the tool and when not to. Each output is a compact summary.
 
 ### The model's history comes from the event log
 
@@ -216,9 +219,11 @@ the open-turn rule.
   names the tail message, and the script otherwise, since the script made every `ask_fact`, the
   onboarding offer and every fallback card.
 - Every other turn goes to the CoS, in every conversation, the onboarding one included.
-- The CoS falls back when no key is configured, when the org's budget cannot cover the
-  reservation, or when the provider fails before the first content chunk. For a typed message the
-  fallback is the script's step: the change card in Act mode and a fixed line in Ask mode. That
+- The CoS falls back when no key is configured, when the model has no entry in the price table, or
+  when the conversation is frozen, all three with reason `resource`. It falls back with reason
+  `budgetary` when the org's budget cannot cover the reservation or the first call would pass it,
+  and with `provider` when the provider fails before the first content chunk. For a typed message
+  the fallback is the script's step: the change card in Act mode and a fixed line in Ask mode. That
   turn writes no `cos.message`, so the model learns its effect from the next context message.
 - For a results turn the fallback resolves each result in order without the model. A denial becomes
   `output-denied`. An approval runs the tool's own function under its approval id, whichever of
@@ -231,16 +236,23 @@ the open-turn rule.
 ### Caps and cost
 
 The cap is $1 per org per UTC day of CoS spend. The first transaction holds the org's budget lock
-while it sums the day's spend: settled cost for closed turns, the reservation for open ones, and the
-full reservation for abandoned ones, whose last step's usage is lost. It then adds this turn's
-reservation, or falls back if that would pass $1. Concurrent turns in five conversations therefore
-cannot overshoot. The reservation is the worst case of six steps at 30,000 input tokens and
-`maxOutputTokens` at the model's price in `openrouter.models.json` in `packages/facade`. That table
-prices every call at its routing cap, 2.1 times OpenRouter's list price, which is the most any
-provider it routes to can bill. On 2026-09-27 that is $0.0735 per million input tokens and $0.609
-per million output for `deepseek/deepseek-v4.1-flash`, so the reservation is
-6 × (30,000 × $0.0735 + 1,000 × $0.609) / 1,000,000, about $0.017. Both token figures are guesses
-the agent's PR replaces with measured p99s, and the table is regenerated whenever the model changes.
+while it sums the day's spend: settled cost for closed turns, the reservation for open ones, and for
+abandoned ones the greater of their logged spend and their reservation, since their last step's
+usage is lost. The day is the UTC day of the turn's `cos.context` `recorded_at`, the database's
+clock, which abandonment also reads. It then adds this turn's reservation, or falls back if that
+would pass $1. Concurrent turns in five conversations therefore cannot overshoot. The reservation is
+the worst case of six steps at 30,000 input tokens and `maxOutputTokens` at the model's price in
+`openrouter.models.json` in `packages/facade`. That table prices every call at its routing cap, 2.1
+times OpenRouter's list price, which is the most any provider it routes to can bill. On 2026-09-27
+that is $0.0735 per million input tokens and $0.609 per million output for
+`deepseek/deepseek-v4.1-flash`, so the reservation is 6 × (30,000 × $0.0735 + 1,000 × $0.609) /
+1,000,000, about $0.017. Both token figures are guesses that the measurement after the agent's PR
+replaces with measured p99s, and the table is regenerated whenever the model changes.
+
+A turn also stays inside its own reservation. Before the first call, `prepareStep` prices the
+prompt at two characters a token plus `maxOutputTokens`, and refuses the call if that passes the
+reservation. The turn then falls back with reason `budgetary`. After each step, `stopWhen` ends the
+run when the spend so far plus the next step's worst case would pass it.
 
 Step cost is priced from usage at the same table the Developer's metering uses, so both reconcile
 against one OpenRouter bill. Priced at the cap, the logged sum overstates the bill by up to the
@@ -248,7 +260,9 @@ factor until each call's actual cost is logged. Until then, the check before the
 the bill is at or under the logged sum, with the gap reported, abandoned turns reported twice, at
 logged spend and at reservation, and the bill between the two. The cap is a ceiling,
 not a forecast: $31 per org in a 31-day month, $31,000 at 1,000 orgs if every org spends it. The
-agent's PR measures typical cost per turn and first-chunk p95 over 20 staging turns.
+measurement after the agent's PR records typical cost per turn and first-chunk p95 over 20
+staging turns. That staging measurement is an exit item of the agent's work, with a $10 cap
+shared with the tier-2 evals.
 
 ### Contract changes, in one contracts PR before the agent
 
@@ -270,7 +284,9 @@ agent's PR measures typical cost per turn and first-chunk p95 over 20 staging tu
   `fallback` adds its reason class. `abandoned` carries the logged spend and the reservation.
 - The payloads of the six model-facing `cos.*` events, which the eval replay reads.
 - The web builds its message type from these schemas, and an api type test checks
-  `InferAgentUIMessage<typeof cosAgent>` against the same schemas.
+  `InferAgentUIMessage<typeof cosAgent>` against the same schemas. The web's typed message lands
+  with the first tool-UI PR, where typed outputs first change what renders. Until then the web
+  keeps its casts inside its history code and adds none elsewhere.
 
 ### Proofs each PR owes
 
@@ -320,9 +336,10 @@ The agent's PR, each red once by mutation:
 
 - The bridge deadline and the database limits in the amendment "a timed-out bridge call has an
   unknown outcome", which replaces the two bullets that stood here.
-- A steer replays by key, as that amendment says.
-- A recorded staging turn from the chosen model and provider, committed as an api test fixture,
-  shows that its tool-call ids pass the new pattern.
+- A steer replays by key, as that amendment says. Done.
+- A recorded turn from the chosen model and provider, committed as an api test fixture, shows that
+  its tool-call ids pass the new pattern. The fixture was recorded locally through OpenRouter, not
+  on staging. The staging measurement records it again.
 - The contracts PR and `appendSessionEvent` in `packages/db` are merged.
 
 ## What was rejected
@@ -550,3 +567,70 @@ so the fallback proof denies a second `request_change` until then.
 **The idle trigger.** The server writes 25P03 to its own log when the idle limit kills a
 session, and that is the trigger in the first amendment. The driver sees only a closed
 connection.
+
+## Amendment, 2026-09-28: the agent as built
+
+This section records where the agent's PR departs from the decision above or fills a gap in it.
+
+**Approved calls settle before the model.** At the start of every CoS turn, before a model call or
+the fallback, the api runs each approved call the log holds no result for, under its approval id.
+Those calls are the ones this turn's results just approved and any a dead turn left behind. The SDK
+never executes an act tool. If it did, it would send the approval response and the result as two
+tool messages, while the derivation yields one, so the hash would never match. One path serves the
+model, the fallback and the dead-turn repair.
+
+**A failed tool is never a refusal.** A tool that throws writes no `cos.tool_result`, and the
+model reads a fixed line with nothing from a driver or the orchestrator. A `ToolFailed`, which a
+tool throws for any orchestrator answer of 500 or above, puts its code in the line. For an answer
+off the contract (class `integrity`), the line says nothing was done. For any other `ToolFailed`
+it says the outcome is unknown. Any other throw gets a fixed line with no code.
+
+During settle, an `integrity` failure closes the call as `output-error`, and the turn goes on. Any
+other `ToolFailed` ends the turn with outcome `error` and answers with the tool's own status,
+leaving the approved call for the next CoS turn to settle again. Any other throw also closes the
+turn as `error`, and the error propagates.
+
+**A typed message cancels only calls still waiting on the owner.** Those are calls in
+`input-available` or `approval-requested`. When the CoS made the tail, it is logged again with
+them cancelled. An approved call waiting to settle is not cancelled.
+
+**The CoS's staff row.** An org with no COS-001 row gets its starting team in the turn's first
+transaction, through the same idempotent path a change uses. Only if the row is still missing does
+the script answer, with an error code in the Worker's log.
+
+**Taint, by what the text carries.**
+- Build goals are the owner's words, or the CoS's restatement of them: `untrusted_input` and
+  `inferred`. A started `request_change` carries its goal, so it gets both labels too.
+- A question's field, reason and options are another agent's: `inferred`.
+- A non-empty `get_facts` result is the owner's business details: `untrusted_input`. When a fact
+  can come from anyone but the owner, facts are labelled by provenance.
+- A CoS message is `inferred`, plus `untrusted_input` once it carries an approval reason or a tool
+  output.
+
+**The context text.** A mode line, then the workspace as JSON inside
+`<data source="workspace" taint="...">`, with `<` escaped so the text cannot close the tag. Its
+shape is hashed into every call, so any change to it takes a new context-policy version. The
+escape made it version 2.
+
+**Reasoning stays in the log.** Reasoning counts as content for the fallback buffer. It is kept in
+`cos.step` and `cos.message`, so the derivation and the hash see it. It is never streamed to the
+owner and never stored in the rows the owner sees. It is unchecked model speculation, and a price
+or opening hours can appear in it (R8). The staging measurement's multi-turn run shows whether the
+provider accepts reasoning sent back. If it does not, history drops it under a new policy version.
+
+**The prefix.** The instructions and tool definitions are a code constant with a version. The
+session logs `cos.prefix` whenever it lacks this prefix's SHA-256, so an edit that forgets to bump
+the version still reaches the log (R7).
+
+**The limits and the measurement.** The agent merged with this ADR's guessed limits. They are
+ceilings, so a wrong one shows as fallbacks, not overspend. The 20-turn staging measurement and the
+bridge deadline over 20 approvals, 5 of them replacing a review, are an exit item of the agent's
+work, the staging measurement. They set `LIMITS` and the deadline in their own PR.
+
+Rejected:
+
+- **Letting the SDK execute approved calls.** The derivation cannot produce its two-message form,
+  so every approval would fail the hash check.
+- **`callOptionsSchema` with `runtimeContext`.** A tool's `execute` does not receive
+  `runtimeContext` in 7.0.83, so the tools would have no ids.
+- **Streaming reasoning to the owner.** It would put unchecked text where R8 forbids it.
