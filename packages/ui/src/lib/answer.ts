@@ -213,11 +213,16 @@ export function answerValue(
   }
   const parsed = FactValue.safeParse({ key: spec.key, value })
   if (parsed.success) return { value }
-  // A format issue comes first; the only custom one is hours out of order.
-  if (parsed.error.issues[0]?.code === "custom") {
+  const issue = parsed.error.issues[0]
+  const name = issue?.path[1]
+  // `FactValue`'s order check on the hours, which runs once both times parse.
+  if (
+    spec.key === "hours.weekday" &&
+    name === "close" &&
+    issue?.code === "custom"
+  ) {
     return { error: "Closing time has to be after opening time." }
   }
-  const name = parsed.error.issues[0]?.path[1]
   const field = fields.find((each: FactInput) => each.name === name)
   return {
     error: field

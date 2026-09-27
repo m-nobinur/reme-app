@@ -28,8 +28,14 @@ export const OWNER_BRIDGE_HEADERS = {
 } as const
 
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-const fact = <K extends string, V extends z.ZodRawShape>(key: K, value: V) =>
-  z.strictObject({ key: z.literal(key), value: z.strictObject(value) })
+const fact = <K extends string, V extends z.ZodRawShape>(
+  key: K,
+  value: V,
+  refine: (
+    v: z.ZodObject<V, z.core.$strict>
+  ) => z.ZodObject<V, z.core.$strict> = (v) => v
+) =>
+  z.strictObject({ key: z.literal(key), value: refine(z.strictObject(value)) })
 
 /**
  * The value an owner can state for a fact, by key: the six the starter site
@@ -37,22 +43,22 @@ const fact = <K extends string, V extends z.ZodRawShape>(key: K, value: V) =>
  * are the golden fixtures'. Currencies are the ones the content gate can
  * verify. The keys are `FactValue.options`; there is no second list.
  *
- * Hours close after they open, on the same day. `HH:MM` compares as text. The
- * published JSON Schema cannot say so, since it cannot compare two fields.
+ * Hours close after they open, on the same day, and a close of `00:00` is
+ * midnight at the end of it. `HH:MM` compares as text. The order is checked
+ * only once both times parse, so a bad time gets one issue, its own. The
+ * published JSON Schema cannot say this, since it cannot compare two fields.
  */
 export const FactValue = z.discriminatedUnion("key", [
   fact("business.name", { name: Text(120) }),
   fact("business.phone", { e164: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
   fact("business.email", { address: z.email().max(254) }),
-  z.strictObject({
-    key: z.literal("hours.weekday"),
-    value: z
-      .strictObject({ open: HHMM, close: HHMM })
-      .refine((v) => v.open < v.close, {
-        path: ["close"],
-        message: "close must be later than open on the same day",
-      }),
-  }),
+  fact("hours.weekday", { open: HHMM, close: HHMM }, (v) =>
+    v.refine((h) => h.close === "00:00" || h.open < h.close, {
+      path: ["close"],
+      message: "close must be later than open on the same day",
+      when: (payload) => payload.issues.length === 0,
+    })
+  ),
   fact("service_area.radius", {
     centre: Text(80),
     radius_km: z.number().positive().max(200),
