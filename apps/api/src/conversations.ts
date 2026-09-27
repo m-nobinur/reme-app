@@ -11,11 +11,11 @@ import {
   conversations,
   eq,
   type OrgScopedDb,
-  pgCode,
   sql,
   type Tenancy,
 } from "@workspace/db"
 import {
+  constraint,
   failure,
   idempotencyKey,
   invalid,
@@ -197,18 +197,6 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
   return Response.json(
     ConversationHistory.parse({ messages: rows.map(toConversationMessage) })
   )
-}
-
-/** Every error shape postgres.js can be wrapped in on the way out of drizzle. */
-export const constraint = (error: unknown) => {
-  const e = error as {
-    constraint_name?: string
-    cause?: { constraint_name?: string }
-  }
-  return {
-    code: pgCode(error),
-    name: e.constraint_name ?? e.cause?.constraint_name,
-  }
 }
 
 /** A message as the writer takes it: the contract's, less the date. */

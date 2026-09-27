@@ -1,4 +1,5 @@
 import type { ErrorEnvelope } from "@workspace/contracts"
+import { pgCode } from "@workspace/db"
 
 /** R4: every failure leaves as the §28.1 envelope, never a raw exception. */
 export function failure(
@@ -97,4 +98,28 @@ export async function boundedBody(
     at += chunk.byteLength
   }
   return body
+}
+
+/**
+ * Keys in code-point order at every depth, for `JSON.stringify`. jsonb keeps
+ * its own key order, so a value read back from the database gives the bytes
+ * of the value written only when its keys are sorted.
+ */
+export const sortedKeys = (_key: string, value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(
+        Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      )
+    : value
+
+/** Every error shape postgres.js can be wrapped in on the way out of drizzle. */
+export const constraint = (error: unknown) => {
+  const e = error as {
+    constraint_name?: string
+    cause?: { constraint_name?: string }
+  }
+  return {
+    code: pgCode(error),
+    name: e.constraint_name ?? e.cause?.constraint_name,
+  }
 }

@@ -7,7 +7,7 @@ import {
 import { eq, events, type OrgScopedDb } from "@workspace/db"
 // Types only, so `ai` stays out of the bundle until the agent brings it.
 import type { ModelMessage, UIMessage } from "ai"
-import { sortedKeys } from "../chat.ts"
+import { sortedKeys } from "../http.ts"
 
 /**
  * The model's history, derived from a session's events and nothing else

@@ -13,7 +13,7 @@ import {
   type OrgScopedDb,
   sql,
 } from "@workspace/db"
-import { constraint } from "../conversations.ts"
+import { constraint } from "../http.ts"
 
 /**
  * One writer per turn, by token (ADR-034). A turn is open from its
