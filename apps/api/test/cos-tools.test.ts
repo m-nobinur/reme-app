@@ -1,4 +1,10 @@
-import { COS_TOOLS, type CosToolName } from "@workspace/contracts"
+import {
+  COS_TOOLS,
+  type CosToolName,
+  FactValue,
+  FactValueKey,
+  OwnerAnswerText,
+} from "@workspace/contracts"
 import {
   assignments,
   sql,
@@ -15,9 +21,6 @@ import {
   it,
   vi,
 } from "vitest"
-// The orchestrator's own rule for an owner's answer, so the stand-in below
-// accepts exactly what the real `/answer` would.
-import { answers } from "../../orchestrator/src/question.ts"
 import {
   answerQuestion,
   getFacts,
@@ -541,12 +544,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     } as const
 
     /**
-     * The orchestrator's `/answer` as it reads a value: its own `answers`
-     * decides whether the value fits the question's field, so the api's
-     * shape for a value is checked against the real rule. A retry is
-     * replayed by what it says, the request id and the value, as the
-     * orchestrator replays it; the key is only carried. `hang` leaves the
-     * first call unanswered.
+     * The orchestrator's `/answer` as it reads a value (`answers` in its
+     * `question.ts`, which its own tests cover): a fact field takes the
+     * fact's inner value in that key's shape, and any other field the
+     * owner's text. A retry is replayed by what it says, the request id and
+     * the value, as the orchestrator replays it; the key is only carried.
+     * `hang` leaves the first call unanswered.
      */
     const answering = (fields: Record<string, string>, hang = false) => {
       const receipts = new Map<string, Response>()
@@ -563,10 +566,9 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         const field = fields[body.request_id]
         const fits =
           field !== undefined &&
-          answers(
-            { field, answer_schema: { type: "string" }, options: null },
-            body.value
-          )
+          (FactValueKey.safeParse(field).success
+            ? FactValue.safeParse({ key: field, value: body.value }).success
+            : OwnerAnswerText.safeParse(body.value).success)
         if (!fits) {
           return Response.json(
             {
