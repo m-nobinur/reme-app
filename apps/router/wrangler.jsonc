@@ -22,6 +22,13 @@
   // The Postgres driver behind the KV-miss fallback needs the Node layer.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Minified as the api is. Measured with `pnpm size`: 228.95 KiB gzip
+  // (1276.94 raw) before, 165.77 (681.18) after. `keep_names` defaults to
+  // true, so the `postgres` error classes keep the `name` they copy into
+  // `error.name`. The source map is uploaded so stack traces in Workers Logs
+  // map back to `src/`; it does not count toward the bundle size.
+  "minify": true,
+  "upload_source_maps": true,
   // Neither host can answer a request correctly: a claim's host never equals a
   // workers.dev name and a pointer lookup on one always misses, so a preview
   // URL for this Worker is a URL that only ever 404s. The per-PR preview
