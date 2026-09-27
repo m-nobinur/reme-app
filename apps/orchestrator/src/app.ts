@@ -24,8 +24,9 @@ import {
   toEventEnvelope,
   toFactRecord,
   toSiteRevision,
+  waitedOn,
 } from "@workspace/db"
-import { init } from "@workspace/facade"
+import { canonical, init } from "@workspace/facade"
 import {
   PREVIEW_TTL_S,
   SCREENSHOTS,
@@ -737,6 +738,14 @@ bridge.post("/:id/cancel", async (c) => {
  * question's schema and options (open item 70). The fact is verified by the
  * org's root owner, which is the caller only while an org has one member
  * (open item 71).
+ *
+ * All under the build's row lock, in this order: a question already
+ * answered takes the same value again (its receipt, and a nudge only while
+ * the build still waits on it) and refuses another with 409
+ * `answer.already_given`; a build not blocked is 409
+ * `assignment.not_waiting`; any question but the one it waits on
+ * (`waitedOn`) is 404 `request.not_found`. The nudge only tells the
+ * Workflow to look; it reads the answer from the database.
  */
 bridge.post("/:id/answer", async (c) => {
   const id = c.req.param("id")
@@ -755,27 +764,48 @@ bridge.post("/:id/answer", async (c) => {
   }
   const requestId = body.request_id
   const owner = byOwner(c)
+  // The console's text is read as JSON too, where that is what fits.
+  const tried = owner ? [body.value] : [body.value, parseValue(body.value)]
   const result = await c.get("kit").withOrg({ orgId }, async (db) => {
+    // Locked first, so two answers to one question queue here and the second
+    // finds the first one's answer.
     const [row] = await db
       .select()
       .from(assignments)
       .where(eq(assignments.id, id))
+      .for("update")
     if (!row) return { missing: true as const }
-    if (row.state !== "blocked_on_information") {
-      return { state: row.state }
+    const blocked = row.state === "blocked_on_information"
+    const [waited] = await waitedOn(db, id)
+    const current = waited?.request.request_id === requestId
+    const [given] = await db.execute<{
+      answer: Record<string, unknown>
+      value: unknown
+    }>(sql`
+      select e.payload as answer, f.value as value
+      from ${events} e
+      left join ${facts} f on f.id = (e.payload->>'fact_id')::uuid
+      where e.assignment_id = ${id}
+        and e.type = 'information.answered'
+        and e.payload->>'request_id' = ${requestId}
+      order by e.event_id
+      limit 1`)
+    if (given) {
+      // The same answer again is a retry: its receipt, and the Workflow
+      // nudged again only while it still waits on this question.
+      const same = tried.some((v) => canonical(v) === canonical(given.value))
+      if (!same) return { given: true as const }
+      return {
+        answer: InformationAnswer.parse(given.answer),
+        nudge: blocked && current,
+      }
     }
-    const [request] = await db
-      .select({ payload: events.payload })
-      .from(events)
-      .where(
-        sql`${events.assignmentId} = ${id} and ${events.type} = 'information.requested' and ${events.payload}->>'request_id' = ${requestId}`
-      )
-      .limit(1)
-    const field = request?.payload.field
-    if (typeof field !== "string") return { no_request: true as const }
-    // The console's text is read as JSON too, where that is what fits.
-    const question = { ...request?.payload, field }
-    const tried = owner ? [body.value] : [body.value, parseValue(body.value)]
+    if (!blocked) return { state: row.state }
+    const field = waited?.request.field
+    if (!current || typeof field !== "string") {
+      return { no_request: true as const }
+    }
+    const question = { ...waited.request, field }
     const value = tried.find((v) => answers(question, v))
     if (value === undefined) return { invalid: field }
     const [root] = owner
@@ -814,14 +844,22 @@ bridge.post("/:id/answer", async (c) => {
       type: "information.answered",
       payload: answer,
     })
-    return { answer }
+    return { answer, nudge: true }
   })
   if ("missing" in result) return notFound(c, id)
   if ("no_request" in result) {
     return failure(c, 404, {
       class: "resource",
       code: "request.not_found",
-      message: "No open information request with that id on this assignment.",
+      message: "This build is not waiting on that question.",
+      detail: { request_id: requestId },
+    })
+  }
+  if ("given" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "answer.already_given",
+      message: "That question has been answered.",
       detail: { request_id: requestId },
     })
   }
@@ -841,11 +879,13 @@ bridge.post("/:id/answer", async (c) => {
       detail: { state: result.state },
     })
   }
-  const instance = await c.env.ASSIGNMENTS.get(id)
-  await instance.sendEvent({
-    type: "answer",
-    payload: { request_id: requestId, fact_id: result.answer.fact_id },
-  })
+  if (result.nudge) {
+    const instance = await c.env.ASSIGNMENTS.get(id)
+    await instance.sendEvent({
+      type: "answer",
+      payload: { request_id: requestId, fact_id: result.answer.fact_id },
+    })
+  }
   return c.json(result.answer, 202)
 })
 

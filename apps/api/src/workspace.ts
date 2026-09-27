@@ -12,7 +12,6 @@ import {
 import {
   approvals,
   assignments,
-  assignmentTransitions,
   eq,
   events,
   facts,
@@ -22,6 +21,7 @@ import {
   sql,
   type Tenancy,
   toFactRecord,
+  waitedOn,
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
@@ -122,50 +122,21 @@ export async function readApprovals(
 }
 
 /**
- * The question each waiting build is blocked on, oldest first, or only
- * `assignmentId`'s. The build's latest transition to
- * `blocked_on_information` names it by `request_id` in its event. A block
- * that names none (a resume from a pause logs only the states) falls back to
- * the build's latest question. Either way, an answered question is not
- * waited on. A build that asked twice waits on its second question, so the
- * owner's answer path reads this too and refuses any other.
+ * The question each waiting build is blocked on (`waitedOn`), oldest first,
+ * in one query. An answered question is not shown while the Workflow wakes.
+ * The orchestrator's `/answer` reads the same helper and refuses any other.
  */
 export async function readQuestions(
-  db: OrgScopedDb,
-  assignmentId: string | null = null
+  db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "question" }>[]> {
-  const rows = await db.execute<{ payload: unknown }>(sql`
-    select q.payload
-    from ${assignments} a
-    cross join lateral (
-      select b.payload->>'request_id' as request_id
-      from ${assignmentTransitions} t
-      join ${events} b on b.event_id = t.event_id
-      where t.assignment_id = a.id and t.to_state = 'blocked_on_information'
-      order by t.version desc
-      limit 1
-    ) latest
-    cross join lateral (
-      select e.payload
-      from ${events} e
-      where e.assignment_id = a.id
-        and e.type = 'information.requested'
-        and (latest.request_id is null or e.payload->>'request_id' = latest.request_id)
-        and not exists (
-          select 1 from ${events} answered
-          where answered.assignment_id = a.id
-            and answered.type = 'information.answered'
-            and answered.payload->>'request_id' = e.payload->>'request_id')
-      order by e.event_id desc
-      limit 1
-    ) q
-    where a.state = 'blocked_on_information'
-      and (${assignmentId}::uuid is null or a.id = ${assignmentId}::uuid)
-    order by q.payload->>'requested_at'`)
-  return rows.map((row) => ({
-    kind: "question",
-    request: InformationRequest.parse(row.payload),
-  }))
+  const waiting = await waitedOn(db)
+  return waiting
+    .filter((waited) => !waited.answer)
+    .map((waited) => ({
+      kind: "question" as const,
+      request: InformationRequest.parse(waited.request),
+    }))
+    .sort((a, b) => (a.request.requested_at < b.request.requested_at ? -1 : 1))
 }
 
 /**

@@ -1,6 +1,6 @@
 import { OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import { assignments, events, facts, sql } from "@workspace/db"
-import { afterAll, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { appendEvent } from "../src/state.ts"
 import { freshOrg, newAssignment, ownerOrg } from "./fixture.ts"
 
@@ -57,6 +57,12 @@ const { kit, previewed } = await import("./site.ts")
  * service binding reaches, never through the default export.
  */
 const url = process.env.DATABASE_URL
+/** Every event sent to a Workflow, and how many sends to fail first. */
+const wake = { sent: [] as unknown[], failures: 0 }
+beforeEach(() => {
+  wake.sent.length = 0
+  wake.failures = 0
+})
 const env = {
   ORCHESTRATOR_TOKEN: "test-token",
   PREVIEW_KEY: "preview-key-for-this-suite-only",
@@ -65,7 +71,13 @@ const env = {
   ASSIGNMENTS: {
     create: async ({ id }: { id: string }) => ({ id }),
     get: async () => ({
-      sendEvent: async () => undefined,
+      sendEvent: async (event: unknown) => {
+        if (wake.failures > 0) {
+          wake.failures--
+          throw new Error("the Workflow did not take the event")
+        }
+        wake.sent.push(event)
+      },
       terminate: async () => undefined,
     }),
   },
@@ -284,46 +296,81 @@ live("an owner starting a build", () => {
 })
 
 live("an owner answering a question", () => {
+  /**
+   * A build blocked on a question, as the Workflow leaves it: the question
+   * asked, then the block that names it. `ask` does it again from
+   * `implementing`; `post` answers any question by either path.
+   */
   async function asked(field: string, question: Record<string, unknown> = {}) {
     const { orgId, ownerStaffId, slug } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
-    for (const to of [
-      "briefing",
-      "planning",
-      "implementing",
-      "blocked_on_information",
-    ] as const) {
+    for (const to of ["briefing", "planning", "implementing"] as const) {
       await advance(kit, ids, to)
     }
-    const requestId = crypto.randomUUID()
-    await kit.withOrg({ orgId }, (db) =>
-      appendEvent(db, {
-        orgId,
-        assignmentId: ids.assignmentId,
-        staffId: null,
-        type: "information.requested",
-        payload: { ...question, request_id: requestId, field },
-      })
-    )
-    const answer = (value: unknown) =>
-      owner(orgId, `/${ids.assignmentId}/answer`, {
-        request_id: requestId,
-        value,
-      })
-    const byConsole = (value: unknown) =>
-      consoleApp.request(
-        `/assignments/${ids.assignmentId}/answer?org=${slug}`,
-        {
-          method: "POST",
-          headers: {
-            authorization: "Bearer test-token",
-            "idempotency-key": crypto.randomUUID(),
-          },
-          body: JSON.stringify({ request_id: requestId, value }),
-        },
-        env
+    const request = async (key: string, extra = {}) => {
+      const requestId = crypto.randomUUID()
+      await kit.withOrg({ orgId }, (db) =>
+        appendEvent(db, {
+          orgId,
+          assignmentId: ids.assignmentId,
+          staffId: null,
+          type: "information.requested",
+          payload: { ...extra, request_id: requestId, field: key },
+        })
       )
-    return { orgId, ownerStaffId, answer, byConsole }
+      return requestId
+    }
+    const ask = async (key: string, extra = {}) => {
+      const requestId = await request(key, extra)
+      await advance(kit, ids, "blocked_on_information", {
+        payload: { request_id: requestId },
+      })
+      return requestId
+    }
+    const requestId = await ask(field, question)
+    const post = (
+      by: "owner" | "console",
+      request_id: string,
+      value: unknown
+    ) =>
+      by === "owner"
+        ? owner(orgId, `/${ids.assignmentId}/answer`, { request_id, value })
+        : consoleApp.request(
+            `/assignments/${ids.assignmentId}/answer?org=${slug}`,
+            {
+              method: "POST",
+              headers: {
+                authorization: "Bearer test-token",
+                "idempotency-key": crypto.randomUUID(),
+              },
+              body: JSON.stringify({ request_id, value }),
+            },
+            env
+          )
+    const answer = (value: unknown) => post("owner", requestId, value)
+    const byConsole = (value: unknown) => post("console", requestId, value)
+    const answered = () =>
+      kit.withOrg({ orgId }, async (db) => {
+        const rows = await db
+          .select({ payload: events.payload })
+          .from(events)
+          .where(
+            sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'information.answered'`
+          )
+        return rows.map((row) => row.payload)
+      })
+    return {
+      orgId,
+      ownerStaffId,
+      ids,
+      requestId,
+      request,
+      ask,
+      post,
+      answer,
+      byConsole,
+      answered,
+    }
   }
 
   const current = (orgId: string, key: string) =>
@@ -366,11 +413,129 @@ live("an owner answering a question", () => {
     for (const bad of [{ spaces: 2 }, 2, "", "   ", "x".repeat(501), "null"]) {
       expect((await answer(bad)).status).toBe(400)
     }
-    // Text that looks like JSON is still the text the owner typed.
+    // Text that looks like JSON is still the text the owner typed. A question
+    // takes one answer, so each text gets its own.
     for (const text of ["Street parking", "[1,2]", "123"]) {
-      expect((await answer(text)).status).toBe(202)
-      expect((await current(orgId, "business.parking"))?.value).toBe(text)
+      const next = await asked("business.parking")
+      expect((await next.answer(text)).status).toBe(202)
+      expect((await current(next.orgId, "business.parking"))?.value).toBe(text)
     }
+    expect(await current(orgId, "business.parking")).toBeUndefined()
+  })
+
+  // A build that asked twice waits on its second question, the one its latest
+  // block names; the owner's `/workspace` shows that one too.
+  it.each(["owner", "console"] as const)(
+    "answers only the question the build waits on, by the %s",
+    async (by) => {
+      const b = await asked("business.parking")
+      const stale = b.requestId
+      await advance(kit, b.ids, "implementing")
+      const waiting = await b.ask("business.parking_notes")
+
+      const refused = await b.post(by, stale, "Street parking")
+      expect(refused.status).toBe(404)
+      expect(await refused.json()).toMatchObject({
+        class: "resource",
+        code: "request.not_found",
+        detail: { request_id: stale },
+      })
+      expect(await current(b.orgId, "business.parking")).toBeUndefined()
+
+      expect((await b.post(by, waiting, "Street parking")).status).toBe(202)
+      expect((await current(b.orgId, "business.parking_notes"))?.value).toBe(
+        "Street parking"
+      )
+    }
+  )
+
+  it.each(["owner", "console"] as const)(
+    "gives a retry by the %s the first receipt and wakes the build again",
+    async (by) => {
+      const b = await asked("business.parking")
+      wake.failures = 1
+      const lost = await b.post(by, b.requestId, "Street parking")
+      expect(lost.status).toBeGreaterThanOrEqual(500)
+      const [stored] = await b.answered()
+      expect(stored).toBeDefined()
+
+      const retry = await b.post(by, b.requestId, "Street parking")
+      expect(retry.status).toBe(202)
+      expect(await retry.json()).toEqual(stored)
+      expect(wake.sent).toEqual([
+        {
+          type: "answer",
+          payload: {
+            request_id: b.requestId,
+            fact_id: (stored as { fact_id: string }).fact_id,
+          },
+        },
+      ])
+
+      const other = await b.post(by, b.requestId, "Round the back")
+      expect(other.status).toBe(409)
+      expect(await other.json()).toMatchObject({
+        code: "answer.already_given",
+        detail: { request_id: b.requestId },
+      })
+      expect(await b.answered()).toHaveLength(1)
+      expect((await current(b.orgId, "business.parking"))?.value).toBe(
+        "Street parking"
+      )
+    }
+  )
+
+  it("gives a retry for a question the build moved past its receipt, and no nudge", async () => {
+    const b = await asked("business.parking")
+    const first = await b.answer("Street parking")
+    expect(first.status).toBe(202)
+    const receipt = await first.json()
+    await advance(kit, b.ids, "implementing")
+    await b.ask("business.parking_notes")
+    wake.sent.length = 0
+    const retry = await b.answer("Street parking")
+    expect(retry.status).toBe(202)
+    expect(await retry.json()).toEqual(receipt)
+    expect(wake.sent).toEqual([])
+  })
+
+  it("tells a build that is not blocked it is not waiting", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, ids, to)
+    }
+    const res = await owner(orgId, `/${ids.assignmentId}/answer`, {
+      request_id: crypto.randomUUID(),
+      value: "Street parking",
+    })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "assignment.not_waiting" })
+  })
+
+  it("writes one answer when two arrive at once", async () => {
+    const b = await asked("business.parking")
+    const both = await Promise.all([
+      b.answer("Street parking"),
+      b.answer("Street parking"),
+    ])
+    expect(both.map((res) => res.status)).toEqual([202, 202])
+    const [first, second] = await Promise.all(both.map((res) => res.json()))
+    expect(second).toEqual(first)
+    expect(await b.answered()).toHaveLength(1)
+  })
+
+  it("waits only on the question its latest block named, through a pause and resume", async () => {
+    const b = await asked("business.parking")
+    // Asked after the block and never blocked on, then a pause and a resume,
+    // whose move back into the block names no question.
+    const skipped = await b.request("business.parking_notes")
+    await advance(kit, b.ids, "paused")
+    await advance(kit, b.ids, "blocked_on_information")
+    const refused = await b.post("owner", skipped, "Street parking")
+    expect(refused.status).toBe(404)
+    expect(await current(b.orgId, "business.parking_notes")).toBeUndefined()
+    expect((await b.answer("Street parking")).status).toBe(202)
   })
 
   it("holds the console to the same check, reading JSON only where it fits", async () => {
