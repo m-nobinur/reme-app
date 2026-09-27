@@ -1,7 +1,7 @@
 import { ErrorEnvelope } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import worker from "../src/index.ts"
-import { type ChangeInput, routeChange } from "../src/owner.ts"
+import { bridge, type ChangeInput, routeChange } from "../src/owner.ts"
 import { etag, orderAttention, unchanged } from "../src/workspace.ts"
 import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 
@@ -252,4 +252,145 @@ describe("owner routes refuse before the database", () => {
     )
     expect(calls).toHaveLength(0)
   })
+})
+
+describe("the bridge", () => {
+  const owner = {
+    orgId: A,
+    session: { workosUserId: "user_probe", sessionId: "session_probe" },
+  } as Parameters<typeof bridge>[1]
+
+  it("gives a call with no deadline its own 10 s, and answers 503 transient", async () => {
+    // The real 10 s, asserted, then run as 20 ms so the case is quick.
+    const timeout = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      asked.push(ms)
+      return timeout(20)
+    })
+    const sent: Request[] = []
+    try {
+      const result = await bridge(
+        {
+          ORCHESTRATOR: {
+            fetch: (request: Request) => {
+              sent.push(request)
+              return new Promise<never>(() => undefined)
+            },
+          },
+        } as unknown as Env,
+        owner,
+        `/${A}/cancel`,
+        { key: "k" }
+      )
+      expect(asked).toEqual([10_000])
+      expect(result.status).toBe(503)
+      expect(ErrorEnvelope.parse(result.body)).toMatchObject({
+        class: "transient",
+        code: "orchestrator.timeout",
+      })
+      // The call itself is cancelled, not only given up on.
+      expect(sent[0]?.signal.aborted).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("answers 503 transient when the binding rejects the call", async () => {
+    const result = await bridge(
+      {
+        ORCHESTRATOR: {
+          fetch: async () => {
+            throw new TypeError("Network connection lost.")
+          },
+        },
+      } as unknown as Env,
+      owner,
+      `/${A}/cancel`,
+      { key: "k" }
+    )
+    expect(result.status).toBe(503)
+    expect(ErrorEnvelope.parse(result.body)).toMatchObject({
+      class: "transient",
+      code: "orchestrator.unavailable",
+    })
+  })
+
+  it("takes its listener off a shared signal once the call settles", async () => {
+    const shared = new AbortController()
+    const removed = vi.spyOn(shared.signal, "removeEventListener")
+    await bridge(
+      {
+        ORCHESTRATOR: { fetch: async () => Response.json({}) },
+      } as unknown as Env,
+      owner,
+      `/${A}/preview`,
+      { method: "GET", signal: shared.signal }
+    )
+    expect(removed).toHaveBeenCalledWith("abort", expect.any(Function))
+  })
+
+  it.each([
+    [
+      "a timeout",
+      () => new Promise<never>(() => undefined),
+      "orchestrator.timeout",
+    ],
+    [
+      "a rejected call",
+      () => Promise.reject(new TypeError("Network connection lost.")),
+      "orchestrator.unavailable",
+    ],
+    [
+      "a bare 500",
+      async () => new Response("upstream broke", { status: 500 }),
+      "orchestrator.unavailable",
+    ],
+    [
+      "an enveloped 5xx",
+      async () =>
+        Response.json(
+          {
+            class: "provider",
+            code: "sandbox.down",
+            message: "Down.",
+            detail: {},
+            occurred_at: new Date().toISOString(),
+          },
+          { status: 502 }
+        ),
+      "sandbox.down",
+    ],
+  ] as const)(
+    "logs %s by its code, route and build, and nothing else",
+    async (_name, answer, code) => {
+      const timeout = AbortSignal.timeout.bind(AbortSignal)
+      const spy = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockImplementation(() => timeout(20))
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        await bridge(
+          { ORCHESTRATOR: { fetch: answer } } as unknown as Env,
+          owner,
+          `/${A}/cancel`,
+          { key: "k" }
+        )
+        expect(logged.mock.calls).toEqual([
+          [
+            JSON.stringify({
+              code,
+              route: "/assignments/:id/cancel",
+              assignment_id: A,
+            }),
+          ],
+        ])
+      } finally {
+        logged.mockRestore()
+        spy.mockRestore()
+      }
+    }
+  )
 })

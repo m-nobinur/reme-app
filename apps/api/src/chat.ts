@@ -278,19 +278,37 @@ type Tail = Row & { content: Content }
 type Read = { kind: "onboarding" | "assistant"; tail: Tail | null }
 
 /**
- * The conversation under the session's org and its last row, the
- * conversation locked for the rest of the turn so turns on it run one at a
- * time. Null for one the org does not hold.
+ * The conversation under the session's org and its last row, with the
+ * turn's lock held for the rest of the transaction so turns on it run one at
+ * a time: 404 for a conversation the org does not hold, and 409 `chat.busy`
+ * while another turn has it.
+ *
+ * The lock is an advisory one only turns take (ADR-034), not the row's: a
+ * rename, an archive or a message insert takes the row too, and would make a
+ * turn busy with no turn open. The two-key form never meets the one-key site
+ * lock. It is tried rather than waited on, so a waiting turn holds no second
+ * connection.
  */
-async function read(db: OrgScopedDb, id: string): Promise<Read | null> {
+async function read(db: OrgScopedDb, id: string): Promise<Read | Response> {
   const [conversation] = await db
     .select({ kind: conversations.kind })
     .from(conversations)
     .where(eq(conversations.id, id))
-    .for("update")
-  if (!conversation) return null
+  if (!conversation) return notFound()
+  const [turn] = await db.execute<{ locked: boolean }>(
+    sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
+  )
+  if (!turn?.locked) return busy()
   return { kind: conversation.kind, tail: await readTail(db, id) }
 }
+
+const busy = () =>
+  failure(409, {
+    class: "validation",
+    code: "chat.busy",
+    message: "Another turn in this conversation is still running.",
+    detail: {},
+  })
 
 async function readTail(db: OrgScopedDb, id: string): Promise<Tail | null> {
   const [tail] = await db
@@ -402,7 +420,7 @@ export async function chat(
   try {
     return await kit.withOrg(scope, async (db) => {
       const held = await read(db, id)
-      if (!held) return notFound()
+      if (held instanceof Response) return held
       if (turn.kind === "message") {
         return typed(
           db,
@@ -595,9 +613,9 @@ async function answer(
 
 /**
  * The owner's yes or no on a `request_change`, inside the turn's lock, so a
- * double click or a typed message waits for it rather than interleaving. A
- * yes runs the change keyed by the approval id, so a retry after a failed
- * write replays the build the first attempt made.
+ * double click or a typed message gets `chat.busy` rather than
+ * interleaving. A yes runs the change keyed by the approval id, so a retry
+ * after a failed write finishes what the first attempt started.
  */
 async function approve(
   db: OrgScopedDb,
@@ -643,13 +661,12 @@ async function approve(
 
 /**
  * Refusals kept as the card's answer, by class. `validation`
- * (change.question_open, change.build_busy, staff.developer_missing, the
- * orchestrator's state refusals), `permission` and `budgetary`
- * (builds.daily_cap) say no to this change, and are stored as `refused`.
- * Everything else (`integrity` such as orchestrator.off_contract at 502,
- * `transient` such as request.failed at 503, `provider`, `resource`) is a
- * failed request: answered as it is and not stored, so a retry runs the
- * change again under the same key.
+ * (change.question_open, change.build_busy, change.cancelled,
+ * staff.developer_missing, the orchestrator's state refusals), `permission`
+ * and `budgetary` (builds.daily_cap) say no to this change, and are stored
+ * as `refused`. Everything else (`transient` such as an unknown outcome at
+ * 503, `provider`, `resource`) is a failed request: answered as it is and
+ * not stored, so a retry runs the change again under the same key.
  */
 const KEPT: readonly ErrorEnvelope["class"][] = [
   "validation",

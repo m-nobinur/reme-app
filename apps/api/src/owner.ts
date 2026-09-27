@@ -66,16 +66,74 @@ export const OWNER_PATH =
 type Bridged = { status: number; body: unknown }
 
 /**
+ * How long a change may take, reads and every call over the binding
+ * together, and how long any other single call may take (ADR-034). A guess:
+ * 7.5 times one measured staging `POST /changes` of 1,330 ms. The chat's
+ * approval waits on it while it holds its turn's lock, so the 15 s
+ * idle-in-transaction limit in `packages/db` is this plus 5 s.
+ */
+const BRIDGE_TIMEOUT_MS = 10_000
+
+/**
+ * `work`, or `late()` once `signal` aborts, whichever comes first. An
+ * aborted signal starts no work; work already started is no longer waited
+ * for, not stopped. The listener goes on before the work starts, so the
+ * deadline wins a tie with the work's own abort, and comes off once either
+ * settles, so a change's one signal does not collect a listener per call.
+ */
+export function within<T>(
+  signal: AbortSignal,
+  work: () => Promise<T>,
+  late: () => T
+): Promise<T> {
+  if (signal.aborted) return Promise.resolve(late())
+  let onAbort: () => void = () => undefined
+  const aborted = new Promise<T>((resolve) => {
+    onAbort = () => resolve(late())
+    signal.addEventListener("abort", onAbort, { once: true })
+  })
+  return Promise.race([work(), aborted]).finally(() =>
+    signal.removeEventListener("abort", onAbort)
+  )
+}
+
+/** The orchestrator answered in no shape at all, or not at all. */
+const unreachable = (
+  code: "orchestrator.timeout" | "orchestrator.unavailable"
+) =>
+  ({
+    status: 503,
+    body: {
+      class: "transient",
+      code,
+      message: "The builder did not answer.",
+      detail: {},
+      occurred_at: new Date().toISOString(),
+    },
+  }) satisfies Bridged
+
+/**
  * One call over the binding. The request is built here from nothing the
  * client sent except a body this file already validated and the
  * idempotency key: never the incoming request or its headers, which would
  * carry a client's `x-reme-*` and `Cloudflare-Workers-Version-Overrides`.
+ *
+ * It ends by `signal`, or by its own `BRIDGE_TIMEOUT_MS` when given none,
+ * and a call cut off answers as a 503 `orchestrator.timeout`: the request
+ * is aborted, and the answer is not waited for even if the binding ignores
+ * the abort. A call the binding rejects (the orchestrator unreachable or
+ * failing before it answers) is a 503 `orchestrator.unavailable`.
  */
-async function bridge(
+export async function bridge(
   env: Env,
   owner: Owner,
   path: string,
-  init: { method?: "GET" | "POST"; body?: unknown; key?: string | null } = {}
+  init: {
+    method?: "GET" | "POST"
+    body?: unknown
+    key?: string | null
+    signal?: AbortSignal
+  } = {}
 ): Promise<Bridged> {
   const headers = new Headers({
     [OWNER_BRIDGE_HEADERS.orgId]: owner.orgId,
@@ -84,55 +142,97 @@ async function bridge(
   })
   if (init.key) headers.set("idempotency-key", init.key)
   if (init.body !== undefined) headers.set("content-type", "application/json")
-  const response = await env.ORCHESTRATOR.fetch(
-    new Request(`https://orchestrator/assignments${path}`, {
-      method: init.method ?? "POST",
-      headers,
-      body: init.body === undefined ? null : JSON.stringify(init.body),
+  const signal = init.signal ?? AbortSignal.timeout(BRIDGE_TIMEOUT_MS)
+  const result = await within(
+    signal,
+    async () => {
+      const response = await env.ORCHESTRATOR.fetch(
+        new Request(`https://orchestrator/assignments${path}`, {
+          method: init.method ?? "POST",
+          headers,
+          body: init.body === undefined ? null : JSON.stringify(init.body),
+          signal,
+        })
+      ).catch(() => null)
+      if (!response) return unreachable("orchestrator.unavailable")
+      return {
+        status: response.status,
+        body: await response.json().catch(() => null),
+      }
+    },
+    () => unreachable("orchestrator.timeout")
+  )
+  if (result.status >= 500) unknownOutcome(path, result)
+  return result
+}
+
+/**
+ * A call whose outcome nobody knows, logged by its code, the orchestrator
+ * route and the build it named, and nothing else. ADR-034's triggers read
+ * these, the first `orchestrator.timeout` on a replace among them.
+ */
+function unknownOutcome(path: string, result: Bridged) {
+  const refusal = ErrorEnvelope.safeParse(result.body)
+  const [, id, verb] = path.split("/")
+  console.error(
+    JSON.stringify({
+      code: refusal.success ? refusal.data.code : "orchestrator.unavailable",
+      route: verb ? `/assignments/:id/${verb}` : "/assignments/",
+      assignment_id: id || null,
     })
   )
-  return {
-    status: response.status,
-    body: await response.json().catch(() => null),
-  }
 }
 
 /**
  * The orchestrator's answer, checked against the contract on the way out. A
- * refusal is passed on when it is the §28.1 envelope. Anything else, a
- * success off contract included, is a bug on one side of the binding: 502
- * `integrity`, never a retryable class, since a success's side effect has
- * already happened and a retry would ask for it twice.
+ * success passes when it parses, and a refusal when it is a 4xx carrying the
+ * §28.1 envelope. A 4xx without one is a route or shape mismatch that
+ * committed nothing and will fail the same way again: 502 `integrity`.
+ * Anything else, a timeout, a 5xx or a success off the contract, leaves the
+ * outcome unknown (ADR-034): the call may have committed. The owner gets 503
+ * `transient`, and a retry under the same key finds what the call did.
  */
 function relay(result: Bridged, parse: (body: unknown) => unknown): Response {
   if (result.status < 300) {
     try {
       return Response.json(parse(result.body), { status: result.status })
     } catch (error) {
-      return offContract(result.status, (error as { issues?: [] }).issues)
+      noted("orchestrator.off_contract", result.status, error)
+      return unknown("orchestrator.off_contract")
     }
   }
   const refusal = ErrorEnvelope.safeParse(result.body)
-  if (refusal.success) {
-    return Response.json(refusal.data, { status: result.status })
+  if (result.status < 500) {
+    if (refusal.success) {
+      return Response.json(refusal.data, { status: result.status })
+    }
+    noted("orchestrator.off_contract", result.status, refusal.error)
+    return failure(502, {
+      class: "integrity",
+      code: "orchestrator.off_contract",
+      message: "The builder answered in a shape we do not accept.",
+      detail: {},
+    })
   }
-  return offContract(result.status, refusal.error.issues)
+  // Logged by `bridge`, which knows the route.
+  return unknown(
+    refusal.success ? refusal.data.code : "orchestrator.unavailable"
+  )
 }
 
-function offContract(status: number, issues?: { path: PropertyKey[] }[]) {
-  console.error(
-    JSON.stringify({
-      code: "orchestrator.off_contract",
-      status,
-      issues: issuePaths(issues),
-    })
-  )
-  return failure(502, {
-    class: "integrity",
-    code: "orchestrator.off_contract",
-    message: "The builder answered in a shape we do not accept.",
+/** An outcome nobody can vouch for, under the code that says why. */
+const unknown = (code: string) =>
+  failure(503, {
+    class: "transient",
+    code,
+    message: "We could not tell whether that went through. Try again.",
     detail: {},
   })
+
+/** The log line for an answer that is not the contract's, paths only. */
+function noted(code: string, status: number, error?: unknown) {
+  const { issues } = (error ?? {}) as { issues?: { path: PropertyKey[] }[] }
+  console.error(JSON.stringify({ code, status, issues: issuePaths(issues) }))
 }
 
 const notFound = (noun: "assignment" | "approval") =>
@@ -181,6 +281,8 @@ export type ChangeRoute =
       revision_id: string | null
       rebuild: "site.build" | "site.revise"
     }
+
+type Replace = Extract<ChangeRoute, { route: "replace" }>
 
 /** States whose Developer is still working, so a message reaches it. */
 const STEERABLE: readonly AssignmentState[] = [
@@ -338,8 +440,9 @@ async function requestChange(
 
 /**
  * An owner's change, routed and started: the build it made or steered, or
- * the envelope saying why not. `key` makes a retry replay the build the
- * first attempt made. `/changes` and the chat's approval both come here.
+ * the envelope saying why not. `/changes` and the chat's approval both come
+ * here, and `key` makes a retry finish what the first attempt started,
+ * read from the build the key made (ADR-034).
  */
 export async function startChange(
   env: Env,
@@ -348,64 +451,148 @@ export async function startChange(
   text: string,
   key: string
 ): Promise<Response> {
+  // One deadline for the whole change: its reads and every call it makes
+  // share it, so a replace's three calls end within it too.
+  const signal = AbortSignal.timeout(BRIDGE_TIMEOUT_MS)
   const { orgId, session } = owner
-  const state = await kit.withOrg(
-    { orgId, workosUserId: session.workosUserId },
-    async (db) => {
-      // An org made before the starting team existed gets it here, so its
-      // first build has a Developer to run it (ruling 2).
-      await ownerStaffId(db, {
-        orgId,
-        workosUserId: session.workosUserId,
-        ownerName: session.name ?? session.email,
-      })
-      // The build this key already made: a retry replays it rather than
-      // routing again against the state the first attempt changed.
-      const [made] = await db
-        .select()
-        .from(assignments)
-        .where(eq(assignments.idempotencyKey, key))
-      if (made) return { made: toAssignment(made) }
-      // A steer makes no build, so a retried steer is found by its event and
-      // replayed against the build it went to, whatever that build is doing
-      // now: routing again could start or steer a different one.
-      const steer = await steerByKey(db, key)
-      if (steer) {
-        const [to] = await db
+  const state = await within(
+    signal,
+    () =>
+      kit.withOrg({ orgId, workosUserId: session.workosUserId }, async (db) => {
+        // An org made before the starting team existed gets it here, so
+        // its first build has a Developer to run it (ruling 2).
+        await ownerStaffId(db, {
+          orgId,
+          workosUserId: session.workosUserId,
+          ownerName: session.name ?? session.email,
+        })
+        const [found] = await db
           .select()
           .from(assignments)
-          .where(eq(assignments.id, steer.assignment_id))
-        if (to) return { steered: toAssignment(to) }
-      }
-      const [builds, reviews, site] = await Promise.all([
-        readBuilds(db, null),
-        readApprovals(db),
-        readSite(db, env.SITE_HOST_SUFFIX),
-      ])
-      return { builds, reviews, live: site.live !== null }
-    }
+          .where(eq(assignments.idempotencyKey, key))
+        const made = found ? toAssignment(found) : null
+        // Only a queued build can have steps left; any other answers alone.
+        if (made && made.state !== "queued") {
+          return { made, steered: null, builds: [], reviews: [], live: false }
+        }
+        // A steer makes no build, so a retried steer is found by its event
+        // and replayed against the build it went to, whatever that build is
+        // doing now: routing again could start or steer a different one.
+        const steer = made ? null : await steerByKey(db, key)
+        if (steer) {
+          const [to] = await db
+            .select()
+            .from(assignments)
+            .where(eq(assignments.id, steer.assignment_id))
+          if (to) {
+            return {
+              made: null,
+              steered: toAssignment(to),
+              builds: [],
+              reviews: [],
+              live: false,
+            }
+          }
+        }
+        const [builds, reviews, site] = await Promise.all([
+          readBuilds(db, null),
+          readApprovals(db),
+          readSite(db, env.SITE_HOST_SUFFIX),
+        ])
+        return {
+          made,
+          steered: null,
+          builds,
+          reviews,
+          live: site.live !== null,
+        }
+      }),
+    () => null
   )
-  if ("made" in state) return Response.json(summary(state.made))
-  if ("steered" in state && state.steered) {
-    const to = state.steered
-    const replayed = await bridge(env, owner, `/${to.assignment_id}/steer`, {
-      body: { message: text },
-      key,
-    })
-    return relay(replayed, () => summary(to))
+  if (!state) return unknown("change.timeout")
+  const { made, steered } = state
+  if (steered) {
+    const replayed = await bridge(
+      env,
+      owner,
+      `/${steered.assignment_id}/steer`,
+      {
+        body: { message: text },
+        key,
+        signal,
+      }
+    )
+    return relay(replayed, () => summary(steered))
   }
+  // Routed on the org's other builds, so a retry sees what is left to do.
   const route = routeChange({
     live: state.live,
-    builds: state.builds,
+    builds: state.builds.filter((b) => b.assignment_id !== made?.assignment_id),
     reviews: state.reviews.map(({ request: r }) => ({
       assignment_id: r.assignment_id,
       revision_id: r.target.kind === "revision" ? r.target.revision_id : "",
     })),
   })
-  const create = (kind: "site.build" | "site.revise") =>
-    bridge(env, owner, "/", { body: { kind, goal: text }, key }).then(
-      (result) => relay(result, summary)
+  const call = (path: string, body?: unknown) =>
+    bridge(env, owner, path, { body, key, signal })
+  // The old review turned down once the new build exists. Only a definite
+  // no cancels the new build: an unknown outcome may have ended the review.
+  const end = async (build: Assignment, status: number, old: Replace) => {
+    const ended = relay(
+      await call(
+        `/${old.assignment_id}/${old.via}`,
+        old.via === "reject" ? { revision_id: old.revision_id } : undefined
+      ),
+      () => null
     )
+    if (ended.ok) return Response.json(summary(build), { status })
+    if (ended.status >= 500) return ended
+    // The old build keeps the site, so nothing would release the new one.
+    // If the cancel's outcome is not known, a retry finds the build still
+    // queued and runs these steps again.
+    const cancelled = relay(
+      await call(`/${build.assignment_id}/cancel`),
+      () => null
+    )
+    if (cancelled.ok) return ended
+    if (cancelled.status >= 500) return cancelled
+    // Refused outright: both builds stay open and no retry will change
+    // that, so it is a conflict someone has to look at, not a 503 to loop on.
+    console.error(
+      JSON.stringify({
+        alert: "change.not_cancelled",
+        new_assignment_id: build.assignment_id,
+        old_assignment_id: old.assignment_id,
+        status: cancelled.status,
+      })
+    )
+    return failure(409, {
+      class: "validation",
+      code: "change.not_cancelled",
+      message:
+        "Your change could not replace the build waiting for review. We have flagged it.",
+      detail: {
+        assignment_id: build.assignment_id,
+        replacing_assignment_id: old.assignment_id,
+      },
+    })
+  }
+  if (made) {
+    if (made.state === "cancelled") {
+      return failure(409, {
+        class: "validation",
+        code: "change.cancelled",
+        message: "That change was cancelled. Ask for it again.",
+        detail: { assignment_id: made.assignment_id },
+      })
+    }
+    if (made.state === "queued" && route.route === "replace") {
+      return end(made, 200, route)
+    }
+    return Response.json(summary(made))
+  }
+  const create = async (kind: "site.build" | "site.revise") =>
+    relay(await call("/", { kind, goal: text }), summary)
   switch (route.route) {
     case "refuse":
       return failure(409, {
@@ -420,9 +607,8 @@ export async function startChange(
     case "steer": {
       // The orchestrator stores the steer under this key and delivers it
       // once, so a retry after a timeout replays the first receipt.
-      const result = await bridge(env, owner, `/${route.assignment_id}/steer`, {
-        body: { message: text },
-        key,
+      const result = await call(`/${route.assignment_id}/steer`, {
+        message: text,
       })
       const build = state.builds.find(
         (b) => b.assignment_id === route.assignment_id
@@ -431,35 +617,14 @@ export async function startChange(
     }
     case "replace": {
       // The new build first: while the old one holds the site it queues
-      // behind the lock and claims it once the old one ends. A refused
-      // create (the daily cap) leaves the review standing.
-      const created = await bridge(env, owner, "/", {
-        body: { kind: route.rebuild, goal: text },
-        key,
-      })
-      const made = Assignment.safeParse(created.body)
-      if (created.status >= 300 || !made.success) {
+      // behind the lock and claims it once the old one ends. A refused or
+      // unknown create leaves the review standing.
+      const created = await call("/", { kind: route.rebuild, goal: text })
+      const build = Assignment.safeParse(created.body)
+      if (created.status >= 300 || !build.success) {
         return relay(created, summary)
       }
-      const ended = await bridge(
-        env,
-        owner,
-        `/${route.assignment_id}/${route.via}`,
-        {
-          body:
-            route.via === "reject"
-              ? { revision_id: route.revision_id }
-              : undefined,
-          key,
-        }
-      )
-      if (ended.status < 300) return relay(created, summary)
-      // The old build still holds the site, so nothing would ever release
-      // the new one: cancel it, and answer with why the old one stayed. A
-      // retry with this key replays the cancelled build; a new attempt is a
-      // new key.
-      await bridge(env, owner, `/${made.data.assignment_id}/cancel`, { key })
-      return relay(ended, () => null)
+      return end(build.data, created.status, route)
     }
     case "build":
       return create("site.build")

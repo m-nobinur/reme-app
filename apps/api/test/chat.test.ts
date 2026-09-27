@@ -23,7 +23,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   ASK_REPLY,
   CANCELLED,
@@ -42,6 +42,7 @@ import {
   owner,
   type Stub,
   SUFFIX,
+  seed,
   stubOrchestrator,
 } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
@@ -949,8 +950,19 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         const [a, b] = await Promise.all(
           kits.map((own) => me.send(body(true), stub, own))
         )
-        expect([a?.response.status, b?.response.status]).toEqual([200, 200])
-        expect(b?.text).toBe(a?.text)
+        // The second click either finds the turn open and is busy, or
+        // comes after it and replays it.
+        const [first, second] = [a, b].sort(
+          (x, y) => (x?.response.status ?? 0) - (y?.response.status ?? 0)
+        )
+        expect(first?.response.status).toBe(200)
+        if (second?.response.status === 409) {
+          expect(ErrorEnvelope.parse(JSON.parse(second.text)).code).toBe(
+            "chat.busy"
+          )
+        } else {
+          expect(second?.text).toBe(first?.text)
+        }
         expect(stub.calls).toHaveLength(1)
         expect(
           (await me.tail(id)).parts.filter((p) => p.type === "step-start")
@@ -960,39 +972,143 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       }
     })
 
-    it("holds a typed message until the yes it raced is written", async () => {
+    const typedTurn = (id: string, messageId: string) => ({
+      conversation_id: id,
+      mode: "act",
+      turn: { kind: "message", message_id: messageId, text: "Wait" },
+    })
+
+    it("keeps a refused cancel as the card's answer, so the retry calls nothing", async () => {
+      const { who, me, id, body } = await carded("chat-not-cancelled")
+      // An open review, so the yes replaces it.
+      const s = seed(kit, who)
+      const reviewing = await s.assignment("awaiting_review")
+      await s.approval(reviewing, await s.revision(reviewing, 1), 72)
+      const refusal = (code: string) =>
+        Response.json(
+          {
+            class: "validation",
+            code,
+            message: "Refused.",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 409 }
+        )
+      const created = building()
+      const refusing = stubOrchestrator((request) => {
+        const path = new URL(request.url).pathname
+        if (path === "/assignments/") return created.fetch(request)
+        return refusal(
+          path.endsWith("/cancel") ? "assignment.state" : "approval.gone"
+        )
+      })
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        const first = await me.turn(id, body(true), refusing)
+        expect(first.after.parts.at(-2)).toMatchObject({
+          output: {
+            outcome: "refused",
+            error: { code: "change.not_cancelled" },
+          },
+        })
+      } finally {
+        logged.mockRestore()
+      }
+      expect(refusing.calls).toHaveLength(3)
+      const again = await me.send(body(true), refusing)
+      expect(again.response.status).toBe(200)
+      expect(refusing.calls).toHaveLength(3)
+      await s.state(reviewing, "cancelled")
+    })
+
+    it("answers a turn sent while a yes runs with chat.busy at once", async () => {
       const { me, id, body } = await carded("chat-interleave")
       const own = tenancy(url as string, { max: 2 })
-      let typed: Promise<{ response: Response; text: string }> | undefined
+      let typed: { response: Response; text: string; ms: number } | undefined
       const racing = stubOrchestrator(async (request) => {
-        typed = me.send(
-          {
-            conversation_id: id,
-            mode: "act",
-            turn: { kind: "message", message_id: "u_race", text: "Wait" },
-          },
+        const started = Date.now()
+        const sent = await me.send(
+          typedTurn(id, "u_race"),
           stubOrchestrator(),
           own
         )
-        // Long enough for the typed turn to reach the row if nothing holds it.
-        await new Promise((resolve) => setTimeout(resolve, 300))
+        typed = { ...sent, ms: Date.now() - started }
         return building().fetch(request)
       })
       try {
         const yes = await me.send(body(true), racing)
         expect(yes.response.status, yes.text).toBe(200)
-        expect((await typed)?.response.status).toBe(200)
-        const rows = await me.rows(id)
-        const card = (rows.at(-3)?.content as { parts: ToolPart[] } | undefined)
-          ?.parts
-        expect(card?.at(-2)).toMatchObject({
-          state: "output-available",
-          output: { outcome: "started" },
-        })
-        expect(rows.at(-2)?.id).toBe("u_race")
+        expect(typed?.response.status).toBe(409)
+        expect(ErrorEnvelope.parse(JSON.parse(typed?.text ?? "")).code).toBe(
+          "chat.busy"
+        )
+        expect(typed?.ms).toBeLessThan(1_000)
+        // Once the yes is written the same message goes through.
+        const after = await me.send(typedTurn(id, "u_race"))
+        expect(after.response.status, after.text).toBe(200)
       } finally {
         await own.close()
       }
+    })
+
+    it("is not made busy by a rename in flight", async () => {
+      const { who, me, id } = await carded("chat-rename")
+      let renamed: () => void = () => undefined
+      let release: () => void = () => undefined
+      const isRenamed = new Promise<void>((resolve) => {
+        renamed = resolve
+      })
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      // A rename holds the conversation's row until it commits.
+      const renaming = kit.withOrg({ orgId: who.orgId }, async (db) => {
+        await db
+          .update(conversations)
+          .set({ title: "Renamed" })
+          .where(eq(conversations.id, id))
+        renamed()
+        await released
+      })
+      await isRenamed
+      const turn = me.send(typedTurn(id, "u_renamed"))
+      setTimeout(release, 300)
+      await renaming
+      const { response, text } = await turn
+      expect(response.status, text).toBe(200)
+    })
+
+    it("answers 503 on a bridge that never answers, and lets go of the conversation", async () => {
+      const { me, id, body } = await carded("chat-hung")
+      // The real 10 s, run as 1 s: long enough for the change's reads under
+      // load, so the deadline lands on the hung call.
+      const timeout = AbortSignal.timeout.bind(AbortSignal)
+      const spy = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockImplementation(() => timeout(1_000))
+      const hung = stubOrchestrator(() => new Promise<never>(() => undefined))
+      const before = await me.rows(id)
+      try {
+        const first = await me.send(body(true), hung)
+        expect(first.response.status).toBe(503)
+        expect(ErrorEnvelope.parse(JSON.parse(first.text))).toMatchObject({
+          class: "transient",
+          code: "orchestrator.timeout",
+        })
+      } finally {
+        spy.mockRestore()
+      }
+      expect(await me.rows(id)).toEqual(before)
+      // The lock went with the turn, and the retry runs under the same key.
+      const stub = building()
+      const retried = await me.send(body(true), stub)
+      expect(retried.response.status).toBe(200)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        hung.calls[0]?.request.headers.get("idempotency-key")
+      )
     })
 
     it("replays when the row moved to this same yes while the change ran", async () => {
