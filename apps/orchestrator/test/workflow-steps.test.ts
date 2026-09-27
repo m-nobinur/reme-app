@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import steps from "./workflow-steps.json" with { type: "json" }
 
 /**
@@ -79,6 +79,19 @@ vi.mock("@workspace/db", () => ({
   facts: {},
   eq: () => ({}),
   listOrgIds: async () => [...orgList],
+  // What each look finds: the question the build waits on and whether it is
+  // answered. With nothing scripted, the round's question, answered.
+  waitedOn: async () => {
+    const seen = script.looks.shift() ?? { request_id: "q", fact_id: "f" }
+    return [
+      {
+        assignment_id: ROW.id,
+        request: { request_id: seen.request_id },
+        answer: seen.fact_id ? { fact_id: seen.fact_id } : null,
+        value: null,
+      },
+    ]
+  },
   toFactRecord: (row: unknown) => ({
     ...(row as object),
     key: "business.phone",
@@ -110,6 +123,7 @@ const script = {
   origin: "console" as "owner" | "console",
   reviews: 0,
   reviewRefusal: null as string | null,
+  looks: [] as { request_id: string; fact_id: string | null }[],
 }
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
@@ -188,11 +202,17 @@ const { AssignmentWorkflow, SweepWorkflow, sweepHour } = await import(
 )
 
 type Wake = { payload: Record<string, unknown> } | "timeout"
-type Answer = Record<string, unknown> | "timeout"
+/**
+ * One wait for an answer: a nudge, or a timeout. `after` moves the clock on
+ * first, as the time the wait took.
+ */
+type Answer = { timeout?: true; after?: number }
 
 /** A recording step: names in order, callbacks run, sleeps skipped, waits scripted. */
 function drive(wakes: Wake[], answers: Answer[] = []) {
   const names: string[] = []
+  /** The timeout each answer wait was given. */
+  const waits: unknown[] = []
   const step = {
     do: async (name: string, a: unknown, b?: unknown) => {
       names.push(name)
@@ -202,12 +222,17 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
     sleep: async (name: string) => {
       names.push(name)
     },
-    waitForEvent: async (name: string, opts: { type: string }) => {
+    waitForEvent: async (
+      name: string,
+      opts: { type: string; timeout?: unknown }
+    ) => {
       names.push(name)
       if (opts.type === "answer") {
-        const answer = answers.shift() ?? { request_id: "q", fact_id: "f" }
-        if (answer === "timeout") throw new Error("timed out")
-        return { payload: answer }
+        waits.push(opts.timeout)
+        const answer = answers.shift() ?? {}
+        if (answer.after) vi.setSystemTime(Date.now() + answer.after)
+        if (answer.timeout) throw new Error("timed out")
+        return { payload: { request_id: "ignored", fact_id: "ignored" } }
       }
       const next = wakes.shift()
       if (!next || next === "timeout") throw new Error("timed out")
@@ -222,8 +247,12 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
       { payload: { org_id: ROW.orgId, assignment_id: ROW.id } } as never,
       step as never
     )
-  return { names, run }
+  return { names, waits, run }
 }
+
+const HOUR = 60 * 60 * 1000
+const DAY = 24 * HOUR
+const unanswered = { request_id: "q", fact_id: null }
 
 const completion: Wake = {
   payload: { kind: "completion", report_id: "r", revision_id: "v" },
@@ -244,6 +273,7 @@ type Setup = {
   verdicts?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
+  looks?: typeof script.looks
   origin?: "owner"
 }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
@@ -255,10 +285,18 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { origin: "owner" },
     { outcome: "preview_ready" },
   ],
+  // The first look finds no answer yet; the nudge sends it to look again.
   [
     "information round trip",
     [information, completion],
-    {},
+    { looks: [unanswered] },
+    { outcome: "preview_ready" },
+  ],
+  // A nudge for an earlier question, or a repeat: one more look, then a wait.
+  [
+    "a stale nudge, then the answer",
+    [information, completion],
+    { looks: [unanswered, unanswered] },
     { outcome: "preview_ready" },
   ],
   [
@@ -317,15 +355,28 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
   [
     "nobody answered",
     [information],
-    { answers: ["timeout"] },
+    {
+      looks: [unanswered, unanswered],
+      answers: [{ timeout: true, after: 7 * DAY }],
+    },
     {
       outcome: "failed",
     },
   ],
 ]
 
+beforeEach(() => {
+  vi.setSystemTime(new Date("2026-09-27T09:00:00Z"))
+  script.looks = []
+  dispatched.length = 0
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe("the assignment Workflow's step names", () => {
   it.each(paths)("%s", async (path, wakes, setup, outcome) => {
+    script.looks = [...(setup.looks ?? [])]
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
@@ -334,6 +385,45 @@ describe("the assignment Workflow's step names", () => {
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
+  })
+
+  it("keeps a round's deadline through a stale nudge, and resumes on its answer", async () => {
+    script.verdicts = ["preview_ready"]
+    // Round 1 is answered at once. In round 2 a nudge for round 1's question
+    // arrives an hour before the deadline: one look finds round 2 unanswered,
+    // the next wait gets only the hour left, and the answer ends it.
+    script.looks = [
+      { request_id: "q", fact_id: "f" },
+      unanswered,
+      unanswered,
+      { request_id: "q", fact_id: "f2" },
+    ]
+    const { names, waits, run } = drive(
+      [information, information, completion],
+      [{ after: 7 * DAY - HOUR }, {}]
+    )
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(names.filter((n) => n.startsWith("deadline"))).toEqual([
+      "deadline 1",
+      "deadline 2",
+    ])
+    expect(waits).toEqual([6 * HOUR, HOUR])
+    const resumed = dispatched
+      .map((d) => d.message as { type?: string; body?: string })
+      .filter((m) => m.type === "information.answered")
+    expect(resumed).toHaveLength(2)
+  })
+
+  it("finds an answer whose nudge was lost at the next look", async () => {
+    script.verdicts = ["preview_ready"]
+    script.looks = [unanswered, { request_id: "q", fact_id: "f" }]
+    const { names, waits, run } = drive(
+      [information, completion],
+      [{ timeout: true, after: 6 * HOUR }]
+    )
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(waits).toEqual([6 * HOUR])
+    expect(names).toContain("resume 1")
   })
 
   it("opens a review for an owner's preview only", async () => {
@@ -407,6 +497,7 @@ describe("the assignment Workflow's step names", () => {
         "pool full then provisioned",
         "checkpoint found the site gone",
         "nobody answered",
+        "a stale nudge, then the answer",
       ].sort()
     )
   })
