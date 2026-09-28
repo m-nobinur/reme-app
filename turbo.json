@@ -36,11 +36,11 @@
       // database. It is hashed as well, so the 15-case run and the 23-case run
       // cache separately.
       //
-      // Consequence: `.githooks/pre-push` runs `pnpm test` with
-      // `TURBO_FORCE=true`, so a developer with DATABASE_URL exported at an
-      // unmigrated or unseeded database now fails the push where it used to
-      // skip clean. Intended. A suite failing against a broken database is
-      // information.
+      // Consequence: a developer with DATABASE_URL exported at an unmigrated
+      // or unseeded database now fails `pnpm test` where it used to skip
+      // clean. Intended. A suite failing against a broken database is
+      // information. The hash holds the URL, not the database's state, so
+      // `.githooks/pre-push` replays a pass cached against the same URL.
       "env": ["DATABASE_URL"]
     },
     // The starter site test builds into dist and then reads it. A package that
@@ -69,8 +69,7 @@
     // stale ones. Measured: one planted 44-byte chunk moved the figure, and a
     // real dist left over from another commit read 911.90 KiB against a true
     // 839.59. So `pnpm size` passes `--force`, which reaches the build too and
-    // lets vite empty the directory. Same reason as `TURBO_FORCE=true` in
-    // pre-push: a turbo result is evidence only when the cache was bypassed.
+    // lets vite empty the directory.
     "size": {
       "dependsOn": ["build"],
       "cache": false
