@@ -20,7 +20,6 @@ import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { WORKING } from "../build-state"
 import type {
-  ActivityItem,
   ApprovalItem,
   AttentionItem,
   DecisionOutcome,
@@ -630,16 +629,15 @@ async function conversationMessages(
     .messages as TransportedMessage[]
 }
 
-async function activity(): Promise<ActivityItem[]> {
+async function activity(): Promise<AttentionItem[]> {
   const body = await get("/activity")
   if (body === null) {
     return []
   }
-  return ActivityFeed.parse(body).items.map((item) => ({
-    id: item.event_id,
-    summary: logged(item).title,
-    occurredAt: item.at,
-  }))
+  // Reports and alerts name no staff member, so no directory is read.
+  return ActivityFeed.parse(body).items.map((item) =>
+    toAttention(item, new Map())
+  )
 }
 
 async function factsOf(): Promise<TransportedFact[]> {

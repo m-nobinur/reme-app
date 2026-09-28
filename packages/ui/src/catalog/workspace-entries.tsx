@@ -1,11 +1,16 @@
 import {
+  BellIcon,
   CheckCircleIcon,
   FlowArrowIcon,
   NotePencilIcon,
   UserCircleIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
-import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
+import {
+  AppNav,
+  NavCount,
+  navLinkClass,
+} from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -42,6 +47,7 @@ import { SamplePanel } from "./panel-entries"
 type Entry = { name: string; render: () => ReactNode }
 
 const NAV = [
+  { href: "#notifications", label: "Notifications", icon: BellIcon },
   { href: "#approvals", label: "Approvals", icon: CheckCircleIcon },
   { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
   { href: "#staff", label: "Staff", icon: UsersThreeIcon },
@@ -84,6 +90,7 @@ function Rail() {
             <a className={navLinkClass} href={item.href}>
               <item.icon aria-hidden />
               {item.label}
+              {item.href === "#notifications" ? <NavCount count={3} /> : null}
             </a>
           </li>
         ))}
@@ -103,6 +110,7 @@ function ShellSample() {
       panel={<SamplePanel />}
       panelCount={2}
       rail={<Rail />}
+      railCount={3}
     >
       <WorkspacePage>
         <h1 className="mb-6 font-semibold text-2xl">Approvals</h1>

@@ -9,9 +9,11 @@ import { GOAL_MAX, Uuid } from "@workspace/contracts"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
+import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { source } from "./source"
 import type {
   ApprovalItem,
+  AttentionItem,
   BusinessProfile,
   DecisionOutcome,
   Json,
@@ -80,6 +82,15 @@ function localId(value: unknown): string {
 /** The caller's idempotency key, or a fresh one: a key is never empty. */
 const keyOf = (value: unknown) => text(value, 255) || crypto.randomUUID()
 
+/** Reports and alerts for the rail's count, or null when they could not be read. */
+async function readActivity(orgId: string): Promise<AttentionItem[] | null> {
+  try {
+    return await source.activity(orgId)
+  } catch {
+    return null
+  }
+}
+
 /** The conversations list for the rail, or null when it could not be read. */
 async function readConversations(
   orgId: string
@@ -111,6 +122,13 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     conversations: Conversation[] | null
     /** Staff names by id, for naming who asked in a polled workspace. */
     names: Record<string, string>
+    /**
+     * Reports and alerts from `/activity`, for the notifications page and
+     * the rail's count. Null when the read failed.
+     */
+    activity: AttentionItem[] | null
+    /** The newest notification the owner has seen in `active`, from their cookie. */
+    seenAt: string | null
   }> => {
     const orgs = await source.orgs()
     const active = pickOrg(orgs)
@@ -122,13 +140,17 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
         workspace: EMPTY_WORKSPACE,
         conversations: [],
         names: {},
+        activity: [],
+        seenAt: null,
       }
     }
     const staff = source.staff(active.id)
-    const [workspace, conversations, members] = await Promise.all([
+    const [workspace, conversations, members, activity] = await Promise.all([
       readWorkspace(() => source.workspace(active.id, staff)),
       readConversations(active.id),
       staff.catch(() => []),
+      // ponytail: one more API read on every /app/* navigation; cache it, or read it only on the panel's timer, if frame latency shows it.
+      readActivity(active.id),
     ])
     return {
       orgs,
@@ -136,6 +158,8 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
       workspace,
       conversations,
+      activity,
+      seenAt: seenAtOf(getCookie(seenCookie(active.id))),
       names: Object.fromEntries(
         members.map((member) => [member.id, member.displayName])
       ),

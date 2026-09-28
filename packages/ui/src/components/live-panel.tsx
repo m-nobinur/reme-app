@@ -323,10 +323,16 @@ function WaitingOnYou({
   children,
   status = null,
   error = null,
+  action = null,
+  onRetry,
 }: {
   children?: ReactNode
   status?: string | null
   error?: string | null
+  /** The owner's next step while nothing waits on them. */
+  action?: ReactNode
+  /** Read the list again now, offered when it did not load. */
+  onRetry?: () => Promise<void>
 }) {
   const items = Children.toArray(children).filter(isValidElement)
   return (
@@ -347,12 +353,37 @@ function WaitingOnYou({
           land here.
         </p>
       )}
+      {items.length ? null : error ? (
+        onRetry ? (
+          <Retry onRetry={onRetry} />
+        ) : null
+      ) : (
+        action
+      )}
     </PanelSection>
   )
 }
 
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
+
+function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Button
+      className="self-start"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true)
+        void onRetry().finally(() => setBusy(false))
+      }}
+      size="sm"
+      variant="outline"
+    >
+      {pending(busy, "Try again", "Trying again")}
+    </Button>
+  )
+}
 
 /** One native input of a fact, from the `FACT_INPUTS` row. */
 function FactField({
@@ -848,10 +879,13 @@ function YourWebsite({
 function PanelBlank({
   steps,
   description,
+  action = null,
 }: {
   steps: { label: string; done: boolean }[]
   /** What to do next, in the words of the steps below it. */
   description: string
+  /** Where the next step is taken: a link, from the app. */
+  action?: ReactNode
 }) {
   return (
     <PanelSection title="First steps">
@@ -876,6 +910,7 @@ function PanelBlank({
           </li>
         ))}
       </ul>
+      {action}
     </PanelSection>
   )
 }

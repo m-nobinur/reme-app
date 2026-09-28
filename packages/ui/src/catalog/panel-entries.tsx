@@ -3,6 +3,7 @@ import {
   AssignmentState,
   FactValueKey,
 } from "@workspace/contracts"
+import { buttonVariants } from "@workspace/ui/components/button"
 import {
   ApprovalItem,
   ComingUp,
@@ -51,6 +52,19 @@ const PREVIEW = {
   url: "https://preview.example.invalid/",
   screenshots: [page(390), page(768), page(1440)],
 }
+
+/** A blank section's next step, as `apps/web` draws its links. */
+const nextStep = (href: string, label: string) => (
+  <a
+    className={`${buttonVariants({ variant: "outline", size: "sm" })} self-start`}
+    href={href}
+  >
+    {label}
+  </a>
+)
+
+/** A read that takes a moment, so the retry's pending state shows. */
+const retry = () => new Promise<void>((done) => setTimeout(done, 400))
 
 const ANSWER_EXPIRY = "The build waits on you until you answer."
 const APPROVAL_EXPIRY =
@@ -274,11 +288,16 @@ const panelCatalog: Entry[] = [
       </WaitingOnYou>
     ),
   },
-  { name: "WaitingOnYou empty", render: () => <WaitingOnYou /> },
+  {
+    name: "WaitingOnYou empty",
+    render: () => (
+      <WaitingOnYou action={nextStep("#notifications", "See notifications")} />
+    ),
+  },
   {
     name: "WaitingOnYou error",
     render: () => (
-      <WaitingOnYou error="This list did not load. It tries again in a minute." />
+      <WaitingOnYou error="This panel did not load." onRetry={retry} />
     ),
   },
   {
@@ -346,6 +365,7 @@ const panelCatalog: Entry[] = [
     name: "PanelBlank",
     render: () => (
       <PanelBlank
+        action={nextStep("#getting-started", "Continue getting started")}
         description="Tell Reme about your business in the chat, then ask it to build your website."
         steps={[
           { label: "Business name", done: true },
@@ -353,6 +373,16 @@ const panelCatalog: Entry[] = [
           { label: "Weekday hours", done: false },
           { label: "Build your first version", done: false },
         ]}
+      />
+    ),
+  },
+  {
+    name: "PanelBlank ready to build",
+    render: () => (
+      <PanelBlank
+        action={nextStep("#new-chat", "Start your website")}
+        description="Ask Reme in the chat to build your website."
+        steps={[{ label: "Build your first version", done: false }]}
       />
     ),
   },

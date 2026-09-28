@@ -29,6 +29,7 @@ import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import type { PasswordVerdict } from "@workspace/ui/lib/password-policy"
 import type { ReactNode } from "react"
 import { assistantCatalog } from "./assistant-entries"
+import { notificationCatalog } from "./notification-entries"
 import { panelCatalog } from "./panel-entries"
 import { productCatalog } from "./product-entries"
 import { workspaceCatalog } from "./workspace-entries"
@@ -355,6 +356,7 @@ const catalog: CatalogEntry[] = [
   },
   ...workspaceCatalog,
   ...panelCatalog,
+  ...notificationCatalog,
   ...productCatalog,
   ...assistantCatalog,
 ]

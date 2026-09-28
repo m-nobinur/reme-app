@@ -369,10 +369,27 @@ it("leaves out an approval with no version to decide on", async () => {
   ).toEqual([APPROVAL])
 })
 
-it("reads activity from /activity", async () => {
-  expect(await apiSource.activity(ORG)).toEqual([
-    { id: alert.event_id, summary: "A build failed", occurredAt: AT },
-    { id: report.event_id, summary: "Published v3", occurredAt: AT },
+it("reads activity from /activity as reports and alerts", async () => {
+  expect(
+    (await apiSource.activity(ORG)).map(({ kind, id, title, raisedAt }) => ({
+      kind,
+      id,
+      title,
+      raisedAt,
+    }))
+  ).toEqual([
+    {
+      kind: "alert",
+      id: alert.event_id,
+      title: "A build failed",
+      raisedAt: AT,
+    },
+    {
+      kind: "report",
+      id: report.event_id,
+      title: "Published v3",
+      raisedAt: AT,
+    },
   ])
 })
 

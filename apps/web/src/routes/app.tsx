@@ -1,4 +1,5 @@
 import {
+  BellIcon,
   BuildingsIcon,
   CheckCircleIcon,
   FlowArrowIcon,
@@ -11,12 +12,18 @@ import {
   Link,
   Outlet,
   redirect,
+  useLocation,
   useMatches,
+  useMatchRoute,
   useParams,
   useRouter,
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
-import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
+import {
+  AppNav,
+  NavCount,
+  navLinkClass,
+} from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -34,6 +41,7 @@ import {
 import { formatDate } from "@workspace/ui/lib/format"
 import { getWorkspaceFrame, pollWorkspace, selectOrg } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
+import { notificationsOf, unreadCount } from "@/lib/notifications"
 import { onboardingFor } from "@/lib/onboarding"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
@@ -69,6 +77,7 @@ export const Route = createFileRoute("/app")({
 })
 
 const NAV = [
+  { to: "/app/notifications", label: "Notifications", icon: BellIcon },
   { to: "/app/approvals", label: "Approvals", icon: CheckCircleIcon },
   { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon },
   { to: "/app/staff", label: "Staff", icon: UsersThreeIcon },
@@ -89,9 +98,26 @@ const conversationTitle = (conversation: Conversation) =>
     : `Chat from ${formatDate(conversation.created_at)}`)
 
 function AppLayout() {
-  const { owner, orgs, active, panelOpen, workspace, conversations } =
-    Route.useLoaderData()
+  const {
+    owner,
+    orgs,
+    active,
+    panelOpen,
+    workspace,
+    conversations,
+    activity,
+    seenAt,
+  } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  // Nothing is unread on the page that lists it, even before the next
+  // frame read picks up the cookie that page wrote.
+  const reading = useMatchRoute()({ to: "/app/notifications" })
+  const unread = reading
+    ? 0
+    : unreadCount(
+        notificationsOf(live.workspace?.attention ?? [], activity ?? []),
+        seenAt
+      )
   // The conversation owns its height and scroll; every other page is padded.
   // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
@@ -102,11 +128,13 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   const stored = conversations?.find((each) => each.id === id)
   const router = useRouter()
+  const openPanel = useLocation({ select: (at) => at.state.panel === true })
 
   return (
     <LiveWorkspaceProvider value={live}>
       <WorkspaceShell
         defaultPanelOpen={panelOpen}
+        openPanel={openPanel}
         menu={
           conversation ? (
             <ConversationMenu
@@ -118,6 +146,7 @@ function AppLayout() {
         }
         panel={<WorkspacePanel />}
         panelCount={live.workspace?.attention.length ?? 0}
+        railCount={unread}
         title={stored ? conversationTitle(stored) : conversation}
         rail={
           <>
@@ -173,6 +202,9 @@ function AppLayout() {
                   <Link className={navLinkClass} to={item.to}>
                     <item.icon aria-hidden />
                     {item.label}
+                    {item.to === "/app/notifications" ? (
+                      <NavCount count={unread} />
+                    ) : null}
                   </Link>
                 </li>
               ))}
