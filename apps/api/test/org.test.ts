@@ -24,6 +24,7 @@ import {
   type Directory,
   readOrg,
   readStaffDirectory,
+  slugFor,
 } from "../src/org.ts"
 import { ensureStartingTeam } from "../src/staff.ts"
 
@@ -70,6 +71,41 @@ const unreachable = {
 
 const call = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`http://api.invalid${path}`, init), unreachable, ctx)
+
+describe("a slug from the business name", () => {
+  const ID = "0b027d88-0000-4000-8000-000000000001"
+
+  it("never starts with the preview prefix the router reserves", () => {
+    for (const name of [
+      "Preview Cleaning",
+      "PREVIEW v2 Homes",
+      "preview-v12",
+      "Preview",
+    ]) {
+      const slug = slugFor(name, ID)
+      expect(slug.startsWith("preview-"), slug).toBe(false)
+      expect(slug.startsWith("site-preview-"), slug).toBe(true)
+      expect(slug.endsWith("-0b027d88")).toBe(true)
+    }
+    expect(slugFor("Preview Cleaning", ID)).toBe(
+      "site-preview-cleaning-0b027d88"
+    )
+  })
+
+  it("keeps every other name's slug as it was", () => {
+    expect(slugFor("Brightside Cleaning", ID)).toBe(
+      "brightside-cleaning-0b027d88"
+    )
+    expect(slugFor("Previewing Homes", ID)).toBe("previewing-homes-0b027d88")
+    expect(slugFor("!!!", ID)).toBe("0b027d88")
+  })
+
+  it("still cuts the base to 40 characters", () => {
+    const slug = slugFor(`Preview ${"a".repeat(60)}`, ID)
+    expect(slug).toBe(`site-preview-${"a".repeat(27)}-0b027d88`)
+    expect(slug.length).toBe(49)
+  })
+})
 
 describe("routes that need no database", () => {
   it("answers an unknown path with the typed error envelope", async () => {

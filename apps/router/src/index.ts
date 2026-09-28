@@ -64,8 +64,12 @@ const envelope = (
  */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
-/** A preview host, by ADR-030's reserved prefix. */
-const isPreviewHost = (host: string) => host.startsWith("preview-")
+/**
+ * A preview host, `preview-v{n}-{slug}` by ADR-030's reserved prefix. The
+ * version's digits are part of the match: a business whose name starts
+ * "Preview" has a slug starting `preview-`, and its live site is a site.
+ */
+const isPreviewHost = (host: string) => /^preview-v\d+-/.test(host)
 
 /**
  * The hostnames in the zone that are not tenant sites, each one a Worker

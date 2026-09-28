@@ -479,6 +479,18 @@ describe("hosts", () => {
 })
 
 describe("a preview host", () => {
+  it("treats preview-v<digits>- hosts as previews, whatever the version's length", async () => {
+    for (const host of [
+      `preview-v1-brightclean${SUFFIX}`,
+      `preview-v12-brightclean${SUFFIX}`,
+      `preview-v100-brightclean-0b027d88${SUFFIX}`,
+    ]) {
+      const bare = await get(host, "/")
+      expect(bare.status, host).toBe(401)
+      expect(bare.headers.get("cache-control")).toBe("no-store")
+    }
+  })
+
   it("answers 401 with no cookie, and the same 401 for an expired, forged or wrong-host one", async () => {
     const bare = await get(PREVIEW_HOST, "/")
     expect(bare.status).toBe(401)
@@ -673,6 +685,17 @@ describe("a published host", () => {
     pointers.set(`host:${SITE_HOST}`, { revision_id: REV })
     expect((await get(SITE_HOST, "/")).status).toBe(404)
     pointers.delete(`host:${SITE_HOST}`)
+  })
+
+  it("serves a business whose slug starts with preview- as its live site", async () => {
+    // "Preview Cleaning" gets `preview-cleaning-<id>` from `slugFor`.
+    for (const slug of ["preview-cleaning-0b027d88", "preview-vans-0b027d88"]) {
+      const host = `${slug}${SUFFIX}`
+      pointers.set(`host:${host}`, pointer)
+      const home = await get(host, "/")
+      expect(home.status, slug).toBe(200)
+      expect(await home.text()).toContain("0003")
+    }
   })
 
   it("serves the pointed revision with the manifest's headers and caching by class", async () => {
