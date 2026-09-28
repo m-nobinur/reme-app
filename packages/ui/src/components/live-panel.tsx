@@ -630,14 +630,35 @@ type Preview = { url: string; screenshots: string[] }
 
 const SHOTS = ["on a phone", "on a tablet", "on a laptop"] as const
 
+/**
+ * The version's home page at three widths. A preview that could not be
+ * read says so and can be read again, with no link implied where there is
+ * none. Screenshots that fail to load say so, and the preview link beside
+ * them still opens the version.
+ */
 function Screenshots({
   preview,
   version,
+  onRetry,
 }: {
   preview: Preview | "loading" | "error"
   version: number
+  onRetry?: (() => Promise<void>) | undefined
 }) {
+  // Keyed by the preview, so a fresh read shows its own screenshots.
+  const [broken, setBroken] = useState<Preview | null>(null)
   if (preview === "error") {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className={META}>
+          The preview for version {version} isn't available yet. Try again in a
+          moment.
+        </p>
+        {onRetry ? <Retry onRetry={onRetry} /> : null}
+      </div>
+    )
+  }
+  if (preview !== "loading" && broken === preview) {
     return (
       <p className={META}>
         The screenshots did not load. Open the preview to see version {version}.
@@ -656,6 +677,7 @@ function Screenshots({
             height={160}
             key={where}
             loading="lazy"
+            onError={() => setBroken(preview)}
             src={preview.screenshots[index]}
             width={120}
           />
@@ -679,6 +701,7 @@ function ApprovalItem({
   preview,
   onApprove,
   onAskForChanges,
+  onRetryPreview,
   pending: busy = null,
   error = null,
   defaultAsking = false,
@@ -691,6 +714,8 @@ function ApprovalItem({
   preview: Preview | "loading" | "error"
   onApprove: (decision: DecisionRequest) => void
   onAskForChanges: (text: string) => void
+  /** Reads the preview again after it could not be read. */
+  onRetryPreview?: (() => Promise<void>) | undefined
   pending?: "approve" | "change" | null
   error?: string | null
   /** Open on the change note, for the catalog. */
@@ -727,7 +752,11 @@ function ApprovalItem({
         </h3>
         <p className={META}>{rationale}</p>
       </div>
-      <Screenshots preview={preview} version={version} />
+      <Screenshots
+        onRetry={onRetryPreview}
+        preview={preview}
+        version={version}
+      />
       {typeof preview === "object" ? (
         <OutLink href={preview.url}>Open preview</OutLink>
       ) : null}

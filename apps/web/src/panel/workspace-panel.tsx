@@ -149,19 +149,25 @@ function Answerable({
   )
 }
 
-/** The preview of the build behind an approval, read when the row mounts. */
+/**
+ * The preview of the build behind an approval, read when the row mounts,
+ * and read again on request after a read that failed.
+ */
 function usePreview(
   assignmentId: string | null
-): Preview | "loading" | "error" {
+): [Preview | "loading" | "error", (() => Promise<void>) | undefined] {
   const [preview, setPreview] = useState<Preview | "loading" | "error">(
     "loading"
   )
+  const [reads, setReads] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `reads` is the retry's trigger.
   useEffect(() => {
     if (!assignmentId) {
       setPreview("error")
       return
     }
     let current = true
+    setPreview("loading")
     getPreview({ data: { assignmentId } }).then(
       (link) => current && setPreview(link ?? "error"),
       () => current && setPreview("error")
@@ -169,8 +175,12 @@ function usePreview(
     return () => {
       current = false
     }
-  }, [assignmentId])
-  return preview
+  }, [assignmentId, reads])
+  // With no build to read, a retry would read nothing.
+  const retry = assignmentId
+    ? async () => setReads((count) => count + 1)
+    : undefined
+  return [preview, retry]
 }
 
 /**
@@ -201,7 +211,7 @@ export function Decidable({
   announce: Announce
 }) {
   const { pending, error, run } = useWrite<"approve" | "change">(refresh)
-  const preview = usePreview(item.request.assignment_id)
+  const [preview, retryPreview] = usePreview(item.request.assignment_id)
   const [keys] = useState(attemptKeys)
 
   const approve = (decision: DecisionRequest) =>
@@ -239,6 +249,7 @@ export function Decidable({
       onApprove={approve}
       onAskForChanges={change}
       onExpiry={item.onExpiry}
+      onRetryPreview={retryPreview}
       pending={pending}
       preview={preview}
       rationale={item.detail}

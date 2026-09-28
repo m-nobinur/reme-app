@@ -320,8 +320,30 @@ const panelCatalog: Entry[] = [
     render: () =>
       approval({
         preview: "error",
+        onRetryPreview: retry,
         error:
           "A newer version replaced that one. Check the latest before you decide.",
+      }),
+  },
+  // The preview could not be read: say so, offer a retry, and still let
+  // the owner decide.
+  {
+    name: "ApprovalItem preview unavailable",
+    render: () => approval({ preview: "error", onRetryPreview: retry }),
+  },
+  // The preview was read but its screenshots do not load: the link stays.
+  {
+    name: "ApprovalItem screenshots failed",
+    render: () =>
+      approval({
+        preview: {
+          url: PREVIEW.url,
+          screenshots: [
+            "/no-such-shot.png",
+            "/no-such-shot.png",
+            "/no-such-shot.png",
+          ],
+        },
       }),
   },
   {
