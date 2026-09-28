@@ -8,11 +8,18 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
     die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
 done
 
-# The last gate before a push runs the suites for real. Plain `pnpm typecheck`
-# reads a turbo cache shared by every worktree on this machine, so it can print
-# FULL TURBO for a result produced somewhere else, against a tree that no longer
-# exists. Seen on main: 5 cached in 26ms while packages/db/node_modules was gone.
-export TURBO_FORCE=true
+# Turbo's cache is shared by every worktree on this machine, and it hashes
+# declared inputs, not what is installed. A cached pass once replayed while
+# packages/db/node_modules was gone (#11). So the install is checked first: a
+# frozen install puts back what is missing or refuses. A cached result is then
+# one this tree would produce only if every file a task reads is in its
+# inputs, so a suite that reads outside its package names those files in
+# turbo.json. `@workspace/ui#test` is never cached; turbo.json says why.
+printf '  → pnpm install --frozen-lockfile --prefer-offline\n' >&2
+if ! out=$(pnpm install --frozen-lockfile --prefer-offline 2>&1); then
+  printf '%s\n' "$out" >&2
+  die "pnpm install --frozen-lockfile failed. Fix the install before pushing."
+fi
 
 run_script typecheck
 run_script test
