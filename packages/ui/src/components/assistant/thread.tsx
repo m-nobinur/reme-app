@@ -27,6 +27,8 @@ import {
   MicrophoneIcon,
   PlusIcon,
   SquareIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
@@ -760,6 +762,39 @@ const AssistantMessage: FC = () => {
  * owns the history, so a regenerated or rewritten turn would only ever exist
  * on this screen.
  */
+/**
+ * The owner's thumb on a reply with words in it, when the runtime records
+ * one. Each is a toggle a screen reader hears as pressed, and the thumb
+ * fills once it is.
+ */
+const Feedback: FC = () => {
+  const rated = useAuiState((s) => s.message.metadata.submittedFeedback?.type)
+  return (
+    <AuiIf condition={(s) => s.thread.capabilities.feedback}>
+      <ActionBarPrimitive.FeedbackPositive
+        render={
+          <TooltipIconButton
+            aria-pressed={rated === "positive"}
+            tooltip="Helpful"
+          />
+        }
+      >
+        <ThumbsUpIcon weight={rated === "positive" ? "fill" : "regular"} />
+      </ActionBarPrimitive.FeedbackPositive>
+      <ActionBarPrimitive.FeedbackNegative
+        render={
+          <TooltipIconButton
+            aria-pressed={rated === "negative"}
+            tooltip="Not helpful"
+          />
+        }
+      >
+        <ThumbsDownIcon weight={rated === "negative" ? "fill" : "regular"} />
+      </ActionBarPrimitive.FeedbackNegative>
+    </AuiIf>
+  )
+}
+
 const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
@@ -775,6 +810,7 @@ const AssistantActionBar: FC = () => {
           <CopyIcon />
         </AuiIf>
       </ActionBarPrimitive.Copy>
+      <Feedback />
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger
           render={

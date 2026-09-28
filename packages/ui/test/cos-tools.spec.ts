@@ -157,3 +157,46 @@ for (const theme of ["light", "dark"] as const) {
     }
   }
 }
+
+test("a reply with words takes a thumb, and says which one is pressed", async ({
+  page,
+}) => {
+  await open(page, "ReplyFeedback")
+  const entry = page.locator('[data-entry="ReplyFeedback"]')
+  // The rated reply is not the last, so its bar shows on hover.
+  const replies = entry.locator('[data-slot="aui_assistant-message-root"]')
+  await replies.nth(0).hover()
+  await expect(
+    replies.nth(0).getByRole("button", { name: "Helpful", exact: true })
+  ).toHaveAttribute("aria-pressed", "true")
+  const last = replies.nth(1)
+  await expect(
+    last.getByRole("button", { name: "Helpful", exact: true })
+  ).toHaveAttribute("aria-pressed", "false")
+  await last.getByRole("button", { name: "Not helpful" }).click()
+  await expect(
+    last.getByRole("button", { name: "Not helpful" })
+  ).toHaveAttribute("aria-pressed", "true")
+})
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [name, width] of Object.entries({
+    phone: 390,
+    tablet: 768,
+    desktop: 1440,
+  })) {
+    test(`ReplyFeedback has no accessibility violations on a ${name} in ${theme}`, async ({
+      page,
+    }) => {
+      await open(page, "ReplyFeedback", width, theme)
+      const results = await new AxeBuilder({ page })
+        .include('[data-entry="ReplyFeedback"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .analyze()
+      expect(
+        results.violations.map((violation) => violation.id),
+        JSON.stringify(results.violations, null, 2)
+      ).toEqual([])
+    })
+  }
+}

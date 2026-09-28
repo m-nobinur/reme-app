@@ -84,6 +84,9 @@ const ID = FIXTURE.conversation.id
 let stored: unknown
 let turns: (() => Promise<Response>)[] = []
 let sent: unknown[] = []
+/** Each thumb the api was sent, and how it answers the next one. */
+let rated: { body: unknown; key: string | null }[] = []
+let rateStatus = 204
 /** Holds the api's reads until released, to see the thread while it loads. */
 let hold: Promise<void> | null = null
 
@@ -117,6 +120,8 @@ beforeEach(() => {
   process.env.REME_API_URL = "https://api.test"
   sent = []
   turns = []
+  rated = []
+  rateStatus = 204
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -136,6 +141,13 @@ beforeEach(() => {
       }
       if (path === `/conversations/${ID}/messages`) {
         return Response.json(stored)
+      }
+      if (path === `/conversations/${ID}/feedback`) {
+        rated.push({
+          body: JSON.parse(String(init?.body)),
+          key: new Headers(init?.headers).get("idempotency-key"),
+        })
+        return new Response(null, { status: rateStatus })
       }
       throw new Error(`unexpected fetch ${url}`)
     })
@@ -1104,4 +1116,83 @@ it("renders every piece of model or owner text on a card as text, never as marku
   expect(chat.textContent?.split(INJECTED)).toHaveLength(6)
   expect(chat.querySelector("img")).toBeNull()
   expect(chat.querySelector('a[href*="evil.example"]')).toBeNull()
+})
+
+/** A conversation whose last reply is text, rated `feedback`, after a card. */
+const ratedHistory = (feedback: "up" | "down" | null) => ({
+  messages: [
+    OWNER_ROW,
+    {
+      ...row(COS, "msg_owner", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          {
+            type: "tool-request_change",
+            toolCallId: CHANGE,
+            state: "output-denied",
+            input: { text: "Add Saturday hours, 9 to 1." },
+            approval: { id: CHANGE_APPROVAL, approved: false },
+          },
+        ],
+      }),
+    },
+    row("msg_again", COS, {
+      role: "user",
+      parts: [{ type: "text", text: "What is live now?" }],
+    }),
+    {
+      ...row("Tx7wYk2Pq9LmXc4v", "msg_again", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "text", text: "Version 3 is live." },
+        ],
+      }),
+      feedback,
+    },
+  ],
+})
+
+const thumb = (container: HTMLElement, name: "Helpful" | "Not helpful") =>
+  [...container.querySelectorAll("button")].find(
+    (each) => each.textContent?.trim() === name
+  )
+
+it("rates a text reply with a thumb, one key per press, and reads it back", async () => {
+  const chat = await open(ratedHistory("up"))
+  // The stored rating shows as pressed.
+  expect(thumb(chat, "Helpful")?.getAttribute("aria-pressed")).toBe("true")
+  expect(thumb(chat, "Not helpful")?.getAttribute("aria-pressed")).toBe("false")
+  await act(async () => thumb(chat, "Not helpful")?.click())
+  await vi.waitFor(() => expect(rated).toHaveLength(1))
+  expect(thumb(chat, "Not helpful")?.getAttribute("aria-pressed")).toBe("true")
+  await act(async () => thumb(chat, "Helpful")?.click())
+  await vi.waitFor(() => expect(rated).toHaveLength(2))
+  expect(rated.map(({ body }) => body)).toEqual([
+    { message_id: "Tx7wYk2Pq9LmXc4v", rating: "down" },
+    { message_id: "Tx7wYk2Pq9LmXc4v", rating: "up" },
+  ])
+  // Each press is its own request: up, down, up never replays the first up.
+  const [first, second] = rated
+  expect(first?.key).toBeTruthy()
+  expect(second?.key).not.toBe(first?.key)
+})
+
+it("a rating the api fails to record fails quietly", async () => {
+  rateStatus = 503
+  const chat = await open(ratedHistory(null))
+  await act(async () => thumb(chat, "Helpful")?.click())
+  await vi.waitFor(() => expect(rated).toHaveLength(1))
+  expect(chat.querySelector('[role="alert"]')).toBeNull()
+  expect(chat.querySelector(".aui-message-error-message")).toBeNull()
+})
+
+it("a reply that is only a card offers no thumb", async () => {
+  // Even as the last message, where its action bar would show.
+  const [owner, card] = ratedHistory(null).messages
+  const chat = await open({ messages: [owner, card] })
+  expect(changeCard(chat)).not.toBeNull()
+  expect(thumb(chat, "Helpful")).toBeUndefined()
+  expect(thumb(chat, "Not helpful")).toBeUndefined()
 })

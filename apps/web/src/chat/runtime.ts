@@ -1,6 +1,7 @@
 import { useChat } from "@ai-sdk/react"
 import {
   type DictationAdapter,
+  type FeedbackAdapter,
   type ThreadSuggestion,
   useAui,
   useAuiState,
@@ -10,7 +11,7 @@ import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useRef, useState } from "react"
-import { getConversationMessages } from "@/lib/api/server"
+import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
@@ -83,6 +84,35 @@ export function useConversationRuntime({
       })
       .catch(() => undefined)
   }
+  // The owner's thumb on a reply. It is kept on the chat's own message, so
+  // the next update keeps it pressed, and sent with a key of this press's
+  // own, so up, down, up records three ratings and a retry of one records
+  // nothing. A rating that fails fails quietly: the api logs it, and the
+  // adapter has no way to say so on the button.
+  const feedback: FeedbackAdapter = {
+    submit: ({ message, type }) => {
+      const remoteId = aui.threadListItem.getState().remoteId
+      if (!remoteId) return
+      chat.setMessages((messages) =>
+        messages.map((each) =>
+          each.id === message.id
+            ? {
+                ...each,
+                metadata: { ...each.metadata, submittedFeedback: { type } },
+              }
+            : each
+        )
+      )
+      void rateMessage({
+        data: {
+          id: remoteId,
+          message_id: message.id,
+          rating: type === "positive" ? "up" : "down",
+          key: crypto.randomUUID(),
+        },
+      }).catch(() => undefined)
+    },
+  }
   const runtime = useAISDKRuntime(
     {
       ...chat,
@@ -94,7 +124,7 @@ export function useConversationRuntime({
     {
       cancelPendingToolCallsOnSend: false,
       suggestions,
-      adapters: dictation ? { dictation } : {},
+      adapters: dictation ? { dictation, feedback } : { feedback },
     }
   )
   return runtime

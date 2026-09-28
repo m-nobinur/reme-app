@@ -191,3 +191,24 @@ it("remembers a conversation the owner cannot open, and says so", () => {
   expect(seen).toEqual([true])
   stop()
 })
+
+it("reads a rated reply back with its thumb, on both ways a row loads", async () => {
+  const format = await installed()
+  const rated = (feedback: "up" | "down" | null): TransportedMessage => ({
+    ...(ROWS[1] as TransportedMessage),
+    feedback,
+  })
+  expect(toUIMessage(rated("up")).metadata).toMatchObject({
+    submittedFeedback: { type: "positive" },
+  })
+  expect(toUIMessage(rated("down")).metadata).toMatchObject({
+    submittedFeedback: { type: "negative" },
+  })
+  expect(toUIMessage(rated(null)).metadata).not.toHaveProperty(
+    "submittedFeedback"
+  )
+  // A history load decodes the same thumb a reload after a failed turn shows.
+  expect(format.decode(toStorageEntry(rated("down"))).message).toEqual(
+    toUIMessage(rated("down"))
+  )
+})

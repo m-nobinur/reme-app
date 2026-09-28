@@ -37,12 +37,24 @@ export const STORAGE_FORMAT: ConversationMessage["format"] = "ai-sdk/v6"
 export function toStorageEntry(
   message: TransportedMessage
 ): MessageStorageEntry<AISDKStorageFormat> {
-  const { parts, ...content } = message.content
+  const { parts, metadata, ...content } = message.content
   return {
     id: message.id,
     parent_id: message.parent_id,
     format: message.format,
-    content: { ...content, parts: parts as unknown as UIMessage["parts"] },
+    content: {
+      ...content,
+      // The owner's stored thumb, where assistant-ui reads a submitted one.
+      metadata: message.feedback
+        ? {
+            ...metadata,
+            submittedFeedback: {
+              type: message.feedback === "up" ? "positive" : "negative",
+            },
+          }
+        : metadata,
+      parts: parts as unknown as UIMessage["parts"],
+    },
   }
 }
 
