@@ -7,6 +7,7 @@ import {
 import type { Conversation } from "@workspace/contracts"
 import { GOAL_MAX, Reminder, Timestamp, Uuid } from "@workspace/contracts"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
+import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
@@ -317,14 +318,18 @@ export const createConversation = createServerFn({ method: "POST" })
 export const updateConversation = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
-    const patch =
-      typeof data.archived === "boolean"
-        ? { archived: data.archived }
-        : { title: text(data.title, 120) }
-    if ("title" in patch && !patch.title) {
-      throw new Error("A title needs words.")
+    if (typeof data.archived === "boolean") {
+      return {
+        id: id(data.id),
+        patch: { archived: data.archived },
+        key: keyOf(data.key),
+      }
     }
-    return { id: id(data.id), patch, key: keyOf(data.key) }
+    // Kept the way the api keeps a title: one line, single spaces, cut to
+    // 120 UTF-16 units before a character rather than inside one.
+    const title = titleText(typeof data.title === "string" ? data.title : "")
+    if (!title) throw new Error("A title needs words.")
+    return { id: id(data.id), patch: { title }, key: keyOf(data.key) }
   })
   .handler(async ({ data }): Promise<void> => {
     const org = await writingOrg()

@@ -15,6 +15,7 @@ import {
   useLocation,
   useMatches,
   useMatchRoute,
+  useNavigate,
   useParams,
   useRouter,
 } from "@tanstack/react-router"
@@ -39,8 +40,19 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
-import { getWorkspaceFrame, pollWorkspace, selectOrg } from "@/lib/api/server"
+import {
+  getWorkspaceFrame,
+  pollWorkspace,
+  selectOrg,
+  updateConversation,
+} from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
+import {
+  archiveConversation,
+  saveTitle,
+  titleToEdit,
+  useMenuState,
+} from "@/lib/conversation-actions"
 import { notificationsOf, unreadCount } from "@/lib/notifications"
 import { onboardingFor } from "@/lib/onboarding"
 import { requireOwner } from "@/lib/tenant"
@@ -128,7 +140,26 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   const stored = conversations?.find((each) => each.id === id)
   const router = useRouter()
+  const navigate = useNavigate()
   const openPanel = useLocation({ select: (at) => at.state.panel === true })
+  const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
+  const archive = async (target: Conversation) => {
+    setFailed(null)
+    const archived = await archiveConversation(target.id, {
+      // One key per press: a retry of this press replays it, a later press
+      // is its own request.
+      update: (each) =>
+        updateConversation({
+          data: { id: each, archived: true, key: crypto.randomUUID() },
+        }),
+      stillOn: (each) => router.state.location.pathname === `/app/c/${each}`,
+      leave: async () => {
+        await navigate({ to: "/app", state: { chat: crypto.randomUUID() } })
+      },
+    })
+    if (archived) await router.invalidate()
+    else setFailed(target.id)
+  }
 
   return (
     <LiveWorkspaceProvider value={live}>
@@ -141,6 +172,15 @@ function AppLayout() {
               newChat={
                 <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
               }
+              onArchive={stored ? () => archive(stored) : undefined}
+              onRename={
+                stored
+                  ? () => {
+                      setFailed(null)
+                      setRenaming(stored.id)
+                    }
+                  : undefined
+              }
             />
           ) : undefined
         }
@@ -148,6 +188,28 @@ function AppLayout() {
         panelCount={live.workspace?.attention.length ?? 0}
         railCount={unread}
         title={stored ? conversationTitle(stored) : conversation}
+        titleError={
+          stored && failed === stored.id
+            ? "That did not archive. Try again."
+            : undefined
+        }
+        renaming={
+          stored && renaming === stored.id
+            ? {
+                value: titleToEdit(stored),
+                onSave: async (title) => {
+                  await saveTitle(stored, title, (each, next) =>
+                    updateConversation({
+                      data: { id: each, title: next, key: crypto.randomUUID() },
+                    })
+                  )
+                  await router.invalidate()
+                  setRenaming(null)
+                },
+                onCancel: () => setRenaming(null),
+              }
+            : undefined
+        }
         rail={
           <>
             <OrgSwitcher

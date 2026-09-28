@@ -31,6 +31,7 @@ import {
 } from "@workspace/ui/components/sheet"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
+  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -124,6 +125,54 @@ function ShellSample() {
   )
 }
 
+/**
+ * A stored conversation's top bar: the ··· menu renames it in place and
+ * archives it. Saving "Will not save" fails, to show the form's error, and
+ * the archive always fails here, to show the title bar's.
+ */
+function ConversationSample() {
+  const [title, setTitle] = useState("Weekend prices")
+  const [renaming, setRenaming] = useState(false)
+  const [error, setError] = useState<string | undefined>(undefined)
+  return (
+    <WorkspaceShell
+      className="h-[24rem] border border-border"
+      menu={
+        <ConversationMenu
+          newChat={<a href="#new" />}
+          onArchive={() => setError("That did not archive. Try again.")}
+          onRename={() => {
+            setError(undefined)
+            setRenaming(true)
+          }}
+        />
+      }
+      panel={<SamplePanel />}
+      rail={<Rail />}
+      renaming={
+        renaming
+          ? {
+              value: title,
+              onSave: async (next) => {
+                await new Promise((resolve) => setTimeout(resolve, 150))
+                if (next === "Will not save") throw new Error("refused")
+                setTitle(next)
+                setRenaming(false)
+              },
+              onCancel: () => setRenaming(false),
+            }
+          : undefined
+      }
+      title={title}
+      titleError={error}
+    >
+      <WorkspacePage>
+        <p className="text-muted-foreground text-sm">The conversation.</p>
+      </WorkspacePage>
+    </WorkspaceShell>
+  )
+}
+
 function SheetSample() {
   return (
     <Sheet>
@@ -172,6 +221,7 @@ function ChoiceMenuSample() {
 
 const workspaceCatalog: Entry[] = [
   { name: "WorkspaceShell", render: () => <ShellSample /> },
+  { name: "ConversationRename", render: () => <ConversationSample /> },
   {
     name: "WorkspacePage",
     render: () => (
