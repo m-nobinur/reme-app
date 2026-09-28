@@ -1849,6 +1849,10 @@
             "type": "string",
             "enum": ["ask", "act"]
           },
+          "time_zone": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+          },
           "turn": {
             "oneOf": [
               {
