@@ -53,21 +53,41 @@ import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 
 /**
- * The run's limits. Steps and output are ADR-034's; the two timeouts are its
- * guesses until 20 staging turns measure the first-chunk p95 (three times
- * it for `firstChunkMs`, six times that for `totalMs`).
+ * The run's limits, from every CoS turn staging ran on main d626d0f, the
+ * only deploy after 2026-09-27 20:19:35Z: 64 turns and 87 steps between
+ * 20:28:02 and 20:46:05Z, the T2 exit measurement's 20 turns among them.
  */
 export const LIMITS = {
   steps: 6,
-  maxOutputTokens: 1_000,
-  /** The input a step is reserved for. A guess until a measured p99. */
+  /**
+   * max(3 × the per-step output p95, GOAL_MAX / 2 + 3 × p95). The p95 was
+   * 344 tokens (max 421), but request_change must fit an owner's request of
+   * up to 4,000 characters in its input, and a call cut off is broken:
+   * 2,000 + 1,032, rounded up to 3,100.
+   */
+  maxOutputTokens: 3_100,
+  /**
+   * The input a step is reserved for. Not lowered to the measured p99 of
+   * 2,681 tokens: those conversations were short, and a 12-turn history of
+   * long owner messages reaches 45k to 65k tokens a step.
+   */
   inputTokens: 30_000,
+  /**
+   * Unchanged until a multi-step turn with a maximum-length tool call is
+   * measured. A turn lapses this plus `GRACE_MS` after its context: 90 s.
+   */
   totalMs: 60_000,
-  firstChunkMs: 10_000,
+  /**
+   * max(3 × the first-chunk p95, 8 s). The p95 was 1,305 ms (p50 517, max
+   * 1,799), but the SDK restarts this every step and the provider's prefill
+   * grows with the prompt, and those turns were short. It goes lower only
+   * after at least 5 measured turns at 20k+ input tokens.
+   */
+  firstChunkMs: 8_000,
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-export const PREFIX_VERSION = "1"
+export const PREFIX_VERSION = "2"
 
 export const INSTRUCTIONS = `You are Maya, the Chief of Staff for a small cleaning business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
@@ -81,6 +101,8 @@ Rules:
 - Ask the owner at most one question per reply. If you need a fact to go on, ask for it in one sentence.
 - Propose a change with request_change in the owner's own words, one change per call. Only answer a Developer question with answer_question when the owner has told you the answer in this conversation.
 - A tool that is refused tells you why; explain it to the owner plainly. A tool whose outcome is unknown did not report back; say you could not confirm it, and do not guess what it did.
+- When the owner declines a proposal, its call comes back as "The owner declined", followed by their words if they gave any. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
+- A proposal the owner talked over by sending a new message comes back as "User cancelled tool call by sending a new message." That is neither yes nor no: don't act on it, and ask about it again only if it still matters.
 - There is no publish tool. Publishing is the owner's button on the review card.
 - In Ask mode you can only read. If the owner asks for a change, tell them to switch to Act.
 - Reply in plain, short sentences. No markdown headings.`
