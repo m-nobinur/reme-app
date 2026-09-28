@@ -101,3 +101,43 @@ export function requestChangeView(part: ToolPartView): RequestChangeView {
     ? { state: "started", text, output: output.data }
     : { state: "refused", text, message: output.data.error.message }
 }
+
+/** The fields of a message part `isHeld` reads. */
+type CallPart = {
+  type: string
+  toolCallId?: string
+  approval?: { approved?: boolean | undefined } | undefined
+  result?: unknown
+  isError?: boolean | undefined
+}
+
+const unresolved = (part: CallPart) =>
+  part.result === undefined && !part.isError
+
+/**
+ * The owner answered this call while another call in its message still
+ * waits for a yes or no, so the step has not been sent and nothing is
+ * running for it. Only the last step holds calls that wait, so the message
+ * stands in for the step. A call answered and sent, with no other call
+ * waiting, is not held.
+ */
+export function isHeld(parts: readonly object[], toolCallId: string): boolean {
+  const calls = (parts as CallPart[]).filter((p) => p.type === "tool-call")
+  const self = calls.find((p) => p.toolCallId === toolCallId)
+  return (
+    self !== undefined &&
+    unresolved(self) &&
+    self.approval?.approved !== undefined &&
+    calls.some(
+      (p) =>
+        p !== self &&
+        unresolved(p) &&
+        p.approval != null &&
+        p.approval.approved === undefined
+    )
+  )
+}
+
+/** What a held answer says, on every card that can be held. */
+export const heldText = (approved: boolean) =>
+  `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`

@@ -30,22 +30,42 @@ export function chatTurn(
   mode: ChatRequest["mode"],
   messages: UIMessage[]
 ): ChatRequest {
+  // The browser's zone, so the Chief of Staff can read "Friday at 9".
+  const time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const last = messages.at(-1)
   if (last?.role === "user") {
     return {
       conversation_id: conversationId,
       mode,
+      time_zone,
       turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
-  // The server opens a new step after the calls it resolves, so the last
-  // step holds only calls it is waiting on, and those resolved here are the
-  // turn.
+  const results = ownerResults(last)
+  if (!last || results.length === 0) {
+    throw new Error("There is nothing new in this conversation to send.")
+  }
+  return {
+    conversation_id: conversationId,
+    mode,
+    time_zone,
+    turn: { kind: "results", message_id: last.id, results },
+  }
+}
+
+/**
+ * What the owner resolved in the last step: an answer to `ask_fact`, and a
+ * yes or no on any call. A call the server ran itself, such as a read, is
+ * not the owner's to send, even with its output in the step.
+ */
+function ownerResults(last: UIMessage | undefined): ChatResult[] {
+  // The server opens a new step after the calls it resolves, so an answer
+  // in the last step is one it has not seen yet.
   const parts = last?.parts ?? []
   const step = parts.slice(
     parts.map((part) => part.type).lastIndexOf("step-start") + 1
   )
-  const results = step.flatMap((part): ChatResult[] => {
+  return step.flatMap((part): ChatResult[] => {
     if (!isToolUIPart(part)) return []
     if (part.type === "tool-ask_fact" && part.state === "output-available") {
       return [
@@ -75,23 +95,17 @@ export function chatTurn(
     }
     return []
   })
-  if (!last || results.length === 0) {
-    throw new Error("There is nothing new in this conversation to send.")
-  }
-  return {
-    conversation_id: conversationId,
-    mode,
-    turn: { kind: "results", message_id: last.id, results },
-  }
 }
 
 /**
  * A typed message overtakes the calls still waiting on the owner, the way
  * `apps/api` cancels them in the stored row: an unanswered question or an
- * undecided change becomes cancelled, and anything the owner already
- * decided, a "not now" included, stays as it was. assistant-ui's own
- * `cancelPendingToolCallsOnSend` also turns a "not now" into cancelled,
- * which a reload would then contradict.
+ * undecided change becomes cancelled. So does a yes or no held back while
+ * another card in its step waited: it was never sent, so the stored row
+ * still has the call undecided and the api cancels it. A decision the
+ * server already has, a "not now" included, stays as it was.
+ * assistant-ui's own `cancelPendingToolCallsOnSend` also turns that "not
+ * now" into cancelled, which a reload would then contradict.
  */
 export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
   const last = messages.at(-1)
@@ -100,7 +114,9 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
   const parts = last.parts.map((part) => {
     if (
       !isToolUIPart(part) ||
-      (part.state !== "input-available" && part.state !== "approval-requested")
+      (part.state !== "input-available" &&
+        part.state !== "approval-requested" &&
+        part.state !== "approval-responded")
     ) {
       return part
     }
@@ -115,10 +131,32 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
   return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
 }
 
-/** Both kinds of answer send the turn on: a fact, and a yes or no. */
+/**
+ * Sends once the owner has answered every call in the last step that waits
+ * on them, all in one turn. A step whose calls the server finished itself,
+ * such as a read at the step limit, sends nothing.
+ */
 export const sendsOn = ({ messages }: { messages: UIMessage[] }) =>
-  lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
-  lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
+  ownerResults(messages.at(-1)).length > 0 &&
+  (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
+    lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
+
+/**
+ * The transport's request body, which is the turn. It records the message
+ * being sent before anything it awaits, so a send that fails at any point
+ * restores this message, never one from an earlier send.
+ */
+export const turnBody =
+  (
+    initialize: () => Promise<{ remoteId: string }>,
+    mode: () => ChatRequest["mode"],
+    sending: { current: UIMessage | undefined }
+  ) =>
+  async ({ messages }: { messages: UIMessage[] }) => {
+    sending.current = messages.at(-1)
+    const { remoteId } = await initialize()
+    return { body: chatTurn(remoteId, mode(), messages) }
+  }
 
 /**
  * A refusal as the owner reads it: the api's envelope message, which it

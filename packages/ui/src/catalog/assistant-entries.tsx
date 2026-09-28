@@ -334,6 +334,23 @@ const build = (revision: object | null) => ({
   },
 })
 
+type ToolCallContent = Exclude<ThreadMessageLike["content"], string>[number]
+
+/** The Developer's question, as the Chief of Staff offers to answer it. */
+const answerQuestion = (
+  id: string,
+  approved: boolean | undefined
+): ToolCallContent => ({
+  approval: { approved, id: `approval_${id}` },
+  args: {
+    request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
+    value: "Saturdays, 9 to 1",
+  },
+  toolCallId: `call_${id}`,
+  toolName: "answer_question",
+  type: "tool-call",
+})
+
 const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
   requestChange("requested", ONBOARDING_GOAL),
   requestChange("responding", "Add Saturday hours, 9 to 1.", {
@@ -378,6 +395,52 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
       error: BROKEN,
     },
   }),
+  // One step of two cards, each answered while the other still waits: the
+  // answer is held back, and nothing has been sent.
+  {
+    content: [
+      ...(requestChange("held", "Add Saturday hours, 9 to 1.", {
+        approved: true,
+      }).content as ToolCallContent[]),
+      answerQuestion("held_other", undefined),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      answerQuestion("held_question", true),
+      ...(requestChange("held_waiting", "Add Saturday hours, 9 to 1.")
+        .content as ToolCallContent[]),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  // The same two steps, each held answer a no.
+  {
+    content: [
+      ...(requestChange("held_no", "Add Saturday hours, 9 to 1.", {
+        approved: false,
+      }).content as ToolCallContent[]),
+      answerQuestion("held_no_other", undefined),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      answerQuestion("held_no_question", false),
+      ...(requestChange("held_no_waiting", "Add Saturday hours, 9 to 1.")
+        .content as ToolCallContent[]),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  // A yes already sent, loaded while its turn runs: no other card waits.
+  {
+    ...requestChange("sent", "Add Saturday hours, 9 to 1.", { approved: true }),
+    status: WAITING,
+  },
 ]
 
 /** A new owner's onboarding, two answers in and waiting on the third. */
@@ -706,7 +769,7 @@ const assistantCatalog = [
   {
     name: "RequestChange",
     render: () => (
-      <FixtureThread height="h-[92rem]" messages={REQUEST_CHANGE_STATES} />
+      <FixtureThread height="h-[102rem]" messages={REQUEST_CHANGE_STATES} />
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },

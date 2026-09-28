@@ -8,11 +8,11 @@ import {
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, type UIMessage } from "ai"
 import { useRef, useState } from "react"
 import { getConversationMessages } from "@/lib/api/server"
 import { toUIMessage } from "./history"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn, textOf } from "./turn"
+import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -37,6 +37,9 @@ export function useConversationRuntime({
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
+  // The last message of the turn in flight, as the transport saw it. A turn
+  // refused before the thread re-renders leaves `chat.messages` without it.
+  const sending = useRef<UIMessage | undefined>(undefined)
   const [transport] = useState(
     () =>
       new DefaultChatTransport({
@@ -44,10 +47,11 @@ export function useConversationRuntime({
         fetch: chatFetch,
         // The whole body is the turn: no history, system prompt or tools
         // ever leave the browser.
-        prepareSendMessagesRequest: async ({ messages }) => {
-          const { remoteId } = await aui.threadListItem.initialize()
-          return { body: chatTurn(remoteId, mode(), messages) }
-        },
+        prepareSendMessagesRequest: turnBody(
+          () => aui.threadListItem.initialize(),
+          mode,
+          sending
+        ),
       })
   )
   // A failed turn leaves the screen ahead of the stored row: the answer or
@@ -67,7 +71,7 @@ export function useConversationRuntime({
     const remoteId = aui.threadListItem.getState().remoteId
     // A session that ended can read nothing back; the error offers sign-in.
     if (!remoteId || error.message === SESSION_ENDED) return
-    const last = chat.messages.at(-1)
+    const last = sending.current
     void getConversationMessages({ data: { id: remoteId } })
       .then((rows) => {
         const stored = rows.map(toUIMessage)

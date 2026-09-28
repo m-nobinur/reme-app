@@ -6,9 +6,10 @@ import {
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import type { UIMessage } from "ai"
 import { afterEach, expect, it, vi } from "vitest"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn } from "./turn"
+import { cancelOvertaken, chatFetch, chatTurn, sendsOn, turnBody } from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /** Parts as `apps/api` stores and streams them. */
 type Part = UIMessage["parts"][number]
@@ -50,8 +51,21 @@ it("a typed message sends only itself, with the mode", () => {
   expect(ChatRequest.parse(request)).toEqual({
     conversation_id: CONVERSATION,
     mode: "ask",
+    time_zone: ZONE,
     turn: { kind: "message", message_id: "msg_user", text: "Hello" },
   })
+})
+
+it("every turn carries the browser's time zone", () => {
+  const message = chatTurn(CONVERSATION, "act", [
+    { id: "msg_user", role: "user", parts: [{ type: "text", text: "Hi" }] },
+  ])
+  const results = chatTurn(CONVERSATION, "act", [
+    assistant(ask("output-available", { output: STATED })),
+  ])
+  for (const request of [message, results]) {
+    expect(ChatRequest.parse(request).time_zone).toBe(ZONE)
+  }
 })
 
 it("an answer sends the call it resolves, from the last step only", () => {
@@ -175,6 +189,42 @@ it("a typed message cancels what waits on the owner, as the api does", () => {
   ])
 })
 
+it("a typed message cancels a yes or no held back and never sent", () => {
+  for (const approved of [true, false]) {
+    const cancelled = cancelOvertaken([
+      assistant(
+        change("approval-responded", { approval: { id: "appr_1", approved } }),
+        answerQuestion("approval-requested", { approval: { id: "appr_2" } })
+      ),
+    ])
+    expect(cancelled.at(-1)?.parts.slice(1)).toEqual([
+      change("output-error", { errorText: CANCELLED }),
+      answerQuestion("output-error", { errorText: CANCELLED }),
+    ])
+  }
+})
+
+it("a send records its own message before it waits on anything", async () => {
+  const earlier: UIMessage = {
+    id: "msg_earlier",
+    role: "user",
+    parts: [{ type: "text", text: "Earlier" }],
+  }
+  const now: UIMessage = {
+    id: "msg_now",
+    role: "user",
+    parts: [{ type: "text", text: "Now" }],
+  }
+  const sending = { current: earlier as UIMessage | undefined }
+  const body = turnBody(
+    () => Promise.reject(new Error("The conversation could not be opened.")),
+    () => "act",
+    sending
+  )
+  await expect(body({ messages: [now] })).rejects.toThrow()
+  expect(sending.current).toBe(now)
+})
+
 it("a not now stays not now when the owner types next", () => {
   // The row `apps/api` keeps after the owner said no. assistant-ui's own
   // cancel rewrote this part to output-error, which a reload contradicted.
@@ -219,6 +269,78 @@ it("sends on after an answer or an approval, and not after the last stored step"
         ),
       ],
     })
+  ).toBe(false)
+})
+
+const read = {
+  type: "tool-get_workspace",
+  toolCallId: "call_read",
+  state: "output-available",
+  input: {},
+  output: { site: { host: null, live_version: null } },
+} as unknown as Part
+
+const answerQuestion = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-answer_question",
+    toolCallId: "call_question",
+    state,
+    input: { request_id: CONVERSATION, value: "Saturdays, 9 to 1" },
+    ...extra,
+  }) as unknown as Part
+
+it("waits for every card in the step, then sends them as one turn", () => {
+  const halfway = [
+    assistant(
+      read,
+      change("approval-responded", {
+        approval: { id: "appr_1", approved: true },
+      }),
+      answerQuestion("approval-requested", { approval: { id: "appr_2" } })
+    ),
+  ]
+  expect(sendsOn({ messages: halfway })).toBe(false)
+
+  const answered = [
+    assistant(
+      read,
+      change("approval-responded", {
+        approval: { id: "appr_1", approved: true },
+      }),
+      answerQuestion("approval-responded", {
+        approval: { id: "appr_2", approved: false },
+      })
+    ),
+  ]
+  expect(sendsOn({ messages: answered })).toBe(true)
+  expect(
+    ChatRequest.parse(chatTurn(CONVERSATION, "act", answered)).turn
+  ).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [
+      { kind: "approval", approval_id: "appr_1", approved: true },
+      { kind: "approval", approval_id: "appr_2", approved: false },
+    ],
+  })
+})
+
+it("never sends a step the server finished by itself", () => {
+  const settled = change("output-available", {
+    approval: { id: "appr_1", approved: true },
+    output: { outcome: "refused" },
+  })
+  // A results turn the model answered and ended on a read at its step
+  // limit: the last step's only call is the read, which has its output.
+  // This is the case the owner-result check exists for.
+  expect(
+    sendsOn({ messages: [assistant(settled, { type: "step-start" }, read)] })
+  ).toBe(false)
+  // One the fallback answered. `apps/api` opens a new step before the
+  // settled calls and stores it (`stream` and `fallbackTurn` in chat.ts), so
+  // the last step is empty and the SDK's own checks already say no.
+  expect(
+    sendsOn({ messages: [assistant(read, settled, { type: "step-start" })] })
   ).toBe(false)
 })
 

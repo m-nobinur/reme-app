@@ -1,5 +1,9 @@
 import { TOOL_CALL_CANCELLED as CANCELLED } from "@workspace/contracts"
-import { askFactView, requestChangeView } from "@workspace/ui/lib/tool-state"
+import {
+  askFactView,
+  isHeld,
+  requestChangeView,
+} from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
 
 /**
@@ -109,4 +113,33 @@ it("reads every request_change state", () => {
       result: { error: "Lost" },
     })
   ).toEqual({ state: "error", text, message: "Lost" })
+})
+
+/** A tool call as assistant-ui holds it in a message's parts. */
+const call = (toolCallId: string, extra: object = {}) => ({
+  type: "tool-call",
+  toolCallId,
+  ...extra,
+})
+
+it("a yes is held only while another card in its message still waits", () => {
+  const yes = call("a", { approval: { id: "x", approved: true } })
+  const waiting = call("b", { approval: { id: "y" } })
+  const read = call("r", { result: { site: {} } })
+  expect(isHeld([read, yes, waiting], "a")).toBe(true)
+  // The waiting card itself is not held, and nor is a yes on its own,
+  // already sent, or one whose only company is a read.
+  expect(isHeld([yes, waiting], "b")).toBe(false)
+  expect(isHeld([yes], "a")).toBe(false)
+  expect(isHeld([read, yes], "a")).toBe(false)
+  // Once the step has come back, nothing is held.
+  expect(
+    isHeld(
+      [
+        call("a", { approval: { approved: true }, result: { outcome: "x" } }),
+        call("b", { approval: { approved: false }, isError: true }),
+      ],
+      "a"
+    )
+  ).toBe(false)
 })
