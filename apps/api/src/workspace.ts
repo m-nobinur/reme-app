@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   type AttentionItem,
   type BuildSummary,
+  type DerivedReminder,
   type FactRecord,
   FactValueKey,
   InformationRequest,
@@ -255,13 +256,86 @@ export function orderAttention(
   ]
 }
 
+const HOUR = 3_600_000
+
+export type ReminderInput = {
+  approvals: Extract<AttentionItem, { kind: "approval" }>[]
+  questions: Extract<AttentionItem, { kind: "question" }>[]
+  builds: BuildSummary[]
+  missing: FactValueKey[]
+}
+
+/**
+ * Reminders derived from what the panel already read, so each one clears
+ * when its row resolves. Order: approvals soonest to expire first, then
+ * questions longest open first, then previews newest build first, then the
+ * missing facts, which have no deadline.
+ *
+ * A preview never published is a build that has sat in `preview_ready` for
+ * over 12 hours: its gates passed and the preview exists, but no review was
+ * opened on it. An owner build passes through `preview_ready` for seconds on
+ * its way to review, so the wait keeps the rule to builds that stopped
+ * there. Opening a review moves the build to `awaiting_review` and lists its
+ * approval, which this rule then leaves to `approval_expiring`; the `listed`
+ * check covers a review opened between the builds and approvals reads.
+ * Publishing, a cancel or a newer build superseding it takes the build out
+ * of `preview_ready`.
+ */
+export function deriveReminders(
+  input: ReminderInput,
+  now: Date
+): DerivedReminder[] {
+  const at = now.getTime()
+  const listed = new Set(
+    input.approvals.map((item) => item.request.assignment_id)
+  )
+  return [
+    ...input.approvals.flatMap(({ request, version }): DerivedReminder[] => {
+      const left = Date.parse(request.expires_at) - at
+      return left > 0 && left < 24 * HOUR
+        ? [
+            {
+              rule: "approval_expiring",
+              approval_id: request.approval_id,
+              version,
+              expires_at: request.expires_at,
+            },
+          ]
+        : []
+    }),
+    ...input.questions.flatMap(({ request }): DerivedReminder[] =>
+      at - Date.parse(request.requested_at) > 12 * HOUR
+        ? [{ rule: "question_waiting", request_id: request.request_id }]
+        : []
+    ),
+    ...input.builds.flatMap((build): DerivedReminder[] =>
+      build.state === "preview_ready" &&
+      at - Date.parse(build.updated_at) > 12 * HOUR &&
+      build.revision &&
+      !listed.has(build.assignment_id)
+        ? [
+            {
+              rule: "preview_unpublished",
+              assignment_id: build.assignment_id,
+              version: build.revision.version,
+            },
+          ]
+        : []
+    ),
+    ...(input.missing.length > 0
+      ? [{ rule: "facts_missing" as const, keys: input.missing }]
+      : []),
+  ]
+}
+
 /** Reports and alerts stay in the panel for a day; `/activity` keeps 30. */
 const PANEL_HOURS = 24
 
 export async function readWorkspace(
   kit: Tenancy,
   orgId: string,
-  suffix: string
+  suffix: string,
+  now = new Date()
 ): Promise<WorkspaceStatus> {
   return kit.withOrg({ orgId }, async (db) => {
     // Issued together, so postgres.js pipelines them on the transaction's one
@@ -276,12 +350,19 @@ export async function readWorkspace(
         readSite(db, suffix),
         readReminderNotes(db),
       ])
+    const missing = missingFacts(current)
     return WorkspaceStatus.parse({
       site,
       builds,
       attention: orderAttention(approvalItems, questions, feed),
-      missing_facts: missingFacts(current),
-      reminders: { notes, derived: [] },
+      missing_facts: missing,
+      reminders: {
+        notes,
+        derived: deriveReminders(
+          { approvals: approvalItems, questions, builds, missing },
+          now
+        ),
+      },
     })
   })
 }

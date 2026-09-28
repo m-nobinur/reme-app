@@ -254,7 +254,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
-      reminders: { notes: [], derived: [] },
+      reminders: {
+        notes: [],
+        derived: [{ rule: "facts_missing", keys: REQUIRED }],
+      },
     })
   })
 
@@ -404,6 +407,113 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(after.headers.get("etag")).not.toBe(tag)
     const body = WorkspaceStatus.parse(await after.json())
     expect(body.missing_facts).toEqual(REQUIRED.slice(1))
+  })
+
+  it("changes the tag when a reminder comes due, with no row changed", async () => {
+    const due = await owner(kit, url as string, "due")
+    const d = seed(kit, due)
+    const build = await d.assignment("awaiting_review")
+    const approval = await d.approval(build, await d.revision(build, 1), 25)
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() })
+    try {
+      const first = await workspace(due)
+      const tag = first.headers.get("etag") as string
+      const before = WorkspaceStatus.parse(await first.json())
+      expect(before.reminders.derived.map((r) => r.rule)).toEqual([
+        "facts_missing",
+      ])
+      vi.setSystemTime(Date.now() + 2 * 3_600_000)
+      const later = await workspace(due, { "if-none-match": tag })
+      expect(later.status).toBe(200)
+      expect(later.headers.get("etag")).not.toBe(tag)
+      const body = WorkspaceStatus.parse(await later.json())
+      expect(body.reminders.derived[0]).toMatchObject({
+        rule: "approval_expiring",
+        approval_id: approval,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  describe("derived reminders", () => {
+    const derived = async (who: Owner, now?: Date) =>
+      (await readWorkspace(kit, who.orgId, SUFFIX, now)).reminders.derived
+
+    it("reminds of a review under 24 hours from expiry until it is decided", async () => {
+      const who = await owner(kit, url as string, "expiring")
+      const s = seed(kit, who)
+      const build = await s.assignment("awaiting_review")
+      const approval = await s.approval(build, await s.revision(build, 1), 10)
+      const [first, ...rest] = await derived(who)
+      expect(first).toMatchObject({
+        rule: "approval_expiring",
+        approval_id: approval,
+        version: 1,
+      })
+      expect(rest).toEqual([{ rule: "facts_missing", keys: REQUIRED }])
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .update(approvalRows)
+          .set({
+            decision: "approved",
+            decidedBy: { kind: "console" },
+            decidedAt: new Date(),
+          })
+          .where(eq(approvalRows.id, approval))
+      )
+      expect(await derived(who)).toEqual(rest)
+    })
+
+    it("reminds of a question open over 12 hours until it is answered", async () => {
+      const who = await owner(kit, url as string, "waiting")
+      const s = seed(kit, who)
+      const build = await s.assignment("blocked_on_information")
+      const asked = {
+        ...question(who, build),
+        requested_at: new Date(Date.now() - 13 * 3_600_000).toISOString(),
+      }
+      await s.event(build, "information.requested", asked, 13)
+      await s.blocked(build, asked.request_id, 3)
+      expect((await derived(who))[0]).toEqual({
+        rule: "question_waiting",
+        request_id: asked.request_id,
+      })
+      await s.event(build, "information.answered", {
+        answer_id: crypto.randomUUID(),
+        org_id: who.orgId,
+        assignment_id: build,
+        request_id: asked.request_id,
+        fact_id: crypto.randomUUID(),
+        answered_at: new Date().toISOString(),
+      })
+      expect((await derived(who)).map((r) => r.rule)).toEqual(["facts_missing"])
+    })
+
+    it("reminds of an unreviewed preview until it is published or cancelled", async () => {
+      const who = await owner(kit, url as string, "previewed")
+      const s = seed(kit, who)
+      for (const [version, end] of [
+        [1, "published"],
+        [2, "cancelled"],
+      ] as const) {
+        const build = await s.assignment("preview_ready")
+        await s.revision(build, version)
+        expect((await derived(who)).map((r) => r.rule)).toEqual([
+          "facts_missing",
+        ])
+        const later = new Date(Date.now() + 13 * 3_600_000)
+        expect((await derived(who, later))[0]).toEqual({
+          rule: "preview_unpublished",
+          assignment_id: build,
+          version,
+        })
+        await s.state(build, end)
+        expect((await derived(who, later)).map((r) => r.rule)).toEqual([
+          "facts_missing",
+        ])
+      }
+    })
   })
 
   it("reads the workspace in one transaction of seven statements", async () => {
