@@ -3,9 +3,8 @@ import {
   AskFactOutput,
   type FactValue,
   type FactValueKey,
-  OwnerChangeRequest,
-  RequestChangeOutput,
   TOOL_CALL_CANCELLED,
+  toolErrorKind,
 } from "@workspace/contracts"
 
 /**
@@ -35,16 +34,17 @@ export const SESSION_ENDED =
 export const BROKEN = "This step did not come through. Reload the conversation."
 
 /**
- * Why a call ended without an output. The api's error text is written for
- * the model, so it is read only for the cancel marker and the "unknown
- * outcome" prefix `toolErrorText` gives it, and never shown.
+ * Why a call ended without an output, from the contracts' own reading of
+ * the api's error text, which is written for the model and never shown.
+ * Only a `failed` error says nothing was done; any other may follow a side
+ * effect that happened, so the owner is told to check before asking again.
  */
 export type Failure = "cancelled" | "unconfirmed" | "failed"
 
 const failureOf = (result: unknown): Failure => {
   const text = errorOf(result)
   if (text === TOOL_CALL_CANCELLED) return "cancelled"
-  return text.startsWith("unknown_outcome") ? "unconfirmed" : "failed"
+  return toolErrorKind(text) === "failed" ? "failed" : "unconfirmed"
 }
 
 /** What a failed act tool tells the owner. */
@@ -79,16 +79,33 @@ export function readView<O>(
  * A tool that waits for the owner's yes. `drafting` is the call before its
  * approval request exists, while the model is still writing it: there is
  * nothing to approve yet. A call whose input does not parse is `broken` and
- * never offers a yes, because the owner could not see what they approve.
+ * never offers a yes, because the owner could not see what they approve;
+ * `waiting` says whether it still needs a no to let its step go on. A
+ * refusal is its own state. A call that succeeded but whose output does not
+ * parse is still `done`, with no details, so the owner is not invited to do
+ * it again.
  */
 export type DecisionView<I, O> =
   | { state: "drafting" }
-  | { state: "broken" }
+  | { state: "broken"; waiting: boolean }
   | { state: "asking"; input: I }
   | { state: "responding"; input: I; approved: boolean }
-  | { state: "done"; input: I; output: O }
+  | { state: "done"; input: I; output: O | null }
+  | { state: "refused"; input: I; code: string | null }
   | { state: "denied"; input: I }
   | { state: Failure; input: I | null }
+
+/** A refusal's code, read as far as it goes. */
+function refusalOf(result: unknown): { code: string | null } | null {
+  if (!result || typeof result !== "object") return null
+  const { outcome, error } = result as { outcome?: unknown; error?: unknown }
+  if (outcome !== "refused") return null
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? (error as { code: unknown }).code
+      : null
+  return { code: typeof code === "string" && code ? code : null }
+}
 
 export function decisionView<I, O>(
   part: ToolPartView,
@@ -100,7 +117,9 @@ export function decisionView<I, O>(
   if (part.isError) {
     // A no is `output-denied`, reported as an error that keeps the answer.
     if (approved === false) {
-      return args.success ? { state: "denied", input: args.data } : BROKE
+      return args.success
+        ? { state: "denied", input: args.data }
+        : { state: "broken", waiting: false }
     }
     const failure = failureOf(part.result)
     return { state: failure, input: args.success ? args.data : null }
@@ -108,19 +127,26 @@ export function decisionView<I, O>(
   if (part.result === undefined && part.approval == null) {
     return { state: "drafting" }
   }
-  if (!args.success) return BROKE
+  if (!args.success) {
+    return {
+      state: "broken",
+      waiting: part.result === undefined && approved === undefined,
+    }
+  }
   if (part.result === undefined) {
     return approved === undefined
       ? { state: "asking", input: args.data }
       : { state: "responding", input: args.data, approved }
   }
+  const refused = refusalOf(part.result)
+  if (refused) return { state: "refused", input: args.data, ...refused }
   const parsed = output.safeParse(part.result)
-  return parsed.success
-    ? { state: "done", input: args.data, output: parsed.data }
-    : BROKE
+  return {
+    state: "done",
+    input: args.data,
+    output: parsed.success ? parsed.data : null,
+  }
 }
-
-const BROKE = { state: "broken" } as const
 
 export type AskFactView = { key: FactValueKey | null } & (
   | { state: "pending"; input: AskFactInput }
@@ -149,52 +175,6 @@ export function askFactView(part: ToolPartView): AskFactView {
   return output.data.answer === "stated"
     ? { key, state: "answered", fact: output.data.fact }
     : { key, state: "skipped" }
-}
-
-export type RequestChangeView =
-  /** The model is still writing the change: nothing to approve yet. */
-  | { state: "drafting"; text: string }
-  | { state: "approval-requested"; text: string }
-  /** The owner answered and the server has not yet. */
-  | { state: "responding"; text: string; approved: boolean }
-  | {
-      state: "started"
-      text: string
-      output: Extract<RequestChangeOutput, { outcome: "started" }>
-    }
-  | { state: "refused"; text: string; message: string }
-  | { state: "denied"; text: string }
-  | { state: "cancelled"; text: string }
-  | { state: "error"; text: string; message: string }
-
-export function requestChangeView(part: ToolPartView): RequestChangeView {
-  const input = OwnerChangeRequest.safeParse(part.args)
-  const text = input.success ? input.data.text : ""
-  const approved = part.approval?.approved
-  if (part.isError) {
-    // A no is `output-denied`, which the runtime reports as an error that
-    // still carries the owner's answer. A cancel strips the approval.
-    if (approved === false) return { state: "denied", text }
-    const failure = failureOf(part.result)
-    return failure === "cancelled"
-      ? { state: "cancelled", text }
-      : {
-          state: "error",
-          text,
-          message: failure === "unconfirmed" ? UNCONFIRMED : NOT_DONE,
-        }
-  }
-  if (part.result === undefined) {
-    if (part.approval == null) return { state: "drafting", text }
-    return approved === undefined
-      ? { state: "approval-requested", text }
-      : { state: "responding", text, approved }
-  }
-  const output = RequestChangeOutput.safeParse(part.result)
-  if (!output.success) return { state: "error", text, message: BROKEN }
-  return output.data.outcome === "started"
-    ? { state: "started", text, output: output.data }
-    : { state: "refused", text, message: output.data.error.message }
 }
 
 /** The fields of a message part `isHeld` reads. */

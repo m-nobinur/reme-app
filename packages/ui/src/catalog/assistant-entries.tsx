@@ -7,6 +7,7 @@ import {
 import { CopyIcon } from "@phosphor-icons/react"
 import { TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
   Thread,
@@ -60,6 +61,15 @@ import { useState } from "react"
 // under load because a slow paint changes which entries are painted while off
 // screen. `catalog.spec.ts` now asserts no scroll-to-bottom button is visible,
 // so a height that is too tight fails with that message rather than flaking.
+/** A fixed zone, so the catalog reads the same on every machine, and the one open question. */
+const COS_TOOLS_FIXTURE = {
+  zone: "Europe/London",
+  question: (requestId: string) =>
+    requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
+      ? "Hourly price for a standard clean"
+      : null,
+}
+
 function FixtureThread({
   height = "h-[48rem]",
   messages,
@@ -99,11 +109,13 @@ function FixtureThread({
             : `${height} overflow-hidden rounded-3xl border border-border`
         }
       >
-        <Thread
-          autoFocus={false}
-          components={{ ToolFallback: Approval }}
-          {...settings}
-        />
+        <CosToolsProvider value={COS_TOOLS_FIXTURE}>
+          <Thread
+            autoFocus={false}
+            components={{ ToolFallback: Approval }}
+            {...settings}
+          />
+        </CosToolsProvider>
       </div>
     </AssistantRuntimeProvider>
   )
@@ -441,13 +453,25 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
     ...requestChange("sent", "Add Saturday hours, 9 to 1.", { approved: true }),
     status: WAITING,
   },
+  // The model still writing the change: nothing to approve yet.
+  {
+    ...requestChange("drafting", "Add Saturday hours", { approval: false }),
+    status: { type: "running" },
+  },
+  // A no already sent, waiting on the server.
+  {
+    ...requestChange("declining", "Swap the hero photo.", { approved: false }),
+    status: { type: "running" },
+  },
 ]
 
 /* The Chief of Staff's tools, in every state. Fixture content is fictional. */
 
 const IN_FLIGHT = { type: "running" } as const
 const LATER = "2026-10-02T09:00:00.000Z"
-const TOOL_FAILED = "tool_failed: the tool stopped before it answered."
+// The one error that says nothing was done; any other reads as unconfirmed.
+const TOOL_FAILED =
+  "tool_failed (orchestrator.off_contract): the builder answered in a shape we do not accept, so nothing was done."
 const UNKNOWN =
   "unknown_outcome (orchestrator.timeout): the tool did not report back."
 
@@ -537,8 +561,8 @@ const COS_READ_STATES: ThreadMessageLike[] = [
       outcome: "refused",
       error: {
         class: "resource",
-        code: "preview.missing",
-        message: "This build has no preview yet.",
+        code: "assignment.not_found",
+        message: "No assignment with that id in this business.",
       },
     },
   }),
@@ -548,6 +572,7 @@ const COS_READ_STATES: ThreadMessageLike[] = [
 function decisionStates(
   toolName: string,
   args: unknown,
+  broken: unknown,
   done: unknown,
   refused: unknown
 ): ThreadMessageLike[] {
@@ -562,8 +587,18 @@ function decisionStates(
   })
   return [
     call("drafting", {}, IN_FLIGHT),
+    // Left unfinished when the stream stopped.
+    call("unfinished", {}),
     call("asking", { approval: approval("asking") }, WAITING),
+    // A target that does not parse: no yes, only a no to let the step go on.
+    cosCall(
+      toolName,
+      `${toolName}_broken`,
+      { args: broken, approval: approval("broken") },
+      WAITING
+    ),
     call("sent", { approval: approval("sent", true) }, IN_FLIGHT),
+    call("declining", { approval: approval("declining", false) }, IN_FLIGHT),
     {
       content: [
         ...(call("held", { approval: approval("held", true) })
@@ -603,21 +638,27 @@ const refusal = (code: string, message: string) => ({
   error: { class: "validation", code, message },
 })
 
+// The api's own refusals, codes and messages as it sends them; the card
+// shows its own line for each code, never the message.
 const ANSWER_QUESTION_STATES = decisionStates(
   "answer_question",
   {
     request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
     value: { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
   },
+  { request_id: "not-a-request", value: "" },
   { outcome: "answered", request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c" },
-  refusal("request.not_found", "That question was already answered.")
+  refusal("request.not_found", "No build asked that question.")
 )
 
+// Written as 09:00 with the model's offset; stored as 09:00 London time,
+// which is 08:00 UTC on 2 October.
 const CREATE_REMINDER_STATES = decisionStates(
   "create_reminder",
-  { title: "Call the window supplier", due_at: LATER },
-  { outcome: "created", due_at: LATER },
-  refusal("reminder.limit", "You have 50 open reminders. Finish one first.")
+  { title: "Call the window supplier", due_at: "2026-10-02T09:00:00+01:00" },
+  { title: "", due_at: null },
+  { outcome: "created", due_at: "2026-10-02T08:00:00.000Z" },
+  refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
 /** A new owner's onboarding, two answers in and waiting on the third. */
@@ -946,9 +987,26 @@ const assistantCatalog = [
   {
     name: "RequestChange",
     render: () => (
-      <FixtureThread height="h-[112rem]" messages={REQUEST_CHANGE_STATES} />
+      <FixtureThread height="h-[130rem]" messages={REQUEST_CHANGE_STATES} />
     ),
   },
+  // The card the three tools share, its outcome lines and its provider, on
+  // a waiting card, a done one and a refused one.
+  ...(["Decision", "Done", "Problem", "CosToolsProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <FixtureThread
+          height="h-[36rem]"
+          messages={[
+            CREATE_REMINDER_STATES[2],
+            CREATE_REMINDER_STATES[8],
+            CREATE_REMINDER_STATES[9],
+          ].filter((message) => message !== undefined)}
+        />
+      ),
+    })
+  ),
   {
     name: "CosReads",
     render: () => (
@@ -958,13 +1016,13 @@ const assistantCatalog = [
   {
     name: "AnswerQuestion",
     render: () => (
-      <FixtureThread height="h-[140rem]" messages={ANSWER_QUESTION_STATES} />
+      <FixtureThread height="h-[180rem]" messages={ANSWER_QUESTION_STATES} />
     ),
   },
   {
     name: "CreateReminder",
     render: () => (
-      <FixtureThread height="h-[140rem]" messages={CREATE_REMINDER_STATES} />
+      <FixtureThread height="h-[180rem]" messages={CREATE_REMINDER_STATES} />
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },

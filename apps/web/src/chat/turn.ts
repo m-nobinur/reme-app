@@ -6,6 +6,7 @@ import {
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
+import { browserZone } from "@workspace/ui/lib/zone"
 import {
   isToolUIPart,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -30,8 +31,9 @@ export function chatTurn(
   mode: ChatRequest["mode"],
   messages: ChatMessage[]
 ): ChatRequest {
-  // The browser's zone, so the Chief of Staff can read "Friday at 9".
-  const time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  // The browser's zone, so the Chief of Staff can read "Friday at 9". The
+  // reminder card names the same zone, from the same source.
+  const time_zone = browserZone()
   const last = messages.at(-1)
   if (last?.role === "user") {
     return {
@@ -102,20 +104,26 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
  * still has the call undecided and the api cancels it. A decision the
  * server already has, a "not now" included, stays as it was.
  * assistant-ui's own `cancelPendingToolCallsOnSend` also turns that "not
- * now" into cancelled, which a reload would then contradict.
+ * now" into cancelled, which a reload would then contradict. A call still
+ * streaming its input when the stream stopped is dropped: the api never
+ * stores an unfinished call, so a reload does not show one either.
  */
 export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
   const last = messages.at(-1)
   if (last?.role !== "assistant") return messages
   let changed = false
-  const parts = last.parts.map((part) => {
+  const parts = last.parts.flatMap((part): ChatMessage["parts"] => {
+    if (isToolUIPart(part) && part.state === "input-streaming") {
+      changed = true
+      return []
+    }
     if (
       !isToolUIPart(part) ||
       (part.state !== "input-available" &&
         part.state !== "approval-requested" &&
         part.state !== "approval-responded")
     ) {
-      return part
+      return [part]
     }
     changed = true
     const { approval: _, ...rest } = part
@@ -124,7 +132,7 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
       state: "output-error",
       errorText: TOOL_CALL_CANCELLED,
     }
-    return cancelled
+    return [cancelled]
   })
   return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
 }

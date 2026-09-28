@@ -48,19 +48,21 @@ test("reads say what they looked at, and open onto what they found", async ({
     .click()
   await expect(entry).toContainText("It shows under Your website.")
   await entry.getByRole("button", { name: "Checked for a preview" }).click()
-  await expect(entry).toContainText("This build has no preview yet.")
+  await expect(entry).toContainText("That build is not in your workspace.")
+  await expect(entry).not.toContainText("No assignment with that id")
   expect(await entry.innerText()).not.toMatch(WIRE)
 })
 
-for (const [entry, slot, yes, busy, target, done, refused] of [
+for (const [entry, slot, yes, busy, target, detail, done, refused] of [
   [
     "AnswerQuestion",
     "answer-question",
     "Send answer",
     "Sending",
     "Weekday hours: 08:00 to 18:00",
+    "This answers your build's question: Hourly price for a standard clean.",
     "Sent. Your build carries on.",
-    "That question was already answered.",
+    "That question is no longer waiting on you.",
   ],
   [
     "CreateReminder",
@@ -68,46 +70,57 @@ for (const [entry, slot, yes, busy, target, done, refused] of [
     "Add reminder",
     "Adding",
     "Call the window supplier",
-    "Added to Reminders. Due",
-    "You have 50 open reminders. Finish one first.",
+    "Due 2 Oct 2026, 09:00 London time. It shows under Reminders.",
+    "Added to Reminders. Due 2 Oct 2026, 09:00 London time.",
+    "A reminder cannot be due in the past.",
   ],
 ] as const) {
   test(`${entry} shows every state in the owner's words`, async ({ page }) => {
     await open(page, entry)
     const cards = page.locator(`[data-entry="${entry}"] [data-slot="${slot}"]`)
-    await expect(cards).toHaveCount(10)
-    // Nothing to approve while the model is still writing it.
+    await expect(cards).toHaveCount(13)
+    // Nothing to approve while the model is still writing it, and a call
+    // the stream left unfinished stops rather than working forever.
     await expect(cards.nth(0)).toHaveText("Writing this out")
     await expect(cards.nth(0).getByRole("button")).toHaveCount(0)
-    const asking = cards.nth(1)
+    await expect(cards.nth(1)).toContainText("This was not finished.")
+    await expect(cards.nth(1).getByRole("button")).toHaveCount(0)
+    const asking = cards.nth(2)
     await expect(asking.getByRole("heading")).toHaveText(target)
+    await expect(asking).toContainText(detail)
     await expect(asking.getByRole("button", { name: yes })).toBeEnabled()
     await expect(asking.getByRole("button", { name: "Not now" })).toBeEnabled()
+    // A target it cannot read gets no yes, only a way to let the step go on.
+    await expect(cards.nth(3)).toContainText("did not come through")
+    await expect(cards.nth(3).getByRole("button")).toHaveText(["Not now"])
     // Sent and waiting on the server: never optimistic.
     await expect(
-      cards.nth(2).getByRole("button", { name: busy })
+      cards.nth(4).getByRole("button", { name: busy })
     ).toBeDisabled()
-    await expect(cards.nth(2).locator('[aria-busy="true"]')).toHaveCount(1)
+    await expect(cards.nth(4).locator('[aria-busy="true"]')).toHaveCount(1)
+    await expect(cards.nth(5).getByRole("button", { name: yes })).toBeDisabled()
+    await expect(cards.nth(5).getByRole("button", { name: busy })).toHaveCount(
+      0
+    )
     // Held while another card in its step waits.
-    await expect(cards.nth(3).getByRole("status")).toHaveText(
+    await expect(cards.nth(6).getByRole("status")).toHaveText(
       "You said yes. Sent once you answer the other cards."
     )
-    await expect(cards.nth(3).getByRole("button")).toHaveCount(0)
-    await expect(cards.nth(4)).toContainText(done)
-    await expect(cards.nth(5)).toContainText(refused)
-    await expect(cards.nth(6)).toContainText("You said not now.")
-    await expect(cards.nth(7)).toContainText(
-      "Not done. You sent a message instead."
-    )
-    await expect(cards.nth(8)).toContainText(
+    await expect(cards.nth(6).getByRole("button")).toHaveCount(0)
+    await expect(cards.nth(7)).toContainText(done)
+    await expect(cards.nth(8)).toContainText(refused)
+    await expect(cards.nth(9)).toContainText("You said not now.")
+    await expect(cards.nth(10)).toContainText("You sent a message instead.")
+    await expect(cards.nth(11)).toContainText(
       "We could not confirm this went through."
     )
-    await expect(cards.nth(9)).toContainText(
+    await expect(cards.nth(12)).toContainText(
       "This did not go through. Ask again."
     )
-    expect(
-      await page.locator(`[data-entry="${entry}"]`).innerText()
-    ).not.toMatch(WIRE)
+    const shown = await page.locator(`[data-entry="${entry}"]`).innerText()
+    expect(shown).not.toMatch(WIRE)
+    // The api's refusal message is never what the owner reads.
+    expect(shown).not.toMatch(/No build asked/)
   })
 }
 

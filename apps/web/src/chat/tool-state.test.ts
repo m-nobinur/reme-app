@@ -3,14 +3,15 @@ import {
   CreateReminderOutput,
   CreateReminderRequest,
   GetPreviewOutput,
+  OwnerChangeRequest,
+  RequestChangeOutput,
 } from "@workspace/contracts"
+import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   askFactView,
   decisionView,
   isHeld,
-  NOT_DONE,
   readView,
-  requestChangeView,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
@@ -66,25 +67,33 @@ const BUILD = {
   updated_at: "2026-09-27T10:00:00.000Z",
 }
 
-it("reads every request_change state", () => {
-  const text = CHANGE.text
-  expect(requestChangeView({ args: CHANGE, approval: {} })).toEqual({
-    state: "approval-requested",
-    text,
+const change = (part: object) =>
+  decisionView(
+    { args: CHANGE, ...part },
+    OwnerChangeRequest,
+    RequestChangeOutput
+  )
+
+it("reads a change the owner is asked to start, in every state", () => {
+  expect(change({ args: { text: "Add Sat" } })).toEqual({ state: "drafting" })
+  expect(change({ approval: {} })).toEqual({ state: "asking", input: CHANGE })
+  expect(change({ approval: { approved: true } })).toEqual({
+    state: "responding",
+    input: CHANGE,
+    approved: true,
   })
   expect(
-    requestChangeView({ args: CHANGE, approval: { approved: true } })
-  ).toEqual({ state: "responding", text, approved: true })
-  expect(
-    requestChangeView({
-      args: CHANGE,
+    change({
       approval: { approved: true },
       result: { outcome: "started", build: BUILD },
     })
-  ).toMatchObject({ state: "started", text })
+  ).toEqual({
+    state: "done",
+    input: CHANGE,
+    output: { outcome: "started", build: BUILD },
+  })
   expect(
-    requestChangeView({
-      args: CHANGE,
+    change({
       approval: { approved: true },
       result: {
         outcome: "refused",
@@ -97,70 +106,75 @@ it("reads every request_change state", () => {
     })
   ).toEqual({
     state: "refused",
-    text,
-    message: "Answer the open question first.",
+    input: CHANGE,
+    code: "change.question_open",
   })
   expect(
-    requestChangeView({
-      args: CHANGE,
+    change({
       approval: { approved: false },
       isError: true,
       result: { error: "Tool approval denied" },
     })
-  ).toEqual({ state: "denied", text })
-  expect(
-    requestChangeView({
-      args: CHANGE,
-      isError: true,
-      result: { error: CANCELLED },
-    })
-  ).toEqual({ state: "cancelled", text })
-  expect(
-    requestChangeView({
-      args: CHANGE,
-      isError: true,
-      result: { error: "Lost" },
-    })
-  ).toEqual({ state: "error", text, message: NOT_DONE })
-  // The api's text is written for the model and never shown; an unknown
-  // outcome says so in the owner's words.
-  expect(
-    requestChangeView({
-      args: CHANGE,
-      approval: { approved: true },
-      isError: true,
-      result: {
-        error:
-          "unknown_outcome (orchestrator.timeout): the tool did not report back",
-      },
-    })
-  ).toEqual({ state: "error", text, message: UNCONFIRMED })
-  // Before the approval request exists, the model is still writing it.
-  expect(requestChangeView({ args: { text: "Add Sat" } })).toEqual({
-    state: "drafting",
-    text: "Add Sat",
+  ).toEqual({ state: "denied", input: CHANGE })
+  expect(change({ isError: true, result: { error: CANCELLED } })).toEqual({
+    state: "cancelled",
+    input: CHANGE,
   })
+})
+
+it("never offers a yes on a change it cannot read, and says whether it still waits", () => {
+  // No text, so the owner could not see what they would start.
+  expect(change({ args: { text: "" }, approval: {} })).toEqual({
+    state: "broken",
+    waiting: true,
+  })
+  expect(change({ args: {}, approval: { approved: true } })).toEqual({
+    state: "broken",
+    waiting: false,
+  })
+})
+
+it("reads only the integrity refusal as not done; any other failure may have happened", () => {
+  const failure = (error: string) =>
+    change({ approval: { approved: true }, isError: true, result: { error } })
+  expect(
+    failure(
+      "tool_failed (orchestrator.contract): the builder answered in a shape we do not accept, so nothing was done."
+    )
+  ).toEqual({ state: "failed", input: CHANGE })
+  for (const error of [
+    "tool_failed: the tool stopped before it answered. Nothing is known about its result.",
+    "unknown_outcome (orchestrator.timeout): the tool did not report back.",
+    "Something the api never wrote.",
+    "",
+  ]) {
+    expect(failure(error), error).toEqual({
+      state: "unconfirmed",
+      input: CHANGE,
+    })
+  }
+})
+
+it("shows a call that succeeded as done, even when its output does not parse", () => {
+  // Shown as failed, it would invite the owner to start it again.
+  expect(
+    change({ approval: { approved: true }, result: { outcome: "started" } })
+  ).toEqual({ state: "done", input: CHANGE, output: null })
+  expect(
+    change({ approval: { approved: true }, result: { outcome: "refused" } })
+  ).toEqual({ state: "refused", input: CHANGE, code: null })
 })
 
 const REMINDER = { title: "Call the window supplier", due_at: null }
 
-it("reads every state of a tool that waits on the owner", () => {
+it("reads every state of a reminder the owner is asked to add", () => {
   const view = (part: object) =>
     decisionView(
       { args: REMINDER, ...part },
       CreateReminderRequest,
       CreateReminderOutput
     )
-  expect(view({ args: { title: "Call" } })).toEqual({ state: "drafting" })
-  expect(view({ approval: {} })).toEqual({
-    state: "asking",
-    input: REMINDER,
-  })
-  expect(view({ approval: { approved: true } })).toEqual({
-    state: "responding",
-    input: REMINDER,
-    approved: true,
-  })
+  expect(view({ approval: {} })).toEqual({ state: "asking", input: REMINDER })
   expect(
     view({
       approval: { approved: true },
@@ -171,38 +185,6 @@ it("reads every state of a tool that waits on the owner", () => {
     input: REMINDER,
     output: { outcome: "created", due_at: null },
   })
-  expect(
-    view({
-      approval: { approved: false },
-      isError: true,
-      result: { error: "Tool approval denied" },
-    })
-  ).toEqual({ state: "denied", input: REMINDER })
-  expect(view({ isError: true, result: { error: CANCELLED } })).toEqual({
-    state: "cancelled",
-    input: REMINDER,
-  })
-  expect(
-    view({
-      approval: { approved: true },
-      isError: true,
-      result: { error: "unknown_outcome (x): the tool did not report back" },
-    })
-  ).toEqual({ state: "unconfirmed", input: REMINDER })
-  expect(
-    view({
-      approval: { approved: true },
-      isError: true,
-      result: { error: "tool_failed: the tool stopped before it answered." },
-    })
-  ).toEqual({ state: "failed", input: REMINDER })
-  // No yes is ever offered on a target the owner could not read.
-  expect(view({ args: { title: "" }, approval: {} })).toEqual({
-    state: "broken",
-  })
-  expect(
-    view({ approval: { approved: true }, result: { outcome: "made" } })
-  ).toEqual({ state: "broken" })
 })
 
 it("reads every state of a tool that only looks", () => {
@@ -219,9 +201,6 @@ it("reads every state of a tool that only looks", () => {
   expect(view({ result: { outcome: "ready" } })).toEqual({ state: "failed" })
   expect(view({ isError: true, result: { error: CANCELLED } })).toEqual({
     state: "cancelled",
-  })
-  expect(view({ isError: true, result: { error: "tool_failed" } })).toEqual({
-    state: "failed",
   })
 })
 
@@ -252,4 +231,18 @@ it("a yes is held only while another card in its message still waits", () => {
       "a"
     )
   ).toBe(false)
+})
+
+it("says a refusal in the owner's words, never the api's", () => {
+  expect(refusalText("change.question_open", "Fallback.")).toBe(
+    "A build is waiting on your answer. Answer it first."
+  )
+  expect(refusalText("request.not_found", "Fallback.")).toBe(
+    "That question is no longer waiting on you."
+  )
+  // A code with no line of its own, or none at all, gets the tool's line.
+  expect(refusalText("assignment.kind_unknown", "Fallback.")).toBe("Fallback.")
+  expect(refusalText(null, "Fallback.")).toBe("Fallback.")
+  // A reminder whose outcome is unknown says so, rather than "refused".
+  expect(refusalText("reminder.unconfirmed", "Fallback.")).toBe(UNCONFIRMED)
 })

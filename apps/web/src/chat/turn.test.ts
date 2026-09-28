@@ -225,6 +225,24 @@ it("a send records its own message before it waits on anything", async () => {
   expect(sending.current).toBe(now)
 })
 
+it("a typed message drops a call still streaming its input, as a reload would", () => {
+  const streaming = {
+    type: "tool-create_reminder",
+    toolCallId: "call_streaming",
+    state: "input-streaming",
+    input: { title: "Call" },
+  } as unknown as Part
+  const cancelled = cancelOvertaken([
+    assistant(
+      streaming,
+      change("approval-requested", { approval: { id: "a" } })
+    ),
+  ])
+  expect(cancelled.at(-1)?.parts.slice(1)).toEqual([
+    change("output-error", { errorText: CANCELLED }),
+  ])
+})
+
 it("a not now stays not now when the owner types next", () => {
   // The row `apps/api` keeps after the owner said no. assistant-ui's own
   // cancel rewrote this part to output-error, which a reload contradicted.
