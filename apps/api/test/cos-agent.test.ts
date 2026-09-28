@@ -4,6 +4,9 @@ import {
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  TOOL_FAILED,
+  TOOL_UNKNOWN,
+  toolErrorKind,
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
@@ -57,6 +60,7 @@ import {
   reservation,
   toolErrorText,
 } from "../src/cos/agent.ts"
+import { ToolFailed } from "../src/cos/tools.ts"
 import { GRACE_MS, withinCap } from "../src/cos/turns.ts"
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
 import staging from "./cos-staging-turn.json" with { type: "json" }
@@ -402,6 +406,34 @@ describe("the CoS's model and price", () => {
     expect(toolErrorText(new Error("postgres://secret@host"))).not.toContain(
       "postgres"
     )
+  })
+
+  it.each([
+    [
+      "an answer off the contract",
+      new ToolFailed(502, {
+        class: "integrity",
+        code: "orchestrator.off_contract",
+        message: "x",
+      }),
+      "failed",
+    ],
+    [
+      "an unknown outcome",
+      new ToolFailed(503, {
+        class: "transient",
+        code: "orchestrator.timeout",
+        message: "x",
+      }),
+      "unknown",
+    ],
+    ["any other error", new Error("boom"), "unknown"],
+  ] as const)("writes %s so the web reads it as %s", (_name, error, kind) => {
+    const text = toolErrorText(error)
+    expect(toolErrorKind(text)).toBe(kind)
+    expect(
+      text.startsWith(kind === "failed" ? TOOL_FAILED : TOOL_UNKNOWN)
+    ).toBe(true)
   })
 
   it("types each tool's input as COS_TOOLS says", () => {
