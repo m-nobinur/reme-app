@@ -76,6 +76,7 @@ import {
   invalid,
   readBody,
   sortedKeys,
+  titleFrom,
   withoutProviderData,
 } from "./http.ts"
 import { ownerStaffId } from "./staff.ts"
@@ -434,6 +435,28 @@ async function swapTail(
   return true
 }
 
+/**
+ * An assistant conversation's first message names it: a title from the
+ * owner's words, written with the message, so a turn refused before its
+ * message is stored names nothing. Only a conversation that held no message
+ * before this turn is named, never the onboarding one, and only while it
+ * has no title, so a rename is never overwritten.
+ */
+async function nameConversation(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  text: string
+) {
+  if (held.kind !== "assistant" || held.tail !== null) return
+  const title = titleFrom(text)
+  if (!title) return
+  await db
+    .update(conversations)
+    .set({ title, updatedAt: sql`now()` })
+    .where(sql`${conversations.id} = ${id} and ${conversations.title} is null`)
+}
+
 /** Thrown inside a turn's transaction to roll it back and answer with this. */
 class Refusal {
   constructor(readonly response: Response) {}
@@ -535,6 +558,7 @@ export async function chat(
           role: "user",
           parts: [{ type: "text", text: turn.text }],
         })
+        await nameConversation(db, held, id, turn.text)
       }
       return {
         turn: cosTurn,
@@ -1115,6 +1139,7 @@ async function typed(
       ...row,
     })
   }
+  await nameConversation(db, held, id, message.text)
   await db
     .update(conversations)
     .set({ updatedAt: sql`now()` })

@@ -128,6 +128,30 @@ describe("a session's event stream", () => {
     expect([once.seq, again, seqs]).toEqual([0, "23505", [{ seq: 0 }]])
   })
 
+  it("refuses a retried key on a sessionless append, and keeps one row", async () => {
+    const key = newUlid()
+    const event = {
+      orgId: ORG,
+      assignmentId: null,
+      staffId: null,
+      type: "probe.keyed",
+      payload: { key },
+      idempotencyKey: key,
+    }
+    await withOrg(ctx, (db) => appendEvent(db, event))
+    const again = await withOrg(ctx, (db) => appendEvent(db, event)).then(
+      () => null,
+      (error: unknown) => pgCode(error)
+    )
+    const rows = await withOrg(ctx, (db) =>
+      db
+        .select({ key: events.idempotencyKey })
+        .from(events)
+        .where(sql`${events.payload}->>'key' = ${key}`)
+    )
+    expect([again, rows]).toEqual(["23505", [{ key }]])
+  })
+
   it("orders appends in one millisecond by event_id as they were written", async () => {
     // A Worker's clock stands still within a request; this one does too.
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() })

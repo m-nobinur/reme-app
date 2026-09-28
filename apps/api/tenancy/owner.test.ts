@@ -351,6 +351,38 @@ describe("another org's conversation is 404 and never written to", () => {
     expect(await history(theirs, theirConversation.id)).toEqual([])
   })
 
+  it("takes no rating in it, and records nothing", async () => {
+    const theirConversation = await create(theirs)
+    await appendMessages(kit, theirs.orgId, theirConversation.id, [
+      {
+        id: "u_r",
+        parent_id: null,
+        format: "ai-sdk/v6",
+        content: { role: "user", parts: [{ type: "text", text: "Hi" }] },
+      },
+      {
+        id: "a_r",
+        parent_id: "u_r",
+        format: "ai-sdk/v6",
+        content: {
+          role: "assistant",
+          parts: [{ type: "text", text: "Hello.", state: "done" }],
+        },
+      },
+    ])
+    const refused = await mine.call(
+      stubOrchestrator(),
+      `/conversations/${theirConversation.id}/feedback`,
+      keyed("POST", { message_id: "a_r", rating: "down" })
+    )
+    expect(refused.status).toBe(404)
+    expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
+      "conversation.not_found"
+    )
+    const read = await history(theirs, theirConversation.id)
+    expect(read.find((m) => m.id === "a_r")?.feedback).toBeNull()
+  })
+
   it("takes no chat turn in it, of any kind", async () => {
     const list = ConversationList.parse(
       await (await theirs.call(stubOrchestrator(), "/conversations")).json()
