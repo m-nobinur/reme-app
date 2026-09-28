@@ -275,9 +275,9 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-09-28's table and limits: about $0.024 a turn.
+    // On 2026-09-28's table and limits: about $0.025 a turn.
     expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(
-      0.024,
+      0.025,
       3
     )
   })
@@ -407,14 +407,26 @@ describe("a real turn recorded on staging", () => {
     ])
   })
 
-  // The fixture's own shape, so an eval that replays it never replays
-  // reasoning to an owner. It proves nothing about the live filter, which
-  // the reasoning cases below drive.
-  it("holds no reasoning in its chunks", () => {
-    expect(staging.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(
-      false
+  // The fixture's own contents, so a replay of it never carries reasoning
+  // or a staging id. It proves nothing about the live filter, which the
+  // reasoning cases below drive.
+  it("holds no reasoning, provider data or staging ids", () => {
+    const text = JSON.stringify(staging)
+    expect(text).not.toContain("reasoning_details")
+    expect(text).not.toMatch(/"type":"reasoning/)
+    expect(text).not.toMatch(
+      /"(providerMetadata|providerOptions|\w+ProviderMetadata)"/
     )
-    expect(JSON.stringify(staging.chunks)).not.toContain("reasoning_details")
+    // OpenRouter's generation ids.
+    expect(text).not.toMatch(/gen-\d+-/)
+    // Every ULID is a fixed placeholder, not a real turn's.
+    for (const id of text.match(/\b[0-7][0-9A-HJKMNP-TV-Z]{25}\b/g) ?? []) {
+      expect(id.startsWith("01K6A00000000000")).toBe(true)
+    }
+    // Every hash is a placeholder.
+    for (const hash of text.match(/\b[0-9a-f]{64}\b/g) ?? []) {
+      expect(hash).toBe("0".repeat(64))
+    }
   })
 })
 
@@ -1720,7 +1732,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     const done = await turn(me, typed(id, "Read everything.", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
-    // Three steps of 100k input fit a reservation of about $0.024; a
+    // Three steps of 100k input fit a reservation of about $0.025; a
     // fourth could pass it, so the six the model would take never run.
     expect(sent).toHaveLength(3)
     const [ended] = await turnsOf(id)

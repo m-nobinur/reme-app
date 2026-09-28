@@ -53,18 +53,19 @@ import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 
 /**
- * The run's limits, from staging on 2026-09-28 (main d626d0f): 53 CoS
- * turns and 72 steps, the T2 exit measurement's 20 turns among them.
+ * The run's limits, from every CoS turn staging ran on main d626d0f, the
+ * only deploy after 2026-09-27 20:19:35Z: 64 turns and 87 steps between
+ * 20:28:02 and 20:46:05Z, the T2 exit measurement's 20 turns among them.
  */
 export const LIMITS = {
   steps: 6,
   /**
    * max(3 × the per-step output p95, GOAL_MAX / 2 + 3 × p95). The p95 was
-   * 313 tokens (max 421), but request_change must fit an owner's request of
+   * 344 tokens (max 421), but request_change must fit an owner's request of
    * up to 4,000 characters in its input, and a call cut off is broken:
-   * 2,000 + 939, rounded up to 3,000.
+   * 2,000 + 1,032, rounded up to 3,100.
    */
-  maxOutputTokens: 3_000,
+  maxOutputTokens: 3_100,
   /**
    * The input a step is reserved for. Not lowered to the measured p99 of
    * 2,681 tokens: those conversations were short, and a 12-turn history of
@@ -77,7 +78,7 @@ export const LIMITS = {
    */
   totalMs: 60_000,
   /**
-   * max(3 × the first-chunk p95, 8 s). The p95 was 1,555 ms (p50 539, max
+   * max(3 × the first-chunk p95, 8 s). The p95 was 1,305 ms (p50 517, max
    * 1,799), but the SDK restarts this every step and the provider's prefill
    * grows with the prompt, and those turns were short. It goes lower only
    * after at least 5 measured turns at 20k+ input tokens.
