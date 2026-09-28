@@ -453,7 +453,7 @@ async function nameConversation(
   if (!title) return
   await db
     .update(conversations)
-    .set({ title })
+    .set({ title, updatedAt: sql`now()` })
     .where(sql`${conversations.id} = ${id} and ${conversations.title} is null`)
 }
 
