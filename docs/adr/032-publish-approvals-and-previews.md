@@ -155,3 +155,43 @@ A staging spike on 2026-09-26 is the evidence that no public path reaches the en
 Worker bound to `reme-orchestrator#OwnerApi` got the entrypoint's answer. Forged `x-reme-*`
 headers on the custom domain, with and without a version override, got the console's 401, and
 the orchestrator serves no version URLs (`workers_dev: false`).
+
+## Amendment, 2026-09-28: the owner role clears staging probe orgs
+
+The onboarding end-to-end run creates a real org on staging every time, and its cleanup in
+`qa/e2e/workos.ts` deletes only the WorkOS side. The Postgres rows, the routing key and the site
+files stay behind. Clearing them means deleting from `deployments`, which this ADR made
+append-only, and from `events` and `staff_events`, which 0003 made append-only, so the exception is
+recorded here beside the rule. Both 0003 and 0008 revoke UPDATE and DELETE from `reme_app` and no
+other role. `neondb_owner` keeps DELETE and bypasses row security (ADR-029), and ADR-028 already
+names the migrator as the role that removes a person. Append-only binds the app, not the migrator.
+
+`packages/db/scripts/clear-probes.ts`, run as `pnpm probe:clear`, runs on the host, not in a Worker,
+and connects as `neondb_owner`. It reaches staging only, by construction:
+
+- It builds the database URL from `NEON_API_KEY` and a staging branch id written in the script, and
+  never reads `DATABASE_URL`.
+- It takes the KV namespace and the R2 bucket from the staging env in wrangler's config.
+- It refuses a WorkOS client id that is not staging's.
+
+A probe is an org whose name starts with `PROBE_ORG_PREFIX`, whose members are all
+`qa-e2e-*@example.net`, and which has no unfinished assignment. The script refuses any org that
+fails one of the three. For each probe it reads the site ids and hosts, deletes the KV routing
+keys, deletes R2 objects under `sites/<site_id>/`, runs `clearOrgs` in one transaction, then
+deletes the WorkOS users and org. Every step treats "already gone" as done, so a rerun after a
+crash finishes the job. It runs three ways: by org id from the spec's own teardown, as a reaper for
+probes older than an hour, and as a one-off `--org <id>` for a leftover that fails the name or
+email test. That mode keeps the staging guard and the unfinished-assignment check, and prints what
+it will delete before it deletes.
+
+`clearOrgs` stays in `packages/db/fixtures/seed.ts` and keeps its hand-kept order. A test fails
+when a table registered with the tenancy kit is missing from it, so a new tenant table breaks the
+build rather than a staging cleanup.
+
+Rejected: an admin route in `apps/api`, which puts a cross-tenant delete behind the public
+hostname in every environment for a staging chore. Also rejected: a SECURITY DEFINER delete
+granted to `reme_app`, which hands the role that 0003 and 0008 took DELETE from a way to delete
+append-only rows in production.
+
+Reversal trigger: the first real account-deletion request (open item 79). Production erasure gets
+its own ADR and its own path under §10.5. This script does not grow a production mode.
