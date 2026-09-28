@@ -82,12 +82,15 @@ export type Directory = {
  * org's own id so it needs no uniqueness read to be unique. A slug the owner
  * chooses is a later story; this one only has to be stable and theirs.
  */
-function slugFor(name: string, orgId: string): string {
-  const base = name
+export function slugFor(name: string, orgId: string): string {
+  const words = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
+  // `preview-` opens a preview host (ADR-030), so a name whose slug would
+  // start that way, "Preview" alone included, gets a `site-` in front.
+  const reserved = `${words}-`.startsWith("preview-")
+  const base = (reserved ? `site-${words}` : words).slice(0, 40)
   return [base, orgId.slice(0, 8)].filter(Boolean).join("-")
 }
 
