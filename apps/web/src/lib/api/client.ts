@@ -11,6 +11,7 @@ import {
   type CreateReminderRequest,
   ErrorEnvelope,
   FactList,
+  type MessageFeedback,
   Org,
   PreviewLink,
   StaffDirectory,
@@ -647,6 +648,22 @@ async function updateConversation(
   }
 }
 
+async function rateMessage(
+  _orgId: string,
+  id: string,
+  feedback: MessageFeedback,
+  key: string
+): Promise<void> {
+  const response = await post(
+    `/conversations/${segment(id)}/feedback`,
+    feedback,
+    key
+  )
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for a rating`)
+  }
+}
+
 async function conversationMessages(
   _orgId: string,
   id: string
@@ -712,6 +729,7 @@ export const apiSource: OwnerDataSource = {
   conversation,
   createConversation,
   updateConversation,
+  rateMessage,
   conversationMessages,
   chat: (raw) => call("/chat", { method: "POST", raw }),
   decideApproval: async (_orgId, approvalId, revisionId, decision) => {

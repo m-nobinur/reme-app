@@ -19,5 +19,14 @@ export type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
 } & { ask_fact: { input: AskFactInput; output: AskFactOutput } }
 
+/**
+ * What a message's metadata carries: its stored date, and the owner's thumb
+ * where assistant-ui reads a submitted one.
+ */
+export type ChatMetadata = {
+  custom?: { createdAt?: string }
+  submittedFeedback?: { type: "positive" | "negative" }
+}
+
 /** A message as the chat holds it, with its tool parts typed. */
-export type ChatMessage = UIMessage<unknown, UIDataTypes, ChatTools>
+export type ChatMessage = UIMessage<ChatMetadata, UIDataTypes, ChatTools>

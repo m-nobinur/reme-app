@@ -5,7 +5,13 @@ import {
   setCookie,
 } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
-import { GOAL_MAX, Reminder, Timestamp, Uuid } from "@workspace/contracts"
+import {
+  GOAL_MAX,
+  MessageFeedback,
+  Reminder,
+  Timestamp,
+  Uuid,
+} from "@workspace/contracts"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
@@ -334,6 +340,28 @@ export const updateConversation = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<void> => {
     const org = await writingOrg()
     await source.updateConversation(org.id, data.id, data.patch, data.key)
+  })
+
+/**
+ * The owner's thumb on a reply. The key is the press's own, minted in the
+ * browser, so a retry of that press records nothing new and a later press
+ * is a new rating, the latest of which wins.
+ */
+export const rateMessage = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return {
+      id: id(data.id),
+      feedback: MessageFeedback.parse({
+        message_id: data.message_id,
+        rating: data.rating,
+      }),
+      key: keyOf(data.key),
+    }
+  })
+  .handler(async ({ data }): Promise<void> => {
+    const org = await writingOrg()
+    await source.rateMessage(org.id, data.id, data.feedback, data.key)
   })
 
 export const getConversationMessages = createServerFn({ method: "GET" })

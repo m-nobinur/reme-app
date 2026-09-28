@@ -79,8 +79,11 @@ function FixtureThread({
   isRunning = false,
   isLoading = false,
   bare = false,
+  rates = false,
 }: {
   height?: string
+  /** Records a thumb on a reply, as the app does, so the thumbs show. */
+  rates?: boolean
   /** No box of its own, for a thread that sits in the workspace frame. */
   bare?: boolean
   messages: ThreadMessageLike[]
@@ -98,6 +101,7 @@ function FixtureThread({
     messages,
     onNew: noop,
     suggestions,
+    ...(rates ? { adapters: { feedback: { submit: noop } } } : {}),
   })
 
   return (
@@ -661,6 +665,25 @@ const CREATE_REMINDER_STATES = decisionStates(
   refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
+/** Two replies with words: one the owner rated up, one not yet rated. */
+const RATED: ThreadMessageLike[] = [
+  ask("What is live now?"),
+  {
+    content: [
+      { text: "Version 3 is live, with your Saturday hours.", type: "text" },
+    ],
+    metadata: { submittedFeedback: { type: "positive" } },
+    role: "assistant",
+    status: DONE,
+  },
+  ask("And the prices page?"),
+  {
+    content: [{ text: "It shows the hourly rate you gave.", type: "text" }],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** A new owner's onboarding, two answers in and waiting on the third. */
 const ONBOARDING: ThreadMessageLike[] = [
   on("27T09:00:00.000", {
@@ -1007,6 +1030,10 @@ const assistantCatalog = [
       ),
     })
   ),
+  {
+    name: "ReplyFeedback",
+    render: () => <FixtureThread height="h-[30rem]" messages={RATED} rates />,
+  },
   {
     name: "CosReads",
     render: () => (

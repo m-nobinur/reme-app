@@ -717,6 +717,24 @@ it("renames and archives with a PATCH of one field", async () => {
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ archived: true })
 })
 
+it("rates a reply with a POST keyed by the press", async () => {
+  answers[`POST /conversations/${CONVERSATION}/feedback`] = new Response(null, {
+    status: 204,
+  })
+  await apiSource.rateMessage(
+    ORG,
+    CONVERSATION,
+    { message_id: "msg_2", rating: "down" },
+    "press-1"
+  )
+  expect(calls[0]?.init?.method).toBe("POST")
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    message_id: "msg_2",
+    rating: "down",
+  })
+  expect(headerOf(calls[0], "idempotency-key")).toBe("press-1")
+})
+
 it("reads a conversation's messages, oldest first, as stored", async () => {
   const message = {
     id: "msg_1",

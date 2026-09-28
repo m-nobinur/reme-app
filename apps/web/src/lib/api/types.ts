@@ -9,6 +9,7 @@ import type {
   DerivedReminder,
   FactRecord,
   FactValueKey,
+  MessageFeedback,
   Reminder,
 } from "@workspace/contracts"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
@@ -304,6 +305,13 @@ export type OwnerDataSource = {
     orgId: string,
     id: string
   ) => Promise<TransportedMessage[]>
+  /** The owner's thumb on a reply. `key` is the press's own, so a replay records nothing. */
+  rateMessage: (
+    orgId: string,
+    id: string,
+    feedback: MessageFeedback,
+    key: string
+  ) => Promise<void>
   /**
    * One chat turn, its JSON body as the owner sent it, answered as
    * `apps/api` answers it: the stream on success, the refusal otherwise,
