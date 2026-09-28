@@ -1,6 +1,6 @@
 import type { FlueObservation } from "@flue/runtime"
 import { EventEnvelope } from "@workspace/contracts"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { contextHash, deriveContext } from "../src/derive.ts"
 import { createTee, type EventSink, redact } from "../src/tee.ts"
 
@@ -48,6 +48,10 @@ function memorySink(seed: number | null = null) {
 }
 
 describe("the observe tee", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("appends every runtime event in seq order under waitUntil, seeded from the sink", async () => {
     const { sink, rows } = memorySink(6)
     const waited: Promise<unknown>[] = []
@@ -144,6 +148,19 @@ describe("the observe tee", () => {
       ["runtime.agent_start", 1],
       ["runtime.agent_end", 2],
     ])
+  })
+
+  it("mints event ids that sort in write order within one millisecond", async () => {
+    // A Worker's clock stands still within a request; this one does too.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() })
+    const { sink, rows } = memorySink()
+    const waited: Promise<unknown>[] = []
+    const tee = createTee({ sink, ids, waitUntil: (p) => waited.push(p) })
+    for (let i = 0; i < 200; i++) tee.emit("runtime.probe", { i })
+    await Promise.all(waited)
+    const written = rows.map((r) => r.event_id)
+    expect(written).toHaveLength(200)
+    expect([...written].sort()).toEqual(written)
   })
 
   it("keeps the redaction pure: the same observation redacts the same way", () => {

@@ -25,10 +25,12 @@ export type AppendSessionEvent = AppendEvent & {
 const monotonic = /* @__PURE__ */ monotonicFactory()
 
 /**
- * The repo's one ULID source (ADR-034). `event_id` is the append order, and a
- * Worker's clock stands still within a request, so plain `ulid()` would order
- * same-millisecond ids at random. The monotonic factory increments the random
- * part instead, so ids made in one isolate sort in the order they were made.
+ * The ULID source for everything that imports `@workspace/db` (ADR-034); the
+ * facade, which cannot, keeps its own monotonic factory. `event_id` is the
+ * append order, and a Worker's clock stands still within a request, so plain
+ * `ulid()` would order same-millisecond ids at random. The monotonic factory
+ * increments the random part instead, so ids made in one isolate sort in the
+ * order they were made.
  */
 export function newUlid(): string {
   return monotonic()
