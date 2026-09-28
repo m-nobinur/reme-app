@@ -52,6 +52,16 @@ describe("a title from the owner's first message", () => {
     expect([...(titleFrom(emoji) as string)].length).toBe(TITLE_MAX)
   })
 
+  it("counts code points at the 59-character boundary", () => {
+    const whole = `${"a".repeat(57)} \u{1F9FD}`
+    expect([...whole].length).toBe(59)
+    expect(titleFrom(whole)).toBe(whole)
+    expect(titleFrom(`${whole}b`)).toBe("a".repeat(57))
+    expect(titleFrom(`${"a".repeat(58)}\u{1F9FD}b`)).toBe(
+      `${"a".repeat(58)}\u{1F9FD}`
+    )
+  })
+
   it("gives nothing for text with no words", () => {
     expect(titleFrom(" ‮\u0007 ")).toBeNull()
   })
@@ -224,6 +234,28 @@ describe.skipIf(!url)(
         "message.not_found"
       )
       expect(await feedbackEvents(id)).toEqual([])
+    })
+
+    it("answers 404 for another conversation's reply", async () => {
+      const id = await thread()
+      const other = Conversation.parse(
+        await (await call("/conversations", keyed("POST"))).json()
+      ).id
+      expect(
+        await appendMessages(kit, me.orgId, other, [
+          message("ou", "user", null, [{ type: "text", text: "Hi" }]),
+          message("ob", "assistant", "ou", [
+            { type: "text", text: "Hello.", state: "done" },
+          ]),
+        ])
+      ).toBeNull()
+      const done = await rate(id, "ob", "up")
+      expect(done.status).toBe(404)
+      expect(ErrorEnvelope.parse(await done.json()).code).toBe(
+        "message.not_found"
+      )
+      expect(await feedbackEvents(id)).toEqual([])
+      expect(await feedbackEvents(other)).toEqual([])
     })
 
     it("answers 404 for a conversation the org does not hold", async () => {
