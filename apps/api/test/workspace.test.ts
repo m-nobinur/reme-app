@@ -1276,9 +1276,24 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 
     it("gives an org with no team its team before routing", async () => {
       const bare = await owner(kit, url as string, "bare")
+      // An org made before the team had neither the rows nor their hires.
+      // The hires are append-only for `reme_app`, so this deletes as the
+      // connecting role, which row security does not scope: every statement
+      // names the org.
       await kit.withOrg({ orgId: bare.orgId }, async (db) => {
-        await db.delete(staff).where(eq(staff.staffCode, "DEV-001"))
-        await db.delete(staff).where(eq(staff.staffCode, "COS-001"))
+        await db.execute(sql`reset role`)
+        const team = sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${bare.orgId} and ${staff.staffCode} in ('DEV-001', 'COS-001'))`
+        await db.execute(
+          sql`delete from staff_events where staff_id in ${team}`
+        )
+        await db.execute(sql`delete from events where staff_id in ${team}`)
+        for (const code of ["DEV-001", "COS-001"]) {
+          await db
+            .delete(staff)
+            .where(
+              sql`${staff.orgId} = ${bare.orgId} and ${staff.staffCode} = ${code}`
+            )
+        }
       })
       await bare.call(creating(bare), "/changes", json({ text: "Build it." }))
       const codes = await kit.withOrg({ orgId: bare.orgId }, (db) =>

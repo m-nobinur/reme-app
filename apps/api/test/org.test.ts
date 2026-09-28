@@ -4,15 +4,18 @@ import {
   conversationMessages,
   conversations,
   eq,
+  events,
   memberships,
   orgs,
   resolveOrg,
   sql,
   staff,
+  staffEvents,
   tenancy,
   users,
 } from "@workspace/db"
 import { brightclean, emptyco } from "@workspace/db/fixtures"
+import { clearOrgs, type Tx } from "@workspace/db/fixtures/seed"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"
@@ -217,26 +220,75 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   const admin = postgres(url as string, { max: 1 })
 
   /**
-   * An org this suite wrote, gone: its onboarding conversation first, then
-   * staff whatever the codes, then the membership an owner row points at,
-   * then the org. A run that failed halfway leaves nothing the next run
-   * trips on.
+   * The orgs this suite wrote, gone, through the probe cleanup's own
+   * `clearOrgs`. Their hires are append-only rows `reme_app` cannot delete, so
+   * this leaves the app role for the connecting one, the migrator role
+   * `clearOrgs` is written for (ADR-032's amendment). A run that failed
+   * halfway leaves nothing the next run trips on.
    */
-  const drop = (dropped: string) =>
-    kit.withOrg({ orgId: dropped }, async (db) => {
-      await db.delete(conversationMessages)
-      await db.delete(conversations)
-      for (;;) {
-        const gone = await db
-          .delete(staff)
-          .where(
-            sql`${staff.id} not in (select ${staff.managerId} from ${staff} where ${staff.managerId} is not null)`
-          )
-        if ((gone as unknown as { count: number }).count === 0) break
-      }
-      await db.delete(memberships).where(eq(memberships.orgId, dropped))
-      await db.delete(orgs).where(eq(orgs.id, dropped))
+  const drop = (dropped: string[]) =>
+    kit.withOrg({ orgId: dropped[0] as string }, async (db) => {
+      await db.execute(sql`reset role`)
+      await clearOrgs(db as unknown as Tx, dropped, [])
     })
+
+  /** What each table holds for an org, read as the connecting role. */
+  const left = async (id: string) => {
+    const [row] = await admin<Record<string, number>[]>`
+      select
+        (select count(*)::int from orgs where id = ${id}) as orgs,
+        (select count(*)::int from staff where org_id = ${id}) as staff,
+        (select count(*)::int from staff_events where org_id = ${id}) as staff_events,
+        (select count(*)::int from events where org_id = ${id}) as events`
+    return row
+  }
+
+  /** The org's hires: its `staff_events` rows and its `staff.hired` events. */
+  const history = (id: string) =>
+    kit.withOrg({ orgId: id }, async (db) => ({
+      rows: await db
+        .select({
+          staffId: staffEvents.staffId,
+          kind: staffEvents.kind,
+          actor: staffEvents.actorStaffId,
+        })
+        .from(staffEvents),
+      logged: await db
+        .select({
+          staffId: events.staffId,
+          type: events.type,
+          session: events.sessionId,
+          seq: events.seq,
+          assignment: events.assignmentId,
+          taint: events.taint,
+          payload: events.payload,
+        })
+        .from(events)
+        .where(eq(events.type, "staff.hired"))
+        .orderBy(asc(events.eventId)),
+    }))
+
+  /** An org with its owner's membership and nothing else, committed. */
+  const bare = async (name: string) => {
+    const id = crypto.randomUUID()
+    others.push(id)
+    const userId = await person()
+    await kit.withOrg({ orgId: id }, async (db) => {
+      await db.insert(orgs).values({
+        id,
+        slug: `${name.toLowerCase()}-${id.slice(0, 8)}`,
+        name: `${name} Cleaning Co. (fixture)`,
+      })
+      await db.insert(memberships).values({
+        orgId: id,
+        userId,
+        workosMembershipId: `om_probe_${name.toLowerCase()}_${id}`,
+        role: "owner",
+        status: "active",
+      })
+    })
+    return { id, userId }
+  }
 
   let org: Org
   let orgId: string
@@ -261,7 +313,8 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
       workosUserId: WORKOS_USER,
       workosOrganizationId: `${WORKOS_ORG}_1`,
     })
-    for (const id of [...others, ...(written ? [written] : [])]) await drop(id)
+    const dropped = [...others, ...(written ? [written] : [])]
+    if (dropped.length > 0) await drop(dropped)
     await admin.end()
     await kit.close()
   }, 60_000)
@@ -384,8 +437,37 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(stray?.n).toBe(0)
   })
 
+  it("records each of the three hires once, in both logs", async () => {
+    const rows = await team(orgId)
+    const owner = rows.find((row) => row.code === "OWN-001")
+    const { rows: hires, logged } = await history(orgId)
+    // Three, the replay in the case above included: the golden fixtures'
+    // shape, with the root as the actor of every hire.
+    expect(hires).toHaveLength(3)
+    expect(logged).toHaveLength(3)
+    expect(new Set(hires.map((h) => h.staffId))).toEqual(
+      new Set(rows.map((row) => row.id))
+    )
+    for (const hire of hires) {
+      expect(hire).toMatchObject({ kind: "hired", actor: owner?.id })
+    }
+    // Hired in order, root first, and outside any session or assignment.
+    expect(logged).toEqual(
+      ["OWN-001", "COS-001", "DEV-001"].map((code) => ({
+        staffId: rows.find((row) => row.code === code)?.id,
+        type: "staff.hired",
+        session: null,
+        seq: null,
+        assignment: null,
+        taint: [],
+        payload: {},
+      }))
+    )
+  })
+
   it("adds nobody when the team is ensured again", async () => {
     const was = await team(orgId)
+    const recorded = await history(orgId)
     await kit.withOrg({ orgId }, async (db) =>
       ensureStartingTeam(db, {
         orgId,
@@ -394,28 +476,15 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
       })
     )
     expect(await team(orgId)).toEqual(was)
+    expect(await history(orgId)).toEqual(recorded)
   })
 
   it("puts the team under a root that has another code", async () => {
     // An org made before this, whose owner row is not OWN-001. The owner insert
     // meets the one-root index rather than the code, and has to stand aside
     // rather than fail the call.
-    const other = crypto.randomUUID()
-    others.push(other)
-    const userId = await person()
+    const { id: other, userId } = await bare("Older")
     await kit.withOrg({ orgId: other }, async (db) => {
-      await db.insert(orgs).values({
-        id: other,
-        slug: `older-${other.slice(0, 8)}`,
-        name: "Older Cleaning Co. (fixture)",
-      })
-      await db.insert(memberships).values({
-        orgId: other,
-        userId,
-        workosMembershipId: `om_probe_older_${other}`,
-        role: "owner",
-        status: "active",
-      })
       await db.insert(staff).values({
         orgId: other,
         staffCode: "HUM-001",
@@ -439,5 +508,66 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     const [chief, developer, root] = rows
     expect(chief?.managerId).toBe(root?.id)
     expect(developer?.managerId).toBe(chief?.id)
+    // Two hires, acted by the root that was already there. The root itself
+    // predates recorded hires and gets no record dated today.
+    const { rows: hires, logged } = await history(other)
+    expect(hires.map((h) => h.staffId).sort()).toEqual(
+      [chief?.id, developer?.id].sort()
+    )
+    for (const hire of hires) expect(hire.actor).toBe(root?.id)
+    expect(logged.map((e) => e.staffId)).toEqual([chief?.id, developer?.id])
+  })
+
+  it("writes the team and its history together or not at all", async () => {
+    const { id, userId } = await bare("Failing")
+    // The event-log write fails after the staff rows and the staff_events rows
+    // are in. The whole call has to go with it.
+    await expect(
+      kit.withOrg({ orgId: id }, (db) => {
+        const failing = new Proxy(db, {
+          get: (target, key) => {
+            if (key === "insert") {
+              return (table: unknown) => {
+                if (table === events) throw new Error("the event write failed")
+                return target.insert(table as typeof staff)
+              }
+            }
+            const value = Reflect.get(target, key)
+            return typeof value === "function" ? value.bind(target) : value
+          },
+        })
+        return ensureStartingTeam(failing, {
+          orgId: id,
+          userId,
+          ownerName: "Failing Owner",
+        })
+      })
+    ).rejects.toThrow("the event write failed")
+    expect(await left(id)).toEqual({
+      orgs: 1,
+      staff: 0,
+      staff_events: 0,
+      events: 0,
+    })
+  })
+
+  it("leaves nothing of a signed-up org after the probe cleanup", async () => {
+    const { id, userId } = await bare("Cleared")
+    await kit.withOrg({ orgId: id }, (db) =>
+      ensureStartingTeam(db, { orgId: id, userId, ownerName: "Cleared Owner" })
+    )
+    expect(await left(id)).toEqual({
+      orgs: 1,
+      staff: 3,
+      staff_events: 3,
+      events: 3,
+    })
+    await drop([id])
+    expect(await left(id)).toEqual({
+      orgs: 0,
+      staff: 0,
+      staff_events: 0,
+      events: 0,
+    })
   })
 })
