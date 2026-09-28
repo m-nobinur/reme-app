@@ -356,17 +356,26 @@ function TitleEditor({ value, onSave, onCancel }: Renaming) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
-  // Saved or not, a rename hands focus back to the ··· button that started
-  // it, which is back in the title bar by the time this form is gone.
+  // A rename the owner saves or cancels hands focus back to the ··· button
+  // that started it, which is back in the title bar a frame after this form
+  // is gone. One that ends because they went elsewhere leaves focus alone.
   const form = useRef<HTMLFormElement>(null)
-  useEffect(() => {
+  const refocus = () => {
     const bar = form.current?.parentElement
-    return () => {
+    requestAnimationFrame(() =>
       bar
         ?.querySelector<HTMLElement>('[data-slot="conversation-actions"]')
         ?.focus()
-    }
-  }, [])
+    )
+  }
+  const cancel = () => {
+    refocus()
+    onCancel()
+  }
+  // The field takes any length; the title keeps what `titleText` keeps, and
+  // says so before the owner saves, rather than cutting what they paste.
+  const cut =
+    text.replace(/\s+/g, " ").trim().length > (titleText(text) ?? "").length
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -379,6 +388,7 @@ function TitleEditor({ value, onSave, onCancel }: Renaming) {
     setError(null)
     try {
       await onSave(title)
+      refocus()
     } catch {
       setError("That did not save. Try again.")
       setPending(false)
@@ -400,10 +410,9 @@ function TitleEditor({ value, onSave, onCancel }: Renaming) {
         autoFocus
         className="h-8 min-w-0 flex-1"
         disabled={pending}
-        maxLength={120}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onCancel()
+          if (event.key === "Escape") cancel()
         }}
         value={text}
       />
@@ -412,13 +421,21 @@ function TitleEditor({ value, onSave, onCancel }: Renaming) {
       </Button>
       <Button
         disabled={pending}
-        onClick={onCancel}
+        onClick={cancel}
         size="sm"
         type="button"
         variant="ghost"
       >
         Cancel
       </Button>
+      {cut && !error ? (
+        <p
+          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-muted-foreground text-xs shadow-sm"
+          role="status"
+        >
+          Titles keep their first 120 characters.
+        </p>
+      ) : null}
       {error ? (
         // Below the bar, over the page: the bar has one row, and a phone has
         // no room in it for a second.

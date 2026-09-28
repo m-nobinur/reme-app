@@ -3,6 +3,7 @@ import {
   RuntimeAdapterProvider,
   useAui,
 } from "@assistant-ui/react"
+import { titleText } from "@workspace/ui/lib/title"
 import { type PropsWithChildren, useMemo } from "react"
 import {
   createConversation,
@@ -76,7 +77,10 @@ export const conversationList: RemoteThreadListAdapter = {
     return toMetadata(found)
   },
   rename: async (remoteId, title) => {
-    await updateConversation({ data: { id: remoteId, title } })
+    // The same rule the top bar's form and the server apply.
+    const kept = titleText(title)
+    if (!kept) throw new Error("A title needs words.")
+    await updateConversation({ data: { id: remoteId, title: kept } })
   },
   archive: async (remoteId) => {
     await updateConversation({ data: { id: remoteId, archived: true } })
