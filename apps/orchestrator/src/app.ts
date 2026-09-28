@@ -1029,7 +1029,8 @@ function parseValue(value: unknown): unknown {
  * A preview link for the assignment's latest revision (ADR-032): a
  * `PreviewClaim` signed over the org this route resolved, the site and
  * revision it found and the one host the router will honour it on,
- * `preview-v{n}-{slug}` under this environment's suffix (ADR-030), good for
+ * `preview-v{n}-{slug}` under this environment's suffix (ADR-030), the slug's
+ * base cut if the label would pass 63 characters (`previewHost`), good for
  * a day. A revision still `building` has no artifact to show and is refused.
  */
 bridge.get("/:id/preview", async (c) => {
