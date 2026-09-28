@@ -63,7 +63,9 @@ export function startPolling({
   let failed = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let inFlight: Promise<void> | null = null
-  let again = false
+  // The read queued behind one already under way, shared by every caller
+  // who asked while it was.
+  let queued: Promise<void> | null = null
   let stopped = false
   // Bumped by `adopt`: a read that began before it answers for an older
   // workspace than the one adopted, so its answer is dropped.
@@ -91,9 +93,13 @@ export function startPolling({
     clearTimeout(timer)
     if (inFlight) {
       // A read already under way started before whatever asked for this
-      // one, so its answer may be stale: read once more when it lands.
-      again = true
-      return inFlight
+      // one, so its answer may be stale: read once more when it lands, and
+      // answer the caller only when that read has.
+      queued ??= inFlight.then(() => {
+        queued = null
+        return stopped ? undefined : tick()
+      })
+      return queued
     }
     const began = generation
     inFlight = (async () => {
@@ -116,12 +122,8 @@ export function startPolling({
       }
     })().finally(() => {
       inFlight = null
-      if (again && !stopped) {
-        again = false
-        void tick()
-      } else {
-        schedule()
-      }
+      // With a read queued, that read schedules the next one.
+      if (!queued) schedule()
     })
     return inFlight
   }

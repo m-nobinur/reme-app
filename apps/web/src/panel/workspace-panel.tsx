@@ -1,12 +1,18 @@
 import { getRouteApi, Link } from "@tanstack/react-router"
-import type { BuildSummary, DecisionRequest } from "@workspace/contracts"
+import type {
+  BuildSummary,
+  DecisionRequest,
+  Reminder,
+} from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
+  AddReminder,
   ApprovalItem,
   ComingUp,
   PanelBlank,
   type Preview,
   QuestionItem,
+  ReminderNote,
   Reminders,
   type Thumbnail,
   WaitingOnYou,
@@ -15,11 +21,13 @@ import {
 } from "@workspace/ui/components/live-panel"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { cn } from "@workspace/ui/lib/utils"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import {
   answerQuestion,
   askForChanges,
   cancelBuild,
+  completeReminder,
+  createReminder,
   decideApproval,
   getPreview,
 } from "@/lib/api/server"
@@ -27,7 +35,7 @@ import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { onboardingFor } from "@/lib/onboarding"
-import { anchorOf, reminderRows } from "@/lib/reminders"
+import { anchorOf, dueAtOf, noteOf, reminderRows } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
 
@@ -333,8 +341,114 @@ function FirstStep({ workspace }: { workspace: Workspace }) {
   )
 }
 
+/**
+ * The reader's time zone, or null on the server and while hydrating, when it
+ * is not known. The server renders no reminder times at all rather than UTC
+ * ones the browser would then replace.
+ */
+const noSubscription = () => () => undefined
+function useBrowserZone(): string | null {
+  return useSyncExternalStore(
+    noSubscription,
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => null
+  )
+}
+
+/** A written reminder with its own Done, shown done while the write runs. */
+function Completable({
+  note,
+  zone,
+  refresh,
+  announce,
+}: {
+  note: Reminder
+  zone: string | null
+  refresh: Refresh
+  announce: Announce
+}) {
+  const { pending, error, run } = useWrite<"done">(refresh, announce)
+  return (
+    <ReminderNote
+      {...noteOf(note, zone)}
+      error={error}
+      onDone={() =>
+        void run("done", async () => {
+          const outcome = await completeReminder({ data: { id: note.id } })
+          if (outcome.done) announce("Marked done.")
+          return outcome
+        })
+      }
+      pending={pending !== null}
+    />
+  )
+}
+
+/** The add form: one key per reminder until it lands, as `Answerable` has. */
+function Addable({
+  refresh,
+  announce,
+}: {
+  refresh: Refresh
+  announce: Announce
+}) {
+  const { pending, error, run } = useWrite<"add">(refresh)
+  const [keys] = useState(attemptKeys)
+  return (
+    <AddReminder
+      error={error}
+      onAdd={(title, due) =>
+        run("add", async () => {
+          const dueAt = dueAtOf(due)
+          const outcome = await createReminder({
+            data: { title, dueAt, key: keys.key({ title, dueAt }) },
+          })
+          if (outcome.done) {
+            keys.done()
+            announce("Added to your reminders.")
+          }
+          return outcome
+        })
+      }
+      pending={pending !== null}
+    />
+  )
+}
+
+/** Written reminders first, in the api's order, then the derived ones. */
+function ReminderSection({
+  workspace,
+  shownBuild,
+  refresh,
+}: {
+  workspace: Workspace
+  shownBuild: string | null
+  refresh: Refresh
+}) {
+  const zone = useBrowserZone()
+  const [status, setStatus] = useState<string | null>(null)
+  return (
+    <Reminders
+      action={<Addable announce={setStatus} refresh={refresh} />}
+      items={reminderRows(workspace, shownBuild, zone)}
+      status={status}
+    >
+      {workspace.reminderNotes.map((note) => (
+        <Completable
+          announce={setStatus}
+          key={note.id}
+          note={note}
+          refresh={refresh}
+          zone={zone}
+        />
+      ))}
+    </Reminders>
+  )
+}
+
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
+  const { active } = frame.useLoaderData()
   const [status, setStatus] = useState<string | null>(null)
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
   const stale = failed
@@ -352,15 +466,25 @@ export function WorkspacePanel() {
   const { attention, builds, live, host } = workspace
   if (!live && builds.length === 0 && attention.length === 0) {
     return (
-      <PanelBlank
-        action={<FirstStep workspace={workspace} />}
-        description={
-          workspace.missingFacts.length
-            ? "Tell Reme about your business in the chat, then ask it to build your website."
-            : "Ask Reme in the chat to build your website."
-        }
-        steps={firstSteps(workspace)}
-      />
+      <>
+        <PanelBlank
+          action={<FirstStep workspace={workspace} />}
+          description={
+            workspace.missingFacts.length
+              ? "Tell Reme about your business in the chat, then ask it to build your website."
+              : "Ask Reme in the chat to build your website."
+          }
+          steps={firstSteps(workspace)}
+        />
+        {/* With no organisation there is nowhere to add one to. */}
+        {active ? (
+          <ReminderSection
+            refresh={refresh}
+            shownBuild={null}
+            workspace={workspace}
+          />
+        ) : null}
+      </>
     )
   }
 
@@ -419,8 +543,10 @@ export function WorkspacePanel() {
         )}
       </WaitingOnYou>
       <ComingUp items={comingUp(attention)} />
-      <Reminders
-        items={reminderRows(workspace, current?.assignment_id ?? null)}
+      <ReminderSection
+        refresh={refresh}
+        shownBuild={current?.assignment_id ?? null}
+        workspace={workspace}
       />
       {live || host ? (
         <YourWebsite host={host} live={live} thumbnail={thumbnail} />

@@ -18,12 +18,16 @@ const DATE = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 })
 
-const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+const DATE_TIME_PARTS = {
   day: "numeric",
   month: "short",
   year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
+} as const
+
+const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+  ...DATE_TIME_PARTS,
   timeZone: "UTC",
 })
 
@@ -36,15 +40,24 @@ export function formatDate(value: string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : DATE.format(date)
 }
 
-/** `26 Aug 2026, 08:05`. Used where the hour changes what the reader does. */
+/**
+ * `26 Aug 2026, 08:05`. Used where the hour changes what the reader does.
+ * In UTC unless the caller knows the reader's zone and passes it.
+ */
 export function formatDateTime(
-  value: string | null | undefined
+  value: string | null | undefined,
+  timeZone = "UTC"
 ): string | null {
   if (!value) {
     return null
   }
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : DATE_TIME.format(date)
+  if (Number.isNaN(date.getTime())) return null
+  return timeZone === "UTC"
+    ? DATE_TIME.format(date)
+    : new Intl.DateTimeFormat("en-GB", { ...DATE_TIME_PARTS, timeZone }).format(
+        date
+      )
 }
 
 /**

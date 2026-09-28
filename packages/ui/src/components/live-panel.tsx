@@ -8,6 +8,7 @@ import {
   type AssignmentState,
   type DecisionRequest,
   GOAL_MAX,
+  Reminder,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { Button } from "@workspace/ui/components/button"
@@ -27,6 +28,7 @@ import {
   isValidElement,
   type MouseEvent,
   type ReactNode,
+  type Ref,
   useEffect,
   useId,
   useRef,
@@ -48,16 +50,24 @@ const LINK =
 function PanelSection({
   title,
   count,
+  headingRef,
   children,
 }: {
   title: string
   count?: number
+  /** Makes the heading focusable by script, for focus that loses its row. */
+  headingRef?: Ref<HTMLHeadingElement>
   children: ReactNode
 }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
+      <h2
+        className="flex items-baseline gap-2 rounded-sm font-semibold text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring"
+        id={id}
+        ref={headingRef}
+        tabIndex={headingRef ? -1 : undefined}
+      >
         {title}
         {count ? (
           <span className="font-normal text-muted-foreground tabular-nums">
@@ -823,32 +833,217 @@ function jump(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 /**
- * What needs the owner soon, in their words, each row linked to the item it
- * is about when the panel shows that item. Nothing renders when there are
- * none.
+ * A reminder someone wrote down, completed in place. The title is the
+ * owner's text, rendered as text. `due` is already in the reader's own zone,
+ * or null while that zone is not known, so one time is never shown two ways.
+ * Pending shows the reminder as done until the list is read again; a failure
+ * puts it back, with the reason under it.
  */
-function Reminders({ items }: { items: ReminderRow[] }) {
-  if (items.length === 0) return null
+function ReminderNote({
+  title,
+  due,
+  byAssistant,
+  onDone,
+  pending: busy = false,
+  error = null,
+}: {
+  title: string
+  due: string | null
+  /** Set by the assistant (Reme to the owner) rather than by the owner. */
+  byAssistant: boolean
+  onDone: () => void
+  pending?: boolean
+  error?: string | null
+}) {
   return (
-    <PanelSection title="Reminders">
-      <ul className="flex flex-col divide-y divide-border">
-        {items.map((item) => (
-          <li className="flex flex-col py-2" key={item.id}>
-            {item.href ? (
-              <a
-                className="self-start rounded-sm py-0.5 text-sm underline decoration-muted-foreground underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring"
-                href={item.href}
-                onClick={jump}
-              >
-                {item.text}
-              </a>
-            ) : (
-              <span className="text-sm">{item.text}</span>
-            )}
-            {item.detail ? <span className={META}>{item.detail}</span> : null}
-          </li>
-        ))}
-      </ul>
+    <div
+      className="flex items-start gap-3 py-2"
+      data-slot="reminder-note"
+      data-state={busy ? "done" : "open"}
+    >
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span
+          className={cn(
+            "wrap-break-word text-sm",
+            busy && "text-muted-foreground line-through"
+          )}
+        >
+          {title}
+        </span>
+        {due ? <span className={META}>Due {due}</span> : null}
+        {byAssistant ? <span className={META}>Set by Reme</span> : null}
+        {error ? (
+          <p className="text-[0.8125rem] text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <Button
+        aria-label={`Done: ${title}`}
+        disabled={busy}
+        // Focus stays on the button while it waits, so a failure hands it back.
+        focusableWhenDisabled
+        onClick={onDone}
+        size="sm"
+        variant="outline"
+      >
+        Done
+      </Button>
+    </div>
+  )
+}
+
+const TITLE_MAX = Reminder.shape.title.maxLength ?? 200
+
+/**
+ * Write a reminder in place: what, and optionally when, as the owner's own
+ * local time from the native picker. `onAdd` answers whether it was added;
+ * the form clears only then, so a refusal keeps what was typed.
+ */
+function AddReminder({
+  onAdd,
+  pending: busy = false,
+  error = null,
+}: {
+  /** `due` is the picker's value as typed (`2026-10-03T14:00`), or empty. */
+  onAdd: (title: string, due: string) => Promise<boolean>
+  pending?: boolean
+  error?: string | null
+}) {
+  const id = useId()
+  const [invalid, setInvalid] = useState<string | null>(null)
+  const shown = invalid ?? error
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const title = String(data.get("title") ?? "").trim()
+    if (!title) {
+      setInvalid("Write what to remember first.")
+      return
+    }
+    setInvalid(null)
+    void onAdd(title, String(data.get("due") ?? "")).then((added) => {
+      if (added) form.reset()
+    })
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-2"
+      data-slot="add-reminder"
+      noValidate
+      onSubmit={submit}
+    >
+      <Field
+        aria-invalid={invalid ? true : undefined}
+        autoComplete="off"
+        id={`${id}-title`}
+        label="Add a reminder"
+        maxLength={TITLE_MAX}
+        name="title"
+        readOnly={busy}
+      />
+      <Field
+        id={`${id}-due`}
+        label="When (optional)"
+        name="due"
+        readOnly={busy}
+        type="datetime-local"
+      />
+      {shown ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {shown}
+        </p>
+      ) : null}
+      <Button
+        className="self-start"
+        disabled={busy}
+        focusableWhenDisabled
+        size="sm"
+        type="submit"
+        variant="outline"
+      >
+        {pending(busy, "Add reminder", "Adding")}
+      </Button>
+    </form>
+  )
+}
+
+/**
+ * What the owner has to remember: the reminders written down (the children,
+ * `ReminderNote`s, soonest due first as the api lists them), then what the
+ * api derived, each linked to the item it is about when the panel shows it.
+ * `action` is the form that adds one, and the section's blank-state action.
+ */
+function Reminders({
+  items,
+  children,
+  action = null,
+  status = null,
+}: {
+  items: ReminderRow[]
+  children?: ReactNode
+  action?: ReactNode
+  status?: string | null
+}) {
+  const notes = Children.toArray(children).filter(isValidElement)
+  const heading = useRef<HTMLHeadingElement>(null)
+  // The note that last held focus. When it leaves the list (marked done)
+  // and focus went with it, focus moves to the heading, not the page.
+  const focused = useRef<string | null>(null)
+  useEffect(() => {
+    const key = focused.current
+    if (key === null || notes.some((note) => note.key === key)) return
+    focused.current = null
+    if (document.activeElement === document.body) heading.current?.focus()
+  })
+
+  return (
+    <PanelSection headingRef={heading} title="Reminders">
+      <p className="text-sm empty:hidden" role="status">
+        {status}
+      </p>
+      {notes.length || items.length ? (
+        <ul className="flex flex-col divide-y divide-border">
+          {notes.map((note) => (
+            <li
+              key={note.key}
+              onBlur={(event) => {
+                if (event.relatedTarget) focused.current = null
+              }}
+              onFocus={() => {
+                focused.current = note.key
+              }}
+            >
+              {note}
+            </li>
+          ))}
+          {items.map((item) => (
+            <li className="flex flex-col py-2" key={item.id}>
+              {item.href ? (
+                <a
+                  className="self-start rounded-sm py-0.5 text-sm underline decoration-muted-foreground underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring"
+                  href={item.href}
+                  onClick={jump}
+                >
+                  {item.text}
+                </a>
+              ) : (
+                <span className="text-sm">{item.text}</span>
+              )}
+              {item.detail ? <span className={META}>{item.detail}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={META}>
+          Nothing to remember yet. Add one here, or ask Reme in the chat to
+          remind you.
+        </p>
+      )}
+      {action}
     </PanelSection>
   )
 }
@@ -941,12 +1136,14 @@ function PanelBlank({
 
 export type { Preview, ReminderRow, Thumbnail }
 export {
+  AddReminder,
   AnswerInputs,
   ApprovalItem,
   approvalDecision,
   ComingUp,
   PanelBlank,
   QuestionItem,
+  ReminderNote,
   Reminders,
   WaitingOnYou,
   WorkingOn,

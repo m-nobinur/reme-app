@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
 
 /**
@@ -221,4 +222,97 @@ test("the site thumbnail holds its space, and a broken one leaves the text", asy
   const failed = entry("YourWebsite screenshot failed")
   await expect(failed.getByRole("img")).toHaveCount(0)
   await expect(failed.getByText("Version 3 is live.")).toBeVisible()
+})
+
+/** Every state of a written reminder and of the add form. */
+const REMINDER_ENTRIES = [
+  "Reminders",
+  "Reminders empty",
+  "ReminderNote",
+  "ReminderNote set by Reme",
+  "ReminderNote undated",
+  "ReminderNote pending",
+  "ReminderNote failed",
+  "AddReminder",
+  "AddReminder submitting",
+  "AddReminder refused",
+  "AddReminder succeeded",
+]
+
+for (const theme of ["light", "dark"] as const) {
+  test(`reminders have no accessibility violations in ${theme}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000)
+    for (const width of [390, 768, 1440]) {
+      for (const entry of REMINDER_ENTRIES) {
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
+        await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .include(`[data-entry="${entry}"]`)
+          .analyze()
+        expect
+          .soft(
+            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+            JSON.stringify(results.violations, null, 2)
+          )
+          .toEqual([])
+      }
+    }
+  })
+}
+
+test("each written reminder has its own Done, named for it", async ({
+  page,
+}) => {
+  await open(page, "Reminders", 400)
+  await expect(
+    page.getByRole("button", { name: "Done: Send the Hartley Road quote" })
+  ).toBeVisible()
+  await expect(page.getByText("Set by Reme")).toHaveCount(1)
+  await expect(page.getByText("Due 2 Oct 2026, 14:00")).toBeVisible()
+  // Written reminders come before the derived ones.
+  await expect(page.locator("li").first()).toContainText(
+    "Call the supplier about eco sprays"
+  )
+})
+
+test("a reminder being marked done shows done, and keeps its button", async ({
+  page,
+}) => {
+  await open(page, "ReminderNote pending", 400)
+  await expect(page.locator('[data-slot="reminder-note"]')).toHaveAttribute(
+    "data-state",
+    "done"
+  )
+  const done = page.getByRole("button", {
+    name: "Done: Call the supplier about eco sprays",
+  })
+  await expect(done).toHaveAttribute("aria-disabled", "true")
+})
+
+test("a reminder is added in place, with a native date and time", async ({
+  page,
+}) => {
+  await open(page, "AddReminder", 400)
+  await expect(page.getByLabel("When (optional)")).toHaveAttribute(
+    "type",
+    "datetime-local"
+  )
+  await page.getByRole("button", { name: "Add reminder" }).click()
+  await expect(page.getByRole("alert")).toHaveText(
+    "Write what to remember first."
+  )
+  await expect(page.getByLabel("Add a reminder")).toHaveAttribute(
+    "aria-invalid",
+    "true"
+  )
+  await page.getByLabel("Add a reminder").fill("Book the van in")
+  await page.getByLabel("When (optional)").fill("2026-10-02T14:00")
+  await page.getByRole("button", { name: "Add reminder" }).click()
+  await expect(page.getByLabel("Add a reminder")).toHaveValue("")
+  await expect(page.getByLabel("When (optional)")).toHaveValue("")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
 })

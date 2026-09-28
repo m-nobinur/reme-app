@@ -1,4 +1,8 @@
-import type { DerivedReminder, FactValueKey } from "@workspace/contracts"
+import type {
+  DerivedReminder,
+  FactValueKey,
+  Reminder,
+} from "@workspace/contracts"
 import type { ReminderRow } from "@workspace/ui/components/live-panel"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
@@ -39,13 +43,32 @@ export const questionOf = (
   )
 
 /**
- * The panel's rows. A row links to its item only when the panel shows that
- * item: the approval or question in "Waiting on you", or the build in
- * "Working on" (`shownBuild`).
+ * A written reminder as the panel shows it. Its due time is in `zone`, the
+ * reader's own, and absent while that is unknown (the server's render), so
+ * the same time never shows first in UTC and then in local time.
+ */
+export const noteOf = (note: Reminder, zone: string | null) => ({
+  title: note.title,
+  due: zone ? formatDateTime(note.due_at, zone) : null,
+  byAssistant: note.source === "assistant",
+})
+
+/**
+ * The picker's local `2026-10-03T14:00` as an instant, read in the browser's
+ * own zone, or null for no time. A native picker gives a valid value or none.
+ */
+export const dueAtOf = (local: string): string | null =>
+  local ? new Date(local).toISOString() : null
+
+/**
+ * The panel's derived rows. A row links to its item only when the panel
+ * shows that item: the approval or question in "Waiting on you", or the build
+ * in "Working on" (`shownBuild`). Times are in `zone`, as `noteOf` has them.
  */
 export function reminderRows(
   workspace: Workspace,
-  shownBuild: string | null
+  shownBuild: string | null,
+  zone: string | null
 ): ReminderRow[] {
   const { attention, derivedReminders } = workspace
   const shown = (id: string) => attention.some((item) => item.id === id)
@@ -65,7 +88,9 @@ export function reminderRows(
           ? {
               id: `question-${reminder.request_id}`,
               text: `Answer the question about ${question.title.toLowerCase()}`,
-              detail: `Waiting on you since ${formatDateTime(question.raisedAt)}`,
+              detail: zone
+                ? `Waiting on you since ${formatDateTime(question.raisedAt, zone)}`
+                : null,
               href: `#${anchorOf.question(question.id)}`,
             }
           : {

@@ -8,6 +8,7 @@ import {
   Conversation,
   ConversationHistory,
   ConversationList,
+  type CreateReminderRequest,
   ErrorEnvelope,
   FactList,
   Org,
@@ -401,6 +402,7 @@ function workspaceOf(
     host: status.site.host,
     missingFacts: status.missing_facts,
     derivedReminders: status.reminders.derived,
+    reminderNotes: status.reminders.notes,
     etag,
   }
 }
@@ -484,11 +486,14 @@ const REFUSALS: Record<string, string> = {
   "change.build_busy":
     "A build is finishing. Ask again once it is ready for you.",
   "change.cancelled": "That change was cancelled. Ask for it again.",
+  "reminder.due_past": "That time has already passed.",
+  "reminder.due_far": "Pick a time within a year.",
+  "reminder.not_found": "That reminder is no longer open.",
 }
 const STALE = "That has changed since this page loaded. Look again and retry."
 
 /** Refusals that mean the item no longer waits on the owner. */
-const GONE = new Set(["answer.already_given"])
+const GONE = new Set(["answer.already_given", "reminder.not_found"])
 
 /** A write's answer as an outcome. */
 async function outcome(
@@ -572,6 +577,26 @@ async function requestChange(
   key: string
 ): Promise<WriteOutcome> {
   return await outcome(await post("/changes", { text }, key), "/changes")
+}
+
+async function createReminder(
+  _orgId: string,
+  input: CreateReminderRequest,
+  key: string
+): Promise<WriteOutcome> {
+  return await outcome(await post("/reminders", input, key), "/reminders")
+}
+
+async function completeReminder(
+  _orgId: string,
+  id: string
+): Promise<WriteOutcome> {
+  const path = `/reminders/${segment(id)}`
+  // Done is done: a second press is the same request.
+  return await outcome(
+    await post(path, { done: true }, `done:${id}`, "PATCH"),
+    path
+  )
 }
 
 async function conversations(): Promise<Conversation[]> {
@@ -681,6 +706,8 @@ export const apiSource: OwnerDataSource = {
   cancelBuild,
   preview,
   requestChange,
+  createReminder,
+  completeReminder,
   conversations,
   conversation,
   createConversation,
