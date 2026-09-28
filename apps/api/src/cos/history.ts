@@ -59,10 +59,11 @@ export type ContextPolicy = {
 
 /**
  * Version 2 escapes `<` in the context's workspace data, so the text inside
- * cannot close its `<data>` tag. Its numbers are version 1's.
+ * cannot close its `<data>` tag. Version 3 adds the Now line to the context.
+ * Both keep version 1's numbers.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "2",
+  version: "3",
   turns: 12,
   toolTurns: 2,
 }

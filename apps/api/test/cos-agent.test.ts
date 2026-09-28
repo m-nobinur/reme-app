@@ -3,6 +3,7 @@ import {
   type COS_TOOLS,
   CosToolResult,
   CosTurn,
+  CreateReminderRequest,
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
@@ -11,6 +12,7 @@ import {
   eq,
   events,
   failureCode,
+  reminders,
   sql,
   type Tenancy,
   tenancy,
@@ -42,12 +44,15 @@ import {
 import type { z } from "zod"
 import { type ChatDeps, chat } from "../src/chat.ts"
 import {
+  activeTools,
   type CosAgent,
   contextOf,
   costOf,
   DEFAULT_MODEL,
   INSTRUCTIONS,
+  knownZone,
   LIMITS,
+  messageTaint,
   priceOf,
   reservation,
   toolErrorText,
@@ -343,6 +348,56 @@ describe("the CoS's model and price", () => {
     ).toEqual(["inferred", "untrusted_input"])
   })
 
+  it("tells the model the owner's time at their offset, or UTC and that the zone is not known", () => {
+    const line = (zone: string | null, at: string) =>
+      contextOf("act", EMPTY, zone, new Date(at)).text.split("\n")[1]
+    expect(line("Europe/London", "2026-01-15T00:30:00Z")).toBe(
+      "Now: 2026-01-15T00:30:00+00:00 (Europe/London)"
+    )
+    expect(line("Europe/London", "2026-07-15T12:00:00.500Z")).toBe(
+      "Now: 2026-07-15T13:00:00+01:00 (Europe/London)"
+    )
+    expect(line("America/New_York", "2026-07-15T12:00:00Z")).toBe(
+      "Now: 2026-07-15T08:00:00-04:00 (America/New_York)"
+    )
+    expect(line("Asia/Kathmandu", "2026-01-15T12:00:00Z")).toBe(
+      "Now: 2026-01-15T17:45:00+05:45 (Asia/Kathmandu)"
+    )
+    const utc = line(null, "2026-07-15T12:00:00Z")
+    expect(utc).toBe(
+      "Now: 2026-07-15T12:00:00+00:00 (UTC; the owner's time zone is not known)"
+    )
+    // The time as written is one a reminder's due_at takes.
+    const written = (utc as string).split(" ")[1]
+    expect(CreateReminderRequest.shape.due_at.parse(written)).toBe(written)
+    expect(knownZone("Europe/London")).toBe(true)
+    expect(knownZone("Mars/Olympus_Mons")).toBe(false)
+  })
+
+  it("keeps create_reminder out of Ask mode", () => {
+    expect(activeTools("ask")).not.toContain("create_reminder")
+    expect(activeTools("act")).toContain("create_reminder")
+  })
+
+  it("labels a reminder call with the owner's words before it has an output", () => {
+    const pending = {
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-create_reminder",
+          toolCallId: "call_cr",
+          state: "approval-requested",
+          input: { title: "Call the supplier", due_at: null },
+          approval: { id: "approval_1" },
+        },
+      ],
+    }
+    expect(messageTaint(pending).sort()).toEqual([
+      "inferred",
+      "untrusted_input",
+    ])
+  })
+
   it("tells the model an unknown outcome as unknown, never as a refusal", () => {
     expect(toolErrorText(new Error("postgres://secret@host"))).not.toContain(
       "postgres"
@@ -631,7 +686,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(names.sort()).toEqual(["get_facts", "get_preview", "get_workspace"])
   })
 
-  it("asks the owner before answer_question and request_change, even with a value that parses as a fact", async () => {
+  it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -653,12 +708,23 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           id: "call_b",
           tool: "request_change",
           input: { text: "Add a Saturday slot." },
+        },
+        {
+          id: "call_c",
+          tool: "create_reminder",
+          input: { title: "Call the supplier", due_at: null },
         }
       )
     )
     const done = await turn(
       me,
-      typed(id, "Our phone is 01632 960001, and add Saturdays."),
+      {
+        ...typed(
+          id,
+          "Our phone is 01632 960001, add Saturdays, and remind me to call the supplier."
+        ),
+        time_zone: "Asia/Kathmandu",
+      },
       { model },
       stub
     )
@@ -667,10 +733,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const pending = waiting(await tailOf(me, id))
     expect(
       pending.map((p) => p.type).sort((a, b) => a.localeCompare(b))
-    ).toEqual(["tool-answer_question", "tool-request_change"])
+    ).toEqual([
+      "tool-answer_question",
+      "tool-create_reminder",
+      "tool-request_change",
+    ])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(2)
+    ).toHaveLength(3)
+    const stored = await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.select().from(reminders).where(eq(reminders.conversationId, id))
+    )
+    expect(stored).toHaveLength(0)
+    const log = await logOf(id)
+    expect(log.find((e) => e.type === "cos.context")?.payload.text).toMatch(
+      /\nNow: \S+\+05:45 \(Asia\/Kathmandu\)\n/
+    )
+    // The step holds the reminder's title, the owner's words.
+    expect(log.find((e) => e.type === "cos.step")?.taint.sort()).toEqual([
+      "inferred",
+      "untrusted_input",
+    ])
     await s.state(asking, "cancelled")
   })
 
@@ -931,8 +1014,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await s.state(asking, "cancelled")
   })
 
-  /** A tail the CoS made, waiting on the three calls ADR-034's fallback proof resolves. */
-  async function threeApprovals(who: Owner, requestId: string) {
+  /** A tail the CoS made, waiting on the four calls ADR-034's fallback proof resolves. */
+  async function fourApprovals(who: Owner, requestId: string) {
     const id = await conversation(who)
     await turn(
       who,
@@ -960,6 +1043,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               id: "call_rc2",
               tool: "request_change",
               input: { text: "Remove the blog." },
+            },
+            {
+              id: "call_cr",
+              tool: "create_reminder",
+              input: { title: "Call the supplier", due_at: null },
             }
           )
         ).model,
@@ -1030,9 +1118,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const q = question(me, asking)
     await s.event(asking, "information.requested", q)
     await s.state(asking, "cancelled")
-    const { id, tail, pending } = await threeApprovals(me, q.request_id)
-    expect(pending).toHaveLength(3)
-    const [rc1, aq, rc2] = pending as [
+    const { id, tail, pending } = await fourApprovals(me, q.request_id)
+    expect(pending).toHaveLength(4)
+    const [rc1, aq, rc2, cr] = pending as [
+      (typeof pending)[number],
       (typeof pending)[number],
       (typeof pending)[number],
       (typeof pending)[number],
@@ -1056,6 +1145,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               approved: false,
               reason: "Not now.",
             },
+            { kind: "approval", approval_id: cr.approval.id, approved: false },
           ],
         },
       },
@@ -1090,8 +1180,71 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(state(rc1.toolCallId)).toBe("output-available")
     expect(state(aq.toolCallId)).toBe("output-available")
     expect(state(rc2.toolCallId)).toBe("output-denied")
+    expect(state(cr.toolCallId)).toBe("output-denied")
+    expect(
+      await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db.select().from(reminders).where(eq(reminders.conversationId, id))
+      )
+    ).toHaveLength(0)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
     await s.state(asking, "cancelled")
+  })
+
+  it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {
+    const id = await conversation(me)
+    const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+    await turn(me, typed(id, "Remind me to call the supplier."), {
+      model: scripted(
+        calls({
+          id: "call_cr",
+          tool: "create_reminder",
+          // The owner's 09:00, with the offset the model got wrong.
+          input: { title: "Call the supplier", due_at: `${day}T09:00:00Z` },
+        })
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const [call] = waiting(tail)
+    const done = await turn(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        time_zone: "Asia/Kathmandu",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: true,
+            },
+          ],
+        },
+      },
+      { model: null }
+    )
+    expect(done.response.status, done.text).toBe(200)
+    const stored = await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.select().from(reminders).where(eq(reminders.conversationId, id))
+    )
+    // 09:00 in Kathmandu is 03:15 UTC.
+    const due = new Date(`${day}T03:15:00Z`)
+    expect(stored).toHaveLength(1)
+    expect(stored[0]).toMatchObject({
+      title: "Call the supplier",
+      dueAt: due,
+      source: "assistant",
+      createdByStaffId: me.chiefId,
+      idempotencyKey: `approval:${call?.approval.id}`,
+    })
+    const result = (await logOf(id)).find((e) => e.type === "cos.tool_result")
+    expect(result?.payload.output).toEqual({
+      outcome: "created",
+      due_at: due.toISOString(),
+    })
+    expect(result?.taint).toEqual([])
   })
 
   it("runs an approved change before the model continues the same message, and the model reads its result", async () => {

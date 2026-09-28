@@ -161,6 +161,13 @@ const notFound = () =>
     detail: {},
   })
 
+/**
+ * The key space the Chief of Staff's `create_reminder` writes under, one key
+ * per approval. The owner's route refuses it, so an owner key can never
+ * replay an assistant row or the reverse.
+ */
+export const ASSISTANT_KEY_PREFIX = "approval:"
+
 /** `POST /reminders` when `id` is empty, `PATCH /reminders/:id` otherwise. */
 export async function reminderRoute(
   request: Request,
@@ -172,6 +179,14 @@ export async function reminderRoute(
   if (id === "" ? method !== "POST" : method !== "PATCH") return null
   const key = idempotencyKey(request)
   if (!key) return keyMissing()
+  if (key.startsWith(ASSISTANT_KEY_PREFIX)) {
+    return failure(400, {
+      class: "validation",
+      code: "idempotency_key.reserved",
+      message: "This Idempotency-Key is reserved for the assistant.",
+      detail: {},
+    })
+  }
   const body = await readBody(request)
   if (id !== "") {
     const parsed = ReminderPatch.safeParse(body)

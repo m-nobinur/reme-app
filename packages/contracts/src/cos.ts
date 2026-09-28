@@ -6,6 +6,7 @@ import { ConversationMessage } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   BuildSummary,
+  CreateReminderRequest,
   FactValue,
   FactValueKey,
   OwnerAnswerText,
@@ -105,8 +106,7 @@ export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
 /**
  * `create_reminder`'s output once the owner said yes: the due time as
  * stored, and no id, since the model has nothing to do with one. A no is
- * `output-denied`. Its input is `CreateReminderRequest`. The tool joins
- * `COS_TOOLS` and `CosToolResult` in the change that implements it.
+ * `output-denied`. Its input is `CreateReminderRequest`.
  */
 export const CreateReminderOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
@@ -129,6 +129,10 @@ export const COS_TOOLS = {
   get_preview: { input: GetPreviewInput, output: GetPreviewOutput },
   request_change: { input: OwnerChangeRequest, output: RequestChangeOutput },
   answer_question: { input: AnswerQuestionInput, output: AnswerQuestionOutput },
+  create_reminder: {
+    input: CreateReminderRequest,
+    output: CreateReminderOutput,
+  },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -247,6 +251,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("answer_question"),
     output: COS_TOOLS.answer_question.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("create_reminder"),
+    output: COS_TOOLS.create_reminder.output,
   }),
 ])
 

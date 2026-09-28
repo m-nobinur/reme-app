@@ -95,6 +95,7 @@ export type ThreadQuickAction = { title: string; prompt: string }
 export const OWNER_QUICK_ACTIONS: readonly ThreadQuickAction[] = [
   { title: "Change my website", prompt: "On my website, please change " },
   { title: "Check what needs me", prompt: "What is waiting on me?" },
+  { title: "Remind me", prompt: "Remind me to " },
 ]
 
 /** What the conversation is about: the business, and where its site stands. */

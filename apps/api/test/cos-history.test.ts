@@ -177,6 +177,10 @@ const tools = {
     inputSchema: COS_TOOLS.answer_question.input,
     outputSchema: COS_TOOLS.answer_question.output,
   }),
+  create_reminder: tool({
+    inputSchema: COS_TOOLS.create_reminder.input,
+    outputSchema: COS_TOOLS.create_reminder.output,
+  }),
 }
 
 /**
@@ -187,6 +191,7 @@ const tools = {
 const RELEASED: Record<string, { turns: number; toolTurns: number }> = {
   "1": { turns: 12, toolTurns: 2 },
   "2": { turns: 12, toolTurns: 2 },
+  "3": { turns: 12, toolTurns: 2 },
 }
 
 describe("CONTEXT_POLICY", () => {

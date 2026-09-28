@@ -778,6 +778,7 @@ export interface components {
         | "get_preview"
         | "request_change"
         | "answer_question"
+        | "create_reminder"
       )[]
       text: string
       reserved_usd: number
@@ -865,6 +866,7 @@ export interface components {
           | "get_preview"
           | "request_change"
           | "answer_question"
+          | "create_reminder"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -1137,6 +1139,36 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "create_reminder"
+          output:
+            | {
+                /** @constant */
+                outcome: "created"
+                due_at: string | null
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -1155,6 +1187,7 @@ export interface components {
             | "get_preview"
             | "request_change"
             | "answer_question"
+            | "create_reminder"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -1178,6 +1211,7 @@ export interface components {
             | "get_preview"
             | "request_change"
             | "answer_question"
+            | "create_reminder"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -1199,6 +1233,7 @@ export interface components {
             | "get_preview"
             | "request_change"
             | "answer_question"
+            | "create_reminder"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -1220,6 +1255,7 @@ export interface components {
             | "get_preview"
             | "request_change"
             | "answer_question"
+            | "create_reminder"
           )[]
           steps: number
           first_chunk_ms: number | null
