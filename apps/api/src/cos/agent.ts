@@ -7,6 +7,8 @@ import {
   type CosToolResult,
   type CosWorkspace,
   type TaintLabel,
+  TOOL_FAILED,
+  TOOL_UNKNOWN,
 } from "@workspace/contracts"
 import { failureCode, type Tenancy } from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
@@ -426,18 +428,19 @@ export async function runTool(
 
 /**
  * What the model reads when a tool throws: a fixed line and the error's
- * code, never a driver or orchestrator message. A `ToolFailed` is never a
- * refusal: one of class `integrity` is an answer off the contract, which
- * did nothing; any other left the outcome unknown.
+ * code, never a driver or orchestrator message. Every line starts with a
+ * prefix from the contracts, so the web reads it back with `toolErrorKind`.
+ * Only a `ToolFailed` of class `integrity`, an answer off the contract, is
+ * `TOOL_FAILED`: it did nothing. Anything else left the outcome unknown.
  */
 export function toolErrorText(error: unknown): string {
   if (error instanceof ToolFailed && error.error.class === "integrity") {
-    return `tool_failed (${error.error.code}): the builder answered in a shape we do not accept, so nothing was done. Tell the owner it did not go through.`
+    return `${TOOL_FAILED} (${error.error.code}): the builder answered in a shape we do not accept, so nothing was done. Tell the owner it did not go through.`
   }
   if (error instanceof ToolFailed) {
-    return `unknown_outcome (${error.error.code}): the tool did not report back, so nothing is known about its result. Do not guess it; tell the owner it could not be confirmed.`
+    return `${TOOL_UNKNOWN} (${error.error.code}): the tool did not report back, so nothing is known about its result. Do not guess it; tell the owner it could not be confirmed.`
   }
-  return "tool_failed: the tool stopped before it answered. Nothing is known about its result."
+  return `${TOOL_UNKNOWN}: the tool stopped before it answered, so nothing is known about its result. Do not guess it; tell the owner it could not be confirmed.`
 }
 
 /** The approval the SDK made for `toolCallId`, from the messages it was sent. */
