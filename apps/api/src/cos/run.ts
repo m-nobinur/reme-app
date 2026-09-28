@@ -11,6 +11,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { withoutProviderData } from "../http.ts"
 import {
   type AgentTurn,
   cosAgent,
@@ -200,7 +201,7 @@ export async function streamTurn(
   let finish: UIMessageChunk | null = null
   let errored = queued.some((c) => c.type === "error")
   // Reasoning counts as content above and stays in the log, but the owner
-  // never sees it.
+  // never sees it, as a chunk or as a provider's data on one.
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
       for (;;) {
@@ -213,7 +214,7 @@ export async function streamTurn(
         if (chunk.type === "finish") finish = chunk
         else if (!chunk.type.startsWith("reasoning-")) {
           if (chunk.type === "error") errored = true
-          controller.enqueue(chunk)
+          controller.enqueue(withoutProviderData(chunk))
           return
         }
       }

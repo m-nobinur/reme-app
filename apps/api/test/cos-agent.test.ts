@@ -1359,6 +1359,141 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
+  /** Every key under `value` that holds a provider's own data, by name. */
+  const providerKeys = (value: unknown, at = "$"): string[] => {
+    if (Array.isArray(value)) {
+      return value.flatMap((v, i) => providerKeys(v, `${at}[${i}]`))
+    }
+    if (value && typeof value === "object") {
+      return Object.entries(value).flatMap(([key, v]) => [
+        ...(key === "providerMetadata" || key.endsWith("ProviderMetadata")
+          ? [`${at}.${key}`]
+          : []),
+        ...providerKeys(v, `${at}.${key}`),
+      ])
+    }
+    return []
+  }
+
+  /** The conversation as the web reads it back on a reload. */
+  const readBack = async (who: Owner, conversationId: string) => {
+    const read = await who.call(
+      stubOrchestrator(),
+      `/conversations/${conversationId}/messages`
+    )
+    expect(read.status).toBe(200)
+    return (await read.json()) as { messages: unknown[] }
+  }
+
+  it("strips a provider's data from a row written before the fix, on reload and on its next rewrite", async () => {
+    const id = await conversation(me)
+    // A CoS turn that leaves a card pending, then its row as it was stored
+    // before the provider's data was stripped.
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: { text: "Add a Saturday slot." },
+        })
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const leaked = {
+      role: "assistant",
+      parts: tail.parts.map((p) =>
+        "toolCallId" in p
+          ? {
+              ...p,
+              callProviderMetadata: {
+                openrouter: { reasoning_details: [{ text: "OLD-REASONING" }] },
+              },
+            }
+          : p
+      ),
+    }
+    await admin`
+      update conversation_messages set content = ${admin.json(leaked as never)}
+      where conversation_id = ${id} and id = ${tail.id}`
+    expect(JSON.stringify(await readBack(me, id))).not.toContain(
+      "OLD-REASONING"
+    )
+    // Typing cancels the card, which rewrites the row without it.
+    await turn(me, typed(id, "Never mind."), {
+      model: scripted(said("Dropped it.")).model,
+    })
+    expect(JSON.stringify(await rowsOf(me, id))).not.toContain("OLD-REASONING")
+  })
+
+  it("keeps a provider's reasoning metadata out of the owner's stream and rows, and in the log and the next prompt", async () => {
+    const secret = (n: number) => ({
+      openrouter: {
+        reasoning_details: [
+          { type: "reasoning.text", text: `SECRET-REASONING-${n}` },
+        ],
+      },
+    })
+    const id = await conversation(me)
+    const { model, sent } = scripted(
+      [
+        { type: "stream-start", warnings: [] },
+        {
+          type: "tool-call",
+          toolCallId: "call_ws",
+          toolName: "get_workspace",
+          input: "{}",
+          providerMetadata: secret(1),
+        },
+        {
+          type: "finish",
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          usage: usage(),
+          providerMetadata: secret(2),
+        },
+      ],
+      [
+        { type: "stream-start", warnings: [] },
+        { type: "text-start", id: "t1", providerMetadata: secret(3) },
+        {
+          type: "text-delta",
+          id: "t1",
+          delta: "All quiet.",
+          providerMetadata: secret(4),
+        },
+        { type: "text-end", id: "t1", providerMetadata: secret(5) },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: usage(),
+          providerMetadata: secret(6),
+        },
+      ]
+    )
+    const done = await turn(me, typed(id, "Anything new?", "ask"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(done.text).not.toContain("SECRET-REASONING")
+    expect(providerKeys(done.chunks)).toEqual([])
+    const rows = await rowsOf(me, id)
+    expect(JSON.stringify(rows)).not.toContain("SECRET-REASONING")
+    expect(providerKeys(rows)).toEqual([])
+    expect(JSON.stringify(await readBack(me, id))).not.toContain(
+      "SECRET-REASONING"
+    )
+    // The log keeps it, on the call and on its result, and the step after
+    // the call sends it back.
+    const log = JSON.stringify(await logOf(id))
+    expect(log).toContain("SECRET-REASONING-1")
+    expect(log).toContain("resultProviderMetadata")
+    expect(log).toContain("callProviderMetadata")
+    // A text part keeps what its last chunk carried.
+    expect(log).toContain("SECRET-REASONING-5")
+    expect(JSON.stringify(sent[1]?.prompt)).toContain("SECRET-REASONING-1")
+    // So does the next turn, from the logged reply.
+    const next = scripted(said("Still quiet."))
+    await turn(me, typed(id, "And now?", "ask"), { model: next.model })
+    expect(JSON.stringify(next.sent[0]?.prompt)).toContain("SECRET-REASONING-5")
+  })
+
   it("counts a turn's spend on the day the database recorded it, not the day the Worker says", async () => {
     const who = await owner(kit, url as string, "cos-day")
     const room = await conversation(who)
