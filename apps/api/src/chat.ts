@@ -429,7 +429,7 @@ async function swapTail(
   if (swapped.length === 0) return false
   await db
     .update(conversations)
-    .set({ updatedAt: new Date() })
+    .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, conversationId))
   return true
 }
@@ -836,7 +836,7 @@ async function putRow(
   }
   await db
     .update(conversations)
-    .set({ updatedAt: new Date() })
+    .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, id))
 }
 
@@ -1117,7 +1117,7 @@ async function typed(
   }
   await db
     .update(conversations)
-    .set({ updatedAt: new Date() })
+    .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, id))
   return stream(assistantId, step)
 }
