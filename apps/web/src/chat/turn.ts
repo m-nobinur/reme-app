@@ -30,11 +30,14 @@ export function chatTurn(
   mode: ChatRequest["mode"],
   messages: UIMessage[]
 ): ChatRequest {
+  // The browser's zone, so the Chief of Staff can read "Friday at 9".
+  const time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const last = messages.at(-1)
   if (last?.role === "user") {
     return {
       conversation_id: conversationId,
       mode,
+      time_zone,
       turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
@@ -45,6 +48,7 @@ export function chatTurn(
   return {
     conversation_id: conversationId,
     mode,
+    time_zone,
     turn: { kind: "results", message_id: last.id, results },
   }
 }

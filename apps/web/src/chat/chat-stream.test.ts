@@ -306,7 +306,12 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
     )
   )
   // Only the turn went out, and it is the one the api was sent.
-  expect(sent).toEqual([FIXTURE.streams.name.request])
+  expect(sent).toEqual([
+    {
+      ...(FIXTURE.streams.name.request as object),
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+  ])
   await matches(chat, FIXTURE.histories.name)
 })
 

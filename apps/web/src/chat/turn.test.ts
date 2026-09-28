@@ -9,6 +9,7 @@ import { afterEach, expect, it, vi } from "vitest"
 import { cancelOvertaken, chatFetch, chatTurn, sendsOn, turnBody } from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /** Parts as `apps/api` stores and streams them. */
 type Part = UIMessage["parts"][number]
@@ -50,8 +51,21 @@ it("a typed message sends only itself, with the mode", () => {
   expect(ChatRequest.parse(request)).toEqual({
     conversation_id: CONVERSATION,
     mode: "ask",
+    time_zone: ZONE,
     turn: { kind: "message", message_id: "msg_user", text: "Hello" },
   })
+})
+
+it("every turn carries the browser's time zone", () => {
+  const message = chatTurn(CONVERSATION, "act", [
+    { id: "msg_user", role: "user", parts: [{ type: "text", text: "Hi" }] },
+  ])
+  const results = chatTurn(CONVERSATION, "act", [
+    assistant(ask("output-available", { output: STATED })),
+  ])
+  for (const request of [message, results]) {
+    expect(ChatRequest.parse(request).time_zone).toBe(ZONE)
+  }
 })
 
 it("an answer sends the call it resolves, from the last step only", () => {
