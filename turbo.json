@@ -57,9 +57,15 @@
     // ran on, and nothing in the hash says which machine that was: a macOS run
     // and a Linux run of the same commit hash identically and would hand each
     // other a result the other could not have produced.
+    //
+    // `CATALOG_PORT` picks the catalog server's port. Strict mode drops any
+    // variable not listed, so without this line every worktree's run fell back
+    // to 4321 and reused whichever catalog another checkout had up there.
+    // Pass-through, so the port never enters a hash.
     "@workspace/ui#test": {
       "dependsOn": ["^build"],
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["CATALOG_PORT"]
     },
     // `cache: false` keeps the gate from replaying its own verdict, but the
     // build underneath it still restores from cache, and a restore writes the
