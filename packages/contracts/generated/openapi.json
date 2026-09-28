@@ -2495,9 +2495,20 @@
                   },
                   "required": ["role", "parts", "metadata"],
                   "additionalProperties": false
+                },
+                "feedback": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["up", "down"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
-              "required": ["id", "parent_id", "format", "content"],
+              "required": ["id", "parent_id", "format", "content", "feedback"],
               "additionalProperties": false
             }
           }
@@ -2642,9 +2653,20 @@
             },
             "required": ["role", "parts", "metadata"],
             "additionalProperties": false
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["up", "down"]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": ["id", "parent_id", "format", "content"],
+        "required": ["id", "parent_id", "format", "content", "feedback"],
         "additionalProperties": false
       },
       "ConversationPatch": {
@@ -2939,6 +2961,27 @@
           }
         },
         "required": ["facts"],
+        "additionalProperties": false
+      },
+      "CosFeedback": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "message_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["up", "down"]
+          }
+        },
+        "required": ["conversation_id", "message_id", "rating"],
         "additionalProperties": false
       },
       "CosMessage": {
@@ -5898,6 +5941,22 @@
           "requested_at",
           "expires_at"
         ],
+        "additionalProperties": false
+      },
+      "MessageFeedback": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "rating": {
+            "type": "string",
+            "enum": ["up", "down"]
+          }
+        },
+        "required": ["message_id", "rating"],
         "additionalProperties": false
       },
       "Org": {

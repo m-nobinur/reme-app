@@ -717,6 +717,7 @@ export interface components {
             }
           }
         }
+        feedback: ("up" | "down") | null
       }[]
     }
     ConversationList: {
@@ -753,6 +754,7 @@ export interface components {
           }
         }
       }
+      feedback: ("up" | "down") | null
     }
     ConversationPatch:
       | {
@@ -840,6 +842,13 @@ export interface components {
             }
           }
       )[]
+    }
+    CosFeedback: {
+      /** Format: uuid */
+      conversation_id: string
+      message_id: string
+      /** @enum {string} */
+      rating: "up" | "down"
     }
     CosMessage: {
       turn_id: string
@@ -1690,6 +1699,11 @@ export interface components {
       /** Format: date-time */
       requested_at: string
       expires_at: string | null
+    }
+    MessageFeedback: {
+      message_id: string
+      /** @enum {string} */
+      rating: "up" | "down"
     }
     Org: {
       /** Format: uuid */

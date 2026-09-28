@@ -159,8 +159,14 @@ async function patch(request: Request, kit: Tenancy, owner: Owner, id: string) {
   return row ? Response.json(toConversation(row)) : notFound()
 }
 
-/** A message as it is stored: the contract's, less the date added on read. */
-export type StoredMessage = Omit<ConversationMessage, "content"> & {
+/**
+ * A message as it is stored: the contract's, less the date and the rating
+ * added on read.
+ */
+export type StoredMessage = Omit<
+  ConversationMessage,
+  "content" | "feedback"
+> & {
   content: Omit<ConversationMessage["content"], "metadata">
 }
 
@@ -182,6 +188,8 @@ function toConversationMessage(row: MessageRow): ConversationMessage {
       parts: parts.map((part) => withoutProviderData(part)),
       metadata: { custom: { createdAt: row.createdAt.toISOString() } },
     },
+    // No rating is recorded yet: the feedback route and its read-back follow.
+    feedback: null,
   }
 }
 
@@ -201,8 +209,8 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
   )
 }
 
-/** A message as the writer takes it: the contract's, less the date. */
-const Stored = ConversationMessage.extend({
+/** A message as the writer takes it: the contract's, less the date and rating. */
+const Stored = ConversationMessage.omit({ feedback: true }).extend({
   content: ConversationMessage.shape.content.omit({ metadata: true }),
 })
 

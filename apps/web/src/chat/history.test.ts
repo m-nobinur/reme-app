@@ -48,6 +48,7 @@ const ROWS: TransportedMessage[] = [
       parts: [{ type: "text", text: "Change the hero" }],
       metadata: { custom: { createdAt: AT } },
     },
+    feedback: null,
   },
   {
     id: "msg_2",
@@ -58,6 +59,7 @@ const ROWS: TransportedMessage[] = [
       parts: [{ type: "text", text: "On it." }],
       metadata: { custom: { createdAt: AT } },
     },
+    feedback: null,
   },
 ]
 
