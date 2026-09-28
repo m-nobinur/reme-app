@@ -88,7 +88,7 @@ recording refuse until it is changed.
     COS_API_URL=https://staging-api.remeai.co.uk \
       node --env-file=.env.local --experimental-transform-types evals/record.mjs
 
-It is committed, at 29 KiB of text, against the rule that recorded fixtures stay
+It is committed, at 14 KiB of text, against the rule that recorded fixtures stay
 out of git. The rule is about blobs git can only store whole: one line per chunk
 means a word change is a one-line diff, and a fixture nobody can read in a
 review is not golden.
