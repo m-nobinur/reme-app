@@ -1,8 +1,17 @@
-import { TOOL_CALL_CANCELLED as CANCELLED } from "@workspace/contracts"
+import {
+  TOOL_CALL_CANCELLED as CANCELLED,
+  CreateReminderOutput,
+  CreateReminderRequest,
+  GetPreviewOutput,
+} from "@workspace/contracts"
 import {
   askFactView,
+  decisionView,
   isHeld,
+  NOT_DONE,
+  readView,
   requestChangeView,
+  UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
 
@@ -112,7 +121,108 @@ it("reads every request_change state", () => {
       isError: true,
       result: { error: "Lost" },
     })
-  ).toEqual({ state: "error", text, message: "Lost" })
+  ).toEqual({ state: "error", text, message: NOT_DONE })
+  // The api's text is written for the model and never shown; an unknown
+  // outcome says so in the owner's words.
+  expect(
+    requestChangeView({
+      args: CHANGE,
+      approval: { approved: true },
+      isError: true,
+      result: {
+        error:
+          "unknown_outcome (orchestrator.timeout): the tool did not report back",
+      },
+    })
+  ).toEqual({ state: "error", text, message: UNCONFIRMED })
+  // Before the approval request exists, the model is still writing it.
+  expect(requestChangeView({ args: { text: "Add Sat" } })).toEqual({
+    state: "drafting",
+    text: "Add Sat",
+  })
+})
+
+const REMINDER = { title: "Call the window supplier", due_at: null }
+
+it("reads every state of a tool that waits on the owner", () => {
+  const view = (part: object) =>
+    decisionView(
+      { args: REMINDER, ...part },
+      CreateReminderRequest,
+      CreateReminderOutput
+    )
+  expect(view({ args: { title: "Call" } })).toEqual({ state: "drafting" })
+  expect(view({ approval: {} })).toEqual({
+    state: "asking",
+    input: REMINDER,
+  })
+  expect(view({ approval: { approved: true } })).toEqual({
+    state: "responding",
+    input: REMINDER,
+    approved: true,
+  })
+  expect(
+    view({
+      approval: { approved: true },
+      result: { outcome: "created", due_at: null },
+    })
+  ).toEqual({
+    state: "done",
+    input: REMINDER,
+    output: { outcome: "created", due_at: null },
+  })
+  expect(
+    view({
+      approval: { approved: false },
+      isError: true,
+      result: { error: "Tool approval denied" },
+    })
+  ).toEqual({ state: "denied", input: REMINDER })
+  expect(view({ isError: true, result: { error: CANCELLED } })).toEqual({
+    state: "cancelled",
+    input: REMINDER,
+  })
+  expect(
+    view({
+      approval: { approved: true },
+      isError: true,
+      result: { error: "unknown_outcome (x): the tool did not report back" },
+    })
+  ).toEqual({ state: "unconfirmed", input: REMINDER })
+  expect(
+    view({
+      approval: { approved: true },
+      isError: true,
+      result: { error: "tool_failed: the tool stopped before it answered." },
+    })
+  ).toEqual({ state: "failed", input: REMINDER })
+  // No yes is ever offered on a target the owner could not read.
+  expect(view({ args: { title: "" }, approval: {} })).toEqual({
+    state: "broken",
+  })
+  expect(
+    view({ approval: { approved: true }, result: { outcome: "made" } })
+  ).toEqual({ state: "broken" })
+})
+
+it("reads every state of a tool that only looks", () => {
+  const view = (part: object) =>
+    readView({ args: {}, ...part }, GetPreviewOutput)
+  const ready = {
+    outcome: "ready",
+    assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+    version: 4,
+    expires_at: "2026-09-28T18:00:00.000Z",
+  }
+  expect(view({})).toEqual({ state: "working" })
+  expect(view({ result: ready })).toEqual({ state: "done", output: ready })
+  expect(view({ result: { outcome: "ready" } })).toEqual({ state: "failed" })
+  expect(view({ isError: true, result: { error: CANCELLED } })).toEqual({
+    state: "cancelled",
+  })
+  expect(view({ isError: true, result: { error: "tool_failed" } })).toEqual({
+    state: "failed",
+  })
 })
 
 /** A tool call as assistant-ui holds it in a message's parts. */

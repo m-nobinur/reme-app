@@ -443,6 +443,183 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
   },
 ]
 
+/* The Chief of Staff's tools, in every state. Fixture content is fictional. */
+
+const IN_FLIGHT = { type: "running" } as const
+const LATER = "2026-10-02T09:00:00.000Z"
+const TOOL_FAILED = "tool_failed: the tool stopped before it answered."
+const UNKNOWN =
+  "unknown_outcome (orchestrator.timeout): the tool did not report back."
+
+type CallFields = {
+  args?: unknown
+  result?: unknown
+  isError?: boolean
+  approval?: { id: string; approved?: boolean }
+}
+
+/** One tool call as its own message, so no two reads fold together. */
+const cosCall = (
+  toolName: string,
+  id: string,
+  fields: CallFields,
+  status: ThreadMessageLike["status"] = DONE
+): ThreadMessageLike => ({
+  content: [
+    {
+      args: {},
+      ...fields,
+      toolCallId: `call_${id}`,
+      toolName,
+      type: "tool-call",
+    } as ToolCallContent,
+  ],
+  role: "assistant",
+  status,
+})
+
+const WORKSPACE_READ = {
+  site: { host: "brightclean.example.net", live_version: 3 },
+  builds: [
+    {
+      assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+      kind: "site.revise",
+      state: "implementing",
+      goal: "Add Saturday hours, 9 to 1.",
+      version: null,
+    },
+  ],
+  questions: [
+    {
+      request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
+      field: "pricing.standard_clean_hourly",
+      why: "The prices page needs an hourly rate.",
+      options: null,
+      blocking: true,
+    },
+  ],
+  approvals: [{ version: 4, expires_at: LATER }],
+  missing_facts: ["business.tagline"],
+}
+
+/** Each read: running, done, failed and stopped. */
+const COS_READ_STATES: ThreadMessageLike[] = [
+  cosCall("get_workspace", "ws_running", {}, IN_FLIGHT),
+  cosCall("get_workspace", "ws_done", { result: WORKSPACE_READ }),
+  cosCall("get_workspace", "ws_failed", {
+    isError: true,
+    result: { error: TOOL_FAILED },
+  }),
+  cosCall("get_facts", "facts_done", {
+    result: {
+      facts: [
+        { key: "business.name", value: { name: "Brightclean" } },
+        { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
+      ],
+    },
+  }),
+  cosCall("get_facts", "facts_cancelled", {
+    isError: true,
+    result: { error: TOOL_CALL_CANCELLED },
+  }),
+  cosCall("get_preview", "preview_ready", {
+    args: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+    result: {
+      outcome: "ready",
+      assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+      version: 4,
+      expires_at: LATER,
+    },
+  }),
+  cosCall("get_preview", "preview_none", {
+    args: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+    result: {
+      outcome: "refused",
+      error: {
+        class: "resource",
+        code: "preview.missing",
+        message: "This build has no preview yet.",
+      },
+    },
+  }),
+]
+
+/** Every state of a tool that waits on the owner, for one tool and input. */
+function decisionStates(
+  toolName: string,
+  args: unknown,
+  done: unknown,
+  refused: unknown
+): ThreadMessageLike[] {
+  const call = (
+    id: string,
+    fields: CallFields,
+    status: ThreadMessageLike["status"] = DONE
+  ) => cosCall(toolName, `${toolName}_${id}`, { args, ...fields }, status)
+  const approval = (id: string, approved?: boolean) => ({
+    id: `approval_${toolName}_${id}`,
+    ...(approved === undefined ? {} : { approved }),
+  })
+  return [
+    call("drafting", {}, IN_FLIGHT),
+    call("asking", { approval: approval("asking") }, WAITING),
+    call("sent", { approval: approval("sent", true) }, IN_FLIGHT),
+    {
+      content: [
+        ...(call("held", { approval: approval("held", true) })
+          .content as ToolCallContent[]),
+        ...(requestChange("held_other", "Add Saturday hours, 9 to 1.")
+          .content as ToolCallContent[]),
+      ],
+      role: "assistant",
+      status: WAITING,
+    },
+    call("done", { approval: approval("done", true), result: done }),
+    call("refused", { approval: approval("refused", true), result: refused }),
+    call("denied", {
+      approval: approval("denied", false),
+      isError: true,
+      result: { error: "Tool approval denied" },
+    }),
+    call("cancelled", {
+      isError: true,
+      result: { error: TOOL_CALL_CANCELLED },
+    }),
+    call("unconfirmed", {
+      approval: approval("unconfirmed", true),
+      isError: true,
+      result: { error: UNKNOWN },
+    }),
+    call("failed", {
+      approval: approval("failed", true),
+      isError: true,
+      result: { error: TOOL_FAILED },
+    }),
+  ]
+}
+
+const refusal = (code: string, message: string) => ({
+  outcome: "refused",
+  error: { class: "validation", code, message },
+})
+
+const ANSWER_QUESTION_STATES = decisionStates(
+  "answer_question",
+  {
+    request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
+    value: { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
+  },
+  { outcome: "answered", request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c" },
+  refusal("request.not_found", "That question was already answered.")
+)
+
+const CREATE_REMINDER_STATES = decisionStates(
+  "create_reminder",
+  { title: "Call the window supplier", due_at: LATER },
+  { outcome: "created", due_at: LATER },
+  refusal("reminder.limit", "You have 50 open reminders. Finish one first.")
+)
+
 /** A new owner's onboarding, two answers in and waiting on the third. */
 const ONBOARDING: ThreadMessageLike[] = [
   on("27T09:00:00.000", {
@@ -769,7 +946,25 @@ const assistantCatalog = [
   {
     name: "RequestChange",
     render: () => (
-      <FixtureThread height="h-[102rem]" messages={REQUEST_CHANGE_STATES} />
+      <FixtureThread height="h-[112rem]" messages={REQUEST_CHANGE_STATES} />
+    ),
+  },
+  {
+    name: "CosReads",
+    render: () => (
+      <FixtureThread height="h-[60rem]" messages={COS_READ_STATES} />
+    ),
+  },
+  {
+    name: "AnswerQuestion",
+    render: () => (
+      <FixtureThread height="h-[140rem]" messages={ANSWER_QUESTION_STATES} />
+    ),
+  },
+  {
+    name: "CreateReminder",
+    render: () => (
+      <FixtureThread height="h-[140rem]" messages={CREATE_REMINDER_STATES} />
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },

@@ -84,7 +84,8 @@ function ToolGroupTrigger({
   count: number
   active?: boolean
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`
+  // The owner's words: the assistant checked things, it did not "call tools".
+  const label = `Checked ${count} ${count === 1 ? "thing" : "things"}`
 
   return (
     <CollapsibleTrigger

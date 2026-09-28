@@ -9,6 +9,10 @@ import {
   SealQuestionIcon,
 } from "@phosphor-icons/react"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
+import {
+  COS_CARDS,
+  COS_READS,
+} from "@workspace/ui/components/assistant/cos-tools"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { Button } from "@workspace/ui/components/button"
@@ -136,6 +140,7 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
 export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_fact: AskFact,
   request_change: RequestChange,
+  ...COS_CARDS,
 }
 
 const Approval: ToolCallMessagePartComponent = (props) => {
@@ -143,7 +148,9 @@ const Approval: ToolCallMessagePartComponent = (props) => {
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const Owned = Object.hasOwn(OWNER_CARDS, toolName)
     ? OWNER_CARDS[toolName]
-    : undefined
+    : Object.hasOwn(COS_READS, toolName)
+      ? COS_READS[toolName]
+      : undefined
   if (Owned) return <Owned {...props} />
 
   // Only a real approval gate takes the card. A tool paused on an interrupt has

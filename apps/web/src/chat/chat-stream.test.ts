@@ -584,7 +584,7 @@ for (const [answer, response] of Object.entries(RESOLVED)) {
     expect(changeCard(chat)?.querySelector('[aria-busy="true"]')).toBeNull()
 
     turns.push(sse({ request: null, response }))
-    await press(chat, "Approve")
+    await press(chat, "Send answer")
     await vi.waitFor(() =>
       expect(changeCard(chat)?.textContent).toContain("Started.")
     )
@@ -609,14 +609,10 @@ for (const [answer, response] of Object.entries(RESOLVED)) {
 
 it("the question card holds its yes the same way", async () => {
   const chat = await open(COS_HISTORY)
-  const question = chat.querySelector<HTMLElement>(
-    '[data-slot="approval-request"]'
-  )
-  if (!question) throw new Error("no question card")
-  await act(async () => button(question, "Approve").click())
+  await press(chat, "Send answer")
   expect(await decided(1)).toEqual([false])
   expect(
-    chat.querySelector('[data-slot="approval-held"][role="status"]')
+    chat.querySelector('[data-slot="answer-question"] [role="status"]')
       ?.textContent
   ).toBe(HELD)
 })
@@ -632,14 +628,12 @@ it("a held not now says so on either card", async () => {
 
   const second = await open(COS_HISTORY)
   const question = second.querySelector<HTMLElement>(
-    '[data-slot="approval-request"]'
+    '[data-slot="answer-question"]'
   )
   if (!question) throw new Error("no question card")
-  await act(async () => button(question, "Decline").click())
+  await act(async () => button(question, "Not now").click())
   expect(await decided(2)).toEqual([false, false])
-  expect(second.querySelector('[data-slot="approval-held"]')?.textContent).toBe(
-    NOT_NOW
-  )
+  expect(question.querySelector('[role="status"]')?.textContent).toBe(NOT_NOW)
 })
 
 it("a message typed while a yes is held cancels it, as the api stores it", async () => {
@@ -730,7 +724,7 @@ const ACTIONS = {
   "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
   "a whole step of yeses": async (chat: HTMLElement) => {
     await press(chat, "Approve")
-    await press(chat, "Approve")
+    await press(chat, "Send answer")
   },
 }
 
@@ -748,13 +742,112 @@ for (const [action, run] of Object.entries(ACTIONS)) {
     // composer to send again once the other turn ends.
     await vi.waitFor(() =>
       expect(
-        [...chat.querySelectorAll("button")].filter(
-          (each) => each.textContent?.trim() === "Approve" && !each.disabled
-        )
-      ).toHaveLength(2)
+        [...chat.querySelectorAll("button")]
+          .filter((each) => !each.disabled)
+          .map((each) => each.textContent?.trim())
+          .filter((name) => name === "Approve" || name === "Send answer")
+      ).toEqual(["Approve", "Send answer"])
     )
     if (action === "a typed message") {
       expect(chat.querySelector("textarea")?.value).toBe("Make it 10 to 2.")
     }
   })
 }
+
+it("shows every Chief of Staff tool in the owner's words, and nothing of its wire shape", async () => {
+  const part = (tool: string, id: string, fields: object) => ({
+    type: `tool-${tool}`,
+    toolCallId: `call_${id}`,
+    ...fields,
+  })
+  const chat = await open({
+    messages: [
+      OWNER_ROW,
+      row(COS, "msg_owner", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          part("get_workspace", "read", {
+            state: "output-available",
+            input: {},
+            output: WORKSPACE,
+          }),
+          part("get_facts", "facts", {
+            state: "output-available",
+            input: {},
+            output: {
+              facts: [
+                {
+                  key: "business.name",
+                  value: { name: "Fixture Cleaning Co" },
+                },
+              ],
+            },
+          }),
+          part("get_preview", "preview", {
+            state: "output-available",
+            input: { assignment_id: REQUEST_ID },
+            output: {
+              outcome: "refused",
+              error: {
+                class: "resource",
+                code: "preview.missing",
+                message: "This build has no preview yet.",
+              },
+            },
+          }),
+          part("request_change", "change", {
+            state: "output-error",
+            input: { text: "Add Saturday hours, 9 to 1." },
+            approval: { id: CHANGE_APPROVAL, approved: true },
+            errorText:
+              "unknown_outcome (orchestrator.timeout): the tool did not report back, so nothing is known about its result.",
+          }),
+          part("answer_question", "question", {
+            state: "output-available",
+            input: {
+              request_id: REQUEST_ID,
+              value: {
+                key: "hours.weekday",
+                value: { open: "08:00", close: "18:00" },
+              },
+            },
+            approval: { id: QUESTION_APPROVAL, approved: true },
+            output: { outcome: "answered", request_id: REQUEST_ID },
+          }),
+          part("create_reminder", "reminder", {
+            state: "approval-requested",
+            input: { title: "Call the window supplier", due_at: null },
+            approval: { id: "aitxt-Rm4pQ9sLw2Vn7bTc1RxYe3Ud" },
+          }),
+        ],
+      }),
+    ],
+  })
+  await press(chat, "Checked 3 things")
+  const shown = chat.textContent ?? ""
+  for (const text of [
+    "Checked your workspace",
+    "Read your business details",
+    "Checked for a preview",
+    "We could not confirm this went through.",
+    "Weekday hours: 08:00 to 18:00",
+    "Sent. Your build carries on.",
+    "Call the window supplier",
+    "No date set. It shows under Reminders.",
+  ]) {
+    expect(shown, text).toContain(text)
+  }
+  for (const wire of [
+    "get_",
+    "request_change",
+    "create_reminder",
+    "call_",
+    REQUEST_ID,
+    "unknown_outcome",
+    "{",
+  ]) {
+    expect(shown, wire).not.toContain(wire)
+  }
+  expect(button(chat, "Add reminder")).toBeDefined()
+})

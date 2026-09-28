@@ -66,6 +66,16 @@ function Outcome({ view }: { view: RequestChangeView }) {
           Not started. You sent a message instead.
         </p>
       )
+    case "drafting":
+      // The model is still writing the change: nothing to approve yet.
+      return (
+        <p
+          className="shimmer text-muted-foreground text-sm motion-reduce:animate-none"
+          role="status"
+        >
+          Writing the change
+        </p>
+      )
     case "refused":
     case "error":
       return (
@@ -112,35 +122,35 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
           <p className="text-[0.8125rem] text-muted-foreground">
             This starts a build. Nothing goes live until you approve a version.
           </p>
-          <div
-            aria-busy={view.state === "responding" && !held}
-            className="flex gap-2"
-          >
-            <Button
-              disabled={view.state === "responding"}
-              onClick={() => props.respondToApproval({ approved: true })}
-              size="sm"
-              type="button"
-            >
-              {view.state === "responding" && view.approved && !held
-                ? "Starting"
-                : "Approve"}
-            </Button>
-            <Button
-              disabled={view.state === "responding"}
-              onClick={() => props.respondToApproval({ approved: false })}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Not now
-            </Button>
-          </div>
           {held && view.state === "responding" ? (
+            // Answered while another card in the step waits: the answer is
+            // recorded and nothing is running, so no buttons, only the answer.
             <p className="text-[0.8125rem] text-muted-foreground" role="status">
               {heldText(view.approved)}
             </p>
-          ) : null}
+          ) : (
+            <div aria-busy={view.state === "responding"} className="flex gap-2">
+              <Button
+                disabled={view.state === "responding"}
+                onClick={() => props.respondToApproval({ approved: true })}
+                size="sm"
+                type="button"
+              >
+                {view.state === "responding" && view.approved
+                  ? "Starting"
+                  : "Approve"}
+              </Button>
+              <Button
+                disabled={view.state === "responding"}
+                onClick={() => props.respondToApproval({ approved: false })}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Not now
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <Outcome view={view} />

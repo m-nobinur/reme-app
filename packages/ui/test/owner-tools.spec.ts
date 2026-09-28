@@ -90,10 +90,12 @@ test("the change card is one tap either way, and waits for the server", async ({
   const HELD = "You said yes. Sent once you answer the other cards."
   const held = cards.nth(8)
   await expect(held.getByRole("status")).toHaveText(HELD)
-  await expect(held.getByRole("button", { name: "Approve" })).toBeDisabled()
-  await expect(held.getByRole("button", { name: "Starting" })).toHaveCount(0)
+  // The answer is recorded and nothing runs, so the card offers no buttons.
+  await expect(held.getByRole("button")).toHaveCount(0)
   await expect(held.locator('[aria-busy="true"]')).toHaveCount(0)
-  const heldQuestions = page.locator('[data-slot="approval-held"]')
+  const heldQuestions = page.locator(
+    '[data-slot="answer-question"] [role="status"]'
+  )
   await expect(heldQuestions.nth(0)).toHaveText(HELD)
   await expect(
     cards.nth(9).getByRole("button", { name: "Approve" })
