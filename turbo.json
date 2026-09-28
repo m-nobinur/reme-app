@@ -71,6 +71,18 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/infra/sandbox/**"],
       "env": ["DATABASE_URL"]
     },
+    // clear-probes.test.ts imports the staging WorkOS check and the qa-e2e
+    // address test from outside the package.
+    "@workspace/db#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/apps/api/scripts/dev-owner.mjs",
+        "$TURBO_ROOT$/qa/e2e/workos.ts"
+      ],
+      "env": ["DATABASE_URL"]
+    },
     // cos-import-ban.test.ts lints probe files with the repo's Biome config
     // and the plugin it loads.
     "api#test": {

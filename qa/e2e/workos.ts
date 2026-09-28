@@ -35,6 +35,10 @@ const PREFIX = "qa-e2e-"
 export const PROBE_ORG_PREFIX = "QA probe cleaning "
 const DOMAIN = "example.net"
 
+/** A suite-made address: `qa-e2e-*@example.net`, and nothing else. */
+export const isProbeEmail = (email: string) =>
+  email.startsWith(PREFIX) && email.endsWith(`@${DOMAIN}`)
+
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 /** Both hold a live credential, so both are gitignored. */
@@ -51,7 +55,7 @@ function apiKey(): string {
   return key
 }
 
-async function call(
+export async function call(
   path: string,
   init: RequestInit = {}
 ): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -178,7 +182,7 @@ export async function deleteProbeOrgs(userId: string): Promise<void> {
  * and finishes the delete later (about 9 s measured), so the answer alone
  * proves nothing.
  */
-async function deleteProbeOrg(id: string): Promise<void> {
+export async function deleteProbeOrg(id: string): Promise<void> {
   const deleted = await call(`/organizations/${id}`, { method: "DELETE" })
   if (deleted.status >= 300 && deleted.status !== 404) {
     throw new Error(`WorkOS refused to delete ${id}: ${deleted.status}`)
