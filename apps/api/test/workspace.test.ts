@@ -406,7 +406,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.missing_facts).toEqual(REQUIRED.slice(1))
   })
 
-  it("reads the workspace in one transaction of six statements", async () => {
+  it("reads the workspace in one transaction of seven statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -427,7 +427,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     }
     await readWorkspace(counted, busy.orgId, SUFFIX)
     expect(transactions).toBe(1)
-    expect(statements).toBe(6)
+    expect(statements).toBe(7)
   })
 
   it("lists 30 days of reports and alerts as activity, newest first", async () => {

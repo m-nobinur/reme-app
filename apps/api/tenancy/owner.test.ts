@@ -6,6 +6,7 @@ import {
   ErrorEnvelope,
   FactList,
   OWNER_BRIDGE_HEADERS,
+  Reminder,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { tenancy } from "@workspace/db"
@@ -392,5 +393,64 @@ describe("another org's conversation is 404 and never written to", () => {
       expect(stub.calls).toHaveLength(0)
     }
     expect(await history(theirs, theirId)).toEqual(before)
+  })
+})
+
+describe("another org's reminder is 404 and never changed", () => {
+  const keyed = (method: string, body: unknown, key = crypto.randomUUID()) => ({
+    method,
+    headers: { "content-type": "application/json", "idempotency-key": key },
+    body: JSON.stringify(body),
+  })
+  const create = async (who: Owner, title: string, key?: string) =>
+    Reminder.parse(
+      await (
+        await who.call(
+          stubOrchestrator(),
+          "/reminders",
+          keyed("POST", { title, due_at: null }, key)
+        )
+      ).json()
+    )
+  const notes = async (who: Owner) =>
+    WorkspaceStatus.parse(
+      await (await who.call(stubOrchestrator(), "/workspace")).json()
+    ).reminders.notes
+
+  it("refuses to complete or reopen it, and never lists it", async () => {
+    const theirReminder = await create(theirs, "Theirs (fixture)")
+    for (const done of [true, false]) {
+      const response = await mine.call(
+        stubOrchestrator(),
+        `/reminders/${theirReminder.id}`,
+        keyed("PATCH", { done })
+      )
+      expect(response.status, String(done)).toBe(404)
+      expect(ErrorEnvelope.parse(await response.json())).toMatchObject({
+        code: "reminder.not_found",
+        detail: {},
+      })
+    }
+    expect((await notes(mine)).map((n) => n.id)).not.toContain(theirReminder.id)
+    expect(await notes(theirs)).toContainEqual(theirReminder)
+  })
+
+  it("control: the org completes its own", async () => {
+    const own = await create(mine, "Mine (fixture)")
+    const response = await mine.call(
+      stubOrchestrator(),
+      `/reminders/${own.id}`,
+      keyed("PATCH", { done: true })
+    )
+    expect(response.status).toBe(200)
+    expect(Reminder.parse(await response.json()).done_at).not.toBeNull()
+  })
+
+  it("makes a new reminder for a key another org already used", async () => {
+    const key = crypto.randomUUID()
+    const theirReminder = await create(theirs, "Theirs, keyed", key)
+    const mineReminder = await create(mine, "Mine, keyed", key)
+    expect(mineReminder.id).not.toBe(theirReminder.id)
+    expect(mineReminder.title).toBe("Mine, keyed")
   })
 })

@@ -7,6 +7,7 @@ import {
   FactProvenance,
   FactRecord,
   Org,
+  Reminder,
   SiteRevision,
   StaffMember,
   TaintLabel,
@@ -34,6 +35,7 @@ import {
   assignmentState,
   conversationKind,
   factSource,
+  reminderSource,
   siteRevisionStatus,
   staffKind,
   staffStatus,
@@ -89,6 +91,10 @@ describe("enums match the contract", () => {
 
   it("conversation kinds", () => {
     expect(conversationKind.enumValues).toEqual(Conversation.shape.kind.options)
+  })
+
+  it("reminder sources", () => {
+    expect(reminderSource.enumValues).toEqual(Reminder.shape.source.options)
   })
 })
 

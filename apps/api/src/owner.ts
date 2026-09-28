@@ -28,6 +28,7 @@ import {
   keyMissing,
   readBody,
 } from "./http.ts"
+import { reminderRoute } from "./reminders.ts"
 import {
   etag,
   readActivity,
@@ -46,7 +47,7 @@ import {
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/messages)?)?|chat)$/
+  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/messages)?)?|reminders(\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -195,6 +196,7 @@ export async function ownerRoute(
   if (noun === "conversations") {
     return conversationRoute(request, kit, owner, id, action)
   }
+  if (noun === "reminders") return reminderRoute(request, kit, owner, id)
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)
   }
