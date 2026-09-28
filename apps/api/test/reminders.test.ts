@@ -165,6 +165,17 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
     }
   })
 
+  it("refuses a key in the assistant's key space", async () => {
+    const refused = await post(
+      { title: "Mine", due_at: null },
+      `approval:${crypto.randomUUID()}`
+    )
+    expect(refused.status).toBe(400)
+    expect(ErrorEnvelope.parse(refused.body).code).toBe(
+      "idempotency_key.reserved"
+    )
+  })
+
   it("refuses a due time past through the route too", async () => {
     const refused = await post({
       title: "Yesterday",

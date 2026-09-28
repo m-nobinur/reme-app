@@ -44,16 +44,17 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the five tools, in order", () => {
-    const five = [
+  it("has exactly the six tools, in order", () => {
+    const six = [
       "get_workspace",
       "get_facts",
       "get_preview",
       "request_change",
       "answer_question",
+      "create_reminder",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(five)
-    expect(CosToolName.options).toStrictEqual(five)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(six)
+    expect(CosToolName.options).toStrictEqual(six)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -238,8 +239,8 @@ describe("the refusal a tool shows the model", () => {
   })
 })
 
-// `create_reminder` joins COS_TOOLS with its implementation, so the checks
-// above do not reach it yet. These hold its schemas to the same rules now.
+// Beyond the checks every tool gets: a strict tool mode wants every input
+// property required, and the output holds no id of any kind.
 describe("create_reminder", () => {
   it("takes an object at its root", () => {
     const schema = z.toJSONSchema(CreateReminderRequest) as Record<

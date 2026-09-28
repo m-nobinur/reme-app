@@ -4,6 +4,8 @@ import {
   BuildSummary,
   CosFacts,
   CosWorkspace,
+  type CreateReminderOutput,
+  type CreateReminderRequest,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -20,6 +22,7 @@ import {
   assignments,
   eq,
   events,
+  failureCode,
   siteRevisions,
   sql,
   type Tenancy,
@@ -33,10 +36,16 @@ import {
   startChange,
 } from "../changes.ts"
 import { failure } from "../http.ts"
+import {
+  ASSISTANT_KEY_PREFIX,
+  createReminder as storeReminder,
+} from "../reminders.ts"
 import { readFacts, readWorkspace } from "../workspace.ts"
+import { wallToUtc } from "./time.ts"
+import type { Turn } from "./turns.ts"
 
 /**
- * The Chief of Staff's five tools (ADR-034), as plain functions: the
+ * The Chief of Staff's six tools (ADR-034), as plain functions: the
  * session's org, user and session in, the contract's output out. What they
  * return is what the model reads, so each is cut to its `COS_TOOLS` output:
  * no org or staff id, no URL, no open record, and every refusal the closed
@@ -311,4 +320,49 @@ export async function answerQuestion(
   if (!answered.ok) return refused(answered)
   const receipt = InformationAnswer.parse(await answered.json())
   return { outcome: "answered", request_id: receipt.request_id }
+}
+
+/**
+ * The owner's reminder, stored as `POST /reminders` stores it, with the
+ * turn's conversation and the CoS as its maker. Keyed `approval:<id>`: the
+ * owner's own route shares the org's key space and can see approval ids,
+ * so a bare id could replay an owner's row here. `due_at` is read as the
+ * owner's wall time in the turn's zone (`wallToUtc`). A refusal is the 400
+ * `createReminder` answers; a database error leaves the outcome unknown.
+ */
+export async function createReminder(
+  { kit, owner }: ToolContext,
+  input: CreateReminderRequest,
+  approvalId: string,
+  turn: Turn,
+  zone: string | null
+): Promise<CreateReminderOutput> {
+  const due = input.due_at === null ? null : wallToUtc(input.due_at, zone)
+  let made: Awaited<ReturnType<typeof storeReminder>>
+  try {
+    made = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      storeReminder(
+        db,
+        {
+          orgId: owner.orgId,
+          createdByStaffId: turn.staffId,
+          source: "assistant",
+          conversationId: turn.sessionId,
+          idempotencyKey: `${ASSISTANT_KEY_PREFIX}${approvalId}`,
+        },
+        { ...input, due_at: due }
+      )
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.reminder_failed", error: failureCode(error) })
+    )
+    throw new ToolFailed(503, {
+      class: "transient",
+      code: "reminder.unconfirmed",
+      message: "The reminder could not be confirmed.",
+    })
+  }
+  if (made instanceof Response) return refused(made)
+  return { outcome: "created", due_at: made.due_at }
 }

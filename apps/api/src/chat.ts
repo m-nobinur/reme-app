@@ -35,6 +35,7 @@ import {
   contextOf,
   cosPrefix,
   DEFAULT_MODEL,
+  knownZone,
   LIMITS,
   messageTaint,
   newRunState,
@@ -462,7 +463,8 @@ export async function chat(
   if (!parsed.success) return invalid(parsed.error.issues)
   // Postgres refuses NUL in text and jsonb, and a refusal there is a 500.
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
-  const { conversation_id: id, mode, turn } = parsed.data
+  const { conversation_id: id, mode, turn, time_zone: zone } = parsed.data
+  if (zone && !knownZone(zone)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   const tools = { env, kit, owner }
   // Read before the turn's lock is taken; the CoS's context is built from it.
@@ -512,7 +514,7 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const context = contextOf(mode, workspace)
+      const context = contextOf(mode, workspace, zone ?? null)
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
         messages: opening.messages,
@@ -556,6 +558,7 @@ export async function chat(
     reserved: opened.reserved,
     state: newRunState(),
     abort: new AbortController(),
+    zone: zone ?? null,
   }
   return answerCos(run, {
     env,

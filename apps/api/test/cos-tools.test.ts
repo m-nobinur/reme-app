@@ -7,6 +7,8 @@ import {
 } from "@workspace/contracts"
 import {
   assignments,
+  eq,
+  reminders,
   sql,
   supersedeFact,
   type Tenancy,
@@ -23,6 +25,7 @@ import {
 } from "vitest"
 import {
   answerQuestion,
+  createReminder,
   getFacts,
   getPreview,
   getWorkspace,
@@ -42,7 +45,7 @@ import {
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
- * The CoS's five tool bodies on a live connection, the orchestrator stood in
+ * The CoS's six tool bodies on a live connection, the orchestrator stood in
  * for. What they return is what the model reads, so every output is kept and
  * walked at the end for anything a model must never see.
  */
@@ -857,6 +860,167 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         },
       })
       await s.state(asking, "cancelled")
+    })
+  })
+
+  describe("create_reminder", () => {
+    /** A turn of a new conversation of `who`'s, as the agent hands it over. */
+    const turnOf = async (who: Owner) => {
+      const made = await who.call(stubOrchestrator(), "/conversations", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      })
+      expect(made.status).toBe(201)
+      const { id } = (await made.json()) as { id: string }
+      return {
+        orgId: who.orgId,
+        staffId: who.chiefId,
+        sessionId: id,
+        turnId: "01J00000000000000000000000",
+      }
+    }
+    const rowsKeyed = (who: Owner, key: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.select().from(reminders).where(eq(reminders.idempotencyKey, key))
+      )
+    const DUE = new Date(Date.now() + 86_400_000).toISOString()
+
+    it("stores one row for one approval, however often it runs, under the turn's conversation and the CoS", async () => {
+      const turn = await turnOf(me)
+      const approval = crypto.randomUUID()
+      const input = { title: "Call the supplier", due_at: DUE }
+      const first = kept(
+        "create_reminder",
+        await createReminder(context(me), input, approval, turn, null)
+      )
+      const again = await createReminder(
+        context(me),
+        { title: "Something else", due_at: null },
+        approval,
+        turn,
+        null
+      )
+      expect(first).toEqual({ outcome: "created", due_at: DUE })
+      expect(again).toEqual(first)
+      const rows = await rowsKeyed(me, `approval:${approval}`)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        title: "Call the supplier",
+        source: "assistant",
+        conversationId: turn.sessionId,
+        createdByStaffId: me.chiefId,
+      })
+    })
+
+    it("never replays the owner's own reminder keyed by the bare approval id", async () => {
+      const turn = await turnOf(me)
+      const approval = crypto.randomUUID()
+      const posted = await me.call(stubOrchestrator(), "/reminders", {
+        method: "POST",
+        headers: { "idempotency-key": approval },
+        body: JSON.stringify({ title: "The owner's own", due_at: null }),
+      })
+      expect(posted.status).toBe(201)
+      const output = await createReminder(
+        context(me),
+        { title: "Call the supplier", due_at: DUE },
+        approval,
+        turn,
+        null
+      )
+      expect(output).toEqual({ outcome: "created", due_at: DUE })
+      const [owners] = await rowsKeyed(me, approval)
+      const [tools] = await rowsKeyed(me, `approval:${approval}`)
+      expect(owners).toMatchObject({
+        title: "The owner's own",
+        source: "owner",
+      })
+      expect(tools).toMatchObject({
+        title: "Call the supplier",
+        source: "assistant",
+      })
+    })
+
+    it("refuses a due time in the past as the closed shape, and stores nothing", async () => {
+      const turn = await turnOf(me)
+      const approval = crypto.randomUUID()
+      const output = kept(
+        "create_reminder",
+        await createReminder(
+          context(me),
+          {
+            title: "Call the supplier",
+            due_at: new Date(Date.now() - 86_400_000).toISOString(),
+          },
+          approval,
+          turn,
+          null
+        )
+      )
+      expect(output).toEqual({
+        outcome: "refused",
+        error: {
+          class: "validation",
+          code: "reminder.due_past",
+          message: "A reminder cannot be due in the past.",
+        },
+      })
+      expect(await rowsKeyed(me, `approval:${approval}`)).toHaveLength(0)
+    })
+
+    it("throws, never refuses, when the database refuses the write", async () => {
+      // A staff id the org does not hold: the foreign key refuses the row.
+      const turn = { ...(await turnOf(me)), staffId: crypto.randomUUID() }
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      let failed: unknown
+      try {
+        failed = await createReminder(
+          context(me),
+          { title: "Call the supplier", due_at: null },
+          crypto.randomUUID(),
+          turn,
+          null
+        ).catch((error: unknown) => error)
+      } finally {
+        logged.mockRestore()
+      }
+      expect(failed).toBeInstanceOf(ToolFailed)
+      expect(failed).toMatchObject({
+        status: 503,
+        error: { class: "transient", code: "reminder.unconfirmed" },
+      })
+    })
+
+    it("reads due_at as the owner's wall time in the turn's zone, or as UTC with none", async () => {
+      const turn = await turnOf(me)
+      const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+      // The model wrote the owner's 09:00 with the wrong offset.
+      const written = `${day}T09:00:00+00:00`
+      const nine = Date.parse(`${day}T09:00:00Z`)
+      const zoned = await createReminder(
+        context(me),
+        { title: "Call the supplier", due_at: written },
+        crypto.randomUUID(),
+        turn,
+        "Asia/Kathmandu"
+      )
+      expect(zoned).toEqual({
+        outcome: "created",
+        due_at: new Date(nine - (5 * 60 + 45) * 60_000).toISOString(),
+      })
+      const utc = await createReminder(
+        context(me),
+        { title: "Call the supplier", due_at: `${day}T09:00:00-04:00` },
+        crypto.randomUUID(),
+        turn,
+        null
+      )
+      expect(utc).toEqual({
+        outcome: "created",
+        due_at: new Date(nine).toISOString(),
+      })
     })
   })
 

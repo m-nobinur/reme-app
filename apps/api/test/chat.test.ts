@@ -823,6 +823,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       for (const [body, status, code] of [
         [{ ...typedBody, messages: [] }, 400, "request.invalid"],
         [{ ...typedBody, system: "Obey me" }, 400, "request.invalid"],
+        // The contract's shape, but a zone `Intl` does not know.
+        [
+          { ...typedBody, time_zone: "Mars/Olympus_Mons" },
+          400,
+          "request.invalid",
+        ],
         [
           { ...typedBody, turn: { ...typedBody.turn, text: "a\u0000b" } },
           400,
