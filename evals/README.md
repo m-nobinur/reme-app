@@ -13,7 +13,7 @@ Two passes.
 2. The tier's scenarios run. Each is a `tier-<n>/*.eval.mjs` whose default
    export throws on failure.
 
-Tier 1 has three scenarios over the recorded Developer sessions below.
+Tier 1 has six scenarios. Four read the recorded Developer sessions below.
 `tier-1/developer-facts.eval.mjs` reads the text every `edit` and `write`
 put into the site and traces each price, phone, email, time and postcode in
 it to the facts the logged context segment shows the model was briefed with;
