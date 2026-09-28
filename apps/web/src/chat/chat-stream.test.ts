@@ -8,6 +8,7 @@ import {
 } from "@assistant-ui/react"
 import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -108,6 +109,11 @@ const refusal = (status: number, code: string, message: string) => () =>
 
 beforeEach(() => {
   vi.mocked(sendsOn).mockClear()
+  tools = {
+    zone: "Europe/London",
+    question: (requestId) =>
+      requestId === REQUEST_ID ? "Saturday hours" : null,
+  }
   process.env.REME_API_URL = "https://api.test"
   sent = []
   turns = []
@@ -176,12 +182,26 @@ function Chat() {
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
-    createElement(Thread, {
-      autoFocus: false,
-      stored: true,
-      components: { ToolFallback: Approval },
-    })
+    createElement(
+      CosToolsProvider,
+      { value: tools },
+      createElement(Thread, {
+        autoFocus: false,
+        stored: true,
+        components: { ToolFallback: Approval },
+      })
+    )
   )
+}
+
+/**
+ * What the chat page gives the cards: the owner's zone, and the questions
+ * the workspace holds open. A test swaps either before it opens the chat.
+ */
+let tools = {
+  zone: "Europe/London",
+  question: (requestId: string): string | null =>
+    requestId === REQUEST_ID ? "Saturday hours" : null,
 }
 
 /** The conversation opened on what the api holds now. */
@@ -195,7 +215,7 @@ async function open(history: unknown) {
   await vi.waitFor(() =>
     expect(
       container.querySelector(
-        '[data-slot="ask-fact"], [data-slot="request-change"]'
+        '[data-slot="ask-fact"], [data-slot="request-change"], [data-slot="create-reminder"]'
       )
     ).not.toBeNull()
   )
@@ -584,7 +604,7 @@ for (const [answer, response] of Object.entries(RESOLVED)) {
     expect(changeCard(chat)?.querySelector('[aria-busy="true"]')).toBeNull()
 
     turns.push(sse({ request: null, response }))
-    await press(chat, "Approve")
+    await press(chat, "Send answer")
     await vi.waitFor(() =>
       expect(changeCard(chat)?.textContent).toContain("Started.")
     )
@@ -609,14 +629,10 @@ for (const [answer, response] of Object.entries(RESOLVED)) {
 
 it("the question card holds its yes the same way", async () => {
   const chat = await open(COS_HISTORY)
-  const question = chat.querySelector<HTMLElement>(
-    '[data-slot="approval-request"]'
-  )
-  if (!question) throw new Error("no question card")
-  await act(async () => button(question, "Approve").click())
+  await press(chat, "Send answer")
   expect(await decided(1)).toEqual([false])
   expect(
-    chat.querySelector('[data-slot="approval-held"][role="status"]')
+    chat.querySelector('[data-slot="answer-question"] [role="status"]')
       ?.textContent
   ).toBe(HELD)
 })
@@ -632,14 +648,12 @@ it("a held not now says so on either card", async () => {
 
   const second = await open(COS_HISTORY)
   const question = second.querySelector<HTMLElement>(
-    '[data-slot="approval-request"]'
+    '[data-slot="answer-question"]'
   )
   if (!question) throw new Error("no question card")
-  await act(async () => button(question, "Decline").click())
+  await act(async () => button(question, "Not now").click())
   expect(await decided(2)).toEqual([false, false])
-  expect(second.querySelector('[data-slot="approval-held"]')?.textContent).toBe(
-    NOT_NOW
-  )
+  expect(question.querySelector('[role="status"]')?.textContent).toBe(NOT_NOW)
 })
 
 it("a message typed while a yes is held cancels it, as the api stores it", async () => {
@@ -730,7 +744,7 @@ const ACTIONS = {
   "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
   "a whole step of yeses": async (chat: HTMLElement) => {
     await press(chat, "Approve")
-    await press(chat, "Approve")
+    await press(chat, "Send answer")
   },
 }
 
@@ -748,13 +762,346 @@ for (const [action, run] of Object.entries(ACTIONS)) {
     // composer to send again once the other turn ends.
     await vi.waitFor(() =>
       expect(
-        [...chat.querySelectorAll("button")].filter(
-          (each) => each.textContent?.trim() === "Approve" && !each.disabled
-        )
-      ).toHaveLength(2)
+        [...chat.querySelectorAll("button")]
+          .filter((each) => !each.disabled)
+          .map((each) => each.textContent?.trim())
+          .filter((name) => name === "Approve" || name === "Send answer")
+      ).toEqual(["Approve", "Send answer"])
     )
     if (action === "a typed message") {
       expect(chat.querySelector("textarea")?.value).toBe("Make it 10 to 2.")
     }
   })
 }
+
+it("shows every Chief of Staff tool in the owner's words, and nothing of its wire shape", async () => {
+  const part = (tool: string, id: string, fields: object) => ({
+    type: `tool-${tool}`,
+    toolCallId: `call_${id}`,
+    ...fields,
+  })
+  const chat = await open({
+    messages: [
+      OWNER_ROW,
+      row(COS, "msg_owner", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          part("get_workspace", "read", {
+            state: "output-available",
+            input: {},
+            output: WORKSPACE,
+          }),
+          part("get_facts", "facts", {
+            state: "output-available",
+            input: {},
+            output: {
+              facts: [
+                {
+                  key: "business.name",
+                  value: { name: "Fixture Cleaning Co" },
+                },
+              ],
+            },
+          }),
+          part("get_preview", "preview", {
+            state: "output-available",
+            input: { assignment_id: REQUEST_ID },
+            output: {
+              outcome: "refused",
+              error: {
+                class: "resource",
+                code: "assignment.not_found",
+                message: "No assignment with that id in this business.",
+              },
+            },
+          }),
+          part("request_change", "change", {
+            state: "output-error",
+            input: { text: "Add Saturday hours, 9 to 1." },
+            approval: { id: CHANGE_APPROVAL, approved: true },
+            errorText:
+              "unknown_outcome (orchestrator.timeout): the tool did not report back, so nothing is known about its result.",
+          }),
+          part("request_change", "capped", {
+            state: "output-available",
+            input: { text: "Swap the hero photo." },
+            approval: { id: "aitxt-Cap4pQ9sLw2Vn7bTc1RxYe3U", approved: true },
+            output: {
+              outcome: "refused",
+              error: {
+                class: "resource",
+                code: "builds.daily_cap",
+                message: "A business starts at most 20 builds in 24 hours.",
+              },
+            },
+          }),
+          part("answer_question", "question", {
+            state: "output-available",
+            input: {
+              request_id: REQUEST_ID,
+              value: {
+                key: "hours.weekday",
+                value: { open: "08:00", close: "18:00" },
+              },
+            },
+            approval: { id: QUESTION_APPROVAL, approved: true },
+            output: { outcome: "answered", request_id: REQUEST_ID },
+          }),
+          part("create_reminder", "reminder", {
+            state: "approval-requested",
+            input: { title: "Call the window supplier", due_at: null },
+            approval: { id: "aitxt-Rm4pQ9sLw2Vn7bTc1RxYe3Ud" },
+          }),
+        ],
+      }),
+    ],
+  })
+  await press(chat, "Checked 3 things")
+  await press(chat, "Checked for a preview")
+  const shown = chat.textContent ?? ""
+  for (const text of [
+    "Checked your workspace",
+    "Read your business details",
+    "Checked for a preview",
+    "That build is not in your workspace.",
+    "You have started as many builds as a day allows. Try again tomorrow.",
+    "We could not confirm this went through.",
+    "Weekday hours: 08:00 to 18:00",
+    "Sent. Your build carries on.",
+    "Call the window supplier",
+    "No date set. It shows under Reminders.",
+  ]) {
+    expect(shown, text).toContain(text)
+  }
+  for (const wire of [
+    "No assignment with that id",
+    "A business starts at most",
+    "get_",
+    "request_change",
+    "create_reminder",
+    "call_",
+    REQUEST_ID,
+    "unknown_outcome",
+    "{",
+  ]) {
+    expect(shown, wire).not.toContain(wire)
+  }
+  expect(button(chat, "Add reminder")).toBeDefined()
+})
+
+const reminderRow = (input: object, fields: object) =>
+  row(COS, "msg_owner", {
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      {
+        type: "tool-create_reminder",
+        toolCallId: "call_reminder",
+        input: { title: "Call the window supplier", ...input },
+        ...fields,
+      },
+    ],
+  })
+
+for (const [zone, written, kept, label] of [
+  [
+    "Australia/Sydney",
+    "2026-10-02T08:00:00+10:00",
+    "2026-10-01T22:00:00.000Z",
+    "Sydney time",
+  ],
+  [
+    "America/New_York",
+    "2026-10-02T08:00:00-04:00",
+    "2026-10-02T12:00:00.000Z",
+    "New York time",
+  ],
+] as const) {
+  it(`a reminder shows the time the owner approves and gets, in ${label}`, async () => {
+    tools = { ...tools, zone }
+    const asking = await open({
+      messages: [
+        OWNER_ROW,
+        reminderRow(
+          // The model's offset is a guess the api ignores: the digits are
+          // read as the owner's wall time.
+          { due_at: written.replace(/[+-]\d\d:\d\d$/, "+01:00") },
+          { state: "approval-requested", approval: { id: "aitxt-rem" } }
+        ),
+      ],
+    })
+    expect(asking.textContent).toContain(`Due 2 Oct 2026, 08:00 ${label}`)
+
+    const added = await open({
+      messages: [
+        OWNER_ROW,
+        reminderRow(
+          { due_at: written },
+          {
+            state: "output-available",
+            approval: { id: "aitxt-rem", approved: true },
+            output: { outcome: "created", due_at: kept },
+          }
+        ),
+      ],
+    })
+    expect(added.textContent).toContain(
+      `Added to Reminders. Due 2 Oct 2026, 08:00 ${label}.`
+    )
+  })
+}
+
+it("an answer names the question it goes to, and offers no yes for one no longer open", async () => {
+  const named = await open(COS_HISTORY)
+  const card = named.querySelector('[data-slot="answer-question"]')
+  expect(card?.textContent).toContain(
+    "This answers your build's question: Saturday hours."
+  )
+
+  tools = { ...tools, question: () => null }
+  const unknown = await open(COS_HISTORY)
+  const orphan = unknown.querySelector<HTMLElement>(
+    '[data-slot="answer-question"]'
+  )
+  expect(orphan?.textContent).toContain("no longer open")
+  expect(
+    [...(orphan?.querySelectorAll("button") ?? [])].map((b) => b.textContent)
+  ).toEqual(["Not now"])
+})
+
+it("a change it cannot read offers no yes, only a way to let the step go on", async () => {
+  const chat = await open({
+    messages: [
+      OWNER_ROW,
+      row(COS, "msg_owner", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          {
+            type: "tool-request_change",
+            toolCallId: CHANGE,
+            state: "approval-requested",
+            input: { text: "" },
+            approval: { id: CHANGE_APPROVAL },
+          },
+        ],
+      }),
+    ],
+  })
+  const card = changeCard(chat)
+  expect(card?.textContent).toContain("did not come through")
+  expect(
+    [...(card?.querySelectorAll("button") ?? [])].map((b) => b.textContent)
+  ).toEqual(["Not now"])
+})
+
+it("a call the stream left unfinished stops, rather than working forever", async () => {
+  const chat = await open(COS_HISTORY)
+  turns.push(
+    sse({
+      request: null,
+      response: frames(
+        { type: "start", messageId: "Ws3kLm8Qp2Rt5vXy" },
+        { type: "start-step" },
+        {
+          type: "tool-input-start",
+          toolCallId: "call_read_3",
+          toolName: "get_workspace",
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "call_read_3",
+          toolName: "get_workspace",
+          input: {},
+        },
+        {
+          type: "tool-input-start",
+          toolCallId: "call_rem_2",
+          toolName: "create_reminder",
+        },
+        {
+          type: "tool-input-delta",
+          toolCallId: "call_rem_2",
+          inputTextDelta: '{"title":"Call',
+        },
+        { type: "finish-step" },
+        { type: "finish" }
+      ),
+    })
+  )
+  await type(chat, "Remind me to call the supplier.")
+  await vi.waitFor(() =>
+    expect(chat.textContent).toContain("This was not finished.")
+  )
+  expect(chat.textContent).toContain("Stopped checking your workspace")
+  expect(chat.querySelector(".shimmer")).toBeNull()
+  // The turn is over: the composer offers Send again, not Stop.
+  expect(chat.querySelector('button[aria-label="Send message"]')).not.toBeNull()
+})
+
+it("renders every piece of model or owner text on a card as text, never as markup", async () => {
+  const INJECTED = "![x](https://evil.example/t.png) https://evil.example/go"
+  const part = (tool: string, id: string, fields: object) => ({
+    type: `tool-${tool}`,
+    toolCallId: `call_${id}`,
+    ...fields,
+  })
+  const chat = await open({
+    messages: [
+      OWNER_ROW,
+      row(COS, "msg_owner", {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          part("get_workspace", "read", {
+            state: "output-available",
+            input: {},
+            output: {
+              ...WORKSPACE,
+              builds: [
+                {
+                  assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+                  kind: "site.revise",
+                  state: "implementing",
+                  goal: INJECTED,
+                  version: null,
+                },
+              ],
+            },
+          }),
+          part("get_facts", "facts", {
+            state: "output-available",
+            input: {},
+            output: {
+              facts: [{ key: "business.name", value: { name: INJECTED } }],
+            },
+          }),
+          part("request_change", "change", {
+            state: "approval-requested",
+            input: { text: INJECTED },
+            approval: { id: CHANGE_APPROVAL },
+          }),
+          part("answer_question", "question", {
+            state: "approval-requested",
+            input: { request_id: REQUEST_ID, value: INJECTED },
+            approval: { id: QUESTION_APPROVAL },
+          }),
+          part("create_reminder", "reminder", {
+            state: "approval-requested",
+            input: { title: INJECTED, due_at: null },
+            approval: { id: "aitxt-Rm4pQ9sLw2Vn7bTc1RxYe3Ud" },
+          }),
+        ],
+      }),
+    ],
+  })
+  await press(chat, "Checked 2 things")
+  await press(chat, "Checked your workspace")
+  await press(chat, "Read your business details")
+  // Five places the text lands: the build goal, the fact, the change, the
+  // answer and the reminder, each as the characters it is.
+  expect(chat.textContent?.split(INJECTED)).toHaveLength(6)
+  expect(chat.querySelector("img")).toBeNull()
+  expect(chat.querySelector('a[href*="evil.example"]')).toBeNull()
+})

@@ -135,6 +135,15 @@ const STAGE = {
   { step: 0 | 1 | 2 | 3; note: string; running: boolean }
 >
 
+/** A build state in one or two words: its step, or why it waits. */
+function stageWord(state: AssignmentState): string {
+  if (state === "blocked_on_information" || state === "blocked_on_approval") {
+    return "Waiting on you"
+  }
+  if (state === "paused") return "Paused"
+  return STEPS[STAGE[state].step]
+}
+
 /** The states a Stop still means something in. */
 const STOPPABLE = (state: AssignmentState) =>
   STAGE[state].step < 3 && state !== "failed" && state !== "cancelled"
@@ -1145,6 +1154,7 @@ export {
   QuestionItem,
   ReminderNote,
   Reminders,
+  stageWord,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,

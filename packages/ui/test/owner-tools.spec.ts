@@ -67,7 +67,7 @@ test("the change card is one tap either way, and waits for the server", async ({
 }) => {
   await open(page, "RequestChange")
   const cards = page.locator('[data-slot="request-change"]')
-  await expect(cards).toHaveCount(13)
+  await expect(cards).toHaveCount(15)
   const asked = cards.nth(0)
   await expect(asked.getByRole("heading")).toHaveText(
     "Build my website from the details I gave you."
@@ -85,15 +85,21 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(cards.nth(4)).toContainText("Answer it first")
   await expect(cards.nth(5)).toContainText("You said not now.")
   await expect(cards.nth(6)).toContainText("Not started")
+  // An error after a yes may still have started the build: the owner checks.
+  await expect(cards.nth(7)).toContainText(
+    "We could not confirm this went through."
+  )
   // A yes that waits for the rest of its step is not starting anything yet,
   // on either card.
   const HELD = "You said yes. Sent once you answer the other cards."
   const held = cards.nth(8)
   await expect(held.getByRole("status")).toHaveText(HELD)
-  await expect(held.getByRole("button", { name: "Approve" })).toBeDisabled()
-  await expect(held.getByRole("button", { name: "Starting" })).toHaveCount(0)
+  // The answer is recorded and nothing runs, so the card offers no buttons.
+  await expect(held.getByRole("button")).toHaveCount(0)
   await expect(held.locator('[aria-busy="true"]')).toHaveCount(0)
-  const heldQuestions = page.locator('[data-slot="approval-held"]')
+  const heldQuestions = page.locator(
+    '[data-slot="answer-question"] [role="status"]'
+  )
   await expect(heldQuestions.nth(0)).toHaveText(HELD)
   await expect(
     cards.nth(9).getByRole("button", { name: "Approve" })
@@ -107,6 +113,20 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(sent.getByRole("button", { name: "Starting" })).toBeDisabled()
   await expect(sent.getByRole("status")).toHaveCount(0)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)
+  // Nothing to approve while the model is still writing the change.
+  await expect(cards.nth(13)).toHaveText("Writing this out")
+  await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
+  // A no on its way to the server claims nothing is starting.
+  const declining = cards.nth(14)
+  await expect(
+    declining.getByRole("button", { name: "Approve" })
+  ).toBeDisabled()
+  await expect(
+    declining.getByRole("button", { name: "Not now" })
+  ).toBeDisabled()
+  await expect(declining.getByRole("button", { name: "Starting" })).toHaveCount(
+    0
+  )
 })
 
 test("the approve button shows a visible focus ring from the keyboard", async ({

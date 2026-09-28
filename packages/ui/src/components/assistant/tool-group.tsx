@@ -84,7 +84,9 @@ function ToolGroupTrigger({
   count: number
   active?: boolean
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`
+  // The owner's words: the assistant checks things, it does not "call
+  // tools". Present tense while it still is, past once it has.
+  const label = `${active ? "Checking" : "Checked"} ${count} ${count === 1 ? "thing" : "things"}`
 
   return (
     <CollapsibleTrigger

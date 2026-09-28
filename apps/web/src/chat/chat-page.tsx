@@ -13,6 +13,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
   Thread,
@@ -20,6 +21,7 @@ import {
 } from "@workspace/ui/components/assistant/thread"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { browserZone } from "@workspace/ui/lib/zone"
 import {
   useCallback,
   useEffect,
@@ -29,6 +31,7 @@ import {
   useSyncExternalStore,
 } from "react"
 import { briefingOf } from "@/lib/briefing"
+import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
 import { missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
@@ -67,6 +70,7 @@ export function ChatPage() {
   const { id } = useParams({ strict: false })
   const router = useRouter()
   const { active, workspace } = frame.useLoaderData()
+  const live = useLiveWorkspace()
   const briefing = useMemo(
     () => briefingOf(active, workspace),
     [active, workspace]
@@ -134,6 +138,20 @@ export function ChatPage() {
     () => false
   )
 
+  // The cards name the question an answer goes to, from the workspace the
+  // panel already reads, and times in the zone each turn carries.
+  const questions = live.workspace?.attention
+  const tools = useMemo(
+    () => ({
+      zone: browserZone(),
+      question: (requestId: string) =>
+        questions?.find(
+          (item) => item.kind === "question" && item.id === requestId
+        )?.title ?? null,
+    }),
+    [questions]
+  )
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
@@ -156,16 +174,18 @@ export function ChatPage() {
             />
           </div>
         ) : (
-          <Thread
-            briefing={briefing.line}
-            components={{ ToolFallback: Approval }}
-            context={briefing.context}
-            mode={mode}
-            onModeChange={changeMode}
-            placeholder="Ask, or tell me what to change"
-            quickActions={OWNER_QUICK_ACTIONS}
-            stored={Boolean(id)}
-          />
+          <CosToolsProvider value={tools}>
+            <Thread
+              briefing={briefing.line}
+              components={{ ToolFallback: Approval }}
+              context={briefing.context}
+              mode={mode}
+              onModeChange={changeMode}
+              placeholder="Ask, or tell me what to change"
+              quickActions={OWNER_QUICK_ACTIONS}
+              stored={Boolean(id)}
+            />
+          </CosToolsProvider>
         )}
       </div>
     </AssistantRuntimeProvider>
