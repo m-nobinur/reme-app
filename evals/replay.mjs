@@ -144,12 +144,19 @@ export function canonical(value) {
   return `{${body.join(",")}}`
 }
 
-/** The hash a fixture is pinned to, over the derived context of every session. */
+/**
+ * The hash a fixture is pinned to: the derived context of every session,
+ * with what the owner sent each turn and the facts the run stated, so a
+ * scenario cannot be scored against a turn whose question was edited.
+ */
 export function replay(fixture) {
   const derived = {}
   for (const [name, turnNames] of Object.entries(fixture.sessions)) {
     derived[name] = deriveContext(sessionChunks(fixture, turnNames))
   }
-  const digest = createHash("sha256").update(canonical(derived)).digest("hex")
+  const { owner, facts } = fixture
+  const digest = createHash("sha256")
+    .update(canonical({ derived, owner, facts }))
+    .digest("hex")
   return `sha256:${digest}`
 }

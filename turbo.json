@@ -7,6 +7,7 @@
   // every cached task on a variable none of them read. Declared here because
   // `noUndeclaredEnvVars` reads this file and lint fails on warnings.
   "globalPassThroughEnv": [
+    "COS_API_URL",
     "GITHUB_STEP_SUMMARY",
     "LANGFUSE_SECRET_KEY",
     "ORCHESTRATOR_TOKEN",
