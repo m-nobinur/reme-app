@@ -5,13 +5,15 @@
   "private": true,
   "scripts": {
     "e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "golden": "E2E_BASE_URL=${E2E_BASE_URL:-https://staging.remeai.co.uk} playwright test golden.spec.ts --grep @live"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@types/node": "^22",
     "axe-core": "^4.13.0",
+    "postgres": "3.4.9",
     "typescript": "^6"
   }
 }
