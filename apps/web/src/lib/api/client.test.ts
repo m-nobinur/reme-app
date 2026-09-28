@@ -736,3 +736,64 @@ it("reads a conversation's messages, oldest first, as stored", async () => {
     message,
   ])
 })
+
+const NOTE = "00000000-0000-4000-8000-00000000000b"
+
+it("says why a reminder's time was refused, in the owner's words", async () => {
+  const add = () =>
+    apiSource.createReminder(
+      ORG,
+      { title: "Order more cloths", due_at: AT },
+      "k-4"
+    )
+  answers["POST /reminders"] = refusal(400, "reminder.due_past")
+  expect(await add()).toEqual({
+    done: false,
+    reason: "That time has already passed.",
+  })
+  answers["POST /reminders"] = refusal(400, "reminder.due_far")
+  expect(await add()).toEqual({
+    done: false,
+    reason: "Pick a time within a year.",
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    title: "Order more cloths",
+    due_at: AT,
+  })
+  expect(headerOf(calls[0], "idempotency-key")).toBe("k-4")
+})
+
+it("marks a reminder done once, however often Done is pressed", async () => {
+  answers[`PATCH /reminders/${NOTE}`] = {}
+  expect(await apiSource.completeReminder(ORG, NOTE)).toEqual({ done: true })
+  expect(calls[0]?.init?.method).toBe("PATCH")
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ done: true })
+  expect(headerOf(calls[0], "idempotency-key")).toBe(`done:${NOTE}`)
+
+  // Gone from this business: the panel reads again rather than retrying.
+  answers[`PATCH /reminders/${NOTE}`] = refusal(404, "reminder.not_found")
+  expect(await apiSource.completeReminder(ORG, NOTE)).toMatchObject({
+    done: false,
+    gone: true,
+  })
+})
+
+it("reads the open reminders in the order /workspace lists them", async () => {
+  const written = (id: string, due_at: string | null) => ({
+    id,
+    title: "Order more cloths",
+    due_at,
+    done_at: null,
+    source: "owner",
+    conversation_id: null,
+    created_at: AT,
+    updated_at: AT,
+  })
+  const notes = [written(NOTE, EXPIRES), written(FACT, null)]
+  answers["GET /workspace"] = {
+    ...workspace,
+    reminders: { notes, derived: [] },
+  }
+  const read = await apiSource.pollWorkspace(null)
+  expect(read !== "unchanged" && read.reminderNotes).toEqual(notes)
+})

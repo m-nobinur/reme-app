@@ -178,6 +178,34 @@ it("reads again when a refresh lands while a poll is under way", async () => {
   expect(reads).toHaveLength(2)
 })
 
+it("answers a refresh made during a poll only once a later read lands", async () => {
+  const releases: ((value: WorkspacePoll) => void)[] = []
+  poller.stop()
+  poller = startPolling({
+    initial: idle,
+    read: () =>
+      new Promise<WorkspacePoll>((resolve) => {
+        releases.push(resolve)
+      }),
+    onChange: () => undefined,
+    page,
+  })
+  // The poll is out when the owner's write lands and asks for a read.
+  void poller.refresh()
+  let answered = false
+  void poller.refresh().then(() => {
+    answered = true
+  })
+  releases[0]?.("unchanged")
+  await wait(0)
+  // The older poll has landed; its answer predates the write.
+  expect(releases).toHaveLength(2)
+  expect(answered).toBe(false)
+  releases[1]?.(building)
+  await wait(0)
+  expect(answered).toBe(true)
+})
+
 it("counts polls and 304s per build", async () => {
   start(building)
   answers = ["unchanged", "unchanged", idle]

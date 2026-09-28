@@ -5,10 +5,12 @@ import {
 } from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
+  AddReminder,
   ApprovalItem,
   ComingUp,
   PanelBlank,
   QuestionItem,
+  ReminderNote,
   type ReminderRow,
   Reminders,
   WaitingOnYou,
@@ -138,6 +140,42 @@ const REMINDERS = {
   },
 } satisfies Record<string, ReminderRow>
 
+/**
+ * Reminders written down, one of each kind: the owner's with a time, the
+ * Chief of Staff's, and one with no time. `due` is as `apps/web` formats it
+ * in the reader's zone.
+ */
+type Note = { title: string; due: string | null; byAssistant: boolean }
+const NOTES: Record<"owner" | "assistant" | "undated", Note> = {
+  owner: {
+    title: "Call the supplier about eco sprays",
+    due: "2 Oct 2026, 14:00",
+    byAssistant: false,
+  },
+  assistant: {
+    title: "Send the Hartley Road quote",
+    due: "3 Oct 2026, 09:30",
+    byAssistant: true,
+  },
+  undated: {
+    title: "Order more microfibre cloths",
+    due: null,
+    byAssistant: false,
+  },
+}
+
+const reminderNote = (props: Note, extra = {}) => (
+  <ReminderNote onDone={noop} {...props} {...extra} />
+)
+
+/** The add form; a submit is added after a moment, and the form clears. */
+const addForm = (extra = {}) => (
+  <AddReminder
+    onAdd={() => new Promise((done) => setTimeout(() => done(true), 400))}
+    {...extra}
+  />
+)
+
 /** A panel item a reminder can point at, as `apps/web` wraps them. */
 const target = (id: string, item: ReactNode) => (
   <div
@@ -174,7 +212,13 @@ function SamplePanel() {
           { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
         ]}
       />
-      <Reminders items={[REMINDERS.review, REMINDERS.question]} />
+      <Reminders
+        action={addForm()}
+        items={[REMINDERS.review, REMINDERS.question]}
+      >
+        <ReminderNote key="owner" onDone={noop} {...NOTES.owner} />
+        <ReminderNote key="assistant" onDone={noop} {...NOTES.assistant} />
+      </Reminders>
       <YourWebsite
         host="brightclean-demo.example.invalid"
         live={3}
@@ -324,7 +368,13 @@ const panelCatalog: Entry[] = [
   },
   {
     name: "Reminders",
-    render: () => <Reminders items={Object.values(REMINDERS)} />,
+    render: () => (
+      <Reminders action={addForm()} items={Object.values(REMINDERS)}>
+        {Object.entries(NOTES).map(([key, note]) => (
+          <ReminderNote key={key} onDone={noop} {...note} />
+        ))}
+      </Reminders>
+    ),
   },
   {
     name: "Reminders review",
@@ -343,19 +393,49 @@ const panelCatalog: Entry[] = [
     render: () => <Reminders items={[REMINDERS.facts]} />,
   },
   {
-    // An empty list renders nothing, so the entry shows the sections either
-    // side of where it would be.
+    // Nothing to remember: the section still shows, with the form as its
+    // next step.
     name: "Reminders empty",
+    render: () => <Reminders action={addForm()} items={[]} />,
+  },
+  { name: "ReminderNote", render: () => reminderNote(NOTES.owner) },
+  {
+    name: "ReminderNote set by Reme",
+    render: () => reminderNote(NOTES.assistant),
+  },
+  { name: "ReminderNote undated", render: () => reminderNote(NOTES.undated) },
+  {
+    name: "ReminderNote pending",
+    render: () => reminderNote(NOTES.owner, { pending: true }),
+  },
+  {
+    name: "ReminderNote failed",
+    render: () =>
+      reminderNote(NOTES.owner, {
+        error: "That did not go through. Try again.",
+      }),
+  },
+  { name: "AddReminder", render: () => addForm() },
+  {
+    name: "AddReminder submitting",
+    render: () => addForm({ pending: true }),
+  },
+  {
+    name: "AddReminder refused",
+    render: () => addForm({ error: "That time has already passed." }),
+  },
+  {
+    // Added: the form is empty again, the reminder is in the list, and the
+    // section says so.
+    name: "AddReminder succeeded",
     render: () => (
-      <div className="flex flex-col gap-6">
-        <ComingUp
-          items={[
-            { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
-          ]}
-        />
-        <Reminders items={[]} />
-        <YourWebsite host="brightclean-demo.example.invalid" live={3} />
-      </div>
+      <Reminders
+        action={addForm()}
+        items={[]}
+        status="Added to your reminders."
+      >
+        <ReminderNote key="added" onDone={noop} {...NOTES.undated} />
+      </Reminders>
     ),
   },
   {

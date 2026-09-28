@@ -4,10 +4,12 @@ import type {
   Conversation,
   ConversationMessage,
   ConversationPatch,
+  CreateReminderRequest,
   DecisionRequest,
   DerivedReminder,
   FactRecord,
   FactValueKey,
+  Reminder,
 } from "@workspace/contracts"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
@@ -114,6 +116,8 @@ export type Workspace = {
   missingFacts: FactValueKey[]
   /** What the api derived from rows waiting on the owner, as facts. */
   derivedReminders: DerivedReminder[]
+  /** Open reminders someone wrote down, soonest due first, undated after. */
+  reminderNotes: Reminder[]
   /** `/workspace`'s tag, sent back on the next poll; null when nothing was read. */
   etag: string | null
 }
@@ -272,6 +276,14 @@ export type OwnerDataSource = {
   ) => Promise<WriteOutcome>
   cancelBuild: (orgId: string, assignmentId: string) => Promise<WriteOutcome>
   preview: (orgId: string, assignmentId: string) => Promise<PreviewLinks | null>
+  /** A reminder the owner wrote. Idempotent on `key`. */
+  createReminder: (
+    orgId: string,
+    input: CreateReminderRequest,
+    key: string
+  ) => Promise<WriteOutcome>
+  /** Mark one reminder done. Doing it twice changes nothing. */
+  completeReminder: (orgId: string, id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */
   requestChange: (
     orgId: string,

@@ -25,6 +25,7 @@ const ENTRIES = [
   "WaitingOnYou error",
   "PanelBlank",
   "PanelBlank ready to build",
+  "Reminders empty",
 ]
 
 async function open(page: Page, entry: string, width = 1024, theme = "light") {
@@ -132,6 +133,17 @@ for (const [entry, name, hash] of [
     expect(new URL(page.url()).hash).toBe(hash)
   })
 }
+
+test("Reminders empty offers the add form, and a reminder added clears it", async ({
+  page,
+}) => {
+  await open(page, "Reminders empty")
+  await expect(page.getByText("Nothing to remember yet.")).toBeVisible()
+  const title = page.getByLabel("Add a reminder")
+  await title.fill("Order more microfibre cloths")
+  await page.getByRole("button", { name: "Add reminder" }).click()
+  await expect(title).toHaveValue("")
+})
 
 test("a panel that did not load offers Try again, and it reads again", async ({
   page,

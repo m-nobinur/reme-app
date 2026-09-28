@@ -5,7 +5,7 @@ import {
   setCookie,
 } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
-import { GOAL_MAX, Uuid } from "@workspace/contracts"
+import { GOAL_MAX, Reminder, Timestamp, Uuid } from "@workspace/contracts"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
@@ -250,6 +250,38 @@ export const askForChanges = createServerFn({ method: "POST" })
       return { done: false, reason: "Write what should change first." }
     }
     return await source.requestChange(org.id, data.text, data.key)
+  })
+
+export const createReminder = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    const dueAt = Timestamp.nullable().safeParse(data.dueAt ?? null)
+    if (!dueAt.success) {
+      throw new Error("Expected a timestamp or null.")
+    }
+    return {
+      title: text(data.title, Reminder.shape.title.maxLength ?? 200),
+      dueAt: dueAt.data,
+      key: keyOf(data.key),
+    }
+  })
+  .handler(async ({ data }): Promise<WriteOutcome> => {
+    const org = await writingOrg()
+    if (!data.title) {
+      return { done: false, reason: "Write what to remember first." }
+    }
+    return await source.createReminder(
+      org.id,
+      { title: data.title, due_at: data.dueAt },
+      data.key
+    )
+  })
+
+export const completeReminder = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(async ({ data }): Promise<WriteOutcome> => {
+    const org = await writingOrg()
+    return await source.completeReminder(org.id, data.id)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(
