@@ -187,6 +187,11 @@ export const stateOf = (ids: { orgId: string; assignmentId: string }) =>
     return row?.state
   })
 
+/**
+ * In append order. Without the order the rows come back in whatever order the
+ * plan reads them, which under a heap-order plan and concurrent suites is not
+ * the order they were appended.
+ */
 export const eventsOf = (
   ids: { orgId: string; assignmentId: string },
   type: string
@@ -198,6 +203,7 @@ export const eventsOf = (
       .where(
         sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = ${type}`
       )
+      .orderBy(events.eventId)
   )
 
 /**
