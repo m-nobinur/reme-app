@@ -4,6 +4,7 @@ import {
   ConversationList,
   ConversationMessage,
   ConversationPatch,
+  MessageFeedback,
 } from "../src/conversation.ts"
 import { ajv, generated } from "./json-schema.ts"
 import { samples } from "./samples.ts"
@@ -113,5 +114,58 @@ describe("ConversationMessage", () => {
         id: "a".repeat(64),
       })
     ).toEqual(ACCEPTED)
+  })
+})
+
+describe("MessageFeedback", () => {
+  it.each([
+    ["a thumb up", { message_id: "a_7Kd2Lm9Q", rating: "up" }],
+    ["a thumb down", { message_id: "a_7Kd2Lm9Q", rating: "down" }],
+  ])("accepts %s", (_name, feedback) => {
+    expect(verdict("MessageFeedback", MessageFeedback, feedback)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    ["another rating", { message_id: "a_7Kd2Lm9Q", rating: "positive" }],
+    ["no rating", { message_id: "a_7Kd2Lm9Q" }],
+    ["a message id with a space", { message_id: "a 7", rating: "up" }],
+    // No free text: the thumb is the whole of it.
+    ["a note", { message_id: "a_7Kd2Lm9Q", rating: "up", note: "Wrong" }],
+  ])("refuses %s", (_name, feedback) => {
+    expect(verdict("MessageFeedback", MessageFeedback, feedback)).toEqual(
+      REFUSED
+    )
+  })
+})
+
+describe("ConversationMessage feedback", () => {
+  it.each([
+    ["an unrated or user row", null],
+    ["a thumb up", "up"],
+    ["a thumb down", "down"],
+  ])("accepts %s", (_name, feedback) => {
+    expect(
+      verdict("ConversationMessage", ConversationMessage, {
+        ...(samples.ConversationMessage as object),
+        feedback,
+      })
+    ).toEqual(ACCEPTED)
+  })
+
+  it("refuses a row that leaves feedback out, or rates it another way", () => {
+    const { feedback: _, ...without } = samples.ConversationMessage as {
+      feedback: unknown
+    }
+    expect(
+      verdict("ConversationMessage", ConversationMessage, without)
+    ).toEqual(REFUSED)
+    expect(
+      verdict("ConversationMessage", ConversationMessage, {
+        ...without,
+        feedback: "positive",
+      })
+    ).toEqual(REFUSED)
   })
 })

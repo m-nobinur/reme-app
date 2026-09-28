@@ -37,6 +37,19 @@ export const ConversationPatch = z.union([
   z.strictObject({ archived: z.boolean() }),
 ])
 
+/** An owner's thumb on an assistant message. */
+export const MessageRating = z.enum(["up", "down"])
+
+/**
+ * `POST /conversations/:id/feedback`: the owner's rating of one assistant
+ * message in the conversation. Each press sends its own Idempotency-Key, and
+ * the latest recorded rating wins. No free text: the thumb is the whole of it.
+ */
+export const MessageFeedback = z.strictObject({
+  message_id: MessageId,
+  rating: MessageRating,
+})
+
 /**
  * One stored message in assistant-ui's `MessageStorageEntry` shape. `format`
  * is `aiSDKV6FormatAdapter.format`, which still says v6 on AI SDK 7.
@@ -59,6 +72,11 @@ export const ConversationMessage = z.strictObject({
       custom: z.strictObject({ createdAt: Timestamp }),
     }),
   }),
+  /**
+   * The owner's latest rating of an assistant message, read from its
+   * `cos.feedback` events. Null for a user row and for one never rated.
+   */
+  feedback: MessageRating.nullable(),
 })
 
 /**
@@ -74,3 +92,5 @@ export type ConversationList = z.infer<typeof ConversationList>
 export type ConversationPatch = z.infer<typeof ConversationPatch>
 export type ConversationMessage = z.infer<typeof ConversationMessage>
 export type ConversationHistory = z.infer<typeof ConversationHistory>
+export type MessageRating = z.infer<typeof MessageRating>
+export type MessageFeedback = z.infer<typeof MessageFeedback>

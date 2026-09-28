@@ -426,6 +426,7 @@ const row = <C extends object>(
   parent_id: parent,
   format: "ai-sdk/v6",
   content: { ...content, metadata: { custom: { createdAt: AT } } },
+  feedback: null,
 })
 const WORKSPACE = {
   site: { host: null, live_version: null },

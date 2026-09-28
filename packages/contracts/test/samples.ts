@@ -225,6 +225,7 @@ export const samples: Record<ContractName, unknown> = {
           parts: [{ type: "text", text: "Add Saturday hours to the site." }],
           metadata: { custom: { createdAt: NOW } },
         },
+        feedback: null,
       },
       {
         id: "a_7Kd2Lm9Q",
@@ -237,6 +238,7 @@ export const samples: Record<ContractName, unknown> = {
           ],
           metadata: { custom: { createdAt: NOW } },
         },
+        feedback: "up",
       },
     ],
   },
@@ -261,9 +263,15 @@ export const samples: Record<ContractName, unknown> = {
       parts: [{ type: "text", text: "Add Saturday hours to the site." }],
       metadata: { custom: { createdAt: NOW } },
     },
+    feedback: null,
   },
   ConversationPatch: { title: "Weekend prices" },
   CosCall: { turn_id: ULID, step: 0, sha256: SHA },
+  CosFeedback: {
+    conversation_id: CONVERSATION,
+    message_id: "a_7Kd2Lm9Q",
+    rating: "down",
+  },
   CosContext: {
     turn_id: ULID,
     prefix_sha256: SHA,
@@ -521,6 +529,7 @@ export const samples: Record<ContractName, unknown> = {
     requested_at: NOW,
     expires_at: LATER,
   },
+  MessageFeedback: { message_id: "a_7Kd2Lm9Q", rating: "up" },
   Org: {
     org_id: ORG,
     slug: "brightclean",

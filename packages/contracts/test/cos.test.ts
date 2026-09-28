@@ -5,6 +5,7 @@ import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
   COS_TOOLS,
+  CosFeedback,
   CosToolName,
   CosToolResult,
   CosTurn,
@@ -311,5 +312,26 @@ describe("CosTurn", () => {
     ["a tool it does not have", { ...fallback, tools: ["publish"] }],
   ])("refuses %s", (_name, turn) => {
     expect(verdict("CosTurn", CosTurn, turn)).toEqual(REFUSED)
+  })
+})
+
+describe("CosFeedback", () => {
+  const feedback = samples.CosFeedback as Record<string, unknown>
+
+  it("accepts a rating of one message in one conversation", () => {
+    expect(verdict("CosFeedback", CosFeedback, feedback)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["no conversation", { ...feedback, conversation_id: undefined }],
+    [
+      "a conversation that is not a UUID",
+      { ...feedback, conversation_id: "c1" },
+    ],
+    ["another rating", { ...feedback, rating: "positive" }],
+    // No free text, so the event needs no taint label.
+    ["a note", { ...feedback, note: "Wrong hours" }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosFeedback", CosFeedback, value)).toEqual(REFUSED)
   })
 })

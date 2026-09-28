@@ -2,7 +2,7 @@ import { z } from "zod"
 import { InformationRequest } from "./assignment.ts"
 import { ChatRequest, RequestChangeOutput } from "./chat.ts"
 import { JsonObject, Timestamp, Ulid, Uuid } from "./common.ts"
-import { ConversationMessage } from "./conversation.ts"
+import { ConversationMessage, MessageRating } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   BuildSummary,
@@ -275,6 +275,18 @@ export const CosCall = z.strictObject({
   sha256: Sha256,
 })
 
+/**
+ * The `cos.feedback` payload: the owner's thumb on one assistant message.
+ * Written with no session, so it never takes a turn's `seq` and the
+ * history derivation never reads it. Never model-visible, and no taint
+ * label, because it holds no free text.
+ */
+export const CosFeedback = z.strictObject({
+  conversation_id: Uuid,
+  message_id: ConversationMessage.shape.id,
+  rating: MessageRating,
+})
+
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type GetPreviewInput = z.infer<typeof GetPreviewInput>
@@ -289,3 +301,4 @@ export type CosMessage = z.infer<typeof CosMessage>
 export type CosToolResult = z.infer<typeof CosToolResult>
 export type CosStep = z.infer<typeof CosStep>
 export type CosCall = z.infer<typeof CosCall>
+export type CosFeedback = z.infer<typeof CosFeedback>

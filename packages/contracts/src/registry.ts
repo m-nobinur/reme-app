@@ -17,6 +17,7 @@ import {
   ConversationList,
   ConversationMessage,
   ConversationPatch,
+  MessageFeedback,
 } from "./conversation.ts"
 import {
   AnswerQuestionInput,
@@ -24,6 +25,7 @@ import {
   CosCall,
   CosContext,
   CosFacts,
+  CosFeedback,
   CosMessage,
   CosPrefix,
   CosStep,
@@ -94,6 +96,7 @@ export const contracts = {
   ConversationMessage,
   ConversationPatch,
   CosCall,
+  CosFeedback,
   CosContext,
   CosFacts,
   CosMessage,
@@ -119,6 +122,7 @@ export const contracts = {
   GetPreviewOutput,
   InformationAnswer,
   InformationRequest,
+  MessageFeedback,
   Org,
   OwnerChangeRequest,
   PreviewClaim,

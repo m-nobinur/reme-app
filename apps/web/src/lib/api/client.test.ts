@@ -727,6 +727,7 @@ it("reads a conversation's messages, oldest first, as stored", async () => {
       parts: [{ type: "text", text: "Hello" }],
       metadata: { custom: { createdAt: AT } },
     },
+    feedback: null,
   }
   answers[`GET /conversations/${CONVERSATION}/messages`] = {
     messages: [message],
