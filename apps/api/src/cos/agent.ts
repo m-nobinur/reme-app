@@ -53,21 +53,29 @@ import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 
 /**
- * The run's limits. Steps and output are ADR-034's; the two timeouts are its
- * guesses until 20 staging turns measure the first-chunk p95 (three times
- * it for `firstChunkMs`, six times that for `totalMs`).
+ * The run's limits, set by ADR-034's rules from staging on 2026-09-28: 53
+ * CoS turns and 72 steps at main d626d0f, the 20 turns of the T2 exit
+ * measurement among them.
  */
 export const LIMITS = {
   steps: 6,
-  maxOutputTokens: 1_000,
-  /** The input a step is reserved for. A guess until a measured p99. */
+  /** Three times the per-step output p95, 313 tokens (max 421). */
+  maxOutputTokens: 939,
+  /**
+   * The input a step is reserved for. Not lowered to the measured p99 of
+   * 2,681 tokens: those conversations were short, and a 12-turn history of
+   * long owner messages reaches 45k to 65k tokens a step, which a smaller
+   * figure would refuse at the first call.
+   */
   inputTokens: 30_000,
-  totalMs: 60_000,
-  firstChunkMs: 10_000,
+  /** Six times `firstChunkMs`. */
+  totalMs: 28_200,
+  /** Three times the first-chunk p95, 1,555 ms (p50 539, max 1,799), rounded up. */
+  firstChunkMs: 4_700,
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-export const PREFIX_VERSION = "1"
+export const PREFIX_VERSION = "2"
 
 export const INSTRUCTIONS = `You are Maya, the Chief of Staff for a small cleaning business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
@@ -81,6 +89,7 @@ Rules:
 - Ask the owner at most one question per reply. If you need a fact to go on, ask for it in one sentence.
 - Propose a change with request_change in the owner's own words, one change per call. Only answer a Developer question with answer_question when the owner has told you the answer in this conversation.
 - A tool that is refused tells you why; explain it to the owner plainly. A tool whose outcome is unknown did not report back; say you could not confirm it, and do not guess what it did.
+- When the owner declines a proposal, its call comes back with only the owner's words, or "Tool call execution denied." if they gave none. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
 - There is no publish tool. Publishing is the owner's button on the review card.
 - In Ask mode you can only read. If the owner asks for a change, tell them to switch to Act.
 - Reply in plain, short sentences. No markdown headings.`

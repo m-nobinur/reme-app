@@ -46,6 +46,7 @@ import {
   contextOf,
   costOf,
   DEFAULT_MODEL,
+  INSTRUCTIONS,
   LIMITS,
   priceOf,
   reservation,
@@ -53,6 +54,7 @@ import {
 } from "../src/cos/agent.ts"
 import { GRACE_MS, withinCap } from "../src/cos/turns.ts"
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
+import staging from "./cos-staging-turn.json" with { type: "json" }
 import {
   type Owner,
   owner,
@@ -255,10 +257,11 @@ describe("the CoS's model and price", () => {
     const entry = models.find((m) => m.id === DEFAULT_MODEL)
     const { input, output } = (entry as (typeof models)[number]).cost
     expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(
-      (6 * (30_000 * input + 1_000 * output)) / 1_000_000,
+      (6 * (LIMITS.inputTokens * input + LIMITS.maxOutputTokens * output)) /
+        1_000_000,
       12
     )
-    // ADR-034's arithmetic on 2026-09-27's table: about $0.017 a turn.
+    // On 2026-09-28's table and limits: about $0.017 a turn.
     expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(
       0.017,
       3
@@ -374,6 +377,27 @@ describe("a recorded turn from the chosen model and provider", () => {
         ).toBe(true)
       }
     }
+  })
+})
+
+describe("a real turn recorded on staging", () => {
+  it("holds tool-call ids the contract accepts and every event parses", () => {
+    const ToolCallId = CosToolResult.options[0].shape.tool_call_id
+    expect(staging.wire_tool_call_ids.length).toBeGreaterThan(0)
+    for (const callId of staging.wire_tool_call_ids) {
+      expect(ToolCallId.parse(callId)).toBe(callId)
+    }
+    const turns = staging.events.filter((e) => e.type === "cos.turn")
+    expect(turns.map((e) => CosTurn.parse(e.payload).outcome)).toEqual([
+      "answered",
+    ])
+  })
+
+  it("streamed the owner no reasoning", () => {
+    expect(staging.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(
+      false
+    )
+    expect(JSON.stringify(staging.chunks)).not.toContain("reasoning_details")
   })
 })
 
@@ -1522,6 +1546,64 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
     expect(await check(0.4)).toBe(true)
     expect(await check(0.6)).toBe(false)
+  })
+
+  it("sends a declined card to the model as the owner's denial", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: { text: "Add a Saturday slot." },
+        })
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const [call] = waiting(tail)
+    const { model, sent } = scripted(
+      said("Understood, I won't make that change.")
+    )
+    const stub = stubOrchestrator()
+    const done = await turn(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: false,
+              reason: "Not now.",
+            },
+          ],
+        },
+      },
+      { model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    // The model reads the owner's words as the call's result, which the
+    // instructions name as a denial; nothing says it was refused or failed.
+    const prompt = sent[0]?.prompt as { role: string; content: unknown }[]
+    const result = prompt
+      .filter((m) => m.role === "tool")
+      .flatMap((m) => m.content as { toolCallId: string; output: unknown }[])
+      .find((r) => r.toolCallId === call?.toolCallId)
+    expect(result?.output).toEqual({ type: "error-text", value: "Not now." })
+    expect(INSTRUCTIONS).toContain("only the owner's words")
+    expect(INSTRUCTIONS).toContain('"Tool call execution denied."')
+  })
+
+  it("tells the model a declined card is the owner's no, and not to propose it again", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /owner declines a proposal[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks/
+    )
   })
 
   it("gives an org made before the starting team its Chief of Staff, and the CoS answers", async () => {

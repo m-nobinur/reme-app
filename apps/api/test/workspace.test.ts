@@ -1076,8 +1076,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           "/changes",
           json({ text: "Change the hero." })
         )
-        // One 10 s deadline for the change (the driver asks for others).
-        expect(timer.asked.filter((ms) => ms === 10_000)).toHaveLength(1)
+        // One 6.1 s deadline for the change (the driver asks for others).
+        expect(timer.asked.filter((ms) => ms === 6_100)).toHaveLength(1)
         expect(response.status).toBe(503)
         expect(ErrorEnvelope.parse(await response.json()).code).toBe(
           "orchestrator.timeout"

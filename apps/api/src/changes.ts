@@ -38,12 +38,14 @@ type Bridged = { status: number; body: unknown }
 
 /**
  * How long a change may take, reads and every call over the binding
- * together, and how long any other single call may take (ADR-034). A guess:
- * 7.5 times one measured staging `POST /changes` of 1,330 ms. The chat's
- * approval waits on it while it holds its turn's lock, so the 15 s
- * idle-in-transaction limit in `packages/db` is this plus 5 s.
+ * together, and how long any other single call may take (ADR-034): three
+ * times the p95 of the changes that replaced an open review, measured on
+ * staging on 2026-09-28 from the client, 2,016 ms over 4 (the fifth hit the
+ * daily build cap). All 20 changes: p50 942 ms, p95 2,016 ms, max 2,034 ms;
+ * the Worker's own wall time p50 722 ms, p95 1,786 ms. The 15 s
+ * idle-in-transaction limit in `packages/db` stays above this plus 5 s.
  */
-const BRIDGE_TIMEOUT_MS = 10_000
+const BRIDGE_TIMEOUT_MS = 6_100
 
 /**
  * `work`, or `late()` once `signal` aborts, whichever comes first. An
