@@ -2,7 +2,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cn } from "@workspace/ui/lib/utils"
 import { cva, type VariantProps } from "class-variance-authority"
 
-const buttonVariants = cva(
+const buttonStyles = cva(
   "group/button inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-4xl border border-transparent bg-clip-padding font-medium text-sm outline-none transition-all focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
@@ -37,16 +37,24 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * The button's classes, merged, so the variant's colours win over the base
+ * ones on anything styled as a button (a link has no `cn()` of its own; an
+ * unmerged `border-transparent` hid every outline link's border).
+ */
+const buttonVariants = (...args: Parameters<typeof buttonStyles>) =>
+  cn(buttonStyles(...args))
+
 function Button({
   className,
   variant = "default",
   size = "default",
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonStyles>) {
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={buttonVariants({ variant, size, className })}
       {...props}
     />
   )
