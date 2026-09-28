@@ -47,9 +47,40 @@
     // depends on the starter (the orchestrator bundles its source) makes turbo
     // run starter-site#build at the same time, and two astro builds in one dist
     // fail with ENOTEMPTY. Waiting for the build serialises them.
+    //
+    // This entry and the two below replace `test` rather than extend it, so
+    // each repeats its fields. The `$TURBO_ROOT$` inputs are files a suite
+    // reads from outside its package, which turbo cannot see: without them an
+    // edit to one leaves the hash unchanged and a cached pass is replayed.
+    // package.test.ts compares the tokens with packages/ui's and the
+    // dependencies with the sandbox image's.
     "@workspace/starter-site#test": {
       "dependsOn": ["^build", "build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/packages/ui/src/styles/tokens.css",
+        "$TURBO_ROOT$/infra/sandbox/astro/package.json"
+      ],
+      "env": ["DATABASE_URL"]
+    },
+    // seed.test.ts reads the sandbox image's package.json and
+    // sandbox-config.test.ts its Dockerfile.
+    "orchestrator#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/infra/sandbox/**"],
+      "env": ["DATABASE_URL"]
+    },
+    // cos-import-ban.test.ts lints probe files with the repo's Biome config
+    // and the plugin it loads.
+    "api#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/biome.jsonc",
+        "$TURBO_ROOT$/scripts/lint/no-hardcoded-colours.grit"
+      ],
       "env": ["DATABASE_URL"]
     },
     // Not cached, unlike every other test task. This one compares screenshots
