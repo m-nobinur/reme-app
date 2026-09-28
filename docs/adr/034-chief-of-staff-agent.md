@@ -7,7 +7,7 @@ Amended 2026-09-27: what a timed-out bridge call means, and the limits that foll
 Amended again the same day: the budget lock and the stream. Brought in line with the tools, the
 event appends and the history derivation on 2026-09-28, and marked where the agent's PR adds the
 rest. Amended 2026-09-28: the agent as built. Amended 2026-09-29: feedback, titles, tool errors and
-the limits.
+the limits. Amended again the same day: the reminder tool.
 
 ## Context
 
@@ -560,7 +560,8 @@ Rejected:
 - **Building the SSE pipeline by hand** from `JsonToSseTransformStream` and `TextEncoderStream`.
   It drops the `consumeSseStream` tee, so a closed tab aborts the model run.
 
-**Five tools at first.** The agent's PR shipped `get_workspace`, `get_facts`, `get_preview`,
+**Five tools at first.** Superseded by the amendment "the reminder tool", 2026-09-29, which records
+the sixth tool. The agent's PR shipped `get_workspace`, `get_facts`, `get_preview`,
 `request_change` and `answer_question`. `create_reminder` has since shipped with reminders, the
 sixth tool and the third that needs the owner's approval.
 
@@ -645,17 +646,17 @@ owner got, and evals tell model replies apart by the `cos.message` ids.
 The rating is a `cos.feedback` event, `{conversation_id, message_id, rating}`, written with
 `session_id` null. It takes no turn lock and no seq, never waits on a turn, and the derivation
 never reads it. It is never model-visible and has no taint label, because it holds no free text.
-Each press carries its own Idempotency-Key from the web, kept as the event's key, so a retried
-press writes nothing and still answers 204. A change of mind is a new press with a new key, and
-the latest rating by `recorded_at` wins. `ConversationMessage.feedback` carries it back, required
-and nullable: null on a user row and on a row never rated. The web drops a failed press silently,
-because the adapter has no error path, and the api logs its code.
+Each press carries its own Idempotency-Key from the web. The api hashes it with the event type into
+the event's key, so a retried press writes nothing and still answers 204. A change of mind is a new
+press with a new key, and the latest rating by `recorded_at` wins. `ConversationMessage.feedback`
+carries it back, required and nullable: null on a user row and on a row never rated. The web
+drops a failed press silently, because the adapter has no error path, and the api logs its code.
 
 **Titles.** A conversation's first message names it. In the transaction that stores that message,
 the api sets `title` from the owner's text, only when the conversation held no message before and
 has no title, and never for the onboarding conversation. So a rename is never overwritten. The
 title is the first line, with control characters and bidi controls removed and whitespace
-collapsed, cut at a word boundary to under 60 characters. It is the owner's own text shown to
+collapsed, cut at a word boundary to under 60 code points. It is the owner's own text shown to
 their own org as plain text, never as markdown or HTML, so it needs no taint handling while it
 stays out of model-visible text. If a title ever enters a context or a tool output, it carries
 `untrusted_input`.
@@ -670,11 +671,6 @@ written. The card then says the outcome could not be confirmed and to check befo
 The safe reading is the default. A call the owner talked past, `TOOL_CALL_CANCELLED`, is checked
 first. The instructions treat it as neither a yes nor a no: the model does not act on it, and asks
 again only if it still matters.
-
-**Reminder times.** `create_reminder` reads `due_at` as wall time in the turn's time zone and
-ignores the offset written on it, because a model copies the current offset, which is wrong for a
-date across a clock change. A time the clocks skip moves forward by the gap, a time they pass twice
-takes the earlier instant, and with no zone the wall time reads as UTC.
 
 **The limits.** Measured on staging over 64 turns and 87 steps on 2026-09-27. Each limit is set by
 a rule, not by a multiple of another limit:
@@ -699,3 +695,54 @@ Rejected:
   shorter one.
 - **A lower bridge deadline from the change samples.** Other call types were not measured, and a
   deadline too short turns more calls into unknown outcomes for little gain.
+
+## Amendment, 2026-09-29: the reminder tool
+
+**The sixth tool.** `create_reminder` is the third act tool. It is active only in Act mode, and the
+agent's `toolApproval` map sets it to `'user-approval'`, so it runs only in the settle step after
+the owner's yes. On a yes it stores a reminder with source `assistant`, the turn's conversation
+and the CoS's staff row as its maker, through the same `createReminder` that `POST /reminders`
+uses. Its output is `{outcome: "created", due_at}`, with no ids or URLs. A refusal from the route's
+checks comes back as outcome `refused` with its code. A database error is a `ToolFailed` 503
+`reminder.unconfirmed`, an unknown outcome, never a refusal. An event that holds the reminder's
+title carries `untrusted_input`. The no-key results-turn proof now denies a `create_reminder` as
+well, and stores it as `output-denied`.
+
+**The key.** The tool's key is `approval:<approval_id>`, stored in `reminders.idempotency_key`,
+which is unique per org. `createReminder` looks the key up before any check, so a replayed approval
+returns the first row even after its due time has passed. The owner's route refuses any
+Idempotency-Key that starts `approval:` with 400 `idempotency_key.reserved`. An owner's key can
+then never replay an assistant row, or the reverse.
+
+**The due time's range.** A `due_at` more than 5 minutes before now, or more than 366 days after,
+is refused with 400 `reminder.due_past` or `reminder.due_far`, for both sources. The 5 minutes
+allow for a client clock a little behind. The api never moves a due time into range.
+
+**The Now line.** The model had no clock. `ChatRequest.time_zone` is optional and carries the IANA
+name the owner's browser reports through `Intl`. The contract checks its shape, and the api
+answers 400 on `time_zone` for a name `Intl` does not know. The context's second line is
+`Now: <wall time with offset> (<zone>)` in that zone. With no zone it gives UTC and says the
+owner's zone is not known. The line is part of the context text, so `cos.context` logs it and every
+call's hash covers it (R7). Adding it took context policy version 3. The instructions and the
+tool's description took prefix version 3, since the limits PR (#177) had taken 2.
+
+**Reminder times.** `create_reminder` reads `due_at` as wall time in the turn's time zone and
+ignores the offset written on it, because a model copies the Now line's offset, which is wrong for
+a date across a clock change. The turn is the one that runs the call, usually the one carrying the
+owner's yes, and its Now line is in its own `cos.context`. A time the clocks skip moves forward by
+the gap, so 02:30 on a spring-forward night becomes 03:30. A time they pass twice takes the earlier
+instant. With no zone the wall time reads as UTC.
+
+Rejected:
+
+- **Clamping a due time into range.** A clamped reminder fires at a time the owner never gave. A
+  refusal reaches the model, which can tell the owner and ask again.
+- **The tool call id as the key.** Every act tool is keyed by its approval id, the id that settle,
+  the fallback and a dead turn's repair all run the call under. A tool call id comes from the
+  provider, and nothing makes it unique across turns or providers, so a repeated id would replay an
+  earlier reminder instead of storing a new one.
+- **`cf.timezone`.** Cloudflare derives it from the connecting IP's location, which is wrong behind
+  a VPN or a carrier gateway. The browser's zone is the one the owner's own clock shows.
+
+Change if: the org gains a stored time zone. The turn reads that zone and uses the browser's only
+when none is stored.
