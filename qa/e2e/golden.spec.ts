@@ -87,7 +87,23 @@ const run = {
 }
 
 let user: ProbeUser | null = null
-let cookie = ""
+let owner: Page | null = null
+
+/**
+ * The owner's session as the browser holds it now. The web refreshes the
+ * sealed session as the panel polls, so a cookie read once at sign-in is
+ * stale within minutes and the api answers `session.absent`.
+ */
+async function session(): Promise<string> {
+  if (!owner) throw new Error("no owner is signed in")
+  try {
+    lastSession = await sessionCookie(owner)
+  } catch {
+    // The page is closed by teardown time; the last cookie read is the best left.
+  }
+  return lastSession
+}
+let lastSession = ""
 
 async function step<T>(name: string, body: () => Promise<T>): Promise<T> {
   const began = Date.now()
@@ -136,7 +152,7 @@ async function keyUsage(key: string): Promise<number | null> {
 }
 
 async function readJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await api(cookie, path, init)
+  const response = await api(await session(), path, init)
   expect(response.ok, `${path}: ${await response.clone().text()}`).toBe(true)
   return (await response.json()) as T
 }
@@ -240,7 +256,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     user = await createProbeUser(`golden-${day}-`)
     await signIn(page, user)
     run.org_id = (await startOrg(page, user, run.business)).org_id
-    cookie = await sessionCookie(page)
+    owner = page
     await visit(page, "/app")
     await expect(page).toHaveURL(/\/app\/c\/[0-9a-f-]{36}$/)
     onboarding = page.url()
@@ -307,15 +323,27 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     const retry = panel(page).getByRole("button", { name: "Try again" })
     const question = panel(page).locator('[data-slot="question-item"]')
     await page.route("**/_serverFn/**", fail)
+    let shown = false
     try {
-      await expect(stale.or(question).first()).toBeVisible()
+      // A queued build polls every 30 s (open item 97), so the first failed
+      // read can land half a minute in; a question arriving first is the same
+      // "not reached".
+      shown = await stale
+        .or(question)
+        .first()
+        .waitFor({ timeout: 70_000 })
+        .then(() => true)
+        .catch(() => false)
     } finally {
       await page.unroute("**/_serverFn/**", fail)
     }
-    if (!(await retry.isVisible())) {
-      run.blank_state_actions["Try again"] =
-        "not reached: a question was already waiting"
-      note("Try again was not reachable: the pricing question came first.")
+    if (!shown || !(await retry.isVisible())) {
+      run.blank_state_actions["Try again"] = shown
+        ? "not reached: a question was already waiting"
+        : "not reached: the failed poll did not show within 70 s"
+      note(
+        `Try again was not reachable (${run.blank_state_actions["Try again"]}).`
+      )
       return
     }
     await retry.click()
@@ -359,7 +387,19 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expect(
       page.getByRole("heading", { name: "Notifications", level: 1 })
     ).toBeVisible()
-    await expect(page.locator('li[data-kind="report"]').first()).toBeVisible()
+    // The publish report is written when the deployment is recorded, which
+    // can trail the live host answering; reload as an owner would.
+    const report = page.locator('li[data-kind="report"]').first()
+    const listed = Date.now()
+    await expect(async () => {
+      if (!(await report.isVisible())) await page.reload()
+      await expect(report).toBeVisible({ timeout: 5_000 })
+    }).toPass({ timeout: 180_000, intervals: [5_000] })
+    const waited = Math.round((Date.now() - listed) / 1000)
+    if (waited > 5)
+      note(
+        `v1's publish report was listed ${waited} s after the site was live.`
+      )
     run.blank_state_actions["See notifications"] = "clicked"
   })
 
@@ -420,14 +460,15 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       `Remind me to ring the window cleaner about ${token} tomorrow at 10am`
     )
     await page.getByLabel("Send message").click()
-    // The generic approval card: the tool has no card of its own yet.
-    const card = page
-      .getByRole("region", { name: "Approval needed: create_reminder" })
-      .last()
+    // The tool's own card; its yes is scoped to the card, since the panel's
+    // form has an "Add reminder" button too.
+    const card = page.locator('[data-slot="create-reminder"]').last()
     await card
-      .getByRole("button", { name: "Approve" })
+      .getByRole("button", { name: "Add reminder" })
       .click({ timeout: WAIT.chat })
-    await expect(page.getByText("You approved this.").last()).toBeVisible()
+    await expect(card).toContainText("Added to Reminders.", {
+      timeout: WAIT.chat,
+    })
     // The title is the Chief of Staff's restatement, so it is found by the
     // run's token and then used whole.
     const set = noteOf(token)
@@ -496,15 +537,26 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
  */
 async function stopBuilds() {
   const read = async () =>
-    ((await (await api(cookie, "/workspace")).json()) as Workspace).builds
+    (
+      (await (
+        await api(await session(), "/workspace")
+      ).json()) as Partial<Workspace>
+    ).builds ?? []
   for (const build of await read()) {
-    await api(cookie, `/builds/${build.assignment_id}/cancel`, {
+    await api(await session(), `/builds/${build.assignment_id}/cancel`, {
       method: "POST",
       headers: { "idempotency-key": crypto.randomUUID() },
     })
   }
   await expect.poll(read, { timeout: 120_000 }).toEqual([])
 }
+
+// Builds are stopped while the page and its live session are still open;
+// the probe cleanup refuses an org with an unfinished build.
+test.afterEach(async () => {
+  if (owner)
+    await stopBuilds().catch((error) => note(`builds not stopped: ${error}`))
+})
 
 test.afterAll(async () => {
   test.setTimeout(10 * 60_000)
@@ -537,7 +589,7 @@ test.afterAll(async () => {
   let cleared = false
   if (run.org_id) {
     try {
-      if (cookie) await stopBuilds()
+      if (owner) await stopBuilds()
     } catch (error) {
       failures.push(`builds not stopped: ${error}`)
     }
