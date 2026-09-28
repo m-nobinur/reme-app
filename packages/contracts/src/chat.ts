@@ -17,6 +17,28 @@ const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 export const TOOL_CALL_CANCELLED =
   "User cancelled tool call by sending a new message."
 
+/**
+ * How a Chief of Staff tool's error text begins (ADR-034). `TOOL_FAILED`
+ * means the call did nothing: the builder answered in a shape the api does
+ * not accept. `TOOL_UNKNOWN` means nobody can vouch for the outcome: it may
+ * have happened. The api builds every error line from these, and the web
+ * reads them back with `toolErrorKind`.
+ */
+export const TOOL_FAILED = "tool_failed"
+export const TOOL_UNKNOWN = "unknown_outcome"
+
+/**
+ * What a tool's error text says happened. Only a `TOOL_FAILED` line, which
+ * names its code as `tool_failed (<code>)`, is `failed`. Every other text is
+ * `unknown`, a future or unrecognised one included, and so is an older
+ * stored `tool_failed:` line, whose outcome was never known: telling an owner
+ * that something did not happen when it may have invites a duplicate.
+ * `TOOL_CALL_CANCELLED` is neither, so callers check it first.
+ */
+export function toolErrorKind(errorText: string): "failed" | "unknown" {
+  return errorText.startsWith(`${TOOL_FAILED} (`) ? "failed" : "unknown"
+}
+
 /** Each `FactValue` option as its `ask_fact` input, so `prefill` keeps its key's type. */
 type Asks<T extends readonly unknown[]> = {
   [I in keyof T]: T[I] extends z.ZodObject<{

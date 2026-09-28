@@ -5,6 +5,10 @@ import {
   ChatRequest,
   type ChatResult,
   RequestChangeOutput,
+  TOOL_CALL_CANCELLED,
+  TOOL_FAILED,
+  TOOL_UNKNOWN,
+  toolErrorKind,
 } from "../src/chat.ts"
 import {
   ANSWER_TEXT_MAX,
@@ -251,5 +255,36 @@ describe("ChatRequest", () => {
     ],
   ])("refuses %s", (_name, request) => {
     expect(verdict("ChatRequest", ChatRequest, request)).toEqual(REFUSED)
+  })
+})
+
+describe("toolErrorKind", () => {
+  it("reads only a TOOL_FAILED line with its code as failed", () => {
+    expect(
+      toolErrorKind(
+        `${TOOL_FAILED} (orchestrator.off_contract): the builder answered in a shape we do not accept, so nothing was done.`
+      )
+    ).toBe("failed")
+  })
+
+  it.each([
+    [
+      "an unknown outcome",
+      `${TOOL_UNKNOWN} (orchestrator.timeout): the tool did not report back.`,
+    ],
+    [
+      "an unknown outcome with no code",
+      `${TOOL_UNKNOWN}: the tool stopped before it answered.`,
+    ],
+    [
+      "the older stored fallback line",
+      "tool_failed: the tool stopped before it answered. Nothing is known about its result.",
+    ],
+    ["a cancelled call", TOOL_CALL_CANCELLED],
+    ["the prefix mid-text", `Something broke: ${TOOL_FAILED} (x)`],
+    ["empty text", ""],
+    ["any other text", "The build is on fire."],
+  ])("reads %s as unknown", (_name, errorText) => {
+    expect(toolErrorKind(errorText)).toBe("unknown")
   })
 })
