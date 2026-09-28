@@ -153,3 +153,49 @@ export function withoutProviderData<T extends object>(value: T): T {
   for (const key of PROVIDER_KEYS) delete copy[key]
   return copy as T
 }
+
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+/**
+ * A client's Idempotency-Key as an event's key: 26 Crockford characters from
+ * the SHA-256 of `scope` and the key, so it fits `events.idempotency_key`
+ * (a ULID's shape) and the org's unique index refuses a replay. The scope
+ * keeps one route's keys apart from another's.
+ */
+export async function eventKey(scope: string, key: string): Promise<string> {
+  const hex = await sha256Hex(`${scope}:${key}`)
+  // 128 bits as 26 base-32 digits: the first digit holds the top 3 bits of
+  // 130, so it is at most 3, inside a ULID's 0 to 7.
+  let n = BigInt(`0x${hex.slice(0, 32)}`)
+  let out = ""
+  for (let i = 0; i < 26; i++) {
+    out = CROCKFORD[Number(n % 32n)] + out
+    n /= 32n
+  }
+  return out
+}
+
+/** The longest title made from an owner's first message, in characters. */
+export const TITLE_MAX = 59
+
+/**
+ * A conversation's title from the owner's first message: its first line,
+ * without control characters or bidi controls, whitespace collapsed, cut
+ * at a word boundary to under 60 characters. Null when nothing is left.
+ * The owner's own words, stored and shown as plain text only.
+ */
+export function titleFrom(text: string): string | null {
+  const firstLine = text.split(/\r\n|\r|\n|\u2028|\u2029/, 1)[0] ?? ""
+  const clean = firstLine
+    .replace(/[\p{Cc}\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  const chars = [...clean]
+  if (chars.length === 0) return null
+  if (chars.length <= TITLE_MAX) return clean
+  const head = chars.slice(0, TITLE_MAX + 1).join("")
+  const space = head.lastIndexOf(" ")
+  return space > 0
+    ? head.slice(0, space).trimEnd()
+    : chars.slice(0, TITLE_MAX).join("")
+}

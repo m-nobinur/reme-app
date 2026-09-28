@@ -12,12 +12,16 @@ export type AppendEvent = {
   type: string
   payload: Record<string, unknown>
   taint?: TaintLabel[]
+  /**
+   * A ULID-shaped key the caller keeps to retry with. Defaults to a fresh
+   * one. A second append under the same key in the org fails with 23505 on
+   * `events_org_idempotency_key`.
+   */
+  idempotencyKey?: string
 }
 
 export type AppendSessionEvent = AppendEvent & {
   sessionId: string
-  /** A ULID the caller keeps to retry with. Defaults to a fresh one. */
-  idempotencyKey?: string
 }
 
 // Marked pure so a bundle that never makes an id, such as the router's, drops
@@ -58,15 +62,17 @@ function row(
 }
 
 /**
- * One row in `events`, belonging to no session (ADR-028). A fresh ULID is safe
- * as the idempotency key only because every caller appends inside the same
- * transaction as the write it describes: the two commit or roll back together.
+ * One row in `events`, belonging to no session (ADR-028). With no
+ * `idempotencyKey`, a fresh ULID is safe as the key only because every such
+ * caller appends inside the same transaction as the write it describes: the
+ * two commit or roll back together. A caller whose event is the write passes
+ * its own key, so a retry collides instead of appending twice.
  */
 export async function appendEvent(
   db: OrgScopedDb,
   event: AppendEvent
 ): Promise<string> {
-  const values = row(event, null, newUlid())
+  const values = row(event, null, event.idempotencyKey ?? newUlid())
   await db.insert(events).values(values)
   return values.eventId
 }

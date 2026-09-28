@@ -76,6 +76,7 @@ import {
   invalid,
   readBody,
   sortedKeys,
+  titleFrom,
   withoutProviderData,
 } from "./http.ts"
 import { ownerStaffId } from "./staff.ts"
@@ -434,6 +435,19 @@ async function swapTail(
   return true
 }
 
+/**
+ * The first message names the conversation: a title from the owner's words,
+ * set only while it has none, so a rename is never overwritten.
+ */
+async function nameConversation(db: OrgScopedDb, id: string, text: string) {
+  const title = titleFrom(text)
+  if (!title) return
+  await db
+    .update(conversations)
+    .set({ title })
+    .where(sql`${conversations.id} = ${id} and ${conversations.title} is null`)
+}
+
 /** Thrown inside a turn's transaction to roll it back and answer with this. */
 class Refusal {
   constructor(readonly response: Response) {}
@@ -493,6 +507,7 @@ export async function chat(
       if (session && (await closeLapsedTurn(db, session, LIMITS.totalMs))) {
         return busy()
       }
+      if (turn.kind === "message") await nameConversation(db, id, turn.text)
       const named = turn.kind === "results" ? turn.message_id : held.tail?.id
       const log = session
         ? await sessionState(db, id, prefix.sha256, named ?? null)
