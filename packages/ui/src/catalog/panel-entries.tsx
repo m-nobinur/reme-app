@@ -66,6 +66,9 @@ const nextStep = (href: string, label: string) => (
 /** A read that takes a moment, so the retry's pending state shows. */
 const retry = () => new Promise<void>((done) => setTimeout(done, 400))
 
+/** The live site's home page on a laptop, as the panel's thumbnail. */
+const THUMBNAIL = { src: page(1440) }
+
 const ANSWER_EXPIRY = "The build waits on you until you answer."
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
@@ -172,7 +175,11 @@ function SamplePanel() {
         ]}
       />
       <Reminders items={[REMINDERS.review, REMINDERS.question]} />
-      <YourWebsite host="brightclean-demo.example.invalid" live={3} />
+      <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        thumbnail={THUMBNAIL}
+      />
     </>
   )
 }
@@ -354,7 +361,32 @@ const panelCatalog: Entry[] = [
   {
     name: "YourWebsite",
     render: () => (
-      <YourWebsite host="brightclean-demo.example.invalid" live={3} />
+      <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite loading",
+    render: () => (
+      <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        thumbnail="loading"
+      />
+    ),
+  },
+  {
+    // An image that does not decode: the section falls back to its text.
+    name: "YourWebsite screenshot failed",
+    render: () => (
+      <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        thumbnail={{ src: "data:image/png;base64," }}
+      />
     ),
   },
   {

@@ -4,6 +4,7 @@ import type { AttentionItem, Workspace } from "./api/types"
 export const EMPTY_WORKSPACE: Workspace = {
   attention: [],
   live: null,
+  liveRevision: null,
   building: false,
   open: false,
   builds: [],

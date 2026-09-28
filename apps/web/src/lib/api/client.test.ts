@@ -319,6 +319,7 @@ it("reads the live version, and a build only while it is working", async () => {
   }
   expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
     live: 3,
+    liveRevision: { revisionId: REVISION, assignmentId: ASSIGNMENT },
     building: false,
     open: true,
   })
@@ -329,6 +330,7 @@ it("reads the live version, and a build only while it is working", async () => {
   }
   expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
     live: null,
+    liveRevision: null,
     building: true,
     open: true,
   })
@@ -663,8 +665,10 @@ it("reads a build's preview and its three screenshots", async () => {
   }
   answers[`GET /builds/${ASSIGNMENT}/preview`] = link
   expect(await apiSource.preview(ORG, ASSIGNMENT)).toEqual({
+    revisionId: REVISION,
     url: link.url,
     screenshots: link.screenshots,
+    expiresAt: EXPIRES,
   })
 })
 

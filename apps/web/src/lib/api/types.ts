@@ -100,6 +100,8 @@ export type Workspace = {
   attention: AttentionItem[]
   /** The version live on the site, or null before the first publish. */
   live: number | null
+  /** The live version's revision and the build that made it, to read its screenshots. */
+  liveRevision: { revisionId: string; assignmentId: string } | null
   /** A build is doing work now, rather than waiting on the owner or paused. */
   building: boolean
   /** Any build is unfinished, working or not: another must not be offered. */
@@ -120,7 +122,13 @@ export type Workspace = {
 export type WorkspacePoll = Workspace | "unchanged"
 
 /** A signed preview of one revision: the page and its three screenshots. */
-export type PreviewLinks = { url: string; screenshots: string[] }
+export type PreviewLinks = {
+  revisionId: string
+  url: string
+  screenshots: string[]
+  /** When the signed URLs stop working. */
+  expiresAt: string
+}
 
 /**
  * What became of an owner's write. A refusal the owner can act on comes

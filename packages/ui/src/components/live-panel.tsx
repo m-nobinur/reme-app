@@ -853,16 +853,40 @@ function Reminders({ items }: { items: ReminderRow[] }) {
   )
 }
 
-/** The site as it stands: the version that is live, and where. */
+/** A screenshot of the live site's home page, or "loading" while it is read. */
+type Thumbnail = { src: string } | "loading" | null
+
+/**
+ * The site as it stands: the version that is live, and where. The
+ * thumbnail is the panel's only image, at a fixed ratio so nothing moves
+ * when it arrives; one that fails to load leaves the text alone.
+ */
 function YourWebsite({
   host,
   live,
+  thumbnail = null,
 }: {
   host: string | null
   live: number | null
+  thumbnail?: Thumbnail
 }) {
+  const [broken, setBroken] = useState<string | null>(null)
+  const shot = live ? thumbnail : null
   return (
     <PanelSection title="Your website">
+      {shot === "loading" ? (
+        <Skeleton className="aspect-[16/10] w-full rounded-md" />
+      ) : shot && shot.src !== broken ? (
+        <img
+          alt={`Your website's home page on a laptop, version ${live}`}
+          className="aspect-[16/10] w-full rounded-md border border-border bg-muted object-cover object-top"
+          height={200}
+          loading="lazy"
+          onError={() => setBroken(shot.src)}
+          src={shot.src}
+          width={320}
+        />
+      ) : null}
       <p className="text-sm">
         {live ? `Version ${live} is live.` : "Nothing is published yet."}
       </p>
@@ -915,7 +939,7 @@ function PanelBlank({
   )
 }
 
-export type { Preview, ReminderRow }
+export type { Preview, ReminderRow, Thumbnail }
 export {
   AnswerInputs,
   ApprovalItem,
