@@ -493,14 +493,17 @@ it("polls with the last tag and keeps what it has on a 304", async () => {
   expect(headerOf(calls[0], "if-none-match")).toBe('"a1"')
 })
 
-it("reads a changed workspace with its tag, builds and missing facts", async () => {
+it("reads a changed workspace with its tag, builds, facts and reminders", async () => {
   answers["GET /workspace"] = Response.json(
     {
       site: { host: "fictional.example.invalid", live: null },
       builds: [building],
       attention: [],
       missing_facts: ["business.phone"],
-      reminders: { notes: [], derived: [] },
+      reminders: {
+        notes: [],
+        derived: [{ rule: "facts_missing", keys: ["business.phone"] }],
+      },
     },
     { headers: { etag: '"b2"' } }
   )
@@ -511,6 +514,7 @@ it("reads a changed workspace with its tag, builds and missing facts", async () 
     builds: [building],
     host: "fictional.example.invalid",
     missingFacts: ["business.phone"],
+    derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
   })
   // Nothing to name, so the directory is not read.
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])

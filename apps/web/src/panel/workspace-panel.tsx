@@ -6,6 +6,7 @@ import {
   PanelBlank,
   type Preview,
   QuestionItem,
+  Reminders,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,
@@ -22,6 +23,7 @@ import {
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
+import { anchorOf, reminderRows } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
@@ -38,6 +40,10 @@ import { useLiveWorkspace } from "@/lib/workspace"
 const TYPICAL_BUILD = { min: 115, max: 313 }
 
 const FAILED = "That did not go through. Try again."
+
+/** Where a reminder can point: focusable by script, ringed from the keyboard. */
+const TARGET =
+  "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
 
 const frame = getRouteApi("/app")
 
@@ -308,33 +314,46 @@ export function WorkspacePanel() {
   return (
     <>
       {current ? (
-        <Stoppable
-          build={current}
-          key={current.assignment_id}
-          queued={queued}
-          refresh={refresh}
-        />
+        <div
+          className={TARGET}
+          id={anchorOf.build(current.assignment_id)}
+          tabIndex={-1}
+        >
+          <Stoppable
+            build={current}
+            key={current.assignment_id}
+            queued={queued}
+            refresh={refresh}
+          />
+        </div>
       ) : null}
       <WaitingOnYou error={stale} status={status}>
         {attention.map((item) =>
           item.kind === "approval" ? (
-            <Decidable
-              announce={setStatus}
-              item={item}
+            <div
+              className={TARGET}
+              id={anchorOf.approval(item.id)}
               key={item.id}
-              refresh={refresh}
-            />
+              tabIndex={-1}
+            >
+              <Decidable announce={setStatus} item={item} refresh={refresh} />
+            </div>
           ) : item.kind === "question" ? (
-            <Answerable
-              announce={setStatus}
-              item={item}
+            <div
+              className={TARGET}
+              id={anchorOf.question(item.id)}
               key={item.id}
-              refresh={refresh}
-            />
+              tabIndex={-1}
+            >
+              <Answerable announce={setStatus} item={item} refresh={refresh} />
+            </div>
           ) : null
         )}
       </WaitingOnYou>
       <ComingUp items={comingUp(attention)} />
+      <Reminders
+        items={reminderRows(workspace, current?.assignment_id ?? null)}
+      />
       {live || host ? <YourWebsite host={host} live={live} /> : null}
     </>
   )
