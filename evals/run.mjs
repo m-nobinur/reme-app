@@ -90,7 +90,10 @@ for (const name of fixtureNames) {
   } else if (first !== fixture.hash) {
     fail(
       `${fixture.fixture} replayed to ${first}, pinned to ${fixture.hash}. ` +
-        "Re-record with `pnpm record` and read the diff."
+        (session
+          ? `Re-record with \`pnpm record:session <org> <assignment id> ${fixture.fixture}\``
+          : "Re-record with a paid live run on staging (`evals/record.mjs`, see evals/README.md)") +
+        " and read the diff."
     )
   } else {
     console.log(`ok    ${fixture.fixture} replayed twice, ${first}`)

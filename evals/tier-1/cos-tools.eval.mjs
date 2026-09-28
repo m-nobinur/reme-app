@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { CASES, partsOf, score } from "../cos-cases.mjs"
-import { loadFixture } from "../replay.mjs"
+import { CASES, FACTS, partsOf, score } from "../cos-cases.mjs"
+import { fixtureLeaks } from "../redact.mjs"
+import { canonical, loadFixture } from "../replay.mjs"
 
 /**
  * Tier 1 (§16.3), offline: the Chief of Staff's tool choice, per utterance
@@ -21,8 +23,41 @@ const FIXTURE = fileURLToPath(
   new URL("../fixtures/cos-chat.jsonl", import.meta.url)
 )
 
+/**
+ * Where the recording no longer matches the cases: a case added, dropped or
+ * reworded, or the facts changed, since it was recorded. Scoring a turn
+ * against a question it was not asked is noise, so each needs a re-record.
+ */
+export function drift(fixture) {
+  const found = []
+  if (canonical(fixture.facts) !== canonical(FACTS))
+    found.push("the stated facts")
+  const recorded = Object.keys(fixture.sessions).sort((a, b) =>
+    a.localeCompare(b)
+  )
+  const cased = CASES.map((c) => c.name).sort((a, b) => a.localeCompare(b))
+  if (canonical(recorded) !== canonical(cased)) found.push("the case list")
+  for (const kase of CASES) {
+    const names = fixture.sessions[kase.name] ?? []
+    const sent = names.map((name) => {
+      const { mode, text, deny } = fixture.owner[name]
+      return { mode, text, deny }
+    })
+    if (canonical(sent) !== canonical(kase.turns)) found.push(kase.name)
+  }
+  return found
+}
+
 export default async function cosTools() {
+  const leaks = fixtureLeaks(readFileSync(FIXTURE, "utf8"))
+  if (leaks.length > 0)
+    throw new Error(`cos-chat.jsonl holds ${leaks.join(", ")}`)
   const fixture = loadFixture(FIXTURE)
+  const drifted = drift(fixture)
+  if (drifted.length > 0)
+    throw new Error(
+      `cos-chat.jsonl was recorded against other cases (${drifted.join(", ")}). Re-record it on staging; see evals/README.md.`
+    )
   const rows = CASES.map((kase) => {
     const names = fixture.sessions[kase.name] ?? []
     const turns = names.map((name) => ({

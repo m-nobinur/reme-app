@@ -4,7 +4,12 @@ import {
   removeOwner,
   stagingRefusal,
 } from "../../apps/api/scripts/dev-owner.mjs"
-import { CASES, FACTS, partsOf, score } from "../cos-cases.mjs"
+import {
+  deleteProbeUser,
+  reapProbeOrgs,
+  staleProbeUsers,
+} from "../../qa/e2e/workos.ts"
+import { CASES, callsOf, FACTS, partsOf, score } from "../cos-cases.mjs"
 
 /**
  * Tier 2 (§16.3), live: the Chief of Staff on staging, through `/chat` as the
@@ -21,12 +26,14 @@ import { CASES, FACTS, partsOf, score } from "../cos-cases.mjs"
  *     node --env-file=.env.local --experimental-transform-types evals/run.mjs --tier 2
  *
  * WORKOS_API_KEY, WORKOS_CLIENT_ID and WORKOS_COOKIE_PASSWORD are staging's,
- * which the guard below checks. OPENROUTER_API_KEY is the key the api spends
- * from, read for the cap. Its usage lags a minute or more and other runs on
- * the key move it too, so the cap is a backstop. The api's own reservation
- * bounds each turn (ADR-034: about $0.017 at the routing cap, under $0.20
- * for these 11 turns). Skipped without COS_API_URL, so `pnpm eval` runs
- * everywhere.
+ * which the guard below checks. OPENROUTER_API_KEY must be the same key as
+ * staging `reme-api`'s secret of that name: the cap and the spend are read
+ * from its usage. A run whose usage never moves was spending from another
+ * key, so it fails rather than report a spend of zero, and so does any
+ * unreadable usage. Usage lags a minute or more and other runs on the key
+ * move it too, so the cap is a backstop; the api's own reservation bounds
+ * each turn (ADR-034: about $0.017 at the routing cap, under $0.20 for these
+ * 11 turns). Skipped without COS_API_URL, so `pnpm eval` runs everywhere.
  */
 
 /** The most one run may move the key's usage. */
@@ -45,15 +52,65 @@ function outcomeOf(chunks, status) {
   return finish.finishReason ? "answered" : "fallback"
 }
 
+/** The key's usage in dollars. Throws rather than let an unread usage pass as zero. */
 async function keyUsage() {
   // Not passed through turbo: a task that saw the key would run the facade's live tests.
   // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
   const key = process.env.OPENROUTER_API_KEY
-  if (!key) return null
+  if (!key) throw new Error("OPENROUTER_API_KEY is empty, so no spend is known")
   const res = await fetch("https://openrouter.ai/api/v1/key", {
     headers: { authorization: `Bearer ${key}` },
   })
-  return res.ok ? (await res.json()).data.usage : null
+  const usage = res.ok ? (await res.json()).data?.usage : undefined
+  if (typeof usage !== "number")
+    throw new Error(`the key's usage could not be read (${res.status})`)
+  return usage
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * What the run spent, once the key's usage shows it. Eleven model turns
+ * always cost something, so usage that never moves means the api spends
+ * from another key.
+ */
+export async function spentSince(before, tries = 12) {
+  for (let i = 0; i < tries; i++) {
+    const moved = (await keyUsage()) - before
+    if (moved > 0) return moved
+    await sleep(15_000)
+  }
+  throw new Error(
+    "the key's usage did not move after the run: OPENROUTER_API_KEY is not the key staging's api spends from"
+  )
+}
+
+/** A JSON body, or a throw naming the route that did not answer 200. */
+async function read(call, path) {
+  const res = await call("GET", path)
+  if (!res.ok) throw new Error(`GET ${path}: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * Every build the org holds that someone's yes would have started: running,
+ * waiting on a review, failed, published or live. The org is new, so this
+ * starts at zero; only a build that was started and then cancelled within
+ * the run is missed, and nothing in the run cancels one.
+ */
+export async function builds(call) {
+  const workspace = await read(call, "/workspace")
+  const activity = await read(call, "/activity")
+  return {
+    running: workspace.builds.map((b) => b.assignment_id),
+    count:
+      workspace.builds.length +
+      workspace.attention.filter((a) => a.kind === "approval").length +
+      (workspace.site.live ? 1 : 0) +
+      activity.items.filter(
+        (i) => i.what === "published" || i.reason === "build_failed"
+      ).length,
+  }
 }
 
 /** The owner's session against one api. */
@@ -136,6 +193,8 @@ export async function liveRun() {
   if (!base) throw new Error("COS_API_URL names no api")
   if (new URL(base).hostname === "api.remeai.co.uk")
     throw new Error("COS_API_URL is production; this runs against staging")
+  // First, so a run with no readable spend touches nothing.
+  const before = await keyUsage()
   const vars = process.env
   const refusal = await stagingRefusal({
     clientId: vars.WORKOS_CLIENT_ID,
@@ -146,16 +205,25 @@ export async function liveRun() {
     throw new Error("WORKOS_COOKIE_PASSWORD is empty")
 
   const workos = await client(vars)
+  // What an earlier run left behind when it died before its `finally`: the
+  // e2e reapers, by their prefixes and an hour's age.
+  for (const id of await staleProbeUsers()) await deleteProbeUser(id)
+  await reapProbeOrgs()
   const date = new Date().toISOString().slice(0, 10)
-  // The e2e reaper's prefixes, so a run that dies before its `finally` is
-  // cleaned up within the hour.
   const owner = {
     email: `qa-e2e-cos-${date}-${crypto.randomUUID().slice(0, 8)}@example.net`,
     orgName: `QA probe cleaning ${date} cos eval`,
   }
   const password = `Qa${crypto.randomUUID().replaceAll("-", "")}!`
-  const before = await keyUsage()
-  const run = { cases: [], builds: null, spentUsd: null, stopped: null }
+  const run = {
+    cases: [],
+    builds: null,
+    spentUsd: null,
+    stopped: null,
+    // For `pnpm record`'s scan: none of these may reach a fixture.
+    secrets: [owner.email, owner.orgName, new URL(base).host],
+  }
+  let call = null
   try {
     await workos.userManagement.createUser({
       email: owner.email,
@@ -182,42 +250,41 @@ export async function liveRun() {
     })
     if (!signup.ok) throw new Error(`POST /org: ${signup.status}`)
     // The first session predates the org and carries no org claim.
-    const call = api(base, await signIn())
+    call = api(base, await signIn())
     const stated = await call("POST", "/facts", { facts: FACTS })
     if (!stated.ok) throw new Error(`POST /facts: ${stated.status}`)
+    const start = await builds(call)
+    if (start.count !== 0)
+      throw new Error(`the new org already holds ${start.count} build(s)`)
 
     for (const kase of CASES) {
-      const spent = before === null ? null : (await keyUsage()) - before
-      if (spent !== null && spent > SPEND_CAP_USD) {
+      const spent = (await keyUsage()) - before
+      if (spent > SPEND_CAP_USD) {
         run.stopped = `spend cap: $${spent.toFixed(4)} before ${kase.name}`
         break
       }
       run.cases.push({ name: kase.name, turns: await runCase(call, kase) })
     }
-    const workspace = await (await call("GET", "/workspace")).json()
-    const activity = await (await call("GET", "/activity")).json()
-    // Builds still running, and any that already failed. A build that started
-    // and was cancelled within the run would be missed; nothing before this
-    // cancels.
-    run.builds =
-      workspace.builds.length +
-      activity.items.filter((i) => i.reason === "build_failed").length
-    // None of them outlives the run.
-    for (const build of workspace.builds) {
-      const cancelled = await call(
-        "POST",
-        `/builds/${build.assignment_id}/cancel`,
-        {}
-      )
-      if (!cancelled.ok)
-        throw new Error(`a build could not be cancelled: ${cancelled.status}`)
-    }
+    // The run approved nothing, so every one of these is unapproved.
+    run.builds = (await builds(call)).count
+    run.spentUsd = await spentSince(before)
   } finally {
+    const cleanup = []
+    // No build outlives the run, even one a throw above left running.
+    if (call) {
+      try {
+        for (const id of (await builds(call)).running) {
+          const res = await call("POST", `/builds/${id}/cancel`, {})
+          if (!res.ok) cleanup.push(`a build was not cancelled (${res.status})`)
+        }
+      } catch (error) {
+        cleanup.push(`the builds were not read (${error.message})`)
+      }
+    }
     await removeOwner(workos, owner).catch((error) =>
-      console.error(`      the owner was not removed: ${error.name}`)
+      cleanup.push(`the owner was not removed (${error.name})`)
     )
-    const after = await keyUsage()
-    run.spentUsd = before === null || after === null ? null : after - before
+    for (const line of cleanup) console.error(`      ${line}`)
   }
   return run
 }
@@ -244,8 +311,7 @@ export default async function cosLive() {
     r.turns
       .map(
         (t) =>
-          t.parts
-            .filter((p) => p.type === "tool" && p.input !== undefined)
+          callsOf(t.parts)
             .map((p) => p.toolName)
             .join("+") || "-"
       )
@@ -253,7 +319,7 @@ export default async function cosLive() {
   const lines = [
     "## Tier 2: Chief of Staff on staging",
     "",
-    `${passed.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd?.toFixed(4) ?? "unknown"} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
+    `${passed.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
     "",
     "| Case | Tools per turn | Result |",
     "| --- | --- | --- |",
