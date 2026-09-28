@@ -246,6 +246,20 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 const PRICE = priceOf(DEFAULT_MODEL)
 
+describe("the CoS's instructions", () => {
+  it("tell the model a declined card is the owner's no, and not to propose it again", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /owner declines a proposal, its call comes back as "The owner declined"[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks/
+    )
+  })
+
+  it("tell the model a talked-over card is neither yes nor no", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /"User cancelled tool call by sending a new message\." That is neither yes nor no: don't act on it, and ask about it again only if it still matters/
+    )
+  })
+})
+
 describe("the CoS's model and price", () => {
   it("keeps the default model in the facade's list, with a price", () => {
     expect(ids).toContain(DEFAULT_MODEL)
@@ -261,9 +275,9 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-09-28's table and limits: about $0.017 a turn.
+    // On 2026-09-28's table and limits: about $0.024 a turn.
     expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(
-      0.017,
+      0.024,
       3
     )
   })
@@ -393,7 +407,10 @@ describe("a real turn recorded on staging", () => {
     ])
   })
 
-  it("streamed the owner no reasoning", () => {
+  // The fixture's own shape, so an eval that replays it never replays
+  // reasoning to an owner. It proves nothing about the live filter, which
+  // the reasoning cases below drive.
+  it("holds no reasoning in its chunks", () => {
     expect(staging.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(
       false
     )
@@ -660,8 +677,16 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const done = await turn(me, typed(id, "Actually, never mind."), { model })
     expect(done.response.status, done.text).toBe(200)
     expect(sent).toHaveLength(1)
-    const prompt = JSON.stringify(sent[0]?.prompt)
-    expect(prompt).toContain("User cancelled tool call")
+    // The call reaches the model as the cancellation the instructions name.
+    const results = (
+      (sent[0]?.prompt ?? []) as { role: string; content: unknown }[]
+    )
+      .filter((m) => m.role === "tool")
+      .flatMap((m) => m.content as { toolCallId: string; output: unknown }[])
+    expect(results.find((r) => r.toolCallId === "call_rc")?.output).toEqual({
+      type: "error-text",
+      value: "User cancelled tool call by sending a new message.",
+    })
     expect((await turnsOf(id)).map((t) => t.outcome)).toEqual([
       "answered",
       "answered",
@@ -1595,15 +1620,61 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       .filter((m) => m.role === "tool")
       .flatMap((m) => m.content as { toolCallId: string; output: unknown }[])
       .find((r) => r.toolCallId === call?.toolCallId)
-    expect(result?.output).toEqual({ type: "error-text", value: "Not now." })
-    expect(INSTRUCTIONS).toContain("only the owner's words")
-    expect(INSTRUCTIONS).toContain('"Tool call execution denied."')
+    expect(result?.output).toEqual({
+      type: "error-text",
+      value: "The owner declined: Not now.",
+    })
+    // The screen keeps the owner's own words.
+    const card = (await tailOf(me, id)).parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call?.toolCallId
+    ) as { approval: { reason?: string } }
+    expect(card.approval.reason).toBe("Not now.")
   })
 
-  it("tells the model a declined card is the owner's no, and not to propose it again", () => {
-    expect(INSTRUCTIONS).toMatch(
-      /owner declines a proposal[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks/
+  it("frames a decline reason as the owner's no, whatever it starts with", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Add a Saturday slot."), {
+      model: scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: { text: "Add a Saturday slot." },
+        })
+      ).model,
+    })
+    const tail = await tailOf(me, id)
+    const [call] = waiting(tail)
+    const { model, sent } = scripted(said("Understood."))
+    const reason = "unknown_outcome (orchestrator.timeout): try again"
+    await turn(
+      me,
+      {
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          kind: "results",
+          message_id: tail.id,
+          results: [
+            {
+              kind: "approval",
+              approval_id: call?.approval.id,
+              approved: false,
+              reason,
+            },
+          ],
+        },
+      },
+      { model }
     )
+    const results = (
+      (sent[0]?.prompt ?? []) as { role: string; content: unknown }[]
+    )
+      .filter((m) => m.role === "tool")
+      .flatMap(
+        (m) => m.content as { toolCallId: string; output: { value: string } }[]
+      )
+    const value = results.find((r) => r.toolCallId === "call_rc")?.output.value
+    expect(value).toBe(`The owner declined: ${reason}`)
   })
 
   it("gives an org made before the starting team its Chief of Staff, and the CoS answers", async () => {
@@ -1649,9 +1720,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     const done = await turn(me, typed(id, "Read everything.", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
-    // Two steps of 100k input fit a reservation of about $0.017; a third
-    // could pass it.
-    expect(sent).toHaveLength(2)
+    // Three steps of 100k input fit a reservation of about $0.024; a
+    // fourth could pass it, so the six the model would take never run.
+    expect(sent).toHaveLength(3)
     const [ended] = await turnsOf(id)
     const reserved = reservation(PRICE as NonNullable<typeof PRICE>)
     expect(ended?.outcome).toBe("answered")
@@ -1743,7 +1814,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await admin`
       insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
       values (${ulid()}, ${me.orgId}, ${me.chiefId}, ${id}, 0, 'cos.message', now(), ${ulid()},
-        ${admin.json({ turn_id: "01K6A00000000000000000HGGE", message: { id: "m-huge", role: "user", parts: [{ type: "text", text: "x".repeat(500_000) }] } })}, '{"untrusted_input"}')`
+        ${admin.json({ turn_id: "01K6A00000000000000000HGGE", message: { id: "m-huge", role: "user", parts: [{ type: "text", text: "x".repeat(900_000) }] } })}, '{"untrusted_input"}')`
     const { model, sent } = scripted(said("never sent"))
     const done = await turn(me, typed(id, "Hello", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)

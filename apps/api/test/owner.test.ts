@@ -286,7 +286,7 @@ describe("the bridge", () => {
         `/${A}/cancel`,
         { key: "k" }
       )
-      expect(asked).toEqual([6_100])
+      expect(asked).toEqual([10_000])
       expect(result.status).toBe(503)
       expect(ErrorEnvelope.parse(result.body)).toMatchObject({
         class: "transient",

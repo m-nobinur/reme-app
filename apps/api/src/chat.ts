@@ -643,6 +643,24 @@ type CosPart = {
   approval?: { id: string; approved?: boolean; reason?: string }
 }
 
+const DECLINED = "The owner declined"
+
+/** A denial's reason as the model reads it: always the owner's no first. */
+const declined = (reason: string | undefined) =>
+  reason === undefined ? `${DECLINED}.` : `${DECLINED}: ${reason}`
+
+/** The owner's own words from a reason, as the screen shows them. */
+function ownerWords(reason: string | undefined): string | undefined {
+  if (reason === `${DECLINED}.`) return undefined
+  return reason?.startsWith(`${DECLINED}: `)
+    ? reason.slice(DECLINED.length + 2)
+    : reason
+}
+
+/** The reason the screen shows for an approval: a denial's unframed. */
+const shownReason = (approval: { approved?: boolean; reason?: string }) =>
+  approval.approved === false ? ownerWords(approval.reason) : approval.reason
+
 /** The chunks that show a CoS call as the owner's results left it. */
 function settledChunks(part: CosPart): UIMessageChunk[] {
   const toolCallId = part.toolCallId as string
@@ -652,9 +670,9 @@ function settledChunks(part: CosPart): UIMessageChunk[] {
           type: "tool-approval-response",
           approvalId: part.approval.id,
           approved: part.approval.approved === true,
-          ...(part.approval.reason === undefined
+          ...(shownReason(part.approval) === undefined
             ? {}
-            : { reason: part.approval.reason }),
+            : { reason: shownReason(part.approval) }),
         },
       ]
     : []
@@ -751,10 +769,17 @@ async function openCos(
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined
     if (!result || !waiting.includes(part)) return part
+    // A denial's reason is the owner's free text, so the model gets it
+    // framed as the owner's no; it could otherwise open with words the
+    // instructions give to a failure. The screen keeps the owner's words.
     const approval = {
       id: result.approval_id,
       approved: result.approved,
-      ...(result.reason === undefined ? {} : { reason: result.reason }),
+      ...(result.approved
+        ? result.reason === undefined
+          ? {}
+          : { reason: result.reason }
+        : { reason: declined(result.reason) }),
     }
     return result.approved
       ? { ...part, state: "approval-responded", approval }
@@ -998,12 +1023,24 @@ function cancelParts<P extends { type: string }>(parts: P[]): P[] {
 
 /**
  * What a stored row shows of a message: everything but its reasoning,
- * whether as a part or as a provider's data on one.
+ * whether as a part or as a provider's data on one, and a denial's reason
+ * in the owner's own words.
  */
 const shown = <P extends { type: string }>(parts: P[]): P[] =>
   parts
     .filter((p) => !p.type.startsWith("reasoning"))
     .map((p) => withoutProviderData(p))
+    .map((p) => {
+      const approval = (p as CosPart).approval
+      // Only a denial's reason is framed.
+      if (approval?.approved !== false || !approval.reason) return p
+      const { reason: _, ...rest } = approval
+      const words = ownerWords(approval.reason)
+      return {
+        ...p,
+        approval: words === undefined ? rest : { ...rest, reason: words },
+      }
+    })
 
 /**
  * The tail with every pending call cancelled, the way assistant-ui's
