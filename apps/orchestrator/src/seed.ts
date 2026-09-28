@@ -59,13 +59,39 @@ export function siteHost(slug: string, suffix: string): string {
   return `${slug}${suffix}`
 }
 
+/** The longest DNS label a host may carry. */
+const LABEL_MAX = 63
+
+/** The org id's first 8 characters that `slugFor` in apps/api ends a slug with. */
+const ID_TAIL = /-[0-9a-f]{8}$/
+
 /**
  * The host a revision's preview answers on, `preview-v{n}-{slug}` under the
- * same suffix (ADR-030). One level deep, under the reserved `preview-`
- * prefix, and inside a 63-character label while the slug is at most 44.
+ * same suffix (ADR-030), one level deep under the reserved `preview-`
+ * prefix. The first label must fit 63 characters, and a slug can be 49
+ * (`slugFor`'s 40-character base, a hyphen and 8 characters of the org id),
+ * so a label that would pass 63 keeps the slug's id tail, which keeps hosts
+ * apart, and cuts its base instead. A slug that fits is used whole, so
+ * existing preview hosts do not move. The site's own host is `siteHost`,
+ * never cut.
  */
 export function previewHost(slug: string, version: number, suffix: string) {
-  if (!Number.isInteger(version) || version < 1)
+  // A safe integer has at most 16 digits, which leaves room for the id tail.
+  if (!Number.isSafeInteger(version) || version < 1)
     throw new Error(`not a version: ${JSON.stringify(version)}`)
-  return `preview-v${version}-${siteHost(slug, suffix)}`
+  const site = siteHost(slug, suffix)
+  const prefix = `preview-v${version}-`
+  // The part of the suffix that joins the slug's label, `-stg` on staging.
+  const joined = suffix.startsWith("-")
+    ? suffix.slice(0, suffix.indexOf("."))
+    : ""
+  const room = LABEL_MAX - prefix.length - joined.length
+  if (slug.length <= room) return `${prefix}${site}`
+  const tail = ID_TAIL.exec(slug)?.[0] ?? ""
+  const base = slug
+    .slice(0, slug.length - tail.length)
+    .slice(0, Math.max(0, room - tail.length))
+    .replace(/-+$/, "")
+  const cut = base ? `${base}${tail}` : tail.slice(1)
+  return `${prefix}${siteHost(cut, suffix)}`
 }

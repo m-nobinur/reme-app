@@ -6,23 +6,88 @@ import { freshOrg, newAssignment } from "./fixture.ts"
 
 const SUFFIX = "-stg.remeai.co.uk"
 
+const claim = (host: string) =>
+  PreviewClaim.safeParse({
+    org_id: "10000001-0000-4000-8000-000000000001",
+    site_id: "10000001-0000-4000-8000-000000000001",
+    revision_id: "10000001-0000-4000-8000-000000000003",
+    host,
+    scope: "site",
+    exp: 1,
+  }).success
+
 describe("the preview host", () => {
-  it("fits a DNS label at the longest slug staging allows", () => {
-    const slug = `${"a".repeat(35)}-${"b".repeat(8)}`
-    expect(slug).toHaveLength(44)
-    const host = previewHost(slug, 9999, SUFFIX)
-    const [label] = host.split(".")
-    expect(label?.length).toBeLessThanOrEqual(63)
-    expect(
-      PreviewClaim.safeParse({
-        org_id: "10000001-0000-4000-8000-000000000001",
-        site_id: "10000001-0000-4000-8000-000000000001",
-        revision_id: "10000001-0000-4000-8000-000000000003",
-        host,
-        scope: "site",
-        exp: 1,
-      }).success
-    ).toBe(true)
+  // The longest slug `slugFor` makes: a 40-character base, a hyphen and 8
+  // characters of the org id.
+  const longest = (base: string, id: string) =>
+    `${base.repeat(40).slice(0, 40)}-${id}`
+
+  it.each([
+    ["-stg.remeai.co.uk", 1],
+    ["-stg.remeai.co.uk", 10],
+    ["-stg.remeai.co.uk", 100],
+    [".remeai.co.uk", 1],
+    [".remeai.co.uk", 10],
+    [".remeai.co.uk", 100],
+    ["-stg.remeai.co.uk", 9999],
+  ])(
+    "fits one label for a 49-character slug on %s at v%i",
+    (suffix, version) => {
+      const slug = longest("a", "0b027d88")
+      expect(slug).toHaveLength(49)
+      const host = previewHost(slug, version, suffix)
+      const [label] = host.split(".")
+      expect(label?.length).toBeLessThanOrEqual(63)
+      expect(host.endsWith(`-0b027d88${suffix}`)).toBe(true)
+      expect(host.startsWith(`preview-v${version}-a`)).toBe(true)
+      expect(claim(host)).toBe(true)
+    }
+  )
+
+  it("keeps two orgs apart when their bases are the same after the cut", () => {
+    const one = previewHost(longest("ab", "0b027d88"), 100, "-stg.remeai.co.uk")
+    const two = previewHost(longest("ab", "0b027d99"), 100, "-stg.remeai.co.uk")
+    expect(one).not.toBe(two)
+  })
+
+  it("leaves a slug that fits whole", () => {
+    expect(previewHost("brightclean-0b027d88", 3, "-stg.remeai.co.uk")).toBe(
+      "preview-v3-brightclean-0b027d88-stg.remeai.co.uk"
+    )
+    expect(previewHost("brightclean", 3, ".remeai.co.uk")).toBe(
+      "preview-v3-brightclean.remeai.co.uk"
+    )
+    // Exactly one label's room at v1 on staging: 63 less "preview-v1-" and "-stg".
+    const edge = `${"a".repeat(39)}-0b027d88`
+    expect(previewHost(edge, 1, "-stg.remeai.co.uk")).toBe(
+      `preview-v1-${edge}-stg.remeai.co.uk`
+    )
+    expect(`preview-v1-${edge}-stg`).toHaveLength(63)
+    // A slug whose base ended on a hyphen keeps it while it fits.
+    expect(previewHost("bright--0b027d88", 3, ".remeai.co.uk")).toBe(
+      "preview-v3-bright--0b027d88.remeai.co.uk"
+    )
+  })
+
+  it("fits the longest slug at the largest version it takes, and refuses a larger one", () => {
+    const host = previewHost(
+      longest("a", "0b027d88"),
+      Number.MAX_SAFE_INTEGER,
+      "-stg.remeai.co.uk"
+    )
+    expect(host.split(".")[0]?.length).toBeLessThanOrEqual(63)
+    expect(claim(host)).toBe(true)
+    expect(() =>
+      previewHost("brightclean-0b027d88", 10 ** 50, "-stg.remeai.co.uk")
+    ).toThrow()
+  })
+
+  it("never leaves a hyphen where the base was cut", () => {
+    // A base whose cut lands on a hyphen.
+    const slug = `${"a".repeat(36)}-${"b".repeat(3)}-0b027d88`
+    const host = previewHost(slug, 100, "-stg.remeai.co.uk")
+    expect(host).not.toContain("--")
+    expect(claim(host)).toBe(true)
   })
 
   it("refuses what is not a slug, a suffix or a version", () => {
