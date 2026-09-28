@@ -12,8 +12,8 @@ import { visit } from "./visit"
  * load) need an organisation or a failed read. They are clicked in
  * `packages/ui/test/notifications.spec.ts` against the catalog, and
  * `apps/web/src/panel/workspace-panel.test.ts` checks the destinations the
- * app wires into them. Live clicks join the golden-path spec once it signs
- * in an owner with an organisation.
+ * app wires into them. `golden.spec.ts` clicks them live as an owner with
+ * an organisation, "Try again" whenever its run reaches it.
  */
 
 const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })

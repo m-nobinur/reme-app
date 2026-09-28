@@ -1,11 +1,11 @@
-import { expect as baseExpect, type Page, test } from "@playwright/test"
+import { expect as baseExpect, test } from "@playwright/test"
+import { ANSWERS, signIn, startOrg } from "./owner"
 import { visit } from "./visit"
 import {
   createProbeUser,
   deleteProbeOrgs,
   deleteProbeUser,
   PROBE_ORG_PREFIX,
-  type ProbeUser,
 } from "./workos"
 
 /**
@@ -29,46 +29,6 @@ test.use({ storageState: { cookies: [], origins: [] } })
 const expect = baseExpect.configure({ timeout: 30_000 })
 test.setTimeout(240_000)
 
-/** `apps/api` beside the web under test, or `E2E_API_URL`. */
-function apiUrl(): string {
-  if (process.env.E2E_API_URL) return process.env.E2E_API_URL
-  const web = new URL(process.env.E2E_BASE_URL ?? "http://localhost:3000")
-  if (web.hostname === "localhost") return "http://localhost:3001"
-  if (web.hostname.endsWith("-reme-web.beapp.workers.dev")) {
-    return web.origin.replace("-reme-web.", "-reme-api.")
-  }
-  throw new Error(`Set E2E_API_URL: no api is known beside ${web.origin}.`)
-}
-
-async function signIn(page: Page, user: ProbeUser) {
-  await visit(page, "/sign-in", 'button[type="submit"]')
-  await page.getByLabel("Email").fill(user.email)
-  await page.getByLabel("Password").fill(user.password)
-  await page.getByRole("button", { name: "Sign in" }).click()
-  await page.waitForURL(/\/app/)
-}
-
-/** How the run answers each question, by the question the owner reads. */
-const ANSWERS: Record<
-  string,
-  (form: ReturnType<Page["locator"]>) => Promise<void>
-> = {
-  "What number should customers ring?": async (form) => {
-    await form.getByLabel("Phone number").fill("07700 900123")
-  },
-  "Which email address should enquiries go to?": async (form) => {
-    await form.getByLabel("Email address").fill("hello@example.net")
-  },
-  "What are your hours on weekdays?": async (form) => {
-    await form.getByLabel("Opening time").fill("08:00")
-    await form.getByLabel("Closing time").fill("18:00")
-  },
-  "Where do you work from, and how far do you travel?": async (form) => {
-    await form.getByLabel("Town or postcode you work from").fill("Leeds")
-    await form.getByLabel("Distance you travel, in km").fill("15")
-  },
-}
-
 test("@live a new owner is onboarded in the chat, and a reload keeps it", async ({
   page,
 }) => {
@@ -78,26 +38,7 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
   try {
     await signIn(page, user)
 
-    // Signup's own write, as `pnpm dev:session` makes it: the org, its
-    // starting team and its onboarding conversation.
-    const session = (await page.context().cookies()).find(
-      (cookie) => cookie.name === "wos-session"
-    )
-    expect(session, "the sign-in set no session cookie").toBeDefined()
-    const org = await fetch(`${apiUrl()}/org`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `wos-session=${session?.value}`,
-        "idempotency-key": `org:${user.id}`,
-      },
-      body: JSON.stringify({ name: business }),
-    })
-    expect(org.status, await org.clone().text()).toBeLessThan(300)
-    // A session minted before the org carries no org claim; the next one
-    // lands in the only membership.
-    await page.goto("/sign-out")
-    await signIn(page, user)
+    await startOrg(page, user, business)
 
     // The new owner lands in onboarding, not on an empty new chat.
     await visit(page, "/app")
