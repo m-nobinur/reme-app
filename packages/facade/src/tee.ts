@@ -1,6 +1,13 @@
 import type { FlueObservation } from "@flue/runtime"
 import type { EventEnvelope, TaintLabel } from "@workspace/contracts"
-import { ulid } from "ulid"
+import { monotonicFactory } from "ulid"
+
+// A package may import only contracts, config and observability, so the facade
+// cannot reach `newUlid` in `@workspace/db` and keeps its own monotonic
+// factory: a Worker's clock stands still within a request, and plain `ulid()`
+// would order same-millisecond ids at random, while `event_id` is the append
+// order. Marked pure so a Worker that never tees drops it and `ulid`.
+const ulid = /* @__PURE__ */ monotonicFactory()
 
 /**
  * The write path the facade is handed (architect ruling 2). Two operations
