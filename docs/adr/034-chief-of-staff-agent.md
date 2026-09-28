@@ -6,7 +6,8 @@ Staff (CoS). It ends on whichever trigger in the first item under "Change if" fi
 Amended 2026-09-27: what a timed-out bridge call means, and the limits that follow from it.
 Amended again the same day: the budget lock and the stream. Brought in line with the tools, the
 event appends and the history derivation on 2026-09-28, and marked where the agent's PR adds the
-rest. Amended 2026-09-28: the agent as built.
+rest. Amended 2026-09-28: the agent as built. Amended 2026-09-29: feedback, titles, tool errors and
+the limits.
 
 ## Context
 
@@ -49,12 +50,10 @@ given where it matters.
 - `toolApproval` is set on the agent as a map keyed by tool name, as `index.d.ts:3071` and `:5056`
   define it. The tool-level `needsApproval` is not used.
 - `stopWhen: isStepCount(6)`, plus the budget stop in "Caps and cost", and a per-step
-  `maxOutputTokens` of 1,000. That is a guess, which the measurement after the agent's PR replaces
-  with three times the measured p95 output of 20 staging turns.
-- `timeout: {totalMs: 60_000, firstChunkMs: 10_000}`. Both are guesses: six steps of about ten
-  seconds, and ten seconds to a step's first chunk. The measurement after the agent's PR sets
-  `firstChunkMs` to three times the measured first-chunk p95 and `totalMs` to six times that.
-  `firstChunkMs` applies to every step, not only the first.
+  `maxOutputTokens` of 3,100.
+- `timeout: {totalMs: 60_000, firstChunkMs: 8_000}`. `firstChunkMs` applies to every step, not
+  only the first. The rule behind each limit and the measurement are in
+  the amendment "feedback, titles, tool errors and the limits".
 - The model comes from `COS_MODEL`, default `deepseek/deepseek-v4.1-flash`. That id is in
   `packages/facade/src/models/openrouter.ids.json` today, and a unit test keeps it there. The agent
   reaches it through OpenRouter with `OPENROUTER_API_KEY`, a wrangler secret on the api. The
@@ -245,9 +244,10 @@ the worst case of six steps at 30,000 input tokens and `maxOutputTokens` at the 
 `openrouter.models.json` in `packages/facade`. That table prices every call at its routing cap, 2.1
 times OpenRouter's list price, which is the most any provider it routes to can bill. On 2026-09-27
 that is $0.0735 per million input tokens and $0.609 per million output for
-`deepseek/deepseek-v4.1-flash`, so the reservation is 6 × (30,000 × $0.0735 + 1,000 × $0.609) /
-1,000,000, about $0.017. Both token figures are guesses that the measurement after the agent's PR
-replaces with measured p99s, and the table is regenerated whenever the model changes.
+`deepseek/deepseek-v4.1-flash`, so the reservation is 6 × (30,000 × $0.0735 + 3,100 × $0.609) /
+1,000,000, about $0.025, which is about 40 turns under the $1 cap. The token figures follow the
+rules in the amendment "feedback, titles, tool errors and the limits", and the table is regenerated
+whenever the model changes.
 
 A turn also stays inside its own reservation. Before the first call, `prepareStep` prices the
 prompt at two characters a token plus `maxOutputTokens`, and refuses the call if that passes the
@@ -438,8 +438,8 @@ makes, so everything it awaits ends within 10 s. A read the race gives up on run
 statement limit on its own connection. The one write among them, `ownerStaffId`, finds the row
 it would create, so letting it finish after the race is harmless. `bridge()` makes its own 10 s
 signal when its caller passes none. Ten seconds is 7.5 times one measured `POST /changes` of
-1,330 ms. The agent's PR records 20 staging approvals, at least 5 of them replacing an open
-review, and sets the deadline to three times the p95 of the replacing ones.
+1,330 ms. It stays 10 s until every call type has been measured, as
+the amendment "feedback, titles, tool errors and the limits" says.
 
 **Only a turn takes the turn's lock.** A row lock on the conversation also collides with renaming
 and archiving it, since an `UPDATE` takes the row, and with inserting its messages, since the
@@ -560,9 +560,9 @@ Rejected:
 - **Building the SSE pipeline by hand** from `JsonToSseTransformStream` and `TextEncoderStream`.
   It drops the `consumeSseStream` tee, so a closed tab aborts the model run.
 
-**Five tools at first.** The agent's PR ships `get_workspace`, `get_facts`, `get_preview`,
-`request_change` and `answer_question`. `create_reminder` arrives with reminders, as "Tools" says,
-so the fallback proof denies a second `request_change` until then.
+**Five tools at first.** The agent's PR shipped `get_workspace`, `get_facts`, `get_preview`,
+`request_change` and `answer_question`. `create_reminder` has since shipped with reminders, the
+sixth tool and the third that needs the owner's approval.
 
 **The idle trigger.** The server writes 25P03 to its own log when the idle limit kills a
 session, and that is the trigger in the first amendment. The driver sees only a closed
@@ -623,9 +623,8 @@ session logs `cos.prefix` whenever it lacks this prefix's SHA-256, so an edit th
 the version still reaches the log (R7).
 
 **The limits and the measurement.** The agent merged with this ADR's guessed limits. They are
-ceilings, so a wrong one shows as fallbacks, not overspend. The 20-turn staging measurement and the
-bridge deadline over 20 approvals, 5 of them replacing a review, are an exit item of the agent's
-work, the staging measurement. They set `LIMITS` and the deadline in their own PR.
+ceilings, so a wrong one shows as fallbacks, not overspend. The staging measurement then set them
+in their own PR, by the rules in the amendment "feedback, titles, tool errors and the limits".
 
 Rejected:
 
@@ -634,3 +633,69 @@ Rejected:
 - **`callOptionsSchema` with `runtimeContext`.** A tool's `execute` does not receive
   `runtimeContext` in 7.0.83, so the tools would have no ids.
 - **Streaming reasoning to the owner.** It would put unchecked text where R8 forbids it.
+
+## Amendment, 2026-09-29: feedback, titles, tool errors and the limits
+
+**Feedback on a reply.** `POST /conversations/:id/feedback` takes `MessageFeedback`,
+`{message_id, rating}` with `rating` `up` or `down` and no free text, and answers 204. It answers
+404 unless the org holds the conversation and the message is an assistant row in it with a text
+part, so the thumbs never show on a card-only row. A fallback line counts: it is still what the
+owner got, and evals tell model replies apart by the `cos.message` ids.
+
+The rating is a `cos.feedback` event, `{conversation_id, message_id, rating}`, written with
+`session_id` null. It takes no turn lock and no seq, never waits on a turn, and the derivation
+never reads it. It is never model-visible and has no taint label, because it holds no free text.
+Each press carries its own Idempotency-Key from the web, kept as the event's key, so a retried
+press writes nothing and still answers 204. A change of mind is a new press with a new key, and
+the latest rating by `recorded_at` wins. `ConversationMessage.feedback` carries it back, required
+and nullable: null on a user row and on a row never rated. The web drops a failed press silently,
+because the adapter has no error path, and the api logs its code.
+
+**Titles.** A conversation's first message names it. In the transaction that stores that message,
+the api sets `title` from the owner's text, only when the conversation held no message before and
+has no title, and never for the onboarding conversation. So a rename is never overwritten. The
+title is the first line, with control characters and bidi controls removed and whitespace
+collapsed, cut at a word boundary to under 60 characters. It is the owner's own text shown to
+their own org as plain text, never as markdown or HTML, so it needs no taint handling while it
+stays out of model-visible text. If a title ever enters a context or a tool output, it carries
+`untrusted_input`.
+
+**What a tool error means to the owner.** `packages/contracts` exports the two prefixes a tool's
+error line starts with, `TOOL_FAILED` and `TOOL_UNKNOWN`, and `toolErrorKind(errorText)`. The api
+builds every error line from the prefixes, and the web reads the kind back, so rewording the
+model's text cannot change what the owner sees. Only a line starting `tool_failed (`, an answer
+off the contract with its code, reads as `failed`: nothing was done. Every other text reads as
+`unknown`, which covers the older `tool_failed:` fallback line, empty text and any text not yet
+written. The card then says the outcome could not be confirmed and to check before asking again.
+The safe reading is the default. A call the owner talked past, `TOOL_CALL_CANCELLED`, is checked
+first. The instructions treat it as neither a yes nor a no: the model does not act on it, and asks
+again only if it still matters.
+
+**Reminder times.** `create_reminder` reads `due_at` as wall time in the turn's time zone and
+ignores the offset written on it, because a model copies the current offset, which is wrong for a
+date across a clock change. A time the clocks skip moves forward by the gap, a time they pass twice
+takes the earlier instant, and with no zone the wall time reads as UTC.
+
+**The limits.** Measured on staging over 64 turns and 87 steps on 2026-09-27. Each limit is set by
+a rule, not by a multiple of another limit:
+
+| Limit | Rule | Measured | Value |
+| --- | --- | --- | --- |
+| `maxOutputTokens` | The larger of 3 × the per-step output p95 and 4,000 / 2 + 3 × that p95, so a request of the longest allowed goal fits in `request_change`'s input at two characters a token | p95 344, max 421 | 3,100 |
+| `firstChunkMs` | The larger of 3 × the first-chunk p95 and 8 s. The SDK restarts it every step and prefill grows with the prompt, so it goes lower only after 5 measured turns at 20k+ input tokens | p95 1,305 ms, max 1,799 ms | 8,000 |
+| `totalMs` | 2 × the longest measured multi-step turn that includes a maximum-length tool call. None has been measured, so the guess stands as a ceiling | not yet measured | 60,000 |
+| `inputTokens` | The reservation's per-step input. A 12-turn history of long owner messages reaches 45k to 65k tokens a step, so it is not lowered to the short turns' p99 | p99 2,681 | 30,000 |
+| Bridge deadline | Stays until every call type (approve, reject, cancel, answer, steer, preview) has 20 samples, 5 of them replacing a review | changes only | 10 s |
+
+The idle limit follows the deadline plus 5 s, so it stays 15 s. A turn lapses `totalMs` plus 30 s
+after its context. When `totalMs` is lowered, the lapse keeps the old value for one deploy, so a new
+version never abandons a turn an old version is still running.
+
+Rejected:
+
+- **`totalMs` as 6 × `firstChunkMs`.** A turn's length is its steps' output, which grows with
+  `maxOutputTokens`, not with the time to a first chunk.
+- **`maxOutputTokens` at 3 × p95 alone.** A long request cut off mid-call is a broken call, not a
+  shorter one.
+- **A lower bridge deadline from the change samples.** Other call types were not measured, and a
+  deadline too short turns more calls into unknown outcomes for little gain.
