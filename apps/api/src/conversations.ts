@@ -209,23 +209,32 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
   const rows = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
     const held = await find(db, id)
     if (!held) return null
-    // Each row's latest rating in the same statement: the newest
-    // `cos.feedback` for it, by the database's clock.
-    // ponytail: the org's feedback events are scanned per row; an expression
-    // index on (payload->>'conversation_id') when this shows in the slow log.
-    return db
-      .select({
-        row: conversationMessages,
-        rating: sql<MessageRating | null>`(
-          select e.payload->>'rating' from ${events} e
-          where e.org_id = ${conversationMessages.orgId}
-            and e.type = 'cos.feedback'
-            and e.payload->>'conversation_id' = ${held.id}::text
-            and e.payload->>'message_id' = ${conversationMessages.id}
-          order by e.recorded_at desc, e.event_id desc
-          limit 1)`,
+    // Each row's latest rating, picked once for the whole conversation (the
+    // newest `cos.feedback` per message, by the database's clock) and joined
+    // to the rows in the same statement.
+    // ponytail: the pick filters the org's events by type and a payload key
+    // with no index; a partial expression index on the conversation id
+    // (where type = 'cos.feedback') when this shows in the slow log.
+    const message = sql<string>`${events.payload}->>'message_id'`
+    const latest = db
+      .selectDistinctOn([message], {
+        messageId: message.as("message_id"),
+        rating: sql<MessageRating>`${events.payload}->>'rating'`.as("rating"),
       })
+      .from(events)
+      .where(
+        sql`${events.type} = 'cos.feedback' and ${events.payload}->>'conversation_id' = ${held.id}::text`
+      )
+      .orderBy(
+        message,
+        sql`${events.recordedAt} desc`,
+        sql`${events.eventId} desc`
+      )
+      .as("latest")
+    return db
+      .select({ row: conversationMessages, rating: latest.rating })
       .from(conversationMessages)
+      .leftJoin(latest, eq(latest.messageId, conversationMessages.id))
       .where(eq(conversationMessages.conversationId, held.id))
       .orderBy(conversationMessages.seq)
   })

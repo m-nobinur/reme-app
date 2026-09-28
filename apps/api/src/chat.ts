@@ -436,10 +436,19 @@ async function swapTail(
 }
 
 /**
- * The first message names the conversation: a title from the owner's words,
- * set only while it has none, so a rename is never overwritten.
+ * An assistant conversation's first message names it: a title from the
+ * owner's words, written with the message, so a turn refused before its
+ * message is stored names nothing. Only a conversation that held no message
+ * before this turn is named, never the onboarding one, and only while it
+ * has no title, so a rename is never overwritten.
  */
-async function nameConversation(db: OrgScopedDb, id: string, text: string) {
+async function nameConversation(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  text: string
+) {
+  if (held.kind !== "assistant" || held.tail !== null) return
   const title = titleFrom(text)
   if (!title) return
   await db
@@ -507,7 +516,6 @@ export async function chat(
       if (session && (await closeLapsedTurn(db, session, LIMITS.totalMs))) {
         return busy()
       }
-      if (turn.kind === "message") await nameConversation(db, id, turn.text)
       const named = turn.kind === "results" ? turn.message_id : held.tail?.id
       const log = session
         ? await sessionState(db, id, prefix.sha256, named ?? null)
@@ -550,6 +558,7 @@ export async function chat(
           role: "user",
           parts: [{ type: "text", text: turn.text }],
         })
+        await nameConversation(db, held, id, turn.text)
       }
       return {
         turn: cosTurn,
@@ -1130,6 +1139,7 @@ async function typed(
       ...row,
     })
   }
+  await nameConversation(db, held, id, message.text)
   await db
     .update(conversations)
     .set({ updatedAt: sql`now()` })

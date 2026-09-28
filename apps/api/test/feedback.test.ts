@@ -294,5 +294,66 @@ describe.skipIf(!url)(
       expect((await send(renamed, "Weekend prices")).status).toBe(200)
       expect(await titleOf(renamed)).toBe("My name")
     })
+
+    const sendTo = (id: string, text: string) =>
+      call("/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: id,
+          mode: "ask",
+          turn: {
+            kind: "message",
+            message_id: `m-${crypto.randomUUID()}`,
+            text,
+          },
+        }),
+      })
+    const titleOf = async (id: string) =>
+      Conversation.parse(await (await call(`/conversations/${id}`)).json())
+        .title
+
+    it("leaves the onboarding conversation untitled", async () => {
+      const list = (await (await call("/conversations")).json()) as {
+        conversations: { id: string; kind: string }[]
+      }
+      const onboarding = list.conversations.find((c) => c.kind === "onboarding")
+      expect(onboarding).toBeDefined()
+      const id = onboarding?.id as string
+      // With its first row gone, so only its kind keeps it untitled.
+      await admin`delete from conversation_messages where conversation_id = ${id}`
+      expect((await sendTo(id, "Hello there")).status).toBe(200)
+      expect(await titleOf(id)).toBeNull()
+    })
+
+    it("leaves a thread that already held messages untitled", async () => {
+      const id = Conversation.parse(
+        await (await call("/conversations", keyed("POST"))).json()
+      ).id
+      const earlier: StoredMessage[] = Array.from({ length: 40 }, (_, i) =>
+        message(
+          `old_${i}`,
+          i % 2 ? "assistant" : "user",
+          i ? `old_${i - 1}` : null,
+          [{ type: "text", text: `Message ${i}` }]
+        )
+      )
+      expect(await appendMessages(kit, me.orgId, id, earlier)).toBeNull()
+      expect((await sendTo(id, "ok thanks")).status).toBe(200)
+      expect(await titleOf(id)).toBeNull()
+    })
+
+    it("names nothing when a turn is refused, and names it on the next one", async () => {
+      const id = Conversation.parse(
+        await (await call("/conversations", keyed("POST"))).json()
+      ).id
+      await admin.begin(async (tx) => {
+        await tx`select pg_advisory_xact_lock(2, hashtext(${id}::text))`
+        const refused = await sendTo(id, "Refused words")
+        expect(refused.status).toBe(409)
+      })
+      expect(await titleOf(id)).toBeNull()
+      expect((await sendTo(id, "Accepted words")).status).toBe(200)
+      expect(await titleOf(id)).toBe("Accepted words")
+    })
   }
 )
