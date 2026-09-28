@@ -10,7 +10,7 @@
   "orchestrator-unit": 124,
   "orchestrator-unit+db": 234,
   "orchestrator-probe": 5,
-  "facade-unit": 76,
+  "facade-unit": 77,
   "gates-unit": 40,
   "router-unit": 38,
   "router-unit+db": 40,
