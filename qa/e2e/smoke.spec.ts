@@ -158,9 +158,16 @@ test("a chat turn sends only what the owner did", async ({ page }) => {
   await page.getByLabel("Send message").click()
 
   // The turn and nothing else: no history, system prompt or tools leave the
-  // browser, because the server reads its own rows.
+  // browser, because the server reads its own rows. The browser's time zone
+  // rides along, so a time like "Friday at 9" can be read.
   const body = (await sent).postDataJSON()
-  expect(Object.keys(body).sort()).toEqual(["conversation_id", "mode", "turn"])
+  expect(Object.keys(body).sort()).toEqual([
+    "conversation_id",
+    "mode",
+    "time_zone",
+    "turn",
+  ])
+  expect(body.time_zone).toMatch(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
   expect(body.turn).toMatchObject({
     kind: "message",
     text: "How did this week go?",
