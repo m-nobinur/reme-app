@@ -3,7 +3,8 @@
 Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname shape changed, and
 the service Workers got hostnames, see the decision and the last two consequences. Amended
 2026-09-15: staging gained `staging-preview`, see the decision; and staging's tenant and preview
-hosts take a `-stg` suffix on `remeai.co.uk`, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+hosts take a `-stg` suffix on `remeai.co.uk`, see the last consequence. Amended 2026-09-29: a preview host cuts its slug to fit one label, and
+only `preview-v{n}-` marks a preview, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -183,3 +184,16 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   orchestrator each carry an explicit host route beside their custom domain, and their requests
   do not pass through the router. `SERVICE_HOSTS` stays, for a service Worker deployed without
   its route.
+- **Amended 2026-09-29, a preview host fits one label for any slug.** A slug is up to 49
+  characters (`slugFor`'s 40-character base, a hyphen and 8 characters of the org id), and the
+  44-character staging cap above was never enforced on generated slugs. On staging a
+  49-character slug made `preview-v2-{slug}-stg` 64 characters, and the preview read answered 503.
+  `previewHost` now keeps a slug that fits, and otherwise keeps its id tail and cuts its base until
+  the first label is 63 characters, for any safe-integer version. The site's own host is never cut.
+  The router treats only `preview-v{n}-` as a preview host, so a live site whose slug starts
+  `preview-` is served as a site, and `slugFor` gives a new slug that would start `preview-` a
+  `site-` prefix. Before this, "Preview Cleaning" got a slug the router took for a preview, and its
+  live site answered 401. The reserved list's `preview-` prefix now means that: no new slug starts
+  with it, and the router's match is the narrower `preview-v{n}-`. Existing slugs do not move;
+  staging held none starting `preview-` on 2026-09-29, and production needs the same read before
+  release.
