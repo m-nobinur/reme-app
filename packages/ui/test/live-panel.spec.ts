@@ -331,3 +331,60 @@ test("a blank section's next step looks like a button, with a visible border", a
     expect(border.replace(/\s/g, "").endsWith(",0)"), theme).toBe(false)
   }
 })
+
+test("an approval whose preview fails still says what the owner can do, and lets them decide", async ({
+  page,
+}) => {
+  await open(page, "ApprovalItem preview unavailable", 400)
+  let entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
+  await expect(entry).toContainText(
+    "The preview for version 4 isn't available yet. Try again in a moment."
+  )
+  await expect(entry.getByRole("link")).toHaveCount(0)
+  await expect(entry.getByRole("button", { name: "Try again" })).toBeEnabled()
+  await expect(
+    entry.getByRole("button", { name: "Approve and publish v4" })
+  ).toBeEnabled()
+
+  await open(page, "ApprovalItem screenshots failed", 400)
+  entry = page.locator('[data-entry="ApprovalItem screenshots failed"]')
+  await expect(entry).toContainText(
+    "The screenshots did not load. Open the preview to see version 4."
+  )
+  await expect(entry.locator("img")).toHaveCount(0)
+  await expect(entry.getByRole("link", { name: /Open preview/ })).toBeVisible()
+  await expect(
+    entry.getByRole("button", { name: "Approve and publish v4" })
+  ).toBeEnabled()
+})
+
+for (const theme of ["light", "dark"] as const) {
+  test(`an approval whose preview fails has no accessibility violations in ${theme}`, async ({
+    page,
+  }) => {
+    for (const width of [390, 768, 1440]) {
+      for (const entry of [
+        "ApprovalItem preview unavailable",
+        "ApprovalItem screenshots failed",
+      ]) {
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
+        const shown = page.locator(`[data-entry="${entry}"]`)
+        await expect(shown).toBeVisible()
+        if (entry.endsWith("failed")) {
+          await expect(shown.locator("img")).toHaveCount(0)
+        }
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .include(`[data-entry="${entry}"]`)
+          .analyze()
+        expect
+          .soft(
+            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+            JSON.stringify(results.violations, null, 2)
+          )
+          .toEqual([])
+      }
+    }
+  })
+}
