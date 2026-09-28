@@ -85,6 +85,8 @@ declare module "@tanstack/react-router" {
      * starts a new thread.
      */
     chat?: string
+    /** Set by a link that sends the owner to the panel: it opens on arrival. */
+    panel?: boolean
   }
   interface StaticDataRouteOption {
     /**

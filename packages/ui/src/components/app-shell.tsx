@@ -22,6 +22,26 @@ function AppNav({ children, className, ...props }: ComponentProps<"nav">) {
   )
 }
 
+/** A count as it is drawn: past 99, "99+". */
+const countLabel = (count: number) => (count > 99 ? "99+" : String(count))
+
+/**
+ * How many of a rail link's items are unread, at the end of the link. It
+ * says so to a screen reader, and draws nothing at zero.
+ */
+function NavCount({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span
+      className="ms-auto rounded-full bg-primary px-1.5 font-medium text-[0.8125rem] text-primary-foreground tabular-nums leading-5"
+      data-slot="nav-count"
+    >
+      <span aria-hidden>{countLabel(count)}</span>
+      <span className="sr-only">, {count} unread</span>
+    </span>
+  )
+}
+
 /** The heading block at the top of every screen. */
 function PageHeader({
   title,
@@ -52,4 +72,4 @@ function PageHeader({
   )
 }
 
-export { AppNav, navLinkClass, PageHeader }
+export { AppNav, countLabel, NavCount, navLinkClass, PageHeader }

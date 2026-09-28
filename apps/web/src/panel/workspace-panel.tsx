@@ -1,5 +1,6 @@
-import { getRouteApi } from "@tanstack/react-router"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import type { BuildSummary, DecisionRequest } from "@workspace/contracts"
+import { buttonVariants } from "@workspace/ui/components/button"
 import {
   ApprovalItem,
   ComingUp,
@@ -12,6 +13,7 @@ import {
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
 import { factLabel } from "@workspace/ui/lib/facts"
+import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useState } from "react"
 import {
   answerQuestion,
@@ -23,6 +25,7 @@ import {
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
+import { onboardingFor } from "@/lib/onboarding"
 import { anchorOf, reminderRows } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 
@@ -281,6 +284,35 @@ function Stoppable({
   )
 }
 
+/** A blank section's next step, quieter than the primary action. */
+const NEXT_STEP = cn(
+  buttonVariants({ variant: "outline", size: "sm" }),
+  "self-start"
+)
+
+/**
+ * Where a new owner takes the first step: the getting-started conversation
+ * while it is open, or a new chat, whose empty thread offers "Build my
+ * website".
+ */
+function FirstStep({ workspace }: { workspace: Workspace }) {
+  const { conversations } = frame.useLoaderData()
+  const onboarding = onboardingFor(workspace, conversations)
+  return onboarding ? (
+    <Link className={NEXT_STEP} params={{ id: onboarding }} to="/app/c/$id">
+      Continue getting started
+    </Link>
+  ) : (
+    <Link
+      className={NEXT_STEP}
+      state={() => ({ chat: crypto.randomUUID() })}
+      to="/app"
+    >
+      Start your website
+    </Link>
+  )
+}
+
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const [status, setStatus] = useState<string | null>(null)
@@ -289,12 +321,18 @@ export function WorkspacePanel() {
     : null
 
   if (!workspace) {
-    return <WaitingOnYou error={stale ?? "This panel did not load."} />
+    return (
+      <WaitingOnYou
+        error={stale ?? "This panel did not load."}
+        onRetry={refresh}
+      />
+    )
   }
   const { attention, builds, live, host } = workspace
   if (!live && builds.length === 0 && attention.length === 0) {
     return (
       <PanelBlank
+        action={<FirstStep workspace={workspace} />}
         description={
           workspace.missingFacts.length
             ? "Tell Reme about your business in the chat, then ask it to build your website."
@@ -327,7 +365,16 @@ export function WorkspacePanel() {
           />
         </div>
       ) : null}
-      <WaitingOnYou error={stale} status={status}>
+      <WaitingOnYou
+        action={
+          <Link className={NEXT_STEP} to="/app/notifications">
+            See notifications
+          </Link>
+        }
+        error={stale}
+        onRetry={refresh}
+        status={status}
+      >
         {attention.map((item) =>
           item.kind === "approval" ? (
             <div

@@ -121,4 +121,4 @@ function AttentionCard({
 }
 
 export type { AttentionKind }
-export { AttentionCard }
+export { AttentionCard, KIND as attentionKind }

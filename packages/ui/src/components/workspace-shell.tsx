@@ -4,6 +4,7 @@ import {
   NotePencilIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
+import { countLabel } from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -31,6 +32,11 @@ import {
 
 /** A year: the choice is a preference, not a session. */
 const PANEL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+function rememberPanel(open: boolean) {
+  // biome-ignore lint/suspicious/noDocumentCookie: one preference the server has to read on the next request, which the Cookie Store API cannot promise in every browser this app supports.
+  document.cookie = `${PANEL_COOKIE}=${open ? "open" : "closed"}; path=/; max-age=${PANEL_COOKIE_MAX_AGE}; samesite=lax`
+}
 
 /**
  * Closes a sheet when a plain click inside it followed a link. A modified or
@@ -67,6 +73,10 @@ function useCloseAt(query: string, close: () => void) {
   }, [query, close])
 }
 
+/** A count drawn on a toggle's corner. */
+const BADGE =
+  "absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-medium text-[0.8125rem] text-primary-foreground tabular-nums leading-none"
+
 /**
  * The owner workspace: a 15rem rail, the conversation, and a 20rem panel.
  *
@@ -81,7 +91,9 @@ function WorkspaceShell({
   rail,
   panel,
   panelCount = 0,
+  railCount = 0,
   defaultPanelOpen = true,
+  openPanel = false,
   title,
   menu,
   children,
@@ -93,7 +105,14 @@ function WorkspaceShell({
   /** The page's ··· menu, drawn beside the title. */
   menu?: ReactNode
   panelCount?: number
+  /** What the rail holds unread; the phone's menu toggle shows it. */
+  railCount?: number
   defaultPanelOpen?: boolean
+  /**
+   * The owner followed a link to the panel: it opens when this turns true,
+   * even if they had closed it.
+   */
+  openPanel?: boolean
   children: ReactNode
   className?: string
 }) {
@@ -113,9 +132,19 @@ function WorkspaceShell({
   const togglePanel = () => {
     const next = !panelOpen
     setPanelOpen(next)
-    // biome-ignore lint/suspicious/noDocumentCookie: one preference the server has to read on the next request, which the Cookie Store API cannot promise in every browser this app supports.
-    document.cookie = `${PANEL_COOKIE}=${next ? "open" : "closed"}; path=/; max-age=${PANEL_COOKIE_MAX_AGE}; samesite=lax`
+    rememberPanel(next)
   }
+
+  // Sent here to the panel: open it inline from `lg`, as its sheet below.
+  useEffect(() => {
+    if (!openPanel) return
+    if (window.matchMedia("(min-width: 64rem)").matches) {
+      setPanelOpen(true)
+      rememberPanel(true)
+    } else {
+      setPanelSheet(true)
+    }
+  }, [openPanel])
 
   const waiting =
     panelCount > 0 ? `Show panel, ${panelCount} waiting on you` : "Show panel"
@@ -154,14 +183,23 @@ function WorkspaceShell({
             <SheetTrigger
               render={
                 <Button
-                  aria-label="Show menu"
-                  className="md:hidden"
+                  aria-label={
+                    railCount > 0
+                      ? `Show menu, ${railCount} unread notifications`
+                      : "Show menu"
+                  }
+                  className="relative md:hidden"
                   size="icon"
                   variant="ghost"
                 />
               }
             >
               <ListIcon aria-hidden />
+              {railCount > 0 ? (
+                <span aria-hidden className={BADGE} data-slot="rail-count">
+                  {countLabel(railCount)}
+                </span>
+              ) : null}
             </SheetTrigger>
             <SheetContent
               onClick={closeOnLink(() => setRailSheet(false))}
@@ -211,11 +249,7 @@ function WorkspaceShell({
             >
               <SidebarSimpleIcon aria-hidden className="-scale-x-100" />
               {panelCount > 0 ? (
-                <span
-                  aria-hidden
-                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-medium text-[0.8125rem] text-primary-foreground tabular-nums leading-none"
-                  data-slot="panel-count"
-                >
+                <span aria-hidden className={BADGE} data-slot="panel-count">
                   {panelCount}
                 </span>
               ) : null}

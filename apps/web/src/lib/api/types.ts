@@ -210,13 +210,6 @@ export type Json =
  */
 export type TransportedFact = Omit<FactRecord, "value"> & { value: Json }
 
-/** A single day of activity on the dashboard, read from the event log (§10.6). */
-export type ActivityItem = {
-  id: string
-  summary: string
-  occurredAt: string
-}
-
 /**
  * What became of a decision. A refusal the owner can act on comes back with
  * its reason; anything else throws.
@@ -243,7 +236,8 @@ export type OwnerDataSource = {
   pipeline: (orgId: string) => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `orgs()` empty. */
   profile: (orgId: string) => Promise<BusinessProfile | null>
-  activity: (orgId: string) => Promise<ActivityItem[]>
+  /** Reports and alerts from the last 30 days, newest first as listed. */
+  activity: (orgId: string) => Promise<AttentionItem[]>
   /**
    * Answer one approval, bound to the revision the owner was shown: the
    * orchestrator refuses a decision whose revision is not the one the review
