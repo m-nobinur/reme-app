@@ -1,7 +1,9 @@
 import {
+  ArchiveIcon,
   DotsThreeIcon,
   ListIcon,
   NotePencilIcon,
+  PencilSimpleIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { countLabel } from "@workspace/ui/components/app-shell"
@@ -9,9 +11,11 @@ import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
+import { Input } from "@workspace/ui/components/input"
 import {
   Sheet,
   SheetContent,
@@ -19,14 +23,18 @@ import {
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
 import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
+import { titleText } from "@workspace/ui/lib/title"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
+  type FormEvent,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
+  useRef,
   useState,
 } from "react"
 
@@ -96,14 +104,21 @@ function WorkspaceShell({
   openPanel = false,
   title,
   menu,
+  renaming,
+  titleError,
   children,
   className,
 }: {
   rail: ReactNode
   panel: ReactNode
+  /** Plain text, never markup: a title can be the owner's or the model's words. */
   title?: string | undefined
   /** The page's ··· menu, drawn beside the title. */
   menu?: ReactNode
+  /** While set, the title is a form that renames it, in place of the title and menu. */
+  renaming?: Renaming | undefined
+  /** Why the last action on the title failed, such as an archive. */
+  titleError?: string | undefined
   panelCount?: number
   /** What the rail holds unread; the phone's menu toggle shows it. */
   railCount?: number
@@ -213,15 +228,29 @@ function WorkspaceShell({
           </Sheet>
 
           <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-2">
-            {title ? (
-              <p
-                className="truncate font-medium text-sm"
-                data-slot="workspace-title"
-              >
-                {title}
-              </p>
-            ) : null}
-            {menu}
+            {renaming ? (
+              <TitleEditor {...renaming} />
+            ) : (
+              <>
+                {title ? (
+                  <p
+                    className="truncate font-medium text-sm"
+                    data-slot="workspace-title"
+                  >
+                    {title}
+                  </p>
+                ) : null}
+                {menu}
+                {titleError ? (
+                  <p
+                    className="ms-2 truncate text-destructive text-xs"
+                    role="alert"
+                  >
+                    {titleError}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
 
           <Button
@@ -309,19 +338,124 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
+type Renaming = {
+  /** The title as it stands, to edit from. */
+  value: string
+  /** Saves the new title; a throw keeps the form open with its error. */
+  onSave: (title: string) => Promise<void>
+  onCancel: () => void
+}
+
+/**
+ * The title as a one-field form: Enter or Save keeps it, Escape or Cancel
+ * leaves it as it was. The words are checked here the way the api keeps
+ * them, so a title of only spaces never leaves the browser.
+ */
+function TitleEditor({ value, onSave, onCancel }: Renaming) {
+  const [text, setText] = useState(value)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const errorId = useId()
+  // Saved or not, a rename hands focus back to the ··· button that started
+  // it, which is back in the title bar by the time this form is gone.
+  const form = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const bar = form.current?.parentElement
+    return () => {
+      bar
+        ?.querySelector<HTMLElement>('[data-slot="conversation-actions"]')
+        ?.focus()
+    }
+  }, [])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const title = titleText(text)
+    if (!title) {
+      setError("A title needs words.")
+      return
+    }
+    setPending(true)
+    setError(null)
+    try {
+      await onSave(title)
+    } catch {
+      setError("That did not save. Try again.")
+      setPending(false)
+    }
+  }
+
+  return (
+    <form
+      aria-label="Rename conversation"
+      className="relative flex min-w-0 flex-1 items-center gap-1.5"
+      data-slot="title-editor"
+      onSubmit={submit}
+      ref={form}
+    >
+      <Input
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
+        aria-label="Conversation title"
+        autoFocus
+        className="h-8 min-w-0 flex-1"
+        disabled={pending}
+        maxLength={120}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel()
+        }}
+        value={text}
+      />
+      <Button disabled={pending} size="sm" type="submit">
+        {pending ? "Saving" : "Save"}
+      </Button>
+      <Button
+        disabled={pending}
+        onClick={onCancel}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        Cancel
+      </Button>
+      {error ? (
+        // Below the bar, over the page: the bar has one row, and a phone has
+        // no room in it for a second.
+        <p
+          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-destructive text-xs shadow-sm"
+          id={errorId}
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 /**
  * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
  * link element to render the entry as, so the app passes its router's link
- * and this package still imports no router. Rename and archive join it once
- * conversations are stored.
+ * and this package still imports no router. Rename and archive show for a
+ * stored conversation, the only kind the api can change.
  */
-function ConversationMenu({ newChat }: { newChat: ReactElement }) {
+function ConversationMenu({
+  newChat,
+  onRename,
+  onArchive,
+}: {
+  newChat: ReactElement
+  onRename?: (() => void) | undefined
+  onArchive?: (() => void) | undefined
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <Button
             aria-label="Conversation actions"
+            data-slot="conversation-actions"
             size="icon-sm"
             variant="ghost"
           />
@@ -334,6 +468,18 @@ function ConversationMenu({ newChat }: { newChat: ReactElement }) {
           <NotePencilIcon aria-hidden />
           New chat
         </DropdownMenuLinkItem>
+        {onRename ? (
+          <DropdownMenuItem onClick={onRename}>
+            <PencilSimpleIcon aria-hidden />
+            Rename
+          </DropdownMenuItem>
+        ) : null}
+        {onArchive ? (
+          <DropdownMenuItem onClick={onArchive}>
+            <ArchiveIcon aria-hidden />
+            Archive
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )
