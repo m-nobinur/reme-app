@@ -8,10 +8,11 @@ import {
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
-import { DefaultChatTransport, type UIMessage } from "ai"
+import { DefaultChatTransport } from "ai"
 import { useRef, useState } from "react"
 import { getConversationMessages } from "@/lib/api/server"
 import { toUIMessage } from "./history"
+import type { ChatMessage } from "./message"
 import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
 
 /**
@@ -39,10 +40,10 @@ export function useConversationRuntime({
   const id = useAuiState((s) => s.threadListItem.id)
   // The last message of the turn in flight, as the transport saw it. A turn
   // refused before the thread re-renders leaves `chat.messages` without it.
-  const sending = useRef<UIMessage | undefined>(undefined)
+  const sending = useRef<ChatMessage | undefined>(undefined)
   const [transport] = useState(
     () =>
-      new DefaultChatTransport({
+      new DefaultChatTransport<ChatMessage>({
         api: "/api/chat",
         fetch: chatFetch,
         // The whole body is the turn: no history, system prompt or tools
@@ -60,7 +61,7 @@ export function useConversationRuntime({
   // inline, and a typed message goes back into the composer. Through a ref,
   // because the chat keeps the first `onError` it is given.
   const restore = useRef<(error: Error) => void>(() => undefined)
-  const chat = useChat({
+  const chat = useChat<ChatMessage>({
     id,
     transport,
     sendAutomaticallyWhen: sendsOn,

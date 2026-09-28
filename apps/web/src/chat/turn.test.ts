@@ -4,15 +4,15 @@ import {
   ChatRequest,
 } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
-import type { UIMessage } from "ai"
 import { afterEach, expect, it, vi } from "vitest"
+import type { ChatMessage } from "./message"
 import { cancelOvertaken, chatFetch, chatTurn, sendsOn, turnBody } from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
 const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /** Parts as `apps/api` stores and streams them. */
-type Part = UIMessage["parts"][number]
+type Part = ChatMessage["parts"][number]
 
 const ask = (state: string, extra: object = {}) =>
   ({
@@ -37,7 +37,7 @@ const STATED = {
   fact: { key: "business.name", value: { name: "Probe Cleaning" } },
 }
 
-const assistant = (...parts: Part[]): UIMessage => ({
+const assistant = (...parts: Part[]): ChatMessage => ({
   id: "msg_assistant",
   role: "assistant",
   parts: [{ type: "step-start" }, ...parts],
@@ -205,17 +205,17 @@ it("a typed message cancels a yes or no held back and never sent", () => {
 })
 
 it("a send records its own message before it waits on anything", async () => {
-  const earlier: UIMessage = {
+  const earlier: ChatMessage = {
     id: "msg_earlier",
     role: "user",
     parts: [{ type: "text", text: "Earlier" }],
   }
-  const now: UIMessage = {
+  const now: ChatMessage = {
     id: "msg_now",
     role: "user",
     parts: [{ type: "text", text: "Now" }],
   }
-  const sending = { current: earlier as UIMessage | undefined }
+  const sending = { current: earlier as ChatMessage | undefined }
   const body = turnBody(
     () => Promise.reject(new Error("The conversation could not be opened.")),
     () => "act",

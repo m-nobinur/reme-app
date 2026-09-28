@@ -10,11 +10,11 @@ import {
   isToolUIPart,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
-  type UIMessage,
 } from "ai"
+import type { ChatMessage } from "./message"
 
 /** What the owner typed in a message. */
-export const textOf = (message: UIMessage) =>
+export const textOf = (message: ChatMessage) =>
   message.parts
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n")
@@ -28,7 +28,7 @@ export const textOf = (message: UIMessage) =>
 export function chatTurn(
   conversationId: string,
   mode: ChatRequest["mode"],
-  messages: UIMessage[]
+  messages: ChatMessage[]
 ): ChatRequest {
   // The browser's zone, so the Chief of Staff can read "Friday at 9".
   const time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -58,7 +58,7 @@ export function chatTurn(
  * yes or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
  */
-function ownerResults(last: UIMessage | undefined): ChatResult[] {
+function ownerResults(last: ChatMessage | undefined): ChatResult[] {
   // The server opens a new step after the calls it resolves, so an answer
   // in the last step is one it has not seen yet.
   const parts = last?.parts ?? []
@@ -72,10 +72,7 @@ function ownerResults(last: UIMessage | undefined): ChatResult[] {
         {
           kind: "answer",
           tool_call_id: part.toolCallId,
-          output: part.output as Extract<
-            ChatResult,
-            { kind: "answer" }
-          >["output"],
+          output: part.output,
         },
       ]
     }
@@ -107,7 +104,7 @@ function ownerResults(last: UIMessage | undefined): ChatResult[] {
  * assistant-ui's own `cancelPendingToolCallsOnSend` also turns that "not
  * now" into cancelled, which a reload would then contradict.
  */
-export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
+export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
   const last = messages.at(-1)
   if (last?.role !== "assistant") return messages
   let changed = false
@@ -122,11 +119,12 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
     }
     changed = true
     const { approval: _, ...rest } = part
-    return {
+    const cancelled: ChatMessage["parts"][number] = {
       ...rest,
       state: "output-error",
       errorText: TOOL_CALL_CANCELLED,
-    } as UIMessage["parts"][number]
+    }
+    return cancelled
   })
   return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
 }
@@ -136,7 +134,7 @@ export function cancelOvertaken(messages: UIMessage[]): UIMessage[] {
  * on them, all in one turn. A step whose calls the server finished itself,
  * such as a read at the step limit, sends nothing.
  */
-export const sendsOn = ({ messages }: { messages: UIMessage[] }) =>
+export const sendsOn = ({ messages }: { messages: ChatMessage[] }) =>
   ownerResults(messages.at(-1)).length > 0 &&
   (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
     lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
@@ -150,9 +148,9 @@ export const turnBody =
   (
     initialize: () => Promise<{ remoteId: string }>,
     mode: () => ChatRequest["mode"],
-    sending: { current: UIMessage | undefined }
+    sending: { current: ChatMessage | undefined }
   ) =>
-  async ({ messages }: { messages: UIMessage[] }) => {
+  async ({ messages }: { messages: ChatMessage[] }) => {
     sending.current = messages.at(-1)
     const { remoteId } = await initialize()
     return { body: chatTurn(remoteId, mode(), messages) }
@@ -174,7 +172,10 @@ export async function chatFetch(
   if (response.status === 401) throw new Error(SESSION_ENDED)
   const envelope = ErrorEnvelope.safeParse(body)
   if (envelope.success) throw new Error(envelope.data.message)
-  const own = (body as { error?: unknown } | null)?.error
+  const own =
+    typeof body === "object" && body !== null && "error" in body
+      ? body.error
+      : undefined
   throw new Error(
     typeof own === "string"
       ? own

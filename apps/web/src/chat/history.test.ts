@@ -7,7 +7,6 @@ import type {
   MessageStorageEntry,
 } from "@assistant-ui/react"
 import type { Conversation, ConversationMessage } from "@workspace/contracts"
-import type { UIMessage } from "ai"
 import { expect, expectTypeOf, it, vi } from "vitest"
 import type { TransportedMessage } from "../lib/api/types"
 import {
@@ -20,6 +19,7 @@ import {
   toStorageEntry,
   toUIMessage,
 } from "./history"
+import type { ChatMessage } from "./message"
 
 /**
  * `@assistant-ui/ai-sdk` 0.0.2 exports neither its format adapter nor its
@@ -35,7 +35,10 @@ const aiSdk = dirname(
 const ADAPTER_FILE = join(aiSdk, "adapters", "aiSDKFormatAdapter.js")
 const installed = async () =>
   (await import(pathToFileURL(ADAPTER_FILE).href))
-    .aiSDKV6FormatAdapter as MessageFormatAdapter<UIMessage, AISDKStorageFormat>
+    .aiSDKV6FormatAdapter as MessageFormatAdapter<
+    ChatMessage,
+    AISDKStorageFormat
+  >
 
 const AT = "2026-09-26T10:00:00.000Z"
 const ROWS: TransportedMessage[] = [

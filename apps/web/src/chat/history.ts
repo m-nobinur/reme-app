@@ -6,6 +6,7 @@ import type {
 import type { Conversation, ConversationMessage } from "@workspace/contracts"
 import type { UIMessage } from "ai"
 import type { TransportedMessage } from "../lib/api/types"
+import type { ChatMessage } from "./message"
 
 /**
  * Stored conversations in assistant-ui's shapes: a row as the AI SDK
@@ -50,8 +51,8 @@ export function toStorageEntry(
  * decodes it to on a history load, so a reload after a failed turn shows
  * the same thread a fresh load would.
  */
-export const toUIMessage = (message: TransportedMessage): UIMessage =>
-  ({ id: message.id, ...toStorageEntry(message).content }) as UIMessage
+export const toUIMessage = (message: TransportedMessage): ChatMessage =>
+  ({ id: message.id, ...toStorageEntry(message).content }) as ChatMessage
 
 type RemoteThreadMetadata = Awaited<
   ReturnType<RemoteThreadListAdapter["fetch"]>
