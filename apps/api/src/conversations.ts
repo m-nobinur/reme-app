@@ -136,9 +136,11 @@ async function patch(request: Request, kit: Tenancy, owner: Owner, id: string) {
     if ("title" in change) {
       const title = change.title.replace(/\s+/g, " ").trim()
       if (held.title === title) return held
+      // The database's clock, as every write of `updated_at` takes it, so
+      // the list orders one clock's times.
       const [renamed] = await db
         .update(conversations)
-        .set({ title })
+        .set({ title, updatedAt: sql`now()` })
         .where(eq(conversations.id, held.id))
         .returning()
       return renamed ?? held
@@ -280,9 +282,11 @@ export async function appendMessages(
         wrote ||= written.length > 0
       }
       if (wrote) {
+        // The database's clock, never the Worker's: the list compares this
+        // with times the database set, and two clocks drift apart.
         await db
           .update(conversations)
-          .set({ updatedAt: new Date() })
+          .set({ updatedAt: sql`now()` })
           .where(eq(conversations.id, conversation.id))
       }
       return true

@@ -13,7 +13,7 @@ import {
   type Tenancy,
   tenancy,
 } from "@workspace/db"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { appendMessages, type StoredMessage } from "../src/conversations.ts"
 import { BODY_MAX } from "../src/http.ts"
 import worker from "../src/index.ts"
@@ -365,6 +365,79 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
       expect(list.conversations[0]?.id).toBe(body.id)
     })
 
+    /**
+     * A Worker's clock that has drifted a minute behind the database's, as a
+     * Worker's and Neon's clocks can. Only `Date` is faked, so the driver's
+     * timers run as usual.
+     */
+    const workerBehind = () => {
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(Date.now() - 60_000)
+      return () => vi.useRealTimers()
+    }
+
+    it("moves a written conversation above one made before it, on the database's clock", async () => {
+      const { body } = await create()
+      await create()
+      const restore = workerBehind()
+      try {
+        await appendMessages(kit, who.orgId, body.id, [
+          text("u_1", "user", null),
+        ])
+      } finally {
+        restore()
+      }
+      const list = ConversationList.parse(
+        await (await call("/conversations")).json()
+      )
+      expect(list.conversations[0]?.id).toBe(body.id)
+    })
+
+    it("moves a conversation with a new chat turn up the list, on the database's clock", async () => {
+      const { body } = await create()
+      await create()
+      const restore = workerBehind()
+      try {
+        const sent = await call("/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            conversation_id: body.id,
+            mode: "ask",
+            turn: { kind: "message", message_id: "u_chat", text: "Hello" },
+          }),
+        })
+        expect(sent.status).toBe(200)
+        await sent.text()
+      } finally {
+        restore()
+      }
+      const list = ConversationList.parse(
+        await (await call("/conversations")).json()
+      )
+      expect(list.conversations[0]?.id).toBe(body.id)
+    })
+
+    it("moves a renamed conversation up the list, on the database's clock", async () => {
+      const { body } = await create()
+      await create()
+      const restore = workerBehind()
+      try {
+        const renamed = await call(
+          `/conversations/${body.id}`,
+          keyed("PATCH", { title: "Renamed" })
+        )
+        expect(renamed.status).toBe(200)
+      } finally {
+        restore()
+      }
+      const list = ConversationList.parse(
+        await (await call("/conversations")).json()
+      )
+      expect(list.conversations[0]?.id).toBe(body.id)
+    })
+
+    // Ordered by one clock: the retry wrote nothing, so the conversation made
+    // after the turn's first write stays on top.
     it("writes nothing twice when a turn is retried, and leaves the list as it was", async () => {
       const { body } = await create()
       const turn = [text("u_1", "user", null), text("a_1", "assistant", "u_1")]
