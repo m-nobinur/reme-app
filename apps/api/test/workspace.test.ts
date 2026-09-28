@@ -192,6 +192,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       spent_usd: 5,
     })
     busyIds = {
+      live,
       liveRevision,
       published,
       reviewing,
@@ -280,7 +281,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention[0]).toMatchObject({ kind: "approval", version: 2 })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
-      live: { revision_id: busyIds.liveRevision, version: 1 },
+      live: {
+        revision_id: busyIds.liveRevision,
+        version: 1,
+        assignment_id: busyIds.live,
+      },
     })
     expect(
       body.builds.map((b) => [b.assignment_id, b.state, b.revision])

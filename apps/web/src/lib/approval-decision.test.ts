@@ -133,7 +133,14 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
       fc.uuid({ version: 4 }),
       async (generated, live) => {
         body = {
-          site: { host: null, live: { revision_id: live, version: 1000 } },
+          site: {
+            host: null,
+            live: {
+              revision_id: live,
+              version: 1000,
+              assignment_id: crypto.randomUUID(),
+            },
+          },
           builds: [],
           attention: generated.map((approval) => ({
             kind: "approval",

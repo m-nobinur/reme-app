@@ -313,7 +313,7 @@ it("reads the live version, and a build only while it is working", async () => {
     ...workspace,
     site: {
       host: "fictional.invalid",
-      live: { revision_id: REVISION, version: 3 },
+      live: { revision_id: REVISION, version: 3, assignment_id: ASSIGNMENT },
     },
     builds: [build("awaiting_review")],
   }

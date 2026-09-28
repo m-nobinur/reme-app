@@ -225,7 +225,9 @@ export async function readSite(
     .select({
       slug: orgs.slug,
       // One site per org, and its id is the org's (ADR-031).
-      live: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from deployments d join site_revisions r on r.id = d.revision_id where d.site_id = orgs.id order by d.config_version desc limit 1)`,
+      live: sql<
+        WorkspaceStatus["site"]["live"]
+      >`(select json_build_object('revision_id', r.id, 'version', r.version, 'assignment_id', r.assignment_id) from deployments d join site_revisions r on r.id = d.revision_id where d.site_id = orgs.id order by d.config_version desc limit 1)`,
     })
     .from(orgs)
     .limit(1)

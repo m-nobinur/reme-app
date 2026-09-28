@@ -265,6 +265,22 @@ describe("the requests around them", () => {
     expect(status(["site.hidden_facts"])).toEqual(REFUSED)
   })
 
+  it("names the build behind the live version, so its screenshots can be read", () => {
+    const sample = samples.WorkspaceStatus as {
+      site: { host: string; live: Record<string, unknown> }
+    }
+    const live = (value: unknown) =>
+      verdict("WorkspaceStatus", WorkspaceStatus, {
+        ...sample,
+        site: { ...sample.site, live: value },
+      })
+    const { assignment_id: _, ...unnamed } = sample.site.live
+    expect(live(sample.site.live)).toEqual(ACCEPTED)
+    expect(live(null)).toEqual(ACCEPTED)
+    expect(live(unnamed)).toEqual(REFUSED)
+    expect(live({ ...sample.site.live, assignment_id: "a1" })).toEqual(REFUSED)
+  })
+
   it("links a preview over https only, with exactly three screenshots", () => {
     const link = samples.PreviewLink as { screenshots: string[] }
     expect(

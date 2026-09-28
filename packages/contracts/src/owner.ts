@@ -268,7 +268,11 @@ export const REMINDER_NOTES_MAX = 20
 export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
     host: z.string().min(1).nullable(),
-    live: RevisionRef.nullable(),
+    /**
+     * The version being served, and the build that made it, so the panel can
+     * read its screenshots through `GET /builds/:id/preview`.
+     */
+    live: RevisionRef.extend({ assignment_id: Uuid }).nullable(),
   }),
   /** Non-terminal, newest first. */
   builds: z.array(BuildSummary).max(10),
