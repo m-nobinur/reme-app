@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { FACTS } from "./cos-cases.mjs"
-import { fixtureLeaks, MARK, SHAPES } from "./redact.mjs"
+import { fixtureLeaks, MARK, mergeDeltas, SHAPES } from "./redact.mjs"
 import { replay } from "./replay.mjs"
 import { liveRun } from "./tier-2/cos-live.eval.mjs"
 
@@ -81,7 +81,7 @@ export function serialise(run) {
       const id = `${name}.${i + 1}`
       const { mode, text, deny } = turn.owner
       owner[id] = { mode, text, deny, outcome: turn.outcome }
-      for (const chunk of turn.chunks) {
+      for (const chunk of mergeDeltas(turn.chunks)) {
         lines.push({ turn: id, chunk: redact(chunk) })
       }
       return id

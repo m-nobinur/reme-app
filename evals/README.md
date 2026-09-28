@@ -69,17 +69,21 @@ than as an error.
 the owner saw to `fixtures/cos-chat.jsonl`. Line 1 is the header: the facts the
 run stated, what the owner sent each turn and how the turn ended, and the hash
 over all of that and the folded chunks. Every other line is one chunk the api
-streamed, redacted: ids become counters, and URLs, emails, staging and
+streamed, redacted after consecutive deltas of one part are merged, so a
+value split across chunks is redacted whole: ids become counters, and URLs, emails, staging and
 workers.dev hosts, UUIDs and ULIDs (WorkOS's `user_...` included) become
 `REDACTED-<kind>-<n>`, which tier 1 fails if a reply shows it. Provider
 metadata is dropped. It fails closed: nothing is written when `redact.mjs`'s
-scan finds the run's own owner, org or host, a credential-shaped word, an id
+scan, over the file and over each part's joined text, finds the run's own owner, org or host, a credential-shaped word, an id
 the redaction missed or a chunk type the api should not stream, nor when the
 run stopped on its cap, did not know its spend or held any build. Tier 1 runs
 the same scan over the committed file, and fails when the fixture's owner
 turns or facts no longer match `cos-cases.mjs`. Re-record when the cases, the
 agent's instructions, tools or model change, and read the diff, which is what
-a golden fixture is for. Each re-record is a paid run.
+a golden fixture is for. Each re-record is a paid run. The header (`FACTS`
+and the owner's text from `cos-cases.mjs`) is written as it is, not
+redacted, so a fact or an utterance holding an email or a host makes every
+recording refuse until it is changed.
 
     COS_API_URL=https://staging-api.remeai.co.uk \
       node --env-file=.env.local --experimental-transform-types evals/record.mjs

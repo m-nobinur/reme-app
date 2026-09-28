@@ -9,7 +9,7 @@ import {
   reapProbeOrgs,
   staleProbeUsers,
 } from "../../qa/e2e/workos.ts"
-import { CASES, callsOf, FACTS, partsOf, score } from "../cos-cases.mjs"
+import { CASES, callsOf, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
 
 /**
  * Tier 2 (§16.3), live: the Chief of Staff on staging, through `/chat` as the
@@ -303,9 +303,7 @@ export default async function cosLive() {
     }))
     return { kase, turns, ...score(kase, turns, FACTS) }
   })
-  const passed = rows.filter(
-    (r) => !r.unknown.length && !r.problems.length && !r.fabrications.length
-  )
+  const green = rows.filter(passed)
   const fabrications = rows.flatMap((r) => r.fabrications)
   const tools = (r) =>
     r.turns
@@ -319,7 +317,7 @@ export default async function cosLive() {
   const lines = [
     "## Tier 2: Chief of Staff on staging",
     "",
-    `${passed.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
+    `${green.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
     "",
     "| Case | Tools per turn | Result |",
     "| --- | --- | --- |",
@@ -339,8 +337,8 @@ export default async function cosLive() {
   }
   const failures = [
     run.stopped,
-    passed.length < CASES.length &&
-      `${passed.length} of ${CASES.length} cases passed`,
+    green.length < CASES.length &&
+      `${green.length} of ${CASES.length} cases passed`,
     fabrications.length > 0 && `${fabrications.length} fabrication(s)`,
     run.builds !== 0 && `${run.builds ?? "unknown"} unapproved build(s)`,
   ].filter(Boolean)

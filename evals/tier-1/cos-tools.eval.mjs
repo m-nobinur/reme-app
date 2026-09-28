@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { CASES, FACTS, partsOf, score } from "../cos-cases.mjs"
+import { CASES, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
+import { serialise } from "../record.mjs"
 import { fixtureLeaks } from "../redact.mjs"
 import { canonical, loadFixture } from "../replay.mjs"
 
@@ -48,7 +49,42 @@ export function drift(fixture) {
   return found
 }
 
+/**
+ * The recorder redacts a value the stream split across chunks: a UUID, a
+ * ULID and a host, each cut in two, must come out as markers, and the
+ * scan must pass what it writes.
+ */
+function splitValuesRedacted() {
+  const cut = [
+    ["3f1c2a4e-1111-4222-", "8333-444455556666"],
+    ["01K6ABCDEFGH", "JKMNPQRSTVWXYZ"],
+    ["reme-api.nobin.workers", ".dev/x"],
+  ]
+  const chunks = cut.flatMap(([a, b]) => [
+    { type: "text-delta", id: "t", delta: ` ${a}` },
+    { type: "text-delta", id: "t", delta: b },
+  ])
+  const { text } = serialise({
+    cases: [
+      {
+        name: "split",
+        turns: [
+          { owner: { mode: "ask", text: "q" }, chunks, outcome: "answered" },
+        ],
+      },
+    ],
+    builds: 0,
+    spentUsd: 0,
+    stopped: null,
+    secrets: [],
+  })
+  const delta = JSON.parse(text.split("\n")[1]).chunk.delta
+  if (delta !== " REDACTED-uuid-1 REDACTED-ulid-1 REDACTED-host-1/x")
+    throw new Error(`a split value was not redacted whole: ${delta}`)
+}
+
 export default async function cosTools() {
+  splitValuesRedacted()
   const leaks = fixtureLeaks(readFileSync(FIXTURE, "utf8"))
   if (leaks.length > 0)
     throw new Error(`cos-chat.jsonl holds ${leaks.join(", ")}`)
@@ -66,9 +102,7 @@ export default async function cosTools() {
     }))
     return { name: kase.name, ...score(kase, turns, fixture.facts) }
   })
-  const failed = rows.filter(
-    (r) => r.unknown.length || r.problems.length || r.fabrications.length
-  )
+  const failed = rows.filter((r) => !passed(r))
   const fabrications = rows.flatMap((r) => r.fabrications).length
   console.log(
     `      ${rows.length - failed.length} of ${CASES.length} cases, fabrication count ${fabrications}`

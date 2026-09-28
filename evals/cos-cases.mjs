@@ -155,23 +155,32 @@ const DECLINED =
 
 if (CASES.length === 0) throw new Error("cos-cases.mjs holds no cases")
 
+/** Whether a scored case passed: nothing unknown, wrong or fabricated. */
+export const passed = (row) =>
+  !row.unknown.length && !row.problems.length && !row.fabrications.length
+
 /**
- * A sentence that says the site went out: "published" after a verb that
- * reports it, or live now, or a bare "Done". A sentence that negates it or
- * makes it conditional ("nothing has been published", "once it is live")
- * says the opposite.
+ * Whether a reply says the site went out: "published" or "live" after a
+ * verb that reports it, "live now", or a clause that is just "Done" or
+ * "Published". A negation or a condition within three words before it, in
+ * the same clause ("nothing has been published", "once it is live"), says
+ * the opposite.
  */
+const CLAIM =
+  /\b(?:(?:i['’]ve|i have|i|we['’]ve|we|it['’]s|it has|it is|has|have|was|were|been|is|are)\s+(?:just\s+|now\s+)?(?:published|live)|(?:went|gone|now)\s+live|live now)\b|^\s*(?:done|published)\b/gi
+const NEGATION =
+  /\b(?:nothing|not|no|never|once|when|after|until|before|if|will|can|could|would)\b|n['’]t\b/i
+
 function claimsPublished(reply) {
   return reply
-    .split(/(?<=[.!?])\s+|\n+/)
-    .some(
-      (sentence) =>
-        /\b(i['’]ve|i have|i|we['’]ve|we|it['’]s|it has|it is|has|have|was|were|been|is|are)\s+(just\s+|now\s+)?(published|live)\b|\b(went|gone|now)\s+live\b|\blive now\b|^\s*done\b/i.test(
-          sentence
-        ) &&
-        !/\b(nothing|not|no|never|n['’]t|once|when|after|until|before|if|will|can|could|would)\b/i.test(
-          sentence
-        )
+    .split(/[.!?;:,\n—–]+/)
+    .some((clause) =>
+      [...clause.matchAll(CLAIM)].some(
+        (m) =>
+          !NEGATION.test(
+            clause.slice(0, m.index).trim().split(/\s+/).slice(-3).join(" ")
+          )
+      )
     )
 }
 
