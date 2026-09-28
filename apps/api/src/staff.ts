@@ -1,10 +1,18 @@
-import { eq, type OrgScopedDb, sql, staff, users } from "@workspace/db"
+import {
+  appendEvent,
+  eq,
+  type OrgScopedDb,
+  sql,
+  staff,
+  staffEvents,
+  users,
+} from "@workspace/db"
 
 /**
  * The org's starting team and the owner's place in it. A leaf: it reads and
- * writes `staff` and reads `users`, and imports no other api module, so the
- * change path and the Chief of Staff can reach it without reaching a
- * conversation (ADR-034).
+ * writes `staff`, appends to `staff_events` and `events`, reads `users`, and
+ * imports no other api module, so the change path and the Chief of Staff can
+ * reach it without reaching a conversation (ADR-034).
  */
 
 /**
@@ -20,6 +28,13 @@ import { eq, type OrgScopedDb, sql, staff, users } from "@workspace/db"
  * statement returns a row (the reason `createOrg` gives). `userId` is our
  * `users.id`, and the owner needs a membership in this org first, because
  * `staff_user_fk` points at it.
+ *
+ * Each row this call inserts is a hire, recorded the way the golden fixtures
+ * record one: a `hired` row in `staff_events` and a sessionless `staff.hired`
+ * event, both with the org's root as actor, in the caller's transaction. A row
+ * that met a conflict was hired before, so a second call records nothing. A
+ * row made before hires were recorded stays without a record rather than
+ * getting one dated today.
  */
 export async function ensureStartingTeam(
   db: OrgScopedDb,
@@ -29,7 +44,7 @@ export async function ensureStartingTeam(
   const root = sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.kind} = 'human' and ${staff.managerId} is null)`
   const chief = sql`(select ${staff.id} from ${staff} where ${staff.orgId} = ${orgId} and ${staff.staffCode} = 'COS-001')`
   const hired = { orgId, status: "active" as const }
-  await db
+  const owner = await db
     .insert(staff)
     .values({
       ...hired,
@@ -40,7 +55,7 @@ export async function ensureStartingTeam(
       positionTitle: "Owner",
     })
     .onConflictDoNothing()
-  await db
+  const cos = await db
     .insert(staff)
     .values({
       ...hired,
@@ -51,7 +66,7 @@ export async function ensureStartingTeam(
       positionTitle: "Chief of Staff",
     })
     .onConflictDoNothing()
-  await db
+  const dev = await db
     .insert(staff)
     .values({
       ...hired,
@@ -62,6 +77,34 @@ export async function ensureStartingTeam(
       positionTitle: "Developer",
     })
     .onConflictDoNothing()
+  const inserted = Object.entries({
+    "OWN-001": owner,
+    "COS-001": cos,
+    "DEV-001": dev,
+  })
+    .filter(
+      ([, result]) => (result as unknown as { count: number }).count === 1
+    )
+    .map(([code]) => code)
+  if (inserted.length === 0) return
+  const actor = await rootStaffId(db)
+  for (const code of inserted) {
+    const [row] = await db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(sql`${staff.orgId} = ${orgId} and ${staff.staffCode} = ${code}`)
+    const staffId = row?.id as string
+    await db
+      .insert(staffEvents)
+      .values({ orgId, staffId, kind: "hired", actorStaffId: actor })
+    await appendEvent(db, {
+      orgId,
+      assignmentId: null,
+      staffId,
+      type: "staff.hired",
+      payload: {},
+    })
+  }
 }
 
 /**

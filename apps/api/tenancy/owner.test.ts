@@ -9,7 +9,7 @@ import {
   Reminder,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { tenancy } from "@workspace/db"
+import { events, sql, staffEvents, tenancy } from "@workspace/db"
 import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { chat } from "../src/chat.ts"
@@ -393,6 +393,35 @@ describe("another org's conversation is 404 and never written to", () => {
       expect(stub.calls).toHaveLength(0)
     }
     expect(await history(theirs, theirId)).toEqual(before)
+  })
+})
+
+describe("another org's staff history is invisible", () => {
+  /** Each org's hires, read as `as`, with `whose` named in the where clause. */
+  const history = (as: Owner, whose: Owner) =>
+    kit.withOrg({ orgId: as.orgId }, async (db) => [
+      await db
+        .select({ staffId: staffEvents.staffId })
+        .from(staffEvents)
+        .where(sql`${staffEvents.orgId} = ${whose.orgId}`),
+      await db
+        .select({ staffId: events.staffId })
+        .from(events)
+        .where(
+          sql`${events.orgId} = ${whose.orgId} and ${events.type} = 'staff.hired'`
+        ),
+    ])
+
+  it("control: the org reads its own three hires", async () => {
+    const [rows, logged] = await history(mine, mine)
+    expect(rows).toHaveLength(3)
+    expect(logged).toHaveLength(3)
+  })
+
+  it("reads none of another org's hires, even by its id", async () => {
+    const [rows, logged] = await history(theirs, mine)
+    expect(rows).toEqual([])
+    expect(logged).toEqual([])
   })
 })
 
