@@ -2041,6 +2041,8 @@ export interface components {
           /** Format: uuid */
           revision_id: string
           version: number
+          /** Format: uuid */
+          assignment_id: string
         } | null
       }
       builds: {
