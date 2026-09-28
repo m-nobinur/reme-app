@@ -98,7 +98,7 @@ function joinedTexts(lines) {
       texts.push(part.text ?? JSON.stringify(part))
     }
     const inputs = new Map()
-    for (const c of chunks.filter((c) => c.type === "tool-input-delta")) {
+    for (const c of chunks.filter((k) => k.type === "tool-input-delta")) {
       inputs.set(
         c.toolCallId,
         (inputs.get(c.toolCallId) ?? "") + c.inputTextDelta
