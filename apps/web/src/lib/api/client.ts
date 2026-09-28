@@ -26,6 +26,7 @@ import type {
   OrgNode,
   OrgSummary,
   OwnerDataSource,
+  PreviewLinks,
   StaffMember,
   TransportedFact,
   TransportedMessage,
@@ -388,6 +389,12 @@ function workspaceOf(
   return {
     attention: status.attention.map((item) => toAttention(item, names)),
     live: status.site.live?.version ?? null,
+    liveRevision: status.site.live
+      ? {
+          revisionId: status.site.live.revision_id,
+          assignmentId: status.site.live.assignment_id,
+        }
+      : null,
     building: status.builds.some((build) => WORKING.has(build.state)),
     open: status.builds.length > 0,
     builds: status.builds,
@@ -545,13 +552,18 @@ async function cancelBuild(
 async function preview(
   _orgId: string,
   assignmentId: string
-): Promise<{ url: string; screenshots: string[] } | null> {
+): Promise<PreviewLinks | null> {
   const body = await get(`/builds/${segment(assignmentId)}/preview`)
   if (body === null) {
     return null
   }
   const link = PreviewLink.parse(body)
-  return { url: link.url, screenshots: link.screenshots }
+  return {
+    revisionId: link.revision_id,
+    url: link.url,
+    screenshots: link.screenshots,
+    expiresAt: link.expires_at,
+  }
 }
 
 async function requestChange(

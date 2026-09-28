@@ -200,3 +200,25 @@ test("a change in flight keeps its note up", async ({ page }) => {
   // Nothing on the page took focus on its own.
   await expect(page.locator("body")).toBeFocused()
 })
+
+test("the site thumbnail holds its space, and a broken one leaves the text", async ({
+  page,
+}) => {
+  const entry = (name: string) => page.locator(`[data-entry="${name}"]`)
+  await open(page, "YourWebsite", 400)
+  await expect(
+    entry("YourWebsite").getByRole("img", {
+      name: "Your website's home page on a laptop, version 3",
+    })
+  ).toBeVisible()
+
+  await open(page, "YourWebsite loading", 400)
+  await expect(
+    entry("YourWebsite loading").locator('[data-slot="skeleton"]')
+  ).toBeVisible()
+
+  await open(page, "YourWebsite screenshot failed", 400)
+  const failed = entry("YourWebsite screenshot failed")
+  await expect(failed.getByRole("img")).toHaveCount(0)
+  await expect(failed.getByText("Version 3 is live.")).toBeVisible()
+})

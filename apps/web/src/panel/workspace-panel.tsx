@@ -8,6 +8,7 @@ import {
   type Preview,
   QuestionItem,
   Reminders,
+  type Thumbnail,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,
@@ -27,6 +28,7 @@ import { attemptKeys } from "@/lib/attempt"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { onboardingFor } from "@/lib/onboarding"
 import { anchorOf, reminderRows } from "@/lib/reminders"
+import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
@@ -161,6 +163,24 @@ function usePreview(
     }
   }, [assignmentId])
   return preview
+}
+
+/**
+ * The live site's thumbnail, read when the live revision changes and again
+ * before its links expire. Loading from the first render when a site is
+ * live, so the skeleton holds the space from the server's HTML on.
+ */
+function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
+  const [thumbnail, setThumbnail] = useState<Thumbnail>(live ? "loading" : null)
+  const [follower] = useState(() =>
+    followThumbnail({
+      read: (assignmentId) => getPreview({ data: { assignmentId } }),
+      onChange: setThumbnail,
+    })
+  )
+  useEffect(() => follower.show(live), [follower, live])
+  useEffect(() => follower.stop, [follower])
+  return thumbnail
 }
 
 export function Decidable({
@@ -316,6 +336,7 @@ function FirstStep({ workspace }: { workspace: Workspace }) {
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const [status, setStatus] = useState<string | null>(null)
+  const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
   const stale = failed
     ? "This panel did not refresh. It tries again in a minute."
     : null
@@ -401,7 +422,9 @@ export function WorkspacePanel() {
       <Reminders
         items={reminderRows(workspace, current?.assignment_id ?? null)}
       />
-      {live || host ? <YourWebsite host={host} live={live} /> : null}
+      {live || host ? (
+        <YourWebsite host={host} live={live} thumbnail={thumbnail} />
+      ) : null}
     </>
   )
 }
