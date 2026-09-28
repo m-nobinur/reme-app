@@ -316,3 +316,18 @@ test("a reminder is added in place, with a native date and time", async ({
   await expect(page.getByLabel("When (optional)")).toHaveValue("")
   await expect(page.getByRole("dialog")).toHaveCount(0)
 })
+
+test("a blank section's next step looks like a button, with a visible border", async ({
+  page,
+}) => {
+  for (const theme of ["light", "dark"] as const) {
+    await page.goto(`/?entry=PanelBlank&theme=${theme}`)
+    const link = page.getByRole("link", { name: "Continue getting started" })
+    await expect(link).toBeVisible()
+    const border = await link.evaluate(
+      (el) => getComputedStyle(el).borderTopColor
+    )
+    // A fully transparent border computes to an alpha of 0.
+    expect(border.replace(/\s/g, "").endsWith(",0)"), theme).toBe(false)
+  }
+})
