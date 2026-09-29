@@ -75,11 +75,7 @@ describe("the bearer", () => {
   })
 
   it("guards the sandbox probe the same way", async () => {
-    const res = await app.request(
-      "/assignments/sandbox/probe?org=brightclean",
-      {},
-      env
-    )
+    const res = await app.request("/sandbox/probe", {}, env)
     expect(res.status).toBe(401)
     expect((await envelope(res)).code).toBe("console.unauthenticated")
   })
@@ -309,7 +305,7 @@ describe("owner mode", () => {
   ]
   const CONSOLE_ONLY: [string, string][] = [
     ["GET", "/assignments"],
-    ["GET", "/assignments/sandbox/probe"],
+    ["GET", "/sandbox/probe"],
     ["POST", "/assignments/x/start"],
     ["GET", "/assignments/facts"],
     ["POST", "/assignments/facts"],
