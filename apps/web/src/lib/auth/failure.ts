@@ -72,6 +72,19 @@ export function toFailure(error: unknown): AuthFailure {
     }
   }
 
+  // The SDK aborted a request WorkOS had not started answering in
+  // `WORKOS_TIMEOUT_MS`. It arrives as an OauthException with status 408 and
+  // `error: "Request timeout"`, so it has to be caught before that branch
+  // below reads it as a refusal. No "nothing was changed" here: a create that
+  // timed out may have landed.
+  if (status === 408) {
+    return {
+      code: "timeout",
+      message:
+        "The sign-in service did not answer in time. Try again in a moment.",
+    }
+  }
+
   switch (code) {
     // Measured: GenericServerException, status 400. Covers both a wrong
     // password and an address with no account, which is deliberate on WorkOS's

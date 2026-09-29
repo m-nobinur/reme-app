@@ -23,11 +23,35 @@ function required(name: string): string {
   return value
 }
 
+/**
+ * How long WorkOS has to start answering, the same bound `apiFetch` gives
+ * `apps/api`. The SDK's own default is 60 s, and it retried a timeout three
+ * times with backoff, so a stalled WorkOS held a sign-in form for over four
+ * minutes. An abort surfaces as a 408, which `toFailure` answers as `timeout`.
+ */
+export const WORKOS_TIMEOUT_MS = 10_000
+
+/**
+ * The timeout is given twice because the SDK's two builds read it from two
+ * places: the Node build from `timeout`, the Worker build (the one workerd
+ * resolves) from `config`, where its `createHttpClient` drops `timeout`.
+ * Measured in 10.11.0 by `workos.test.ts`, which drives both builds.
+ *
+ * No retries: a retry doubles the wait, and a 429 or 503 retry sleeps for
+ * whatever `Retry-After` says, up to 60 s. The person on the form is the retry.
+ */
+export const CLIENT_OPTIONS = {
+  timeout: WORKOS_TIMEOUT_MS,
+  config: { timeout: WORKOS_TIMEOUT_MS } as RequestInit,
+  maxRetries: 0,
+}
+
 let client: WorkOS | undefined
 
 export function workos(): WorkOS {
   client ??= new WorkOS(required("WORKOS_API_KEY"), {
     clientId: required("WORKOS_CLIENT_ID"),
+    ...CLIENT_OPTIONS,
   })
   return client
 }
