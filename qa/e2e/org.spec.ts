@@ -55,6 +55,10 @@ test.afterAll(async () => {
   ).toEqual([])
 })
 
+// Two sign-ins, three api reads and three pages against a cold preview: the
+// default 60 s ran out on the gate's first run.
+test.setTimeout(3 * 60_000)
+
 /** The panel beside the conversation, by its landmark name. */
 const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })
 
