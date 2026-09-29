@@ -23,6 +23,7 @@ export const Route = createFileRoute("/mfa")({
     }
     return pending
   },
+  head: () => ({ meta: [{ title: "Two-step verification · Reme" }] }),
   component: MfaChallenge,
 })
 
@@ -59,7 +60,7 @@ function MfaChallenge() {
       description="Open the authenticator app on your phone and enter the code it shows for Reme."
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Use a different account

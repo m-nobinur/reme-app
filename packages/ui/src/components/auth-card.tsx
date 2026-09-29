@@ -1,3 +1,4 @@
+import { AuthAside } from "@workspace/ui/components/auth-aside"
 import { Logo } from "@workspace/ui/components/logo"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import { cn } from "@workspace/ui/lib/utils"
@@ -29,9 +30,9 @@ import { type ComponentProps, type ReactNode, useEffect, useRef } from "react"
 const formGuardScript = `document.addEventListener("submit",function(e){var f=e.target;if(f&&f.dataset&&f.dataset.authForm==="true"&&f.dataset.hydrated!=="true"){e.preventDefault();f.dataset.submitQueued="true"}},true)`
 
 /**
- * The frame every page in the sign-in flow renders into: one centred panel on
- * the page background, the product's mark above it, and a single line of onward
- * navigation below.
+ * The frame every page in the sign-in flow renders into: the form on the left
+ * with the product's mark above it and a line of onward navigation below, and
+ * the brand panel on the right from `lg` up.
  *
  * The wordmark and the footer are slots so this package still imports no router.
  */
@@ -52,39 +53,47 @@ function AuthCard({
   return (
     <div
       className={cn(
-        "relative flex min-h-svh flex-col items-center justify-center gap-6 bg-background px-4 py-10 text-foreground",
+        "grid min-h-svh bg-background text-foreground lg:grid-cols-2",
         className
       )}
       {...props}
     >
-      {/* Landmarks rather than plain boxes, and it is not decoration: axe's
-          `region` rule fails any content outside one, and the wordmark, the
-          theme control and the footer line all sat outside `main`. Every page
-          in this flow failed it in both themes until this was three elements
-          instead of one. The toggle is positioned against the outer box, so
-          nesting it here changes the markup and not the layout. */}
-      <header className="flex w-full max-w-sm justify-center">
-        {brand}
-        {/* The one place in the product a person can be before they have an
-            account, so it is the one place the theme control has to exist too. */}
-        <div className="absolute top-4 right-4">
+      <div className="flex min-h-svh flex-col px-6 py-6 sm:px-10 lg:px-14">
+        {/* Landmarks rather than plain boxes, and it is not decoration: axe's
+            `region` rule fails any content outside one, and the wordmark and
+            the theme control both sat outside `main`. Every page in this flow
+            failed it in both themes until this was separate elements. */}
+        <header className="flex items-center justify-between">
+          {brand}
+          {/* The one place in the product a person can be before they have an
+              account, so it is the one place the theme control has to exist. */}
           <ThemeToggle />
-        </div>
-      </header>
+        </header>
 
-      <main className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
-        <h1 className="font-semibold text-xl tracking-tight">{title}</h1>
-        {description ? (
-          <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
-            {description}
-          </p>
-        ) : null}
-        <div className="mt-6">{children}</div>
-      </main>
+        <main className="flex flex-1 flex-col justify-center py-10">
+          <div className="mx-auto w-full max-w-sm">
+            <h1 className="font-semibold text-2xl tracking-tight sm:text-3xl">
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-3 text-muted-foreground text-sm leading-relaxed">
+                {description}
+              </p>
+            ) : null}
+            {/* Auth inputs are one step taller than the app's: this is the form
+                a first-time visitor has to finish. Set here, by slot, so the
+                shared input keeps its size everywhere else. */}
+            <div className="mt-8 [&_[data-slot=input]]:h-10">{children}</div>
+            {footer ? (
+              <footer className="mt-8 text-center text-muted-foreground text-sm">
+                {footer}
+              </footer>
+            ) : null}
+          </div>
+        </main>
+      </div>
 
-      {footer ? (
-        <footer className="text-muted-foreground text-sm">{footer}</footer>
-      ) : null}
+      <AuthAside />
     </div>
   )
 }

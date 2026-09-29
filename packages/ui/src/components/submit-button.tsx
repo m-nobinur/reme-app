@@ -32,6 +32,7 @@ function SubmitButton({
     <Button
       aria-busy={pending || undefined}
       aria-disabled={pending || undefined}
+      size="lg"
       className={cn("w-full aria-disabled:opacity-60", className)}
       onClick={(event) => {
         if (pending) {

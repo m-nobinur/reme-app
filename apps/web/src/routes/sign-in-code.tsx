@@ -20,6 +20,7 @@ export const Route = createFileRoute("/sign-in-code")({
     returnTo:
       search.returnTo === undefined ? undefined : safeReturnTo(search.returnTo),
   }),
+  head: () => ({ meta: [{ title: "Sign in with a code · Reme" }] }),
   component: SignInCode,
 })
 
@@ -42,7 +43,7 @@ function SignInCode() {
 
   const signInLink = (
     <Link
-      className="text-foreground underline underline-offset-4"
+      className="font-medium text-foreground underline underline-offset-4"
       search={{ returnTo }}
       to="/sign-in"
     >

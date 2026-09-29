@@ -18,6 +18,7 @@ export const Route = createFileRoute("/reset-password")({
     token:
       typeof search.token === "string" ? search.token.slice(0, 256) : undefined,
   }),
+  head: () => ({ meta: [{ title: "Set a new password · Reme" }] }),
   component: ResetPassword,
 })
 
@@ -96,7 +97,7 @@ function ResetPassword() {
       description="Pick something you have not used here before."
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Back to sign in
@@ -127,7 +128,7 @@ function ResetPassword() {
           label="New password"
           minLength={PASSWORD_POLICY.minLength}
           name="password"
-          placeholder="At least 10 characters"
+          placeholder="Create a password"
           required
           strength
         />

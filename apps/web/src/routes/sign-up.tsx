@@ -9,7 +9,10 @@ import { PASSWORD_POLICY } from "@workspace/ui/lib/password-policy"
 import { signUp } from "@/lib/auth/actions"
 import { useSubmit } from "@/lib/auth/use-submit"
 
-export const Route = createFileRoute("/sign-up")({ component: SignUp })
+export const Route = createFileRoute("/sign-up")({
+  head: () => ({ meta: [{ title: "Create your account · Reme" }] }),
+  component: SignUp,
+})
 
 function SignUp() {
   const { run, pending, result } = useSubmit(signUp)
@@ -23,12 +26,12 @@ function SignUp() {
           <Logo />
         </Link>
       }
-      description="Reme runs the work around the work. This takes a minute."
+      description="Set up your workspace in a minute. Nothing is published, and no customer is contacted, until you approve it."
       footer={
         <>
           Already have an account?{" "}
           <Link
-            className="text-foreground underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4"
             to="/sign-in"
           >
             Sign in
@@ -79,7 +82,7 @@ function SignUp() {
 
         <Field
           autoComplete="organization"
-          hint="This names your workspace, and it is what the assistant calls your business. You can change it later."
+          hint="Names your workspace and is what the assistant calls your business. You can change it later."
           id="business-name"
           label="Business name"
           maxLength={120}
@@ -112,7 +115,7 @@ function SignUp() {
           label="Password"
           minLength={PASSWORD_POLICY.minLength}
           name="password"
-          placeholder="At least 10 characters"
+          placeholder="Create a password"
           required
           strength
         />
@@ -121,10 +124,8 @@ function SignUp() {
           Create account
         </SubmitButton>
 
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Creating an account sets up your workspace. Nothing is published and
-          no message is sent to anyone until you approve it. By creating an
-          account you agree to the{" "}
+        <p className="text-balance text-center text-muted-foreground text-xs leading-relaxed">
+          By creating an account you agree to the{" "}
           <Link className="underline underline-offset-4" to="/terms">
             terms
           </Link>{" "}
