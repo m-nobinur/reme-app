@@ -1,9 +1,13 @@
 import { env } from "cloudflare:workers"
 import { createServerFn } from "@tanstack/react-start"
+import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
+import { forwardedSession } from "@/lib/api/transport"
 import { type AuthFailure, toFailure } from "./failure"
 import { digits, record, secret, text } from "./input"
+import { createOrgForSession } from "./org"
+import { clearOrgIntent, readOrgIntent } from "./org-intent"
 import { clearPending, readPending, updatePending } from "./pending"
-import { type AuthOutcome, authenticate } from "./session"
+import { type AuthOutcome, authenticate, writeSession } from "./session"
 import { throttleSignIn } from "./throttle"
 import { sessionOptions, workos } from "./workos"
 
@@ -326,6 +330,53 @@ export const chooseOrganization = createServerFn({ method: "POST" })
       { email: pending.email, returnTo: pending.returnTo }
     )
   })
+
+// --- an organisation signup could not write --------------------------------
+
+/**
+ * The organisation a signup could not write, written now. The /app frame
+ * calls this for a signed-in session with no organisation and a business
+ * name recorded for the same user. Safe to run again: `apps/api` adopts the
+ * organisation the person already belongs to, under the same key. True when
+ * the session now carries it, so the page reads again under it; otherwise the
+ * name stays recorded for the next visit.
+ */
+export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
+  async (): Promise<boolean> => {
+    const intent = await readOrgIntent()
+    const auth = getAuthKitContextOrNull()?.auth()
+    if (
+      !intent ||
+      !auth?.user ||
+      auth.organizationId ||
+      auth.user.id !== intent.userId
+    ) {
+      return false
+    }
+    const sealedSession = await forwardedSession()
+    if (!sealedSession) return false
+    try {
+      const next = await createOrgForSession({
+        sealedSession,
+        workosUserId: intent.userId,
+        name: intent.orgName,
+      })
+      if (next === sealedSession) return false
+      await writeSession(next)
+      await clearOrgIntent()
+      return true
+    } catch (error) {
+      // The message only, as at signup (R9).
+      console.error(
+        JSON.stringify({
+          at: "signup.org.retry",
+          message: error instanceof Error ? error.message : "unknown",
+        })
+      )
+      return false
+    }
+  }
+)
 
 // --- leaving ----------------------------------------------------------------
 

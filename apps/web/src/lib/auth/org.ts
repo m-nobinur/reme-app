@@ -1,4 +1,5 @@
 import { CreateOrgRequest, Org } from "@workspace/contracts"
+import { apiFetch, COOKIE } from "@/lib/api/transport"
 import { cookiePassword, workos } from "./workos"
 
 /**
@@ -15,9 +16,6 @@ import { cookiePassword, workos } from "./workos"
  * WorkOS keyed on the session's own user, and the tenant `org_id` is never
  * mentioned in either direction.
  */
-
-/** The cookie name `apps/api` reads, and the one AuthKit writes. */
-const COOKIE = "wos-session"
 
 /**
  * Where `apps/api` answers.
@@ -58,7 +56,7 @@ export async function createOrgForSession(input: {
   name: string
 }): Promise<string> {
   const body = CreateOrgRequest.parse({ name: input.name })
-  const response = await fetch(new URL("/org", apiUrl()), {
+  const response = await apiFetch(new URL("/org", apiUrl()), {
     method: "POST",
     headers: {
       "content-type": "application/json",

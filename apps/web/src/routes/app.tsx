@@ -39,12 +39,14 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
+import { useEffect } from "react"
 import {
   getWorkspaceFrame,
   pollWorkspace,
   updateConversation,
 } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
+import { retryOrgWrite } from "@/lib/auth/actions"
 import {
   archiveConversation,
   saveTitle,
@@ -111,6 +113,7 @@ function AppLayout() {
   const {
     owner,
     active,
+    orgPending,
     panelOpen,
     workspace,
     conversations,
@@ -136,6 +139,16 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   const stored = conversations?.find((each) => each.id === id)
   const router = useRouter()
+  // A signup whose organisation was not written: write it now, then read
+  // every loader again under the session that carries it. Once per page
+  // load, so a write that still fails waits for the next visit.
+  useEffect(() => {
+    if (!orgPending) return
+    retryOrgWrite().then(
+      (written) => (written ? router.invalidate() : undefined),
+      () => undefined
+    )
+  }, [orgPending, router])
   const navigate = useNavigate()
   const openPanel = useLocation({ select: (at) => at.state.panel === true })
   const { renaming, setRenaming, failed, setFailed } = useMenuState(id)

@@ -12,6 +12,7 @@ import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
+import { ORG_INTENT } from "@/lib/auth/org-intent"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { source } from "./source"
 import type {
@@ -88,6 +89,8 @@ async function readConversations(): Promise<Conversation[] | null> {
 export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
   async (): Promise<{
     active: OrgSummary | null
+    /** No organisation yet, and a business name signup could not write. */
+    orgPending: boolean
     panelOpen: boolean
     /**
      * What waits on the owner, and where the site is. Null when the read
@@ -110,6 +113,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     if (!active) {
       return {
         active,
+        orgPending: getCookie(ORG_INTENT) !== undefined,
         panelOpen: getCookie(PANEL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
         conversations: [],
@@ -128,6 +132,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     ])
     return {
       active,
+      orgPending: false,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
       workspace,
       conversations,
