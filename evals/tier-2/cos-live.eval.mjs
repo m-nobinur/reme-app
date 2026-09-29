@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs"
+import postgres from "postgres"
 import {
   client,
   removeOwner,
@@ -34,10 +35,70 @@ import { CASES, callsOf, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
  * move it too, so the cap is a backstop; the api's own reservation bounds
  * each turn (ADR-034: about $0.017 at the routing cap, under $0.20 for these
  * 11 turns). Skipped without COS_API_URL, so `pnpm eval` runs everywhere.
+ *
+ * With E2E_DATABASE_URL set to staging's direct Neon URL, the run also reads
+ * the org's `cos.turn` spend, read only, and fails unless it is within 5% of
+ * what the key's usage moved (ADR-034).
  */
 
 /** The most one run may move the key's usage. */
 const SPEND_CAP_USD = 0.25
+
+/**
+ * How far the logged sum may sit from the bill: 5%, and never under a tenth
+ * of a cent. Eleven turns bill a few cents, so 5% of that is less than one
+ * turn, and a single stray call on the shared key would fail the run.
+ */
+const tolerance = (bill) => Math.max(0.05 * bill, 0.001)
+
+/**
+ * The org's CoS spend as the log holds it. Closed turns count their cost;
+ * an abandoned turn lost its last step's usage, so it counts at its logged
+ * spend in `low` and at the greater of that and its reservation in `high`,
+ * and the bill must fall between the two. With no abandoned turn they match.
+ */
+export async function loggedSpend(url, orgId) {
+  const sql = postgres(url, { max: 1 })
+  try {
+    const [row] = await sql`
+      select
+        coalesce(sum(case when t.payload->>'outcome' = 'abandoned'
+          then (t.payload->>'logged_usd')::float8
+          else (t.payload->>'cost_usd')::float8 end), 0) as low,
+        coalesce(sum(case when t.payload->>'outcome' = 'abandoned'
+          then greatest((t.payload->>'logged_usd')::float8,
+            (t.payload->>'reserved_usd')::float8)
+          else (t.payload->>'cost_usd')::float8 end), 0) as high
+      from events t
+      where t.org_id = ${orgId} and t.type = 'cos.turn'`
+    return { low: Number(row.low), high: Number(row.high) }
+  } finally {
+    await sql.end()
+  }
+}
+
+/**
+ * Whether `bill` is within tolerance of the logged spend, and the line that
+ * says so. With no logged spend, unchecked.
+ */
+export function billCheck(bill, logged) {
+  if (!logged) {
+    return {
+      off: false,
+      line: "E2E_DATABASE_URL is unset: the logged sum is not checked against the bill.",
+    }
+  }
+  const { low, high } = logged
+  const off = bill < low - tolerance(bill) || bill > high + tolerance(bill)
+  const range =
+    high > low
+      ? `$${low.toFixed(4)} to $${high.toFixed(4)} with abandoned turns`
+      : `$${low.toFixed(4)}`
+  return {
+    off,
+    line: `Logged ${range}, ${off ? "not " : ""}within $${tolerance(bill).toFixed(4)} of the bill.`,
+  }
+}
 
 /**
  * How a turn ended. The model's stream closes with the SDK's `finish`, which
@@ -70,16 +131,19 @@ async function keyUsage() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * What the run spent, once the key's usage shows it. Eleven model turns
- * always cost something, so usage that never moves means the api spends
- * from another key.
+ * What the run spent, once the key's usage shows it and stops moving, since
+ * calls land in it one by one. Eleven model turns always cost something, so
+ * usage that never moves means the api spends from another key.
  */
 export async function spentSince(before, tries = 12) {
+  let last = 0
   for (let i = 0; i < tries; i++) {
     const moved = (await keyUsage()) - before
-    if (moved > 0) return moved
+    if (moved > 0 && moved === last) return moved
+    last = moved
     await sleep(15_000)
   }
+  if (last > 0) return last
   throw new Error(
     "the key's usage did not move after the run: OPENROUTER_API_KEY is not the key staging's api spends from"
   )
@@ -219,6 +283,7 @@ export async function liveRun() {
     cases: [],
     builds: null,
     spentUsd: null,
+    bill: null,
     stopped: null,
     // For `pnpm record`'s scan: none of these may reach a fixture.
     secrets: [owner.email, owner.orgName, new URL(base).host],
@@ -249,6 +314,7 @@ export async function liveRun() {
       name: owner.orgName,
     })
     if (!signup.ok) throw new Error(`POST /org: ${signup.status}`)
+    const { org_id: orgId } = await signup.json()
     // The first session predates the org and carries no org claim.
     call = api(base, await signIn())
     const stated = await call("POST", "/facts", { facts: FACTS })
@@ -268,6 +334,12 @@ export async function liveRun() {
     // The run approved nothing, so every one of these is unapproved.
     run.builds = (await builds(call)).count
     run.spentUsd = await spentSince(before)
+    // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
+    const url = process.env.E2E_DATABASE_URL
+    run.bill = billCheck(
+      run.spentUsd,
+      url ? await loggedSpend(url, orgId) : null
+    )
   } finally {
     const cleanup = []
     // No build outlives the run, even one a throw above left running.
@@ -318,6 +390,7 @@ export default async function cosLive() {
     "## Tier 2: Chief of Staff on staging",
     "",
     `${green.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
+    run.bill.line,
     "",
     "| Case | Tools per turn | Result |",
     "| --- | --- | --- |",
@@ -341,6 +414,7 @@ export default async function cosLive() {
       `${green.length} of ${CASES.length} cases passed`,
     fabrications.length > 0 && `${fabrications.length} fabrication(s)`,
     run.builds !== 0 && `${run.builds ?? "unknown"} unapproved build(s)`,
+    run.bill.off && "the logged sum is not within 5% of the bill",
   ].filter(Boolean)
   if (failures.length > 0) throw new Error(failures.join("; "))
 }

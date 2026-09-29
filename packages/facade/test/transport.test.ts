@@ -1,3 +1,4 @@
+import { createModels } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import { FacadeError } from "../src/errors.ts"
 import {
@@ -104,5 +105,84 @@ describe("transport selection", () => {
     })
     expect(auth?.auth.apiKey).toBe("or-key")
     expect(auth?.source).toBe("worker secret")
+  })
+})
+
+/**
+ * A stream as OpenRouter sends it: the answer, then a usage chunk. With
+ * `cost` the usage chunk carries what OpenRouter billed. The body arrives in
+ * reads cut mid-line, so the tap has to join them.
+ */
+function openrouterStream(cost?: number) {
+  const chunk = (body: object) =>
+    `data: ${JSON.stringify({ id: "gen-1", model: "deepseek/deepseek-v4.1-flash", ...body })}\n\n`
+  const text = [
+    ": OPENROUTER PROCESSING\n\n",
+    chunk({ choices: [{ index: 0, delta: { content: "ready" } }] }),
+    chunk({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }),
+    chunk({
+      choices: [],
+      usage: {
+        prompt_tokens: 1_000,
+        completion_tokens: 100,
+        ...(cost === undefined ? {} : { cost }),
+      },
+    }),
+    "data: [DONE]\n\n",
+  ].join("")
+  const bytes = new TextEncoder().encode(text)
+  const cuts = [0, 7, 90, 211, bytes.length - 40, bytes.length]
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let i = 1; i < cuts.length; i++) {
+        controller.enqueue(bytes.slice(cuts[i - 1], cuts[i]))
+      }
+      controller.close()
+    },
+  })
+}
+
+async function call(cost?: number) {
+  const models = createModels()
+  for (const provider of buildProviders(
+    { OPENROUTER_API_KEY: "or-key" },
+    "direct:openrouter"
+  )) {
+    models.setProvider(provider)
+  }
+  const model = models.getModel("openrouter", "deepseek/deepseek-v4.1-flash")
+  if (!model) throw new Error("model did not resolve")
+  const sent: Record<string, unknown>[] = []
+  const reply = await models.complete(
+    model,
+    { messages: [{ role: "user", content: "Say ready", timestamp: 0 }] },
+    {
+      fetch: async (_input, init) => {
+        sent.push(JSON.parse(String(init?.body)))
+        return new Response(openrouterStream(cost), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      },
+    }
+  )
+  const listed = (1_000 * model.cost.input + 100 * model.cost.output) / 1e6
+  return { reply, sent, listed }
+}
+
+describe("the logged cost of an OpenRouter call", () => {
+  it("is what OpenRouter billed, and the call asks for it", async () => {
+    const { reply, sent, listed } = await call(0.0000321)
+    expect(reply.stopReason).toBe("stop")
+    expect(reply.content).toEqual([{ type: "text", text: "ready" }])
+    expect(sent[0]?.usage).toEqual({ include: true })
+    expect(reply.usage.cost.total).toBe(0.0000321)
+    expect(reply.usage.cost.total).toBeLessThan(listed)
+    const { input, output, cacheRead, cacheWrite } = reply.usage.cost
+    expect(input + output + cacheRead + cacheWrite).toBeCloseTo(0.0000321, 15)
+  })
+
+  it("is the table's capped price when OpenRouter reports no cost", async () => {
+    const { reply, listed } = await call()
+    expect(reply.usage.cost.total).toBeCloseTo(listed, 15)
   })
 })

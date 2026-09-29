@@ -110,9 +110,10 @@ const longContextTiers = (pricing: Pricing | undefined) => {
  * The cap is the factor times the list price, the day's hourly peak without
  * long-context tiers. OpenRouter compares a provider against it when a
  * request is made, so a provider under it at any hour can serve a call, and
- * the entry's cost is the cap: the most such a call can bill. The log, and
- * the budget summed from it, then never counts less than was billed (§29.2),
- * and overstates by up to the factor until a call's actual cost is logged.
+ * the entry's cost is the cap: the most such a call can bill. A call is
+ * logged at what OpenRouter billed (`billed` in `transport.ts`); the cap
+ * prices only a call OpenRouter reports no cost for, and the CoS's
+ * reservations, so both err high rather than low (§29.2).
  * Cache reads are not capped by routing, so theirs is the dearest any
  * admitted provider charges. The context and output limits are the smallest
  * any admitted provider serves, so a request fits whichever one is picked.

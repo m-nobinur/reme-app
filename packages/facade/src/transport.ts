@@ -1,5 +1,17 @@
-import type { Api, Model, ModelAuth, Provider } from "@earendil-works/pi-ai"
-import { createProvider } from "@earendil-works/pi-ai"
+import type {
+  Api,
+  AssistantMessageEventStream,
+  Context,
+  Model,
+  ModelAuth,
+  Provider,
+  ProviderStreams,
+  StreamOptions,
+} from "@earendil-works/pi-ai"
+import {
+  createAssistantMessageEventStream,
+  createProvider,
+} from "@earendil-works/pi-ai"
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy"
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy"
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic"
@@ -109,6 +121,127 @@ const fixed = (name: string, auth: () => ModelAuth) => ({
 })
 
 /**
+ * Calls `record` with the `id` and `usage.cost` of each server-sent event in
+ * `body` that carries a cost, and passes every byte through unchanged. A
+ * line split across reads is joined first; `[DONE]` and anything that is
+ * not JSON are skipped.
+ */
+export function tapCost(
+  body: ReadableStream<Uint8Array>,
+  record: (id: unknown, cost: number) => void
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  let rest = ""
+  const scan = (line: string) => {
+    const data = line.startsWith("data:") ? line.slice(5).trim() : ""
+    // Only the usage chunk carries a cost; a line without one is not parsed.
+    if (!data.includes('"cost"')) return
+    try {
+      const chunk = JSON.parse(data) as {
+        id?: unknown
+        usage?: { cost?: unknown }
+      }
+      const cost = chunk.usage?.cost
+      if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
+        record(chunk.id, cost)
+      }
+    } catch {
+      // Not JSON: not a chunk, so not a cost.
+    }
+  }
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(bytes, controller) {
+        controller.enqueue(bytes)
+        const lines = (rest + decoder.decode(bytes, { stream: true })).split(
+          "\n"
+        )
+        rest = lines.pop() ?? ""
+        for (const line of lines) scan(line)
+      },
+      flush() {
+        scan(rest + decoder.decode())
+      },
+    })
+  )
+}
+
+/**
+ * pi-ai prices every OpenRouter call from the table, at the routing cap, and
+ * drops the `usage.cost` OpenRouter bills on the stream's last chunk. This
+ * wraps the API so each call asks for that cost, reads it off the response
+ * body, and writes it into the finished message's `usage.cost` before the
+ * message leaves the stream, so flue's `turn`, the event log and the budget
+ * all see what was billed. The per-part figures are scaled to the same
+ * total, since OpenRouter reports only the total; a sum over parts then
+ * still matches. A call with no reported cost keeps the table's figure,
+ * which errs high. Behind the AI Gateway the body passes through unchanged,
+ * so the same tap reads it.
+ */
+export function billed(api: ProviderStreams): ProviderStreams {
+  const wrap =
+    <O extends StreamOptions>(
+      call: (
+        model: Model<Api>,
+        context: Context,
+        options?: O
+      ) => AssistantMessageEventStream
+    ) =>
+    (model: Model<Api>, context: Context, options?: O) => {
+      let bill: { id: unknown; cost: number } | undefined
+      const inner = call(model, context, {
+        ...(options as O),
+        onPayload: async (params, at) => {
+          const next = (await options?.onPayload?.(params, at)) ?? params
+          return { ...(next as object), usage: { include: true } }
+        },
+        fetch: async (input, init) => {
+          const response = await (options?.fetch
+            ? options.fetch(input, init)
+            : fetch(input, init))
+          const sse = response.headers
+            .get("content-type")
+            ?.includes("text/event-stream")
+          if (!response.ok || !response.body || !sse) return response
+          return new Response(
+            tapCost(response.body, (id, cost) => {
+              bill = { id, cost }
+            }),
+            {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            }
+          )
+        },
+      })
+      const outer = createAssistantMessageEventStream()
+      void (async () => {
+        for await (const event of inner) {
+          const paid = bill
+          if (
+            event.type === "done" &&
+            paid &&
+            paid.id === event.message.responseId
+          ) {
+            const cost = event.message.usage.cost
+            const scale = cost.total > 0 ? paid.cost / cost.total : 0
+            cost.input *= scale
+            cost.output *= scale
+            cost.cacheRead *= scale
+            cost.cacheWrite *= scale
+            cost.total = paid.cost
+          }
+          outer.push(event)
+        }
+        outer.end(await inner.result())
+      })()
+      return outer
+    }
+  return { stream: wrap(api.stream), streamSimple: wrap(api.streamSimple) }
+}
+
+/**
  * The providers to register for a transport. OpenRouter is registered
  * whenever its key is present, because the fallback model lives there;
  * Anthropic whenever a path to it exists. Returned as well as registered, so
@@ -139,7 +272,7 @@ export function buildProviders(
           ...(gateway ? { headers: gatewayHeaders() } : {}),
         })),
         models: withBase(openrouterModels(), baseUrl),
-        api: openAICompletionsApi(),
+        api: billed(openAICompletionsApi()),
       })
     )
   }

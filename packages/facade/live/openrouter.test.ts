@@ -6,7 +6,9 @@ import { buildProviders, selectTransport } from "../src/transport.ts"
  * One real call through the transport the environment selects, skipped
  * without a key. Pi's own registry with the facade's provider registered in
  * it, the smallest completion the model will give, and the host it dialled
- * read back from the model. Costs a fraction of a cent.
+ * read back from the model. Costs a fraction of a cent. The logged cost is
+ * what OpenRouter billed, which a routed provider keeps under the table's
+ * capped price for the same tokens.
  */
 const env = {
   REME_MODEL_PRIMARY: process.env.REME_MODEL_PRIMARY,
@@ -37,6 +39,12 @@ live("a model call over the selected transport", { timeout: 60_000 }, () => {
       },
       { maxTokens: 16 }
     )
+    const { input, output, cacheRead } = reply.usage
+    const capped =
+      (input * model.cost.input +
+        output * model.cost.output +
+        cacheRead * model.cost.cacheRead) /
+      1e6
     const text = reply.content
       .map((part) => ("text" in part ? part.text : ""))
       .join("")
@@ -45,10 +53,13 @@ live("a model call over the selected transport", { timeout: 60_000 }, () => {
         transport,
         model: reply.model,
         usage: reply.usage,
+        capped,
         text,
       })
     )
     expect(reply.stopReason).not.toBe("error")
     expect(text.toLowerCase()).toContain("ready")
+    expect(reply.usage.cost.total).toBeGreaterThan(0)
+    expect(reply.usage.cost.total).toBeLessThan(capped)
   })
 })
