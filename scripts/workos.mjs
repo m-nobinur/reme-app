@@ -30,9 +30,10 @@ process.env.WORKOS_MODE = "agent"
  * `logoutUris` and `passwordResetUrl` have no CLI command, like the sign-in
  * endpoint, so they are listed here and printed at the end rather than set.
  *
- * `prod` is the WorkOS Production environment (client
- * `client_01M0WWHMK5RP961JNYJH00YWZV`), for the one hostname every business
- * shares (ADR-030). Until the split, staging carries that hostname too.
+ * `prod` is the WorkOS environment named Preview (client
+ * `client_01M3QC36ZWTT50A5EDA5AGBTA7`), for the one hostname every business
+ * shares (ADR-030). It is a sandbox: the environment named Production needs
+ * billing details before it takes traffic.
  */
 const environments = {
   staging: {
@@ -57,11 +58,6 @@ const environments = {
       // `probe-reme-web...` reaches the AuthKit bootstrap, `probe-reme-nope...`
       // is refused with `redirect-uri-invalid`.
       "https://*-reme-web.beapp.workers.dev/api/auth/callback",
-      // Production, on the one hostname every business shares (ADR-030). It
-      // sits on the staging environment because production runs against the
-      // staging WorkOS environment until launch (open item 13), so this list is
-      // every origin that signs anyone in, across all three environments.
-      "https://preview.remeai.co.uk/api/auth/callback",
     ],
     // No preview entry, deliberately. A CORS origin only matters when a browser
     // calls api.workos.com directly, and nothing does: sign-in is DR-4a, our own
@@ -69,22 +65,15 @@ const environments = {
     // host anywhere in `@workos/authkit-tanstack-react-start` is its README.
     // Adding a wildcard here would also be permanent, because the CORS half of
     // this API has no delete.
-    corsOrigins: [
-      "http://localhost:3000",
-      "https://staging.remeai.co.uk",
-      "https://preview.remeai.co.uk",
-    ],
+    corsOrigins: ["http://localhost:3000", "https://staging.remeai.co.uk"],
     logoutUris: [
       "http://localhost:3000/",
       "https://staging.remeai.co.uk/",
-      "https://preview.remeai.co.uk/",
       "https://*-reme-web.beapp.workers.dev/",
     ],
-    // One value per environment, and this one serves production until the
-    // split, so both point at production's host. Staging's has read this since
-    // 2026-09-29; a run with localhost here would put it back.
-    homepageUrl: "https://preview.remeai.co.uk",
-    passwordResetUrl: "https://preview.remeai.co.uk/reset-password",
+    // One value per environment, so the deployed host rather than local dev.
+    homepageUrl: "https://staging.remeai.co.uk",
+    passwordResetUrl: "https://staging.remeai.co.uk/reset-password",
     signInEndpoint: "http://localhost:3000/sign-in",
   },
   prod: {
