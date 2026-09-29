@@ -13,6 +13,7 @@ import {
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
+  chiefStaffId,
   conversationMessages,
   conversations,
   eq,
@@ -60,7 +61,6 @@ import {
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
   beginTurn,
-  chiefStaffId,
   closeLapsedTurn,
   loggedMessage,
   NoSuchSession,

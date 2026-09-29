@@ -1,12 +1,23 @@
 import {
   assignments,
+  ensureStartingTeam,
   eq,
   memberships,
   orgs,
+  rootStaffId,
   staff,
   type Tenancy,
+  tenancy,
   users,
 } from "@workspace/db"
+
+/** One pool per suite file, on the database the suite was given, if any. */
+export const kit: Tenancy = tenancy(
+  process.env.DATABASE_URL ?? "postgres://unused"
+)
+
+/** Staging's site host suffix, the one every suite builds hosts under. */
+export const SUFFIX = "-stg.remeai.co.uk"
 
 /**
  * A fresh fictional org per case with the two staff rows an assignment needs
@@ -15,10 +26,10 @@ import {
  * role cannot. Rows stay behind: `events` is append-only, so nothing here can
  * delete them.
  */
-export async function freshOrg(kit: Tenancy): Promise<string> {
+export async function freshOrg(pool: Tenancy): Promise<string> {
   const orgId = crypto.randomUUID()
   const workosUserId = `user_probe_${orgId}`
-  await kit.withOrg({ orgId, workosUserId }, async (db) => {
+  await pool.withOrg({ orgId, workosUserId }, async (db) => {
     await db.insert(orgs).values({
       id: orgId,
       slug: `state-test-${orgId.slice(0, 8)}`,
@@ -63,11 +74,11 @@ export async function freshOrg(kit: Tenancy): Promise<string> {
 }
 
 export async function newAssignment(
-  kit: Tenancy,
+  pool: Tenancy,
   orgId: string,
   kind = "site.build"
 ) {
-  return kit.withOrg({ orgId }, async (db) => {
+  return pool.withOrg({ orgId }, async (db) => {
     const [dev] = await db
       .select({ id: staff.id })
       .from(staff)
@@ -93,17 +104,15 @@ export async function newAssignment(
 }
 
 /**
- * A fresh fictional org whose only staff are the starting team, written the
- * way `apps/api`'s `ensureStartingTeam` writes it (which this app cannot
- * import): the owner as the human root, `COS-001` under the owner and
- * `DEV-001` under the Chief. The owner is a real person with a membership,
- * because a human staff row can only name one.
+ * A fresh fictional org whose only staff are the starting team, written by
+ * `ensureStartingTeam`, the call `apps/api` makes. The owner is a real person
+ * with a membership, because a human staff row can only name one.
  */
-export async function ownerOrg(kit: Tenancy) {
+export async function ownerOrg(pool: Tenancy) {
   const orgId = crypto.randomUUID()
   const workosUserId = `user_probe_${orgId}`
   const slug = `owner-test-${orgId.slice(0, 8)}`
-  const ownerStaffId = await kit.withOrg(
+  const ownerStaffId = await pool.withOrg(
     { orgId, workosUserId },
     async (db) => {
       await db.insert(orgs).values({
@@ -126,40 +135,12 @@ export async function ownerOrg(kit: Tenancy) {
         role: "owner",
         status: "active",
       })
-      const hired = { orgId, status: "active" as const }
-      await db.insert(staff).values({
-        ...hired,
-        staffCode: "OWN-001",
-        displayName: "Sam Probe",
-        kind: "human",
-        userId: person?.id,
-        positionTitle: "Owner",
+      await ensureStartingTeam(db, {
+        orgId,
+        userId: person?.id as string,
+        ownerName: "Sam Probe",
       })
-      const [owner] = await db
-        .select({ id: staff.id })
-        .from(staff)
-        .where(eq(staff.staffCode, "OWN-001"))
-      await db.insert(staff).values({
-        ...hired,
-        staffCode: "COS-001",
-        displayName: "Maya",
-        kind: "agent",
-        managerId: owner?.id,
-        positionTitle: "Chief of Staff",
-      })
-      const [chief] = await db
-        .select({ id: staff.id })
-        .from(staff)
-        .where(eq(staff.staffCode, "COS-001"))
-      await db.insert(staff).values({
-        ...hired,
-        staffCode: "DEV-001",
-        displayName: "Alex",
-        kind: "agent",
-        managerId: chief?.id,
-        positionTitle: "Developer",
-      })
-      return owner?.id as string
+      return (await rootStaffId(db)) as string
     }
   )
   return { orgId, slug, ownerStaffId }

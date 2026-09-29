@@ -3,6 +3,7 @@ import {
   asc,
   conversationMessages,
   conversations,
+  ensureStartingTeam,
   eq,
   events,
   facts,
@@ -27,7 +28,6 @@ import {
   readStaffDirectory,
   slugFor,
 } from "../src/org.ts"
-import { ensureStartingTeam } from "../src/staff.ts"
 
 /**
  * Two halves, the same split `health.test.ts` uses. The routing half needs no

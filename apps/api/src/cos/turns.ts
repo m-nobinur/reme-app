@@ -15,7 +15,6 @@ import {
   events,
   type OrgScopedDb,
   sql,
-  staff,
 } from "@workspace/db"
 import { constraint } from "../http.ts"
 import { stepMessages } from "./history.ts"
@@ -455,15 +454,6 @@ export async function beginTurn(
       throw new SessionBusy(turn.sessionId)
     }
   }
-}
-
-/** The org's Chief of Staff staff row, or null for an org made before the starting team. */
-export async function chiefStaffId(db: OrgScopedDb): Promise<string | null> {
-  const [row] = await db
-    .select({ id: staff.id })
-    .from(staff)
-    .where(eq(staff.staffCode, "COS-001"))
-  return row?.id ?? null
 }
 
 /**

@@ -14,12 +14,14 @@ import {
 import {
   appendEvent,
   assignments,
+  currentFacts,
   eq,
   events,
   facts,
   logFailure,
   orgs,
   resolveOrgBySlug,
+  STAFF_CODE,
   siteRevisions,
   sql,
   staff,
@@ -374,9 +376,11 @@ async function createAssignment(
     const codes = await db
       .select({ id: staff.id, code: staff.staffCode })
       .from(staff)
-      .where(sql`${staff.staffCode} in ('DEV-001', 'COS-001')`)
-    const developer = codes.find((s) => s.code === "DEV-001")
-    const chief = codes.find((s) => s.code === "COS-001")
+      .where(
+        sql`${staff.staffCode} in (${STAFF_CODE.developer}, ${STAFF_CODE.chief})`
+      )
+    const developer = codes.find((s) => s.code === STAFF_CODE.developer)
+    const chief = codes.find((s) => s.code === STAFF_CODE.chief)
     if (!developer || !chief) return { missing: true as const }
     const [row] = await db
       .insert(assignments)
@@ -491,13 +495,7 @@ consoleOnly.post("/:id/start", async (c) => {
 consoleOnly.get("/facts", async (c) => {
   const rows = await c
     .get("kit")
-    .withOrg({ orgId: c.get("orgId") }, (db) =>
-      db
-        .select()
-        .from(facts)
-        .where(sql`${facts.validTo} is null`)
-        .orderBy(facts.key)
-    )
+    .withOrg({ orgId: c.get("orgId") }, currentFacts)
   return c.json({ facts: rows.map(toFactRecord) })
 })
 
