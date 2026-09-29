@@ -107,6 +107,17 @@ it("polls every 3 s while a build runs, and slows when it stops", async () => {
   expect(tags.at(-1)).toBe('"idle"')
 })
 
+it("polls every 3 s while a build waits in the queue", async () => {
+  start({
+    ...EMPTY_WORKSPACE,
+    open: true,
+    builds: [{ ...BUILD, state: "queued" }],
+    etag: '"queued"',
+  })
+  await wait(INTERVAL.building)
+  expect(tags).toEqual(['"queued"'])
+})
+
 it("keeps what it has on a 304", async () => {
   start(building)
   answers = ["unchanged", "unchanged"]
