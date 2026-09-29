@@ -15,6 +15,7 @@ import {
   readBody,
   tooLarge,
 } from "./http.ts"
+import { limitWrites } from "./limit.ts"
 import {
   createOrg,
   type Directory,
@@ -235,6 +236,13 @@ async function route(
         : "An impersonated session can read, not change anything.",
       detail: {},
     })
+  }
+
+  // Every write counts against the person's minute, signup and the chat
+  // turn among them. A request with no session is refused further on.
+  if (method !== "GET" && method !== "HEAD" && session) {
+    const limited = await limitWrites(env.WRITE_LIMIT, session.workosUserId)
+    if (limited) return limited
   }
 
   if (pathname === "/org" && method === "POST") {

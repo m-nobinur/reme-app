@@ -32,6 +32,8 @@ const COPY: Record<string, string> = {
     "Other people still belong to this business. Remove them first.",
   "account.not_owner": "Only the owner can delete this account.",
   "preview.unconfigured": "Previews are not available right now.",
+  "rate.limited":
+    "Too many changes in a short time. Wait a minute and try again.",
 }
 
 export function refusalText(code: string | null, fallback: string): string {
