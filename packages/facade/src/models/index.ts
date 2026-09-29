@@ -3,6 +3,7 @@ import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter"
 import { FacadeError } from "../errors.ts"
 import ids from "./openrouter.ids.json" with { type: "json" }
 import generated from "./openrouter.models.json" with { type: "json" }
+import { HOST_ROUTING } from "./price.ts"
 
 export type OpenRouterModel = Model<"openai-completions">
 
@@ -21,8 +22,13 @@ export function openrouterModels(
   required: readonly string[] = OPENROUTER_IDS
 ): OpenRouterModel[] {
   const byId = new Map<string, OpenRouterModel>()
-  for (const model of openrouterProvider().getModels())
-    byId.set(model.id, model)
+  for (const model of openrouterProvider().getModels()) {
+    const routing = { ...model.compat?.openRouterRouting, ...HOST_ROUTING }
+    byId.set(model.id, {
+      ...model,
+      compat: { ...model.compat, openRouterRouting: routing },
+    })
+  }
   for (const model of entries) byId.set(model.id, model)
   const missing = required.filter(
     (id) => !entries.some((model) => model.id === id)

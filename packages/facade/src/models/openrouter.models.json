@@ -21,7 +21,23 @@
         "max_price": {
           "prompt": 0.0735,
           "completion": 0.609
-        }
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
       }
     }
   },
@@ -56,7 +72,23 @@
         "max_price": {
           "prompt": 4.2,
           "completion": 12.6
-        }
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
       }
     }
   },
@@ -82,7 +114,23 @@
         "max_price": {
           "prompt": 0.0945,
           "completion": 0.294
-        }
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
       }
     }
   }

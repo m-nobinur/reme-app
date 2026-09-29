@@ -36,7 +36,7 @@ We do not sell your data. We do not use it for advertising. We do not use it to 
 
 ## How AI is involved
 
-Reme's assistant and its website builder are AI models. To reply to you, we send the conversation so far, your business facts and your workspace details to an AI model. To build your website, we send your business facts and the build instructions to an AI model. We send these through OpenRouter, which passes each request to a company that runs the chosen model.
+Reme's assistant and its website builder are AI models. To reply to you, we send the conversation so far, your business facts and your workspace details to an AI model. To build your website, we send your business facts and the build instructions to an AI model. We send these through OpenRouter, which passes each request to a company that runs the chosen model. We tell OpenRouter to use only companies that do not keep or train on what we send, and none based in China.
 
 The models we use today are DeepSeek V4.1 Flash, GLM 5.3 Flash from Z.ai, and Grok 4.6 from xAI, which we fall back to when the first choice fails. We may change models. We will update this list when we do.
 
@@ -52,7 +52,7 @@ These companies process data for us under contract, and only to provide Reme:
 | Neon | Hosts our database | Frankfurt, Germany, on Amazon Web Services |
 | WorkOS | Sign-in, and the sign-in code, verification and password reset emails | United States |
 | OpenRouter | Routes requests to AI models | United States |
-| AI model providers reached through OpenRouter | Produce chat replies and website code | Depends on the provider OpenRouter selects. This can include the United States, China and other countries |
+| AI model providers reached through OpenRouter | Produce chat replies and website code | Depends on the provider OpenRouter selects, which can be in the United States or other countries. We exclude providers based in China |
 | Google | Only if you choose Sign in with Google | United States |
 
 Where your data leaves the UK, we rely on UK adequacy regulations where they exist. Otherwise we rely on the UK International Data Transfer Addendum or the UK Extension to the EU-US Data Privacy Framework, as applicable.

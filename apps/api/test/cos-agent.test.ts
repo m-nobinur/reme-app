@@ -56,6 +56,7 @@ import {
   knownZone,
   LIMITS,
   messageTaint,
+  openrouterModel,
   priceOf,
   reservation,
   stepCost,
@@ -281,6 +282,21 @@ describe("the CoS's model and price", () => {
     expect(ids).toContain(DEFAULT_MODEL)
     expect(models.some((m) => m.id === DEFAULT_MODEL)).toBe(true)
     expect(PRICE).not.toBeNull()
+  })
+
+  it("routes every table model at its cap, off China-based hosts and hosts that keep prompts", () => {
+    for (const { id, compat } of models) {
+      const model = openrouterModel("k", id) as unknown as {
+        settings: { provider?: unknown }
+      }
+      expect(model.settings.provider, id).toEqual(compat.openRouterRouting)
+      expect(model.settings.provider, id).toMatchObject({
+        max_price: expect.any(Object),
+        ignore: expect.arrayContaining(["deepseek", "alibaba", "z-ai"]),
+        data_collection: "deny",
+      })
+    }
+    expect(openrouterModel("k", "nobody/nothing")).toBeNull()
   })
 
   it("reserves six steps of the input guess and the output cap at the table's price", () => {

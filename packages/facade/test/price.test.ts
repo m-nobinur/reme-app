@@ -2,6 +2,7 @@ import { calculateCost, type Model } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import {
   type Endpoint,
+  HOST_ROUTING,
   type ListedModel,
   openrouterEntry,
   ROUTING_CAP_FACTOR,
@@ -88,6 +89,25 @@ describe("a generated OpenRouter entry", () => {
 
   it("counts distinct live providers under the cap", () => {
     expect(openrouterEntry(listed, providers).live).toBe(3)
+  })
+
+  it("routes off the ignored hosts and never counts or prices them", () => {
+    const { entry, live } = openrouterEntry(listed, [
+      ...providers,
+      provider("DeepSeek", rates(0.1, 0.4, 0.5), {
+        tag: "deepseek",
+        context_length: 1_000,
+      }),
+      provider("StreamLake", rates(0.1, 0.4, 0.5), { tag: "streamlake/fp8" }),
+    ])
+    expect(entry.compat.openRouterRouting).toEqual({
+      max_price: { prompt: 0.21, completion: 0.84 },
+      ignore: HOST_ROUTING.ignore,
+      data_collection: "deny",
+    })
+    expect(live).toBe(3)
+    expect(entry.cost.cacheRead).toBe(0.06)
+    expect(entry.contextWindow).toBe(250_000)
   })
 
   it("takes the day's peak where the list price moves by the hour", () => {

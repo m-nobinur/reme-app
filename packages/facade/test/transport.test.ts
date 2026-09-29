@@ -1,6 +1,7 @@
 import { createModels } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import { FacadeError } from "../src/errors.ts"
+import { HOST_ROUTING } from "../src/models/price.ts"
 import {
   buildProviders,
   outboundUrl,
@@ -184,5 +185,16 @@ describe("the logged cost of an OpenRouter call", () => {
   it("is the table's capped price when OpenRouter reports no cost", async () => {
     const { reply, listed } = await call()
     expect(reply.usage.cost.total).toBeCloseTo(listed, 15)
+  })
+})
+
+describe("an OpenRouter call's host", () => {
+  it("is asked for in the request: no ignored host, no data collection", async () => {
+    const { sent } = await call()
+    expect(sent[0]?.provider).toMatchObject({
+      max_price: expect.any(Object),
+      ignore: HOST_ROUTING.ignore,
+      data_collection: "deny",
+    })
   })
 })
