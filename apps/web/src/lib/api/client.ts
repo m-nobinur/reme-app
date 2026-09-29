@@ -1,6 +1,3 @@
-import { getCookie } from "@tanstack/react-start/server"
-import { sessionEncryption } from "@workos/authkit-session"
-import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
 import {
   ActivityFeed,
   ApprovalDecision,
@@ -22,6 +19,7 @@ import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
+import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import type {
   AttentionItem,
   DecisionOutcome,
@@ -50,9 +48,6 @@ import type {
  * falls back to a fixture: an empty inbox is true, and a fixture business on a
  * tenant's screen is not (exit gate 9, R8).
  */
-
-/** The cookie AuthKit writes and `apps/api` reads (ADR-024, ADR-026). */
-const COOKIE = "wos-session"
 
 /**
  * Where `apps/api` answers. A `vars` entry rather than a secret, because it is
@@ -100,42 +95,6 @@ const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
 /**
- * The session to forward: the one AuthKit resolved for this request, sealed
- * again, and not the cookie the request arrived with. When the access token
- * has expired (after about five idle minutes), the middleware refreshes it
- * and sets the new cookie on the response, but the request still carries the
- * old one, which `apps/api` refuses with 401 `session.absent`. Sealed once per
- * request. With no AuthKit context (a unit test), the cookie as it came.
- */
-const sealed = new WeakMap<Request, Promise<string>>()
-
-async function forwardedSession(): Promise<string | undefined> {
-  const context = getAuthKitContextOrNull()
-  if (!context) return getCookie(COOKIE)
-  const auth = context.auth()
-  if (!auth.user) return undefined
-  let seal = sealed.get(context.request)
-  if (!seal) {
-    const password = process.env.WORKOS_COOKIE_PASSWORD
-    if (!password) {
-      throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
-    }
-    // The fields `AuthKitCore.encryptSession` seals, from the same session.
-    seal = sessionEncryption.sealData(
-      {
-        accessToken: auth.accessToken,
-        refreshToken: auth.refreshToken,
-        user: auth.user,
-        impersonator: auth.impersonator,
-      },
-      { password, ttl: 0 }
-    )
-    sealed.set(context.request, seal)
-  }
-  return await seal
-}
-
-/**
  * One request with the session forwarded, or null when there is no session.
  * A body goes as JSON; an empty one sends no body at all.
  */
@@ -160,7 +119,7 @@ async function call(
   }
   if (init.key) headers["idempotency-key"] = init.key
   if (init.etag) headers["if-none-match"] = init.etag
-  return await fetch(new URL(path, apiUrl()), {
+  return await apiFetch(new URL(path, apiUrl()), {
     method: init.method ?? "GET",
     headers,
     body:

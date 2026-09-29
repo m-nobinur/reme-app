@@ -2,6 +2,7 @@ import { getAuthkit } from "@workos/authkit-tanstack-react-start"
 import type { AuthenticationResponse } from "@workos-inc/node"
 import { type AuthFailure, asRecord, toFailure } from "./failure"
 import { createOrgForSession } from "./org"
+import { recordOrgIntent } from "./org-intent"
 import { clearPending, readPending, setPending } from "./pending"
 import { safeReturnTo } from "./redirect-target"
 import { workos } from "./workos"
@@ -26,7 +27,7 @@ export type AuthOutcome =
  * which is why `authkitMiddleware` has to be registered for any of this to
  * work — the kit throws rather than dropping the cookie silently if it is not.
  */
-async function writeSession(sealedSession: string): Promise<void> {
+export async function writeSession(sealedSession: string): Promise<void> {
   const authkit = await getAuthkit()
   await authkit.saveSession(undefined, sealedSession)
 }
@@ -79,7 +80,8 @@ async function resolveUserId(
  * refusing the sign-in would leave the person with an account they cannot get
  * into and a signup form that now answers "email already in use". Signed in
  * without an organisation is a state the app already has a shape for, and the
- * write is safe to run again.
+ * write is safe to run again: the business name is recorded, and the /app
+ * frame writes it on the person's next visit (`retryOrgWrite`).
  */
 async function provisionOrg(
   response: AuthenticationResponse,
@@ -91,8 +93,9 @@ async function provisionOrg(
   if (!orgName || response.organizationId) {
     return sealedSession
   }
+  let next = sealedSession
   try {
-    return await createOrgForSession({
+    next = await createOrgForSession({
       sealedSession,
       workosUserId: response.user.id,
       name: orgName,
@@ -106,8 +109,15 @@ async function provisionOrg(
         message: error instanceof Error ? error.message : "unknown",
       })
     )
-    return sealedSession
   }
+  // The same session back means the organisation is not in it yet. Kept for
+  // the retry; a cookie that cannot be written still costs no one the sign-in.
+  if (next === sealedSession) {
+    await recordOrgIntent({ userId: response.user.id, orgName }).catch(
+      () => undefined
+    )
+  }
+  return next
 }
 
 /**
