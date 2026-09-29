@@ -195,3 +195,5 @@ append-only rows in production.
 
 Reversal trigger: the first real account-deletion request (open item 79). Production erasure gets
 its own ADR and its own path under §10.5. This script does not grow a production mode.
+ADR-035 (2026-09-29) deletes an account without erasing its rows, so this trigger now waits on
+the first erasure request.
