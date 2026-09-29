@@ -7,7 +7,7 @@ import {
 } from "@playwright/test"
 import postgres from "postgres"
 import {
-  ANSWERS,
+  answerOnboarding,
   api,
   clearProbe,
   sessionCookie,
@@ -149,6 +149,27 @@ async function keyUsage(key: string): Promise<number | null> {
   }
 }
 
+/**
+ * A key's usage once the run's calls have landed on it: it lags them a
+ * little. Read every 5 s until it has moved past `before` and two reads
+ * agree, or a minute has passed, when the last read stands.
+ */
+async function settledUsage(
+  key: string,
+  before: number | null
+): Promise<number | null> {
+  let last: number | null = null
+  for (let tries = 0; tries < 12; tries++) {
+    const now = await keyUsage(key)
+    if (now !== null && now === last && (before === null || now > before)) {
+      return now
+    }
+    last = now
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+  }
+  return last
+}
+
 async function readJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await api(await session(), path, init)
   expect(response.ok, `${path}: ${await response.clone().text()}`).toBe(true)
@@ -273,33 +294,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   })
 
   await step("onboarding, pricing skipped, build accepted", async () => {
-    const pending = page.locator('[data-slot="ask-fact"] form')
-    const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
+    await answerOnboarding(page)
     const card = page.locator('[data-slot="request-change"]')
-    // Signup gave the name, so the first question is the phone.
-    let count = 0
-    // Six facts at most: a guard against a script that never ends.
-    while (count < 7) {
-      await expect(pending.or(card).first()).toBeVisible()
-      if (await card.count()) break
-      await expect(pending.locator("input").first()).toBeFocused()
-      const question = await page
-        .locator('[data-slot="ask-fact"]:has(form) p')
-        .first()
-        .innerText()
-      const skip = pending.getByRole("button", { name: "Skip for now" })
-      if (await skip.count()) {
-        await skip.click()
-      } else {
-        const fill = ANSWERS[question]
-        expect(fill, `no answer for "${question}"`).toBeDefined()
-        await fill?.(pending)
-        await pending.getByRole("button", { name: "Save" }).click()
-      }
-      count += 1
-      await expect(answered).toHaveCount(count)
-    }
-    expect(count).toBe(5)
     await expect(card).toContainText("Build my website")
     await card.getByRole("button", { name: "Approve" }).click()
     await expect(card).toContainText("Started. Follow it under Working on.")
@@ -558,19 +554,17 @@ test.afterAll(async () => {
   test.setTimeout(10 * 60_000)
   const failures: string[] = []
 
-  // The key's usage lags the calls a little.
-  if (openrouterKeys().length) {
-    await new Promise((resolve) => setTimeout(resolve, 30_000))
-  }
-  for (const [name, key] of openrouterKeys()) {
-    const entry = run.openrouter_usage_usd[name]
-    if (!entry) continue
-    entry.after = await keyUsage(key)
-    entry.delta =
-      entry.before === null || entry.after === null
-        ? null
-        : Number((entry.after - entry.before).toFixed(6))
-  }
+  await Promise.all(
+    openrouterKeys().map(async ([name, key]) => {
+      const entry = run.openrouter_usage_usd[name]
+      if (!entry) return
+      entry.after = await settledUsage(key, entry.before)
+      entry.delta =
+        entry.before === null || entry.after === null
+          ? null
+          : Number((entry.after - entry.before).toFixed(6))
+    })
+  )
   const record = JSON.stringify(run, null, 2)
   console.log(`golden run\n${record}`)
   await test.info().attach("golden-run.json", {
