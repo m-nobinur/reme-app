@@ -92,7 +92,7 @@ jobs:
       # `-pooler` host itself because its advisory lock is session-scoped.
       - name: Migrate the production database
         run: |
-          url=$(npx -y neonctl connection-string main \
+          url=$(npx -y neonctl@6.4.0 connection-string main \
             --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
           case "$url" in
             postgresql://*pooler*) echo "::error::neonctl answered with the pooled endpoint"; exit 1 ;;
