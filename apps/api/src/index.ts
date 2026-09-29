@@ -23,7 +23,14 @@ import {
   readStaffDirectory,
 } from "./org.ts"
 import { OWNER_PATH, ownerRoute } from "./owner.ts"
-import { readSession, type Session, workos } from "./session.ts"
+import {
+  bounded,
+  readSession,
+  type Session,
+  WORKOS_TIMEOUT_MS,
+  WorkosTimeout,
+  workos,
+} from "./session.ts"
 
 /**
  * The Core API (C2). It holds the only database binding in the fleet: §9.2
@@ -112,11 +119,11 @@ async function signup(
   const client = workos(env)
   const directory: Directory = {
     createOrganization: (options, requestOptions) =>
-      client.organizations.createOrganization(options, requestOptions),
+      bounded(client.organizations.createOrganization(options, requestOptions)),
     listOrganizationMemberships: (options) =>
-      client.userManagement.listOrganizationMemberships(options),
+      bounded(client.userManagement.listOrganizationMemberships(options)),
     createOrganizationMembership: (options) =>
-      client.userManagement.createOrganizationMembership(options),
+      bounded(client.userManagement.createOrganizationMembership(options)),
   }
   try {
     const org = await createOrg(kit, directory, {
@@ -166,9 +173,10 @@ async function removeAccount(
   const client = workos(env)
   const accounts: Accounts = {
     listOrganizationMemberships: (options) =>
-      client.userManagement.listOrganizationMemberships(options),
-    deleteOrganization: (id) => client.organizations.deleteOrganization(id),
-    deleteUser: (id) => client.userManagement.deleteUser(id),
+      bounded(client.userManagement.listOrganizationMemberships(options)),
+    deleteOrganization: (id) =>
+      bounded(client.organizations.deleteOrganization(id)),
+    deleteUser: (id) => bounded(client.userManagement.deleteUser(id)),
   }
   switch (await deleteAccount(kit, accounts, takedown, session)) {
     case "deleted":
@@ -294,6 +302,14 @@ export default {
     } catch (error) {
       if (error instanceof BodyTooLarge) return tooLarge()
       logFailure(where, error)
+      if (error instanceof WorkosTimeout) {
+        return failure(503, {
+          class: "transient",
+          code: "workos.timeout",
+          message: "The sign-in service did not answer in time. Try again.",
+          detail: { timeout_ms: WORKOS_TIMEOUT_MS },
+        })
+      }
       return failure(503, REQUEST_FAILED)
     } finally {
       ctx.waitUntil(Promise.allSettled(running).then(() => kit.close()))
