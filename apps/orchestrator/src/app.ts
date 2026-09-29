@@ -1,9 +1,13 @@
 import {
-  type ErrorEnvelope,
+  type EnvelopeBody,
+  envelope,
   GOAL_MAX,
   InformationAnswer,
+  idempotencyKey,
+  KEY_MISSING,
   OWNER_BRIDGE_HEADERS,
   PreviewClaim,
+  REQUEST_FAILED,
   type TaintLabel,
   Uuid,
 } from "@workspace/contracts"
@@ -13,7 +17,7 @@ import {
   eq,
   events,
   facts,
-  failureCode,
+  logFailure,
   orgs,
   resolveOrgBySlug,
   siteRevisions,
@@ -73,30 +77,14 @@ import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
  */
 
 /** R4: every failure leaves as the §28.1 envelope. */
-const envelope = (body: Omit<ErrorEnvelope, "occurred_at">): ErrorEnvelope => ({
-  ...body,
-  occurred_at: new Date().toISOString(),
-})
-
 const failure = (
   c: Context,
   status: 400 | 401 | 403 | 404 | 409 | 429 | 503,
-  body: Omit<ErrorEnvelope, "occurred_at">
+  body: EnvelopeBody
 ) => c.json(envelope(body), status)
 
 /** §13.1: every console call that makes something carries an Idempotency-Key. */
-const idempotencyKey = (c: Context) => {
-  const key = c.req.header("idempotency-key")?.trim()
-  return key && key.length <= 255 ? key : null
-}
-
-const keyMissing = (c: Context) =>
-  failure(c, 400, {
-    class: "validation",
-    code: "idempotency_key.missing",
-    message: "This request needs an Idempotency-Key header.",
-    detail: {},
-  })
+const keyMissing = (c: Context) => failure(c, 400, KEY_MISSING)
 
 const unauthenticated = () =>
   envelope({
@@ -277,7 +265,7 @@ consoleOnly.get("/", async (c) => {
  * of Staff, by staff code, because that is who the console stands in for.
  */
 bridge.post("/", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as {
     kind?: unknown
@@ -532,7 +520,7 @@ const factNotFound = (c: Context, key: string) =>
  * console). `updateFacts` owns the rules; this route owns the request's shape.
  */
 consoleOnly.post("/facts", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { facts?: unknown }
   const changes = (Array.isArray(body.facts) ? body.facts : []) as {
@@ -623,7 +611,7 @@ consoleOnly.get("/site", async (c) => {
  * is no second verb to undo. Before `/:id`, which would take the path.
  */
 consoleOnly.post("/site/hidden", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { fact_keys?: unknown }
   const factKeys = body.fact_keys
@@ -951,7 +939,7 @@ bridge.post("/:id/answer", async (c) => {
 bridge.post("/:id/steer", async (c) => {
   const id = c.req.param("id")
   const orgId = c.get("orgId")
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const body = (await c.req.json().catch(() => ({}))) as { message?: unknown }
   const message = typeof body.message === "string" ? body.message.trim() : ""
@@ -1171,7 +1159,7 @@ function refused(c: Context, error: unknown) {
  * hours; nothing publishes until someone decides.
  */
 consoleOnly.post("/:id/review", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const ids = { orgId: c.get("orgId"), assignmentId: c.req.param("id") }
   try {
@@ -1191,7 +1179,7 @@ consoleOnly.post("/:id/review", async (c) => {
  * own Workflow keyed by the approval id, so a second create is refused.
  */
 bridge.post("/:id/approve", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   if (!byOwner(c) && c.env.CONSOLE_APPROVALS !== "allow") {
     return failure(c, 403, {
@@ -1238,7 +1226,7 @@ bridge.post("/:id/approve", async (c) => {
  * gate, since nothing publishes.
  */
 bridge.post("/:id/reject", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const revisionId = await namedRevision(c, "A rejection")
   if (typeof revisionId !== "string") return revisionId
@@ -1262,7 +1250,7 @@ bridge.post("/:id/reject", async (c) => {
  * rollback and not two, which would be a roll forward.
  */
 consoleOnly.post("/rollback", async (c) => {
-  const key = idempotencyKey(c)
+  const key = idempotencyKey(c.req.raw)
   if (!key) return keyMissing(c)
   const orgId = c.get("orgId")
   const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown }
@@ -1347,18 +1335,8 @@ export const noRoute: NotFoundHandler = (c) =>
 const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
   // `bearerAuth` refuses with an exception that carries its own typed 401.
   if (error instanceof HTTPException) return error.getResponse()
-  console.error(
-    JSON.stringify({
-      at: new URL(c.req.url).pathname,
-      code: failureCode(error),
-    })
-  )
-  return failure(c, 503, {
-    class: "transient",
-    code: "request.failed",
-    message: "The request could not be completed.",
-    detail: {},
-  })
+  logFailure({ at: new URL(c.req.url).pathname }, error)
+  return failure(c, 503, REQUEST_FAILED)
 }
 
 // The default export is the console's only: the custom domain, workers.dev

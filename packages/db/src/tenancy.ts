@@ -243,6 +243,15 @@ export function failureCode(error: unknown): string {
 }
 
 /**
+ * A catch-all's log line: where it was, and the code and nothing else. A
+ * driver message can carry the connection string it failed on, and every
+ * Worker logs to an account-wide sink (R9).
+ */
+export function logFailure(where: Record<string, string>, error: unknown) {
+  console.error(JSON.stringify({ ...where, code: failureCode(error) }))
+}
+
+/**
  * Who a request is, before it is anything else. Both halves come from the
  * sealed session and neither is ever read off a request body: `org_id` never
  * comes from client input, and neither does the vendor id it is looked up by.

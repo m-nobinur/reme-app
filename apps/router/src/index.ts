@@ -1,13 +1,15 @@
 import {
   DeploymentManifest,
-  type ErrorEnvelope,
+  type EnvelopeBody,
+  envelope,
   formatSiteRevision,
+  REQUEST_FAILED,
   SITE_REVISION_HEADER,
   SitePointer,
 } from "@workspace/contracts"
 import {
   deployments,
-  failureCode,
+  logFailure,
   orgOpen,
   resolveOrgBySlug,
   sql,
@@ -59,12 +61,8 @@ const tooMany = (c: Context<App>) =>
   c.text("Too many requests.", 429, { ...NO_STORE, "retry-after": "60" })
 
 /** R4: a failure that is ours leaves as the §28.1 envelope. */
-const envelope = (
-  c: Context<App>,
-  status: 501 | 503,
-  body: Omit<ErrorEnvelope, "occurred_at">
-) =>
-  c.json({ ...body, occurred_at: new Date().toISOString() }, status, NO_STORE)
+const failure = (c: Context<App>, status: 501 | 503, body: EnvelopeBody) =>
+  c.json(envelope(body), status, NO_STORE)
 
 /**
  * What is left of a host once the suffix is off has to be one DNS label. No
@@ -355,7 +353,7 @@ app.use("*", async (c, next) => {
 
 // The site's own API surface arrives with ingest (Phase 3).
 app.all("/api/*", (c) =>
-  envelope(c, 501, {
+  failure(c, 501, {
     class: "resource",
     code: "route.not_implemented",
     message: "A site's API lands with ingest.",
@@ -484,18 +482,8 @@ app.on(["GET", "HEAD"], "*", async (c) => {
 app.notFound(notHere)
 
 app.onError((error, c) => {
-  console.error(
-    JSON.stringify({
-      host: new URL(c.req.url).hostname,
-      code: failureCode(error),
-    })
-  )
-  return envelope(c, 503, {
-    class: "transient",
-    code: "request.failed",
-    message: "The request could not be completed.",
-    detail: {},
-  })
+  logFailure({ host: new URL(c.req.url).hostname }, error)
+  return failure(c, 503, REQUEST_FAILED)
 })
 
 export default app

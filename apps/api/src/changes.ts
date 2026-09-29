@@ -3,6 +3,7 @@ import {
   type AssignmentState,
   type BuildSummary,
   ErrorEnvelope,
+  envelope,
   type FactRecord,
   type FactValue,
   OWNER_BRIDGE_HEADERS,
@@ -74,13 +75,12 @@ const unreachable = (
 ) =>
   ({
     status: 503,
-    body: {
+    body: envelope({
       class: "transient",
       code,
       message: "The builder did not answer.",
       detail: {},
-      occurred_at: new Date().toISOString(),
-    },
+    }),
   }) satisfies Bridged
 
 /**
