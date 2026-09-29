@@ -37,10 +37,16 @@ export type Limiter = {
  * each is keyed on: the address, except `reset`, which has none and is keyed
  * on its link's token.
  */
-export type Throttled = "sign-in" | "sign-up" | "reset-request" | "reset"
+export type Throttled =
+  | "sign-in"
+  | "sign-in-code"
+  | "sign-up"
+  | "reset-request"
+  | "reset"
 
 const REFUSED: Record<Throttled, string> = {
   "sign-in": "Too many sign-in attempts for that email.",
+  "sign-in-code": "Too many sign-in codes asked for that address.",
   "sign-up": "Too many sign-up attempts for that email.",
   "reset-request": "Too many reset emails asked for that address.",
   reset: "Too many attempts with this reset link.",

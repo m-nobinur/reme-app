@@ -165,6 +165,16 @@ function SignIn() {
             {option.label}
           </a>
         ))}
+        <Link
+          className={buttonVariants({
+            variant: "outline",
+            className: "w-full",
+          })}
+          search={{ returnTo }}
+          to="/sign-in-code"
+        >
+          Email me a sign-in code
+        </Link>
       </div>
     </AuthCard>
   )

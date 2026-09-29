@@ -24,6 +24,7 @@ const PAGES = [
   ["the landing page", "/"],
   ["sign in", "/sign-in"],
   ["sign in after a cancelled provider redirect", "/sign-in?error=cancelled"],
+  ["sign in with a code", "/sign-in-code"],
   ["sign up", "/sign-up"],
   ["forgot password", "/forgot-password"],
   ["a dead reset link", "/reset-password"],
