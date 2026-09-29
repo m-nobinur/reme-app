@@ -103,7 +103,9 @@ export async function clearProbe(
       }
     )
     cleared = clear.status === 0
-    if (!cleared) {
+    // 3: no such org in staging's Postgres, as on a preview, whose Neon
+    // branch goes with the PR; only the WorkOS org is left to delete.
+    if (!cleared && clear.status !== 3) {
       failures.push(
         `pnpm probe:clear --probe ${orgId} exited ${clear.status}; its rows stay, clear them with --org`
       )

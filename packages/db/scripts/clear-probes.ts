@@ -516,8 +516,12 @@ async function main() {
           where starts_with(name, ${PROBE_ORG_PREFIX})
             and created_at < now() - interval '1 hour'
           order by created_at`
-    if (id && orgs.length === 0)
+    // Exit 3, so a teardown against a preview, whose rows live on a Neon
+    // branch this script never reads, knows to delete the WorkOS org itself.
+    if (id && orgs.length === 0) {
       console.log(`no org ${id} in Postgres; nothing to clear there`)
+      process.exitCode = 3
+    }
 
     const plans: Plan[] = []
     for (const org of orgs) {
