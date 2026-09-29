@@ -1,4 +1,4 @@
-import type { AssignmentState } from "@workspace/contracts"
+import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import {
   assignments,
   assignmentTransitions,
@@ -16,7 +16,6 @@ import {
   claim,
   parkForBudget,
   REPAIR_LIMIT,
-  TERMINAL,
   TransitionError,
   transition,
 } from "../src/state.ts"
@@ -57,7 +56,7 @@ const NON_TERMINAL = (
     "repairing",
     "paused",
   ] as const
-).filter((s) => !TERMINAL.includes(s))
+).filter((s) => !TERMINAL_STATES.includes(s))
 
 /** One legal path from `queued` to each state. */
 const PATH: Record<AssignmentState, AssignmentState[]> = {

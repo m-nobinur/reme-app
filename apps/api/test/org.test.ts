@@ -1,4 +1,9 @@
-import { ErrorEnvelope, Org, StaffDirectory } from "@workspace/contracts"
+import {
+  ErrorEnvelope,
+  Org,
+  StaffDirectory,
+  slugFor,
+} from "@workspace/contracts"
 import {
   asc,
   conversationMessages,
@@ -26,7 +31,6 @@ import {
   type Directory,
   readOrg,
   readStaffDirectory,
-  slugFor,
 } from "../src/org.ts"
 
 /**

@@ -6,6 +6,7 @@ import {
   parseSiteRevision,
   SITE_REVISION_HEADER,
   SitePointer,
+  siteHost,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -22,7 +23,6 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
-import { siteHost } from "./seed.ts"
 import {
   enteredFrom,
   type Ids,

@@ -1,4 +1,4 @@
-import { AssignmentState } from "@workspace/contracts"
+import { AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import { getTableColumns, getTableName, is } from "drizzle-orm"
 import { PgTable } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
@@ -6,7 +6,6 @@ import { STAGING_CLIENT_ID } from "../../../apps/api/scripts/dev-owner.mjs"
 import { PROBE_ORG_PREFIX } from "../../../qa/e2e/workos.ts"
 import { clearOrgs, type Tx } from "../fixtures/seed.ts"
 import {
-  FINISHED,
   probeRefusal,
   STAGING,
   stagingRefusal,
@@ -89,7 +88,7 @@ describe("probeRefusal", () => {
   })
 
   it("names only real states", () => {
-    for (const state of FINISHED)
+    for (const state of TERMINAL_STATES)
       expect(AssignmentState.options).toContain(state)
   })
 })

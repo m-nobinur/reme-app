@@ -1,14 +1,10 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { siteHost } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import { repoMap } from "../src/repo-map.ts"
-import {
-  SEED_DIGEST,
-  SEED_FIELDS,
-  STARTER_FILES,
-  siteHost,
-} from "../src/seed.ts"
+import { SEED_DIGEST, SEED_FIELDS, STARTER_FILES } from "../src/seed.ts"
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url))
 const tracked = (dir: string) =>

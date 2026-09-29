@@ -7,7 +7,9 @@ import {
   KEY_MISSING,
   OWNER_BRIDGE_HEADERS,
   PreviewClaim,
+  previewHost,
   REQUEST_FAILED,
+  siteHost,
   type TaintLabel,
   Uuid,
 } from "@workspace/contracts"
@@ -65,7 +67,6 @@ import {
 import { answers } from "./question.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, probe } from "./sandbox.ts"
-import { previewHost, siteHost } from "./seed.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**

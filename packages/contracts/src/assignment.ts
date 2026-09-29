@@ -21,6 +21,13 @@ export const AssignmentState = z.enum([
   "cancelled",
 ])
 
+/** The states an assignment ends in. No transition leaves one. */
+export const TERMINAL_STATES: readonly AssignmentState[] = [
+  "published",
+  "failed",
+  "cancelled",
+]
+
 /**
  * `Assignment` (§19): CoS to orchestrator to runtime. The brief travels as a
  * fact-snapshot reference, not a copy of the facts, so §8.5 content
