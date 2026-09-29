@@ -80,6 +80,19 @@ describe("the bearer", () => {
     expect((await envelope(res)).code).toBe("console.unauthenticated")
   })
 
+  it("answers a sandbox that throws as a transient 503, which the probe retries", async () => {
+    const res = await app.request(
+      "/sandbox/probe",
+      { headers: { authorization: "Bearer test-token" } },
+      env
+    )
+    expect(res.status).toBe(503)
+    expect(await envelope(res)).toMatchObject({
+      class: "transient",
+      code: "request.failed",
+    })
+  })
+
   it("fails closed when the Worker has no token at all", async () => {
     const res = await app.request(
       "/assignments?org=brightclean",
