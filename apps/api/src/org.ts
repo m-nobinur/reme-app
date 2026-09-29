@@ -1,4 +1,4 @@
-import type { Org, StaffDirectory } from "@workspace/contracts"
+import { FactValue, type Org, type StaffDirectory } from "@workspace/contracts"
 import {
   asc,
   conversationMessages,
@@ -8,6 +8,7 @@ import {
   orgs,
   resolveOrg,
   staff,
+  supersedeFact,
   type Tenancy,
   toOrg,
   toStaffMember,
@@ -15,6 +16,7 @@ import {
 } from "@workspace/db"
 import { firstMessage } from "./chat.ts"
 import { ensureStartingTeam, rootStaffId } from "./staff.ts"
+import { readFacts } from "./workspace.ts"
 
 /**
  * The org read, the staff directory read and the write that gives them
@@ -227,6 +229,26 @@ export async function createOrg(
         userId: person.id,
         ownerName: input.displayName ?? input.email,
       })
+      const root = (await rootStaffId(db)) as string
+      // The name sign-up asked for is the owner's statement of it, so
+      // onboarding does not ask it again.
+      const name = FactValue.safeParse({
+        key: "business.name",
+        value: { name: input.name },
+      })
+      if (name.success) {
+        await supersedeFact(db, {
+          orgId,
+          key: name.data.key,
+          factType: "business",
+          value: name.data.value,
+          provenance: {
+            source: "owner_stated",
+            confidence: 1,
+            verifiedByStaffId: root,
+          },
+        })
+      }
       // The new owner lands in onboarding: its conversation, and the first
       // question already asked. Ids made here, so nothing needs RETURNING.
       const conversationId = newId()
@@ -234,12 +256,12 @@ export async function createOrg(
         id: conversationId,
         orgId,
         kind: "onboarding",
-        createdByStaffId: (await rootStaffId(db)) as string,
+        createdByStaffId: root,
       })
       await db.insert(conversationMessages).values({
         conversationId,
         orgId,
-        ...firstMessage(input.name, newId),
+        ...firstMessage(input.name, await readFacts(db), newId),
       })
       return true
     }

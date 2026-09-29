@@ -48,11 +48,8 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
     const pending = page.locator('[data-slot="ask-fact"] form')
     const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
     const card = page.locator('[data-slot="request-change"]')
-    // The business name comes filled in from signup.
-    await expect(page.getByLabel("Business name")).toHaveValue(business)
-    await pending.getByRole("button", { name: "Save" }).click()
-    let count = 1
-    await expect(answered).toHaveCount(count)
+    // Signup gave the name, so the first question is the phone.
+    let count = 0
 
     // Six facts at most: one guard against a script that never ends.
     while (count < 7) {
@@ -78,8 +75,8 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
       count += 1
       await expect(answered).toHaveCount(count)
     }
-    // Name, phone, email, hours, area and the skipped price.
-    expect(count).toBe(6)
+    // Phone, email, hours, area and the skipped price.
+    expect(count).toBe(5)
 
     // The offer of the first build, which this run declines: a yes would
     // start a real build.
@@ -131,7 +128,7 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
       facts.getByRole("definition").filter({ hasText: business })
     ).toBeVisible()
     await expect(facts.getByText("Leeds, within 15 km")).toBeVisible()
-    // Every fact the chat took, and none from anywhere else.
+    // The name from signup and every fact the chat took, and none else.
     await expect(facts.getByText(/^You told Reme/)).toHaveCount(5)
   } finally {
     await deleteProbeOrgs(user.id)

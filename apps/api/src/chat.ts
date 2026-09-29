@@ -6,6 +6,7 @@ import {
   type ChatResult,
   type CosTurn,
   ErrorEnvelope,
+  type FactRecord,
   FactValue,
   type FactValueKey,
   RequestChangeOutput,
@@ -1326,13 +1327,17 @@ async function changed(
 
 /**
  * The onboarding conversation's first row, for `createOrg` to insert: the
- * script's first step for an org with no facts, asking for the business name
- * with `orgs.name` filled in.
+ * script's first step for the facts the org holds, which ask for the first
+ * one missing.
  */
-export function firstMessage(orgName: string, newId: () => string) {
+export function firstMessage(
+  orgName: string,
+  current: FactRecord[],
+  newId: () => string
+) {
   const step = nextStep({
     kind: "onboarding",
-    missing: missingFacts([]),
+    missing: missingFacts(current),
     orgName,
     skipped: [],
     offered: false,

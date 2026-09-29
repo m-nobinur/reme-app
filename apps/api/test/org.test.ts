@@ -5,6 +5,7 @@ import {
   conversations,
   eq,
   events,
+  facts,
   memberships,
   orgs,
   resolveOrg,
@@ -376,13 +377,24 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(calls).toBe(1)
   })
 
-  it("lands the owner in onboarding, asked for the business name", async () => {
-    const [held, rows] = await kit.withOrg({ orgId }, (db) =>
+  it("keeps the business name as the owner's fact and lands the owner in onboarding, asked the next one", async () => {
+    const [held, rows, name] = await kit.withOrg({ orgId }, (db) =>
       Promise.all([
         db.select().from(conversations),
         db.select().from(conversationMessages),
+        db
+          .select()
+          .from(facts)
+          .where(
+            sql`${facts.key} = 'business.name' and ${facts.validTo} is null`
+          ),
       ])
     )
+    // One version, the replay above included.
+    expect(name).toHaveLength(1)
+    expect(name[0]?.value).toEqual({ name: input.name })
+    expect(name[0]?.provenanceSource).toBe("owner_stated")
+    expect(name[0]?.verifiedByStaffId).toEqual(expect.any(String))
     // One of each, the replay above included.
     expect(held.map((c) => c.kind)).toEqual(["onboarding"])
     expect(rows).toHaveLength(1)
@@ -397,9 +409,9 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
           toolCallId: expect.any(String),
           state: "input-available",
           input: {
-            key: "business.name",
+            key: "business.phone",
             skippable: false,
-            prefill: { name: input.name },
+            prefill: null,
           },
         },
       ],

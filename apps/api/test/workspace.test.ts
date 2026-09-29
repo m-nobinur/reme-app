@@ -48,8 +48,8 @@ import { env, stubJwksFetch } from "./sealed-session.ts"
 
 const url = process.env.DATABASE_URL
 
+/** The required facts a new org lacks: sign-up already gave its name. */
 const REQUIRED = [
-  "business.name",
   "business.phone",
   "business.email",
   "hours.weekday",
@@ -246,7 +246,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   const workspace = async (who: Owner, headers: Record<string, string> = {}) =>
     who.call(stubOrchestrator(), "/workspace", { headers })
 
-  it("shows a new org nothing running and the six facts to ask for", async () => {
+  it("shows a new org nothing running and the five facts to ask for", async () => {
     const response = await workspace(fresh)
     expect(response.status).toBe(200)
     const body = WorkspaceStatus.parse(await response.json())
@@ -404,7 +404,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const set = await fresh.call(
       stubOrchestrator(),
       "/facts",
-      json({ facts: [{ key: "business.name", value: { name: "Probe Co" } }] })
+      json({ facts: [{ key: "business.phone", value: { e164: "+15550143" } }] })
     )
     expect(set.status).toBe(200)
     const after = await workspace(fresh, { "if-none-match": tag })
@@ -582,7 +582,9 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           .where(eq(staff.staffCode, "OWN-001"))
       )
       const written = await facts(changes)
+      // The name is sign-up's, stated the same way.
       expect(written.map((f) => f.key)).toEqual([
+        "business.name",
         "business.phone",
         "hours.weekday",
       ])

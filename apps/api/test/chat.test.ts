@@ -188,7 +188,7 @@ describe("the onboarding script", () => {
   )
 
   it("makes the first row from the same script", () => {
-    expect(firstMessage("Brightclean (fixture)", counter())).toEqual({
+    expect(firstMessage("Brightclean (fixture)", [], counter())).toEqual({
       id: "id2",
       parentId: null,
       format: "ai-sdk/v6",
@@ -403,7 +403,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         (p.state === "input-available" || p.state === "approval-requested")
     ) as unknown as ToolPart
 
-  /** The whole script: confirm the name, four facts, skip pricing, approve. */
+  /** The whole script: four facts, skip pricing, approve. Sign-up gave the name. */
   async function onboard(ids: () => string) {
     const who = await owner(kit, url as string, "chat-script", ids)
     const me = talker(who, ids)
@@ -422,10 +422,6 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       bodies.push(done.text)
       return done
     }
-    await answer({
-      answer: "stated",
-      fact: { key: "business.name", value: { name: who.name } },
-    })
     for (const fact of STATED) await answer({ answer: "stated", fact })
     await answer({ answer: "skipped" })
     const offer = pendingCall(await me.tail(id))
@@ -543,7 +539,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     it("refuses a fact for another key, and a skip of a key the site needs", async () => {
       const before = await me.rows(id)
       for (const output of [
-        { answer: "stated", fact: STATED[0] },
+        { answer: "stated", fact: STATED[1] },
         { answer: "skipped" },
       ]) {
         const { response, text } = await answering(output)
@@ -639,13 +635,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             {
               kind: "answer",
               tool_call_id: call.toolCallId,
-              output: {
-                answer: "stated",
-                fact: {
-                  key: "business.name",
-                  value: { name: "Sparkle (fixture)" },
-                },
-              },
+              output: { answer: "stated", fact: STATED[0] },
             },
           ],
         },
@@ -670,8 +660,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               output: {
                 answer: "stated",
                 fact: {
-                  key: "business.name",
-                  value: { name: "Other (fixture)" },
+                  key: "business.phone",
+                  value: { e164: "+441632960002" },
                 },
               },
             },
@@ -683,11 +673,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         await (await who.call(stubOrchestrator(), "/facts")).json()
       )
       expect(listed.facts).toMatchObject([
-        {
-          key: "business.name",
-          value: { name: "Sparkle (fixture)" },
-          provenance: { source: "owner_stated" },
-        },
+        { key: "business.name", provenance: { source: "owner_stated" } },
+        { ...STATED[0], provenance: { source: "owner_stated" } },
       ])
     })
   })
@@ -729,7 +716,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       expect(pendingCall(typed.after)).toMatchObject({
         type: "tool-ask_fact",
-        input: { key: "business.name" },
+        input: { key: "business.phone" },
       })
     })
 
