@@ -58,6 +58,7 @@ import {
   messageTaint,
   priceOf,
   reservation,
+  stepCost,
   toolErrorText,
 } from "../src/cos/agent.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
@@ -306,6 +307,31 @@ describe("the CoS's model and price", () => {
         output_tokens: 100_000,
       })
     ).toBeCloseTo(0.6 + 0.04 + 1, 12)
+  })
+
+  it("costs a step at what OpenRouter billed, and at the capped price without it", () => {
+    const price = { input: 1, output: 10, cacheRead: 0.1 }
+    const tokens = {
+      inputTokens: 1_000_000,
+      inputTokenDetails: { cacheReadTokens: 0 },
+      outputTokens: 0,
+    } as Parameters<typeof stepCost>[1]["usage"]
+    const billed = (cost: unknown) => ({ openrouter: { usage: { cost } } })
+    expect(
+      stepCost(price, {
+        usage: tokens,
+        providerMetadata: billed(0.42) as never,
+      })
+    ).toBe(0.42)
+    expect(stepCost(price, { usage: tokens })).toBeCloseTo(1, 12)
+    for (const bad of [-1, Number.NaN, "0.42", null]) {
+      expect(
+        stepCost(price, {
+          usage: tokens,
+          providerMetadata: billed(bad) as never,
+        })
+      ).toBeCloseTo(1, 12)
+    }
   })
 
   const EMPTY = {
@@ -1895,6 +1921,33 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const [row] = await admin<{ staff_id: string }[]>`
       select staff_id from events where session_id = ${room} and type = 'cos.context'`
     expect(row?.staff_id).toBe(chief?.id)
+  })
+
+  it("logs what OpenRouter billed for a step, and the capped price for one it did not report", async () => {
+    const id = await conversation(me)
+    const [first, second] = [
+      calls({ id: "call_ws", tool: "get_workspace", input: {} }),
+      said("All quiet."),
+    ]
+    const finish = first.at(-1) as StreamPart
+    finish.providerMetadata = { openrouter: { usage: { cost: 0.000123 } } }
+    const { model } = scripted(first, second)
+    const done = await turn(me, typed(id, "Anything new?", "ask"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    const steps = (await logOf(id))
+      .filter((e) => e.type === "cos.step")
+      .map((e) => (e.payload as { cost_usd: number }).cost_usd)
+    const capped = costOf(PRICE as NonNullable<typeof PRICE>, {
+      input_tokens: 1_000,
+      cached_input_tokens: 0,
+      output_tokens: 50,
+    })
+    expect(steps).toEqual([0.000123, capped])
+    const [ended] = await turnsOf(id)
+    expect(ended?.outcome === "answered" && ended.cost_usd).toBeCloseTo(
+      0.000123 + capped,
+      12
+    )
   })
 
   it("stops a turn before a step could take its spend past the reservation", async () => {

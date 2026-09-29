@@ -22,6 +22,7 @@ import {
   type LanguageModel,
   type LanguageModelUsage,
   type ModelMessage,
+  type ProviderMetadata,
   ToolLoopAgent,
   type ToolSet,
   tool,
@@ -171,7 +172,8 @@ export type Price = { input: number; output: number; cacheRead: number }
 
 /**
  * The model's price at its routing cap, from the table the Developer's
- * metering reads, or null for a model the table does not hold.
+ * metering reads, or null for a model the table does not hold. Reservations
+ * are priced at it, and a step OpenRouter reports no cost for.
  */
 export function priceOf(modelId: string): Price | null {
   const entry = (models as { id: string; cost: Price }[]).find(
@@ -188,8 +190,9 @@ export function priceOf(modelId: string): Price | null {
 
 /**
  * The CoS's model through OpenRouter, capped at the table's routing price
- * so no provider can bill more than the log records. Null for a model the
- * table does not hold, which the chat treats as no model at all.
+ * so no provider can bill more than the reservation assumes, and asking for
+ * the billed cost on each finish part. Null for a model the table does not
+ * hold, which the chat treats as no model at all.
  */
 export function openrouterModel(
   apiKey: string,
@@ -248,6 +251,23 @@ export const costOf = (price: Price, usage: Usage) =>
     usage.cached_input_tokens * price.cacheRead +
     usage.output_tokens * price.output) /
   1_000_000
+
+/**
+ * What a step cost: OpenRouter's billed figure from the finish part's
+ * metadata when it reports one, else its usage at the table's capped price,
+ * which errs high. The metadata is read here and never stored.
+ */
+export function stepCost(
+  price: Price,
+  step: { usage: LanguageModelUsage; providerMetadata?: ProviderMetadata }
+): number {
+  const billed = (
+    step.providerMetadata?.openrouter?.usage as { cost?: unknown } | undefined
+  )?.cost
+  return typeof billed === "number" && Number.isFinite(billed) && billed >= 0
+    ? billed
+    : costOf(price, usageOf(step.usage))
+}
 
 /** The labels a workspace's text carries: its builds' goals and the Developer's questions. */
 function workspaceTaint(workspace: CosWorkspace): TaintLabel[] {
@@ -576,10 +596,7 @@ export function cosAgent(
       ({ steps }) => {
         const last = steps.at(-1)
         if (!last) return false
-        const spent = steps.reduce(
-          (sum, s) => sum + costOf(run.price, usageOf(s.usage)),
-          0
-        )
+        const spent = steps.reduce((sum, s) => sum + stepCost(run.price, s), 0)
         const next =
           (last.usage.inputTokens ?? 0) +
           tokensIn(JSON.stringify(last.response.messages).length)
@@ -648,7 +665,7 @@ export function cosAgent(
     },
     onStepEnd: async (step) => {
       const usage = usageOf(step.usage)
-      const cost = costOf(run.price, usage)
+      const cost = stepCost(run.price, step)
       run.state.steps += 1
       run.state.costUsd += cost
       run.state.usage = {
