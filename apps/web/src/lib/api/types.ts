@@ -276,6 +276,8 @@ export type OwnerDataSource = {
     key: string
   ) => Promise<WriteOutcome>
   cancelBuild: (orgId: string, assignmentId: string) => Promise<WriteOutcome>
+  /** The owner's own account, ended (ADR-035). A second call finishes the first. */
+  deleteAccount: (orgId: string) => Promise<WriteOutcome>
   preview: (orgId: string, assignmentId: string) => Promise<PreviewLinks | null>
   /** A reminder the owner wrote. Idempotent on `key`. */
   createReminder: (
