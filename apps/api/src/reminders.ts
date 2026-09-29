@@ -1,5 +1,6 @@
 import {
   CreateReminderRequest,
+  idempotencyKey,
   REMINDER_NOTES_MAX,
   Reminder,
   ReminderPatch,
@@ -13,13 +14,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import type { Owner } from "./changes.ts"
-import {
-  failure,
-  idempotencyKey,
-  invalid,
-  keyMissing,
-  readBody,
-} from "./http.ts"
+import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { ownerStaffId } from "./staff.ts"
 
 /**

@@ -28,6 +28,7 @@ export {
   closeTenancy,
   failureCode,
   listOrgIds,
+  logFailure,
   ORG_SETTING,
   pgCode,
   resolveOrg,

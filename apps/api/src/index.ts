@@ -1,12 +1,15 @@
-import { CreateOrgRequest } from "@workspace/contracts"
-import { failureCode, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
+import {
+  CreateOrgRequest,
+  idempotencyKey,
+  REQUEST_FAILED,
+} from "@workspace/contracts"
+import { logFailure, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
 import { type Accounts, deleteAccount, type Takedown } from "./account.ts"
 import { bridge, type Owner } from "./changes.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
   failure,
-  idempotencyKey,
   invalid,
   keyMissing,
   readBody,
@@ -89,14 +92,7 @@ async function signup(
 ): Promise<Response> {
   if (!session) return failure(401, UNAUTHENTICATED)
   const key = idempotencyKey(request)
-  if (!key) {
-    return failure(400, {
-      class: "validation",
-      code: "idempotency_key.missing",
-      message: "This request needs an Idempotency-Key header.",
-      detail: {},
-    })
-  }
+  if (!key) return keyMissing()
   // Caught rather than left to the handler, which would answer a body that is
   // not JSON with a 503 and tell the caller to retry something that will never
   // work.
@@ -281,20 +277,8 @@ export default {
       return await route(request, env, kit, (promise) => running.push(promise))
     } catch (error) {
       if (error instanceof BodyTooLarge) return tooLarge()
-      // The code and nothing else. A driver message can carry the connection
-      // string it failed on, and this worker logs to an account-wide sink (R9).
-      console.error(
-        JSON.stringify({
-          at: new URL(request.url).pathname,
-          code: failureCode(error),
-        })
-      )
-      return failure(503, {
-        class: "transient",
-        code: "request.failed",
-        message: "The request could not be completed.",
-        detail: {},
-      })
+      logFailure({ at: new URL(request.url).pathname }, error)
+      return failure(503, REQUEST_FAILED)
     } finally {
       ctx.waitUntil(Promise.allSettled(running).then(() => kit.close()))
     }
