@@ -4,6 +4,7 @@ import {
   FactSnapshot,
   type GateResult,
   InformationAnswer,
+  siteHost,
   ValidationReport,
 } from "@workspace/contracts"
 import {
@@ -19,7 +20,6 @@ import {
   toFactRecord,
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
-import { siteHost } from "./seed.ts"
 import { type Ids, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */

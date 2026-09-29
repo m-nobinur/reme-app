@@ -205,3 +205,87 @@ export type PreviewClaim = z.infer<typeof PreviewClaim>
 export type SitePointer = z.infer<typeof SitePointer>
 export type SiteField = z.infer<typeof SiteField>
 export type SiteFields = z.infer<typeof SiteFields>
+
+/**
+ * A slug, and what is left of a site host once its suffix is off: one DNS
+ * label. `slugFor` makes only slugs that pass it.
+ */
+export const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+/** The org id's first 8 characters, which `slugFor` ends a slug with. */
+const ID_TAIL = /-[0-9a-f]{8}$/
+
+/**
+ * A handle a person can be given for their org. Derived rather than accepted,
+ * so a caller cannot probe which handles are taken, and suffixed with the
+ * org's own id so it needs no uniqueness read to be unique. A slug the owner
+ * chooses is a later story; this one only has to be stable and theirs.
+ */
+export function slugFor(name: string, orgId: string): string {
+  const words = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  // `preview-` opens a preview host (ADR-030), so a name whose slug would
+  // start that way, "Preview" alone included, gets a `site-` in front.
+  const reserved = `${words}-`.startsWith("preview-")
+  const base = (reserved ? `site-${words}` : words).slice(0, 40)
+  return [base, orgId.slice(0, 8)].filter(Boolean).join("-")
+}
+
+/** A host suffix: a `-` or a `.`, then at least two labels. */
+const HOST_SUFFIX = /^[-.][a-z0-9-]+(?:\.[a-z0-9-]+)+$/
+
+/**
+ * The host a site's canonical URLs, sitemap and robots name: the org's slug
+ * joined to the environment's suffix (ADR-030: `.remeai.co.uk` in
+ * production, `-stg.remeai.co.uk` on staging). Both halves are checked
+ * because the result reaches a shell command in the sandbox.
+ */
+export function siteHost(slug: string, suffix: string): string {
+  if (!SLUG.test(slug)) throw new Error(`not a slug: ${JSON.stringify(slug)}`)
+  if (!HOST_SUFFIX.test(suffix))
+    throw new Error(`not a host suffix: ${JSON.stringify(suffix)}`)
+  return `${slug}${suffix}`
+}
+
+/** The longest DNS label a host may carry. */
+const LABEL_MAX = 63
+
+/**
+ * The host a revision's preview answers on, `preview-v{n}-{slug}` under the
+ * same suffix (ADR-030), one level deep under the reserved `preview-`
+ * prefix. The first label must fit 63 characters, and a slug can be 49
+ * (`slugFor`'s 40-character base, a hyphen and 8 characters of the org id),
+ * so a label that would pass 63 keeps the slug's id tail, which keeps hosts
+ * apart, and cuts its base instead. A slug that fits is used whole, so
+ * existing preview hosts do not move. The site's own host is `siteHost`,
+ * never cut.
+ */
+export function previewHost(slug: string, version: number, suffix: string) {
+  // A safe integer has at most 16 digits, which leaves room for the id tail.
+  if (!Number.isSafeInteger(version) || version < 1)
+    throw new Error(`not a version: ${JSON.stringify(version)}`)
+  const site = siteHost(slug, suffix)
+  const prefix = `preview-v${version}-`
+  // The part of the suffix that joins the slug's label, `-stg` on staging.
+  const joined = suffix.startsWith("-")
+    ? suffix.slice(0, suffix.indexOf("."))
+    : ""
+  const room = LABEL_MAX - prefix.length - joined.length
+  if (slug.length <= room) return `${prefix}${site}`
+  const tail = ID_TAIL.exec(slug)?.[0] ?? ""
+  const base = slug
+    .slice(0, slug.length - tail.length)
+    .slice(0, Math.max(0, room - tail.length))
+    .replace(/-+$/, "")
+  const cut = base ? `${base}${tail}` : tail.slice(1)
+  return `${prefix}${siteHost(cut, suffix)}`
+}
+
+/**
+ * A preview host, `preview-v{n}-{slug}` by ADR-030's reserved prefix. The
+ * version's digits are part of the match: a business whose name starts
+ * "Preview" has a slug starting `preview-`, and its live site is a site.
+ */
+export const isPreviewHost = (host: string) => /^preview-v\d+-/.test(host)

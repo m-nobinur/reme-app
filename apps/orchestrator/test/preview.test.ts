@@ -1,7 +1,6 @@
-import { PreviewClaim } from "@workspace/contracts"
+import { PreviewClaim, previewHost } from "@workspace/contracts"
 import { verifyPreview } from "@workspace/gates/preview"
 import { afterAll, describe, expect, it, vi } from "vitest"
-import { previewHost } from "../src/seed.ts"
 import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 const claim = (host: string) =>

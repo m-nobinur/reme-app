@@ -7,6 +7,7 @@ import {
   FactSnapshot,
   InformationRequest,
   RuntimeSpec,
+  siteHost,
 } from "@workspace/contracts"
 import { orgs, siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
 import {
@@ -47,7 +48,7 @@ import {
 import { repoMap } from "../repo-map.ts"
 import { SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
-import { SEED_DIGEST, STARTER_FILES, siteHost } from "../seed.ts"
+import { SEED_DIGEST, STARTER_FILES } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost } from "../state.ts"
 

@@ -8,6 +8,8 @@ import {
   FactValueKey,
   InformationRequest,
   SiteFields,
+  siteHost,
+  TERMINAL_STATES,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
@@ -72,7 +74,7 @@ export async function readBuilds(
     })
     .from(assignments)
     .where(
-      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ('published', 'failed', 'cancelled')`
+      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ${TERMINAL_STATES}`
     )
     .orderBy(sql`${assignments.createdAt} desc`)
   const rows = await (limit === null ? query : query.limit(limit))
@@ -227,7 +229,7 @@ export async function readSite(
     .from(orgs)
     .limit(1)
   const live = row?.live ?? null
-  return { host: row && live ? `${row.slug}${suffix}` : null, live }
+  return { host: row && live ? siteHost(row.slug, suffix) : null, live }
 }
 
 /** Required facts the org does not hold yet, minus the ones it keeps off the site. */

@@ -1,4 +1,4 @@
-import type { AssignmentState } from "@workspace/contracts"
+import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -17,12 +17,6 @@ import {
  * that bumps `version`, appends the event and writes the transition row, or
  * does nothing at all.
  */
-
-export const TERMINAL: readonly AssignmentState[] = [
-  "published",
-  "failed",
-  "cancelled",
-]
 
 /** Repairing is entered at most this many times per assignment (§8.4). */
 export const REPAIR_LIMIT = 3
@@ -204,7 +198,8 @@ export async function transition(
       `${from} -> ${to}: ${why}`
     )
 
-  if (TERMINAL.includes(from)) throw illegal("the assignment is finished")
+  if (TERMINAL_STATES.includes(from))
+    throw illegal("the assignment is finished")
   if (to === "paused" || to === "cancelled") {
     if (from === to) throw illegal("already there")
   } else if (from === "paused") {
@@ -231,7 +226,7 @@ export async function transition(
 
   const version = row.version + 1
   // Frozen at close, in the transaction that closes it.
-  const costUsd = TERMINAL.includes(to)
+  const costUsd = TERMINAL_STATES.includes(to)
     ? await assignmentCost(db, row.id)
     : undefined
   try {
@@ -371,7 +366,7 @@ export function cancel(
 ): Promise<AssignmentState> {
   return kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const row = await lockRow(db, ids.assignmentId)
-    if (TERMINAL.includes(row.state)) return row.state
+    if (TERMINAL_STATES.includes(row.state)) return row.state
     await transition(db, {
       ...ids,
       to: "cancelled",
