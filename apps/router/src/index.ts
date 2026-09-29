@@ -5,6 +5,7 @@ import {
   formatSiteRevision,
   isPreviewHost,
   REQUEST_FAILED,
+  SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
   SLUG,
@@ -23,6 +24,7 @@ import {
   resolvePreviewPath,
   SCREENSHOTS,
   verifyPreview,
+  verifyProbe,
 } from "@workspace/gates/preview"
 import { resolveSitePath } from "@workspace/gates/site-path"
 import { type Context, Hono } from "hono"
@@ -460,8 +462,16 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   if (!file) return notHere(c)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
   // Which version answered a page, so the publisher's probe judges only its
-  // own. An immutable asset names its revision in its path already.
-  if (file.endsWith(".html")) {
+  // own, and told to the probe alone. An immutable asset names its revision
+  // in its path already.
+  if (
+    file.endsWith(".html") &&
+    (await verifyProbe(
+      c.req.header(SITE_PROBE_HEADER),
+      host,
+      c.env.PREVIEW_KEY
+    ))
+  ) {
     headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
   }
   return serve(c, host, `${found.base}dist/${file}`, headers)

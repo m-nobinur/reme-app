@@ -170,12 +170,17 @@ export const SitePointer = z.strictObject({
 })
 
 /**
- * The header the router puts on every HTML page it serves for a published
- * host, from the pointer it served by, so the publisher's probe can tell
- * which version answered before judging it. Written by `formatSiteRevision`
- * and read by `parseSiteRevision`, never by hand.
+ * The header the router puts on an HTML page it serves for a published host,
+ * from the pointer it served by, so the publisher's probe can tell which
+ * version answered before judging it. Sent only to a request carrying a valid
+ * `SITE_PROBE_HEADER`, so a visitor cannot read revision ids or count
+ * publishes. Written by `formatSiteRevision` and read by `parseSiteRevision`,
+ * never by hand.
  */
 export const SITE_REVISION_HEADER = "x-reme-revision"
+
+/** The probe's proof that it is the probe, made by `probeProof` in `@workspace/gates/preview`. */
+export const SITE_PROBE_HEADER = "x-reme-probe"
 
 const ServedRevision = SitePointer.pick({
   revision_id: true,

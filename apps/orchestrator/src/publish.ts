@@ -4,6 +4,7 @@ import {
   ApprovalTarget,
   type FactRecord,
   parseSiteRevision,
+  SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
   siteHost,
@@ -542,7 +543,10 @@ export async function probeHost(
   host: string,
   facts: readonly FactRecord[] | null,
   fetcher: typeof fetch = fetch,
-  expected?: Pick<SitePointer, "revision_id" | "config_version">,
+  expected?: Pick<SitePointer, "revision_id" | "config_version"> & {
+    /** `probeProof` for the host, without which the router names no revision. */
+    proof: string
+  },
   pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
 ): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
   let res: Response | null = null
@@ -550,7 +554,10 @@ export async function probeHost(
     let seen: string
     try {
       res = await fetcher(`https://${host}/`, {
-        headers: { "cache-control": "no-cache" },
+        headers: {
+          "cache-control": "no-cache",
+          ...(expected && { [SITE_PROBE_HEADER]: expected.proof }),
+        },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
       const tag = res.headers.get(SITE_REVISION_HEADER)

@@ -94,6 +94,43 @@ export async function verifyPreview(
   }
 }
 
+/** A colon no base64url body carries, so a probe proof and a preview token never stand in for each other. */
+const probeMessage = (host: string) => encoder.encode(`site-probe:${host}`)
+
+/**
+ * The publish probe's proof for `host`, sent as `SITE_PROBE_HEADER`: an HMAC
+ * under the preview key, which the orchestrator and the router already share.
+ * ponytail: a proof never expires; sign a timestamp too if it ever travels
+ * anywhere a third party could log it.
+ */
+export async function probeProof(host: string, secret: string) {
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(secret, "sign"),
+    probeMessage(host)
+  )
+  return b64url(new Uint8Array(mac))
+}
+
+/** Whether `proof` is `host`'s, compared in constant time. False without a key. */
+export async function verifyProbe(
+  proof: string | undefined,
+  host: string,
+  secret: string
+): Promise<boolean> {
+  if (!proof || !secret) return false
+  try {
+    return await crypto.subtle.verify(
+      "HMAC",
+      await hmacKey(secret, "verify"),
+      fromB64url(proof),
+      probeMessage(host)
+    )
+  } catch {
+    return false
+  }
+}
+
 /** The screenshots `report_complete` stores, reachable by these names only. */
 export const SCREENSHOTS = new Set([
   "screenshots/home-390.png",

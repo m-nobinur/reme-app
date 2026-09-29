@@ -24,6 +24,7 @@ import {
   REPEATING_FAILURE,
   SANDBOX_UPDATING,
 } from "@workspace/facade"
+import { probeProof } from "@workspace/gates/preview"
 import { Hono } from "hono"
 import { Developer } from "./agents/developer.ts"
 import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
@@ -674,6 +675,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
         const probe = await probeHost(target.host, factRecords, undefined, {
           revision_id: target.revision_id,
           config_version: deployment.config_version,
+          proof: await probeProof(target.host, this.env.PREVIEW_KEY),
         })
         return run((kit) =>
           kit.withOrg({ orgId }, async (db) => {

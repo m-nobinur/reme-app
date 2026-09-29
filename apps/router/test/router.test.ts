@@ -1,5 +1,9 @@
-import { formatSiteRevision, SITE_REVISION_HEADER } from "@workspace/contracts"
-import { signPreview } from "@workspace/gates/preview"
+import {
+  formatSiteRevision,
+  SITE_PROBE_HEADER,
+  SITE_REVISION_HEADER,
+} from "@workspace/contracts"
+import { probeProof, signPreview } from "@workspace/gates/preview"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import app from "../src/index.ts"
 
@@ -133,6 +137,10 @@ const claimFor = (overrides: Record<string, unknown> = {}) =>
     KEY
   )
 const cookie = (token: string) => ({ cookie: `reme_preview=${token}` })
+/** The header the publish probe proves itself with, for `host`. */
+const probe = async (host: string) => ({
+  [SITE_PROBE_HEADER]: await probeProof(host, KEY),
+})
 const get = (host: string, path: string, init: RequestInit = {}) =>
   app.request(`https://${host}${path}`, init, env)
 
@@ -320,17 +328,21 @@ describe("the edge cache", () => {
     withEdgeCache()
     point(REV, 1)
     const tag = formatSiteRevision({ revision_id: REV, config_version: 1 })
-    const cold = await get(SITE_HOST, "/")
+    const proof = await probe(SITE_HOST)
+    const cold = await get(SITE_HOST, "/", { headers: proof })
     reads.length = 0
-    const warm = await get(SITE_HOST, "/")
+    const warm = await get(SITE_HOST, "/", { headers: proof })
     expect(reads).toEqual([])
     expect(warm.headers.get(SITE_REVISION_HEADER)).toBe(tag)
     const same = await get(SITE_HOST, "/", {
-      headers: { "if-none-match": cold.headers.get("etag") as string },
+      headers: {
+        ...proof,
+        "if-none-match": cold.headers.get("etag") as string,
+      },
     })
     expect(same.status).toBe(304)
     expect(same.headers.get(SITE_REVISION_HEADER)).toBe(tag)
-    const head = await get(SITE_HOST, "/", { method: "HEAD" })
+    const head = await get(SITE_HOST, "/", { method: "HEAD", headers: proof })
     expect(head.headers.get(SITE_REVISION_HEADER)).toBe(tag)
   })
 
@@ -782,12 +794,37 @@ describe("a published host", () => {
   it("tags each HTML page with the revision it served by, and no immutable asset", async () => {
     pointers.set(`host:${SITE_HOST}`, pointer)
     const tag = formatSiteRevision(pointer)
-    const home = await get(SITE_HOST, "/")
+    const proof = await probe(SITE_HOST)
+    const home = await get(SITE_HOST, "/", { headers: proof })
     expect(home.headers.get(SITE_REVISION_HEADER)).toBe(tag)
-    const head = await get(SITE_HOST, "/contact/", { method: "HEAD" })
+    const head = await get(SITE_HOST, "/contact/", {
+      method: "HEAD",
+      headers: proof,
+    })
     expect(head.headers.get(SITE_REVISION_HEADER)).toBe(tag)
-    const css = await get(SITE_HOST, "/_astro/index.C1.css")
+    const css = await get(SITE_HOST, "/_astro/index.C1.css", { headers: proof })
     expect(css.headers.get(SITE_REVISION_HEADER)).toBeNull()
+  })
+
+  it("names no revision to a visitor, or to a proof made for another host", async () => {
+    pointers.set(`host:${SITE_HOST}`, pointer)
+    const visitor = await get(SITE_HOST, "/")
+    expect(visitor.status).toBe(200)
+    expect(visitor.headers.get(SITE_REVISION_HEADER)).toBeNull()
+    for (const headers of [
+      await probe(`other${SUFFIX}`),
+      { [SITE_PROBE_HEADER]: "not-a-proof" },
+    ]) {
+      const res = await get(SITE_HOST, "/", { headers })
+      expect(res.status).toBe(200)
+      expect(res.headers.get(SITE_REVISION_HEADER)).toBeNull()
+    }
+    const unkeyed = await app.request(
+      `https://${SITE_HOST}/`,
+      { headers: await probe(SITE_HOST) },
+      { ...env, PREVIEW_KEY: "" } as unknown as Env
+    )
+    expect(unkeyed.headers.get(SITE_REVISION_HEADER)).toBeNull()
   })
 
   it("serves nothing the manifest does not list, screenshots included", async () => {
@@ -939,7 +976,8 @@ live("a published host, against a real database", () => {
     const { orgId, slug, revisionId } = await publishedOrg("open")
     const host = `${slug}${SUFFIX}`
     expect(pointers.has(`host:${host}`)).toBe(false)
-    const res = await app.request(`https://${host}/`, {}, liveEnv)
+    const proof = { headers: await probe(host) }
+    const res = await app.request(`https://${host}/`, proof, liveEnv)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain(revisionId.slice(-4))
     const tag = formatSiteRevision({
@@ -971,7 +1009,7 @@ live("a published host, against a real database", () => {
     await app.request(`https://nobody-here${SUFFIX}/`, {}, liveEnv)
     pointers.delete(`host:${host}`)
     limited = true
-    const served = await app.request(`https://${host}/`, {}, liveEnv)
+    const served = await app.request(`https://${host}/`, proof, liveEnv)
     expect(served.status).toBe(200)
     // Served from the pointer the edge believed, and tagged from it.
     expect(served.headers.get(SITE_REVISION_HEADER)).toBe(tag)
