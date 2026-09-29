@@ -1,6 +1,6 @@
 import { WorkOS } from "@workos-inc/node"
 import { ErrorEnvelope } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import worker from "../src/index.ts"
 import { readSession } from "../src/session.ts"
 import {
@@ -223,32 +223,46 @@ describe("a forged cookie", () => {
     }
   })
 
-  it("is called transient when its seal will not decode, which is the wrong class", async () => {
-    // A defect, pinned rather than hidden. `unsealData` catches five iron
-    // errors by message and rethrows the rest, and a seal cut mid-component
-    // fails base64 decoding first: `DOMException: InvalidCharacterError`, which
-    // is not on that list. It leaves `authenticate()` as a throw, and the
-    // handler's catch answers 503 `request.failed`, class `transient`.
-    //
-    // Fail-closed, so no session is issued and nothing leaks. Wrong all the
-    // same: transient tells the caller to retry, and a corrupt cookie retries
-    // forever instead of being told to sign in again, while the misclassified
-    // failures land in the server error rate rather than in bad sessions.
-    //
-    // Not fixed here on purpose. It is `apps/api/src/session.ts`, it belongs to
-    // the role that owns that file, and the fix has to keep a JWKS the worker
-    // cannot reach as a 503: signing everyone out during a WorkOS outage is
-    // worse than saying the request failed. When it lands, this case becomes a
-    // 401 `session.absent` and the two below it stop needing to be separate.
+  it("is signed out when its seal will not decode", async () => {
+    // A seal cut mid-component fails base64 decoding first, a
+    // `DOMException: InvalidCharacterError` that `unsealData` rethrows rather
+    // than answering for. It is a bad cookie, not an outage, so it is told to
+    // sign in again rather than to retry.
     const whole = await sessionCookie(OWNER)
     const response = await call("/org", {
       headers: {
         cookie: `wos-session=${encodeURIComponent(whole.slice(0, whole.length - 4))}`,
       },
     })
-    expect(response.status).toBe(503)
-    const body = ErrorEnvelope.parse(await response.json())
-    expect(body.code).toBe("request.failed")
-    expect(body.class).toBe("transient")
+    expect(response.status).toBe(401)
+    expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+      "session.absent"
+    )
+  })
+
+  it("still throws, so answers 503, when the JWKS cannot be reached", async () => {
+    // The other half of the line above: a good cookie the worker cannot
+    // verify because WorkOS is out of reach is a failed request, not a
+    // signed-out owner. A fresh module, so no JWKS is cached from the cases
+    // before; the worker's catch-all turns the throw into the 503.
+    vi.resetModules()
+    const fresh = await import("../src/session.ts")
+    const request = new Request("http://api.invalid/", {
+      headers: await cookieHeader(OWNER),
+    })
+    const jwks = globalThis.fetch
+    let asked = 0
+    globalThis.fetch = async () => {
+      asked++
+      throw new TypeError("Network connection lost.")
+    }
+    try {
+      await expect(fresh.readSession(request, env(NOWHERE))).rejects.toThrow(
+        TypeError
+      )
+      expect(asked).toBeGreaterThan(0)
+    } finally {
+      globalThis.fetch = jwks
+    }
   })
 })

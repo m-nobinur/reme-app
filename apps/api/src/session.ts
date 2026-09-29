@@ -89,7 +89,18 @@ export async function readSession(
     sessionData: data,
     cookiePassword: required(env, "WORKOS_COOKIE_PASSWORD"),
   })
-  const result = await session.authenticate()
+  let result: Awaited<ReturnType<typeof session.authenticate>>
+  try {
+    result = await session.authenticate()
+  } catch (error) {
+    // A seal cut mid-component fails base64 decoding before anything is
+    // fetched, and the SDK rethrows that one: a bad cookie, so signed out.
+    // Anything else, an unreachable JWKS among them, stays a throw and a 503:
+    // signing everyone out during a WorkOS outage is worse.
+    if (error instanceof DOMException && error.name === "InvalidCharacterError")
+      return null
+    throw error
+  }
   if (!result.authenticated) return null
   const { user, organizationId, sessionId, impersonator } = result
   return {
