@@ -2,10 +2,17 @@ import {
   createRouter as createTanStackRouter,
   Link,
 } from "@tanstack/react-router"
+import { getGlobalStartContext } from "@tanstack/react-start"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import { config } from "zod"
 import { routeTree } from "./routeTree.gen"
+
+// Zod probes for `new Function` before compiling a fast parser, which the CSP
+// (lib/csp.ts) refuses and reports as a violation on every page that parses.
+// Its fallback is what runs anyway, so skip the probe.
+config({ jitless: true })
 
 // The three route states, set once here so every route gets the same ones and
 // no screen has to remember to. A route overrides one only when it has a
@@ -44,6 +51,19 @@ function RouteNotFound() {
   )
 }
 
+/**
+ * This request's CSP nonce, from `lib/csp.ts`. None in the browser, and none
+ * on the server paths that build a router outside the request's context (a
+ * server function's redirect), which render no HTML.
+ */
+function requestNonce(): string | undefined {
+  try {
+    return getGlobalStartContext()?.nonce
+  } catch {
+    return undefined
+  }
+}
+
 export function getRouter() {
   // The workspace scrolls its <main>, not the window, so the router has to be
   // told to reset it. Only on a new visit, though: after restoring an element
@@ -63,6 +83,7 @@ export function getRouter() {
     defaultPendingComponent: () => <LoadingState className="m-6" />,
     defaultErrorComponent: RouteError,
     defaultNotFoundComponent: RouteNotFound,
+    ssr: { nonce: requestNonce() },
   })
   // Back lands on a lower history index. Forward looks like a new visit and
   // opens at the top.

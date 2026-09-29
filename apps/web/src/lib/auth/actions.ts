@@ -8,7 +8,7 @@ import { createOrgForSession } from "./org"
 import { clearOrgIntent, readOrgIntent } from "./org-intent"
 import { clearPending, readPending, updatePending } from "./pending"
 import { type AuthOutcome, authenticate, writeSession } from "./session"
-import { throttleSignIn } from "./throttle"
+import { throttle } from "./throttle"
 import { sessionOptions, workos } from "./workos"
 
 /**
@@ -56,7 +56,7 @@ export const signIn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<AuthOutcome> => {
     // Before the password reaches WorkOS, so a run of guesses costs us nothing
     // and tells the guesser nothing about whether the address exists.
-    const limited = await throttleSignIn(env.SIGN_IN_LIMIT, data.email)
+    const limited = await throttle(env.SIGN_IN_LIMIT, "sign-in", data.email)
     if (limited) {
       return { status: "failed", failure: limited }
     }
@@ -88,6 +88,10 @@ export const signUp = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
+    const limited = await throttle(env.SIGN_IN_LIMIT, "sign-up", data.email)
+    if (limited) {
+      return { status: "failed", failure: limited }
+    }
     try {
       await workos().userManagement.createUser({
         email: data.email,
@@ -160,6 +164,16 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ email: text(record(input).email) }))
   .handler(
     async ({ data }): Promise<{ sent: true } | { failure: AuthFailure }> => {
+      // Counted whether or not the address has an account, so the refusal
+      // says nothing the swallowed 404 below does not.
+      const limited = await throttle(
+        env.SIGN_IN_LIMIT,
+        "reset-request",
+        data.email
+      )
+      if (limited) {
+        return { failure: limited }
+      }
       try {
         await workos().userManagement.createPasswordReset({ email: data.email })
       } catch (error) {
@@ -191,6 +205,10 @@ export const resetPassword = createServerFn({ method: "POST" })
               "This link is missing its token. Ask for a new reset email.",
           },
         }
+      }
+      const limited = await throttle(env.SIGN_IN_LIMIT, "reset", data.token)
+      if (limited) {
+        return { failure: limited }
       }
       try {
         await workos().userManagement.resetPassword({

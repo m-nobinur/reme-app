@@ -15,7 +15,7 @@ import {
 } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { Route } from "../routes/__root"
+import { contentSecurityPolicy } from "../lib/csp"
 
 /**
  * Model text reaches the thread's markdown renderer, and a prompt injection
@@ -234,10 +234,8 @@ it("a caller's own link component still gets the new tab and the host", async ()
   expect(link?.rel).toBe("noopener noreferrer")
 })
 
-it("the app lets images load only from itself, data URLs and any remeai.co.uk host", async () => {
-  const head = await Route.options.head?.({} as never)
-  expect(head?.meta).toContainEqual({
-    httpEquiv: "Content-Security-Policy",
-    content: "img-src 'self' data: https://*.remeai.co.uk",
-  })
+it("the app lets images load only from itself, data URLs and any remeai.co.uk host", () => {
+  expect(contentSecurityPolicy("n").split("; ")).toContain(
+    "img-src 'self' data: https://*.remeai.co.uk"
+  )
 })

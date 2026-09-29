@@ -56,7 +56,8 @@
   "kv_namespaces": [
     { "binding": "CACHE", "id": "f5c3036a297e4612bba96014b7975d81" }
   ],
-  // The sign-in form's limit, five attempts per address per minute. Needs no
+  // The auth forms' limit: five a minute per address for each of sign-in,
+  // sign-up and asking for a reset email, and five per reset link. Needs no
   // resource to exist and no id from an account: `namespace_id` is a counter
   // name local to this Worker, so unlike Hyperdrive this one is real in dev,
   // preview and production from the day it lands.
