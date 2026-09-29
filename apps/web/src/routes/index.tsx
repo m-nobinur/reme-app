@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { Logo } from "@workspace/ui/components/logo"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import { LegalFooter } from "@/lib/legal-footer"
 
 export const Route = createFileRoute("/")({ component: Landing })
 
@@ -30,6 +31,7 @@ function Landing() {
           Open the dashboard
         </Link>
       </main>
+      <LegalFooter />
     </div>
   )
 }

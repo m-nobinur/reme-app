@@ -123,7 +123,16 @@ function SignUp() {
 
         <p className="text-muted-foreground text-xs leading-relaxed">
           Creating an account sets up your workspace. Nothing is published and
-          no message is sent to anyone until you approve it.
+          no message is sent to anyone until you approve it. By creating an
+          account you agree to the{" "}
+          <Link className="underline underline-offset-4" to="/terms">
+            terms
+          </Link>{" "}
+          and the{" "}
+          <Link className="underline underline-offset-4" to="/privacy">
+            privacy policy
+          </Link>
+          .
         </p>
       </AuthForm>
     </AuthCard>
