@@ -42,9 +42,8 @@ import type {
  *
  * Every value on every screen comes from a row a tenant owns, resolved from their own session: no request
  * from here names an organisation, in any spelling, because `apps/api` produces
- * the org id from the sealed session and would not read one if we sent it.
- * `orgId` is still a parameter of `OwnerDataSource` and is deliberately unused
- * below.
+ * the org id from the sealed session and would not read one if we sent it,
+ * so nothing here takes one either.
  *
  * The pipeline has no endpoint yet. It answers empty rather than inventing
  * rows, which is what an owner on their first day genuinely has. Nothing here
@@ -408,10 +407,7 @@ function workspaceOf(
   }
 }
 
-async function workspace(
-  _orgId: string,
-  staff: Promise<StaffMember[]>
-): Promise<Workspace> {
+async function workspace(staff: Promise<StaffMember[]>): Promise<Workspace> {
   const [read, members] = await Promise.all([workspaceStatus(), staff])
   if (read === "unchanged") {
     throw new Error("apps/api answered 304 to a read with no tag")
@@ -511,7 +507,14 @@ async function outcome(
     await response.json().catch(() => null)
   )
   const code = refusal.success ? refusal.data.code : ""
-  if (response.status >= 400 && response.status < 500 && refusal.success) {
+  // `org.unresolved` is a session with no organisation, which has nothing to
+  // act on: a defect, not a stale screen.
+  if (
+    response.status >= 400 &&
+    response.status < 500 &&
+    refusal.success &&
+    code !== "org.unresolved"
+  ) {
     const reason = REFUSALS[code] ?? STALE
     return GONE.has(code)
       ? { done: false, reason, gone: true }
@@ -532,7 +535,6 @@ function segment(id: string): string {
 }
 
 async function answer(
-  _orgId: string,
   assignmentId: string,
   requestId: string,
   value: unknown,
@@ -546,10 +548,7 @@ async function answer(
   return await outcome(response, path)
 }
 
-async function cancelBuild(
-  _orgId: string,
-  assignmentId: string
-): Promise<WriteOutcome> {
+async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
   const path = `/builds/${segment(assignmentId)}/cancel`
   // One build is stopped once: a second press is the same request.
   return await outcome(
@@ -558,7 +557,7 @@ async function cancelBuild(
   )
 }
 
-async function deleteAccount(_orgId: string): Promise<WriteOutcome> {
+async function deleteAccount(): Promise<WriteOutcome> {
   // An account is deleted once: a second press is the same request.
   return await outcome(
     await post("/account", undefined, "account:delete", "DELETE"),
@@ -566,10 +565,7 @@ async function deleteAccount(_orgId: string): Promise<WriteOutcome> {
   )
 }
 
-async function preview(
-  _orgId: string,
-  assignmentId: string
-): Promise<PreviewLinks | null> {
+async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   const body = await get(`/builds/${segment(assignmentId)}/preview`)
   if (body === null) {
     return null
@@ -583,26 +579,18 @@ async function preview(
   }
 }
 
-async function requestChange(
-  _orgId: string,
-  text: string,
-  key: string
-): Promise<WriteOutcome> {
+async function requestChange(text: string, key: string): Promise<WriteOutcome> {
   return await outcome(await post("/changes", { text }, key), "/changes")
 }
 
 async function createReminder(
-  _orgId: string,
   input: CreateReminderRequest,
   key: string
 ): Promise<WriteOutcome> {
   return await outcome(await post("/reminders", input, key), "/reminders")
 }
 
-async function completeReminder(
-  _orgId: string,
-  id: string
-): Promise<WriteOutcome> {
+async function completeReminder(id: string): Promise<WriteOutcome> {
   const path = `/reminders/${segment(id)}`
   // Done is done: a second press is the same request.
   return await outcome(
@@ -616,10 +604,7 @@ async function conversations(): Promise<Conversation[]> {
   return body === null ? [] : ConversationList.parse(body).conversations
 }
 
-async function conversation(
-  _orgId: string,
-  id: string
-): Promise<Conversation | null> {
+async function conversation(id: string): Promise<Conversation | null> {
   const response = await call(`/conversations/${segment(id)}`)
   // Another org's id is a 404, the same as one that never existed.
   if (!response || [401, 403, 404].includes(response.status)) {
@@ -631,11 +616,12 @@ async function conversation(
   return Conversation.parse(await response.json())
 }
 
-async function createConversation(
-  _orgId: string,
-  key: string
-): Promise<Conversation> {
+async function createConversation(key: string): Promise<Conversation | null> {
   const response = await post("/conversations", undefined, key)
+  // A session with no organisation has nowhere to store one.
+  if (response.status === 401 || response.status === 403) {
+    return null
+  }
   if (!response.ok) {
     throw new Error(`apps/api answered ${response.status} for /conversations`)
   }
@@ -643,7 +629,6 @@ async function createConversation(
 }
 
 async function updateConversation(
-  _orgId: string,
   id: string,
   patch: { title: string } | { archived: boolean },
   key: string
@@ -660,7 +645,6 @@ async function updateConversation(
 }
 
 async function rateMessage(
-  _orgId: string,
   id: string,
   feedback: MessageFeedback,
   key: string
@@ -675,10 +659,7 @@ async function rateMessage(
   }
 }
 
-async function conversationMessages(
-  _orgId: string,
-  id: string
-): Promise<TransportedMessage[]> {
+async function conversationMessages(id: string): Promise<TransportedMessage[]> {
   const response = await call(`/conversations/${segment(id)}/messages`)
   // Another org's id is a 404, the same as one that never existed: no
   // history to show.
@@ -720,7 +701,10 @@ export const apiSource: OwnerDataSource = {
     return org ? [org] : []
   },
   staff: staffOf,
-  orgTree: async () => treeOf(await staffOf()),
+  directory: async () => {
+    const staff = await staffOf()
+    return { staff, tree: treeOf(staff) }
+  },
   workspace,
   approvals,
   pipeline: async () => [],
@@ -744,7 +728,7 @@ export const apiSource: OwnerDataSource = {
   rateMessage,
   conversationMessages,
   chat: (raw) => call("/chat", { method: "POST", raw }),
-  decideApproval: async (_orgId, approvalId, revisionId, decision) => {
+  decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(
       path,

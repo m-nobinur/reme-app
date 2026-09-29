@@ -238,19 +238,17 @@ export type DecisionOutcome =
 export type OwnerDataSource = {
   /** The organisations the signed-in owner belongs to. */
   orgs: () => Promise<OrgSummary[]>
-  staff: (orgId: string) => Promise<StaffMember[]>
-  orgTree: (orgId: string) => Promise<OrgNode[]>
+  staff: () => Promise<StaffMember[]>
+  /** The directory and its reporting lines, from one read. */
+  directory: () => Promise<{ staff: StaffMember[]; tree: OrgNode[] }>
   /** `staff` is the directory the caller has already read, for names. */
-  workspace: (
-    orgId: string,
-    staff: Promise<StaffMember[]>
-  ) => Promise<Workspace>
-  approvals: (orgId: string) => Promise<ApprovalItem[]>
-  pipeline: (orgId: string) => Promise<PipelineItem[]>
+  workspace: (staff: Promise<StaffMember[]>) => Promise<Workspace>
+  approvals: () => Promise<ApprovalItem[]>
+  pipeline: () => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `orgs()` empty. */
-  profile: (orgId: string) => Promise<BusinessProfile | null>
+  profile: () => Promise<BusinessProfile | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
-  activity: (orgId: string) => Promise<AttentionItem[]>
+  activity: () => Promise<AttentionItem[]>
   /**
    * Answer one approval, bound to the revision the owner was shown: the
    * orchestrator refuses a decision whose revision is not the one the review
@@ -258,7 +256,6 @@ export type OwnerDataSource = {
    * revision replays the first one's answer.
    */
   decideApproval: (
-    orgId: string,
     approvalId: string,
     revisionId: string,
     decision: DecisionRequest["decision"]
@@ -269,47 +266,39 @@ export type OwnerDataSource = {
    */
   pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
   answer: (
-    orgId: string,
     assignmentId: string,
     requestId: string,
     value: unknown,
     key: string
   ) => Promise<WriteOutcome>
-  cancelBuild: (orgId: string, assignmentId: string) => Promise<WriteOutcome>
+  cancelBuild: (assignmentId: string) => Promise<WriteOutcome>
   /** The owner's own account, ended (ADR-035). A second call finishes the first. */
-  deleteAccount: (orgId: string) => Promise<WriteOutcome>
-  preview: (orgId: string, assignmentId: string) => Promise<PreviewLinks | null>
+  deleteAccount: () => Promise<WriteOutcome>
+  preview: (assignmentId: string) => Promise<PreviewLinks | null>
   /** A reminder the owner wrote. Idempotent on `key`. */
   createReminder: (
-    orgId: string,
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
   /** Mark one reminder done. Doing it twice changes nothing. */
-  completeReminder: (orgId: string, id: string) => Promise<WriteOutcome>
+  completeReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */
-  requestChange: (
-    orgId: string,
-    text: string,
-    key: string
-  ) => Promise<WriteOutcome>
-  conversations: (orgId: string) => Promise<Conversation[]>
-  conversation: (orgId: string, id: string) => Promise<Conversation | null>
-  /** Idempotent on `key`, the thread's local id: a retry returns the same row. */
-  createConversation: (orgId: string, key: string) => Promise<Conversation>
+  requestChange: (text: string, key: string) => Promise<WriteOutcome>
+  conversations: () => Promise<Conversation[]>
+  conversation: (id: string) => Promise<Conversation | null>
+  /**
+   * Idempotent on `key`, the thread's local id: a retry returns the same row.
+   * Null for a session with no organisation, which has nowhere to store one.
+   */
+  createConversation: (key: string) => Promise<Conversation | null>
   updateConversation: (
-    orgId: string,
     id: string,
     patch: ConversationPatch,
     key: string
   ) => Promise<void>
-  conversationMessages: (
-    orgId: string,
-    id: string
-  ) => Promise<TransportedMessage[]>
+  conversationMessages: (id: string) => Promise<TransportedMessage[]>
   /** The owner's thumb on a reply. `key` is the press's own, so a replay records nothing. */
   rateMessage: (
-    orgId: string,
     id: string,
     feedback: MessageFeedback,
     key: string

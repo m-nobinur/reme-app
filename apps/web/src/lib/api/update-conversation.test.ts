@@ -27,13 +27,6 @@ vi.mock("@tanstack/react-start/server", () => ({
 const updates = vi.fn(async () => undefined)
 vi.mock("./source", () => ({
   source: {
-    orgs: async () => [
-      {
-        id: "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e",
-        slug: "fixture",
-        name: "Fixture",
-      },
-    ],
     updateConversation: updates,
   },
 }))
@@ -47,22 +40,12 @@ it("keeps a renamed title the way the api keeps it", async () => {
   await updateConversation({
     data: { id: ID, title: `  Saturday${" ".repeat(200)}hours\n`, key: "k" },
   })
-  expect(updates).toHaveBeenCalledWith(
-    "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e",
-    ID,
-    { title: "Saturday hours" },
-    "k"
-  )
+  expect(updates).toHaveBeenCalledWith(ID, { title: "Saturday hours" }, "k")
   // Cut to 120 units before a character, never inside one.
   await updateConversation({
     data: { id: ID, title: `${"a".repeat(119)}🧽`, key: "k" },
   })
-  expect(updates).toHaveBeenLastCalledWith(
-    expect.any(String),
-    ID,
-    { title: "a".repeat(119) },
-    "k"
-  )
+  expect(updates).toHaveBeenLastCalledWith(ID, { title: "a".repeat(119) }, "k")
 })
 
 it("refuses a title with no words before it reaches the api", async () => {

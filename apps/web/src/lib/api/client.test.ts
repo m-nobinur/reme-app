@@ -250,7 +250,6 @@ const domainApproval = {
 
 it("reads attention from the workspace, in its order and the owner's words", async () => {
   const { attention: items } = await apiSource.workspace(
-    ORG,
     Promise.resolve([alex])
   )
   // Names come from the directory the caller already has, not a second read.
@@ -317,7 +316,7 @@ it("reads the live version, and a build only while it is working", async () => {
     },
     builds: [build("awaiting_review")],
   }
-  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
+  expect(await apiSource.workspace(Promise.resolve([]))).toMatchObject({
     live: 3,
     liveRevision: { revisionId: REVISION, assignmentId: ASSIGNMENT },
     building: false,
@@ -328,7 +327,7 @@ it("reads the live version, and a build only while it is working", async () => {
     ...workspace,
     builds: [build("paused"), build("implementing")],
   }
-  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toMatchObject({
+  expect(await apiSource.workspace(Promise.resolve([]))).toMatchObject({
     live: null,
     liveRevision: null,
     building: true,
@@ -337,7 +336,7 @@ it("reads the live version, and a build only while it is working", async () => {
 })
 
 it("lists only the workspace's approvals, each with its version", async () => {
-  const items = await apiSource.approvals(ORG)
+  const items = await apiSource.approvals()
   expect(items).toEqual([
     {
       request: approval.request,
@@ -352,7 +351,7 @@ it("lists only the workspace's approvals, each with its version", async () => {
 
 it("reads the directory for approvals only when there is one to name", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [alert, report] }
-  expect(await apiSource.approvals(ORG)).toEqual([])
+  expect(await apiSource.approvals()).toEqual([])
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
 })
 
@@ -363,9 +362,9 @@ it("leaves out an approval with no version to decide on", async () => {
     ...workspace,
     attention: [domainApproval, approval],
   }
-  const listed = await apiSource.approvals(ORG)
+  const listed = await apiSource.approvals()
   expect(listed.map((item) => item.request.approval_id)).toEqual([APPROVAL])
-  const { attention } = await apiSource.workspace(ORG, Promise.resolve([alex]))
+  const { attention } = await apiSource.workspace(Promise.resolve([alex]))
   expect(
     attention.filter((item) => item.kind === "approval").map((item) => item.id)
   ).toEqual([APPROVAL])
@@ -373,7 +372,7 @@ it("leaves out an approval with no version to decide on", async () => {
 
 it("reads activity from /activity as reports and alerts", async () => {
   expect(
-    (await apiSource.activity(ORG)).map(({ kind, id, title, raisedAt }) => ({
+    (await apiSource.activity()).map(({ kind, id, title, raisedAt }) => ({
       kind,
       id,
       title,
@@ -396,10 +395,27 @@ it("reads activity from /activity as reports and alerts", async () => {
 })
 
 it("reads the profile's facts from /facts", async () => {
-  expect(await apiSource.profile(ORG)).toEqual({
+  expect(await apiSource.profile()).toEqual({
     org: { id: ORG, slug: "fictional-co", name: "Fictional Co" },
     facts: [fact],
   })
+})
+
+it("reads the directory once for both the list and the tree", async () => {
+  const { staff: members, tree } = await apiSource.directory()
+  expect(members.map((each) => each.id)).toEqual([DEV])
+  expect(tree.map((node) => node.staff.id)).toEqual([DEV])
+  expect(calls.map((call) => call.path)).toEqual(["/staff"])
+})
+
+it("reads the profile's organisation once", async () => {
+  await apiSource.profile()
+  expect(calls.filter((call) => call.path === "/org")).toHaveLength(1)
+})
+
+it("makes no request for a pipeline it cannot read yet", async () => {
+  expect(await apiSource.pipeline()).toEqual([])
+  expect(calls).toEqual([])
 })
 
 it("answers empty for a session with no organisation", async () => {
@@ -407,22 +423,30 @@ it("answers empty for a session with no organisation", async () => {
     "fetch",
     vi.fn(async () => new Response(null, { status: 403 }))
   )
-  expect(await apiSource.workspace(ORG, Promise.resolve([]))).toEqual(
+  expect(await apiSource.workspace(Promise.resolve([]))).toEqual(
     EMPTY_WORKSPACE
   )
-  expect(await apiSource.approvals(ORG)).toEqual([])
-  expect(await apiSource.activity(ORG)).toEqual([])
-  expect(await apiSource.profile(ORG)).toBeNull()
+  expect(await apiSource.approvals()).toEqual([])
+  expect(await apiSource.activity()).toEqual([])
+  expect(await apiSource.profile()).toBeNull()
+})
+
+it("stores no conversation, and records no write, for a session with no organisation", async () => {
+  answers["POST /conversations"] = refusal(403, "org.unresolved")
+  expect(await apiSource.createConversation("__LOCALID_abc")).toBeNull()
+  // Nothing to act on is a defect to surface, not a stale screen to retry.
+  answers["POST /changes"] = refusal(403, "org.unresolved")
+  await expect(apiSource.requestChange("Bigger logo", "k")).rejects.toThrow()
 })
 
 it("refuses a workspace off contract rather than rendering it", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [{ kind: "memo" }] }
-  await expect(apiSource.workspace(ORG, Promise.resolve([]))).rejects.toThrow()
+  await expect(apiSource.workspace(Promise.resolve([]))).rejects.toThrow()
 })
 
 it("posts a decision bound to the revision, with an idempotency key", async () => {
   expect(
-    await apiSource.decideApproval(ORG, APPROVAL, REVISION, "rejected")
+    await apiSource.decideApproval(APPROVAL, REVISION, "rejected")
   ).toEqual({ recorded: true })
   const [call] = calls
   expect(call?.path).toBe(`/approvals/${APPROVAL}/decision`)
@@ -438,7 +462,7 @@ it("posts a decision bound to the revision, with an idempotency key", async () =
   // replays rather than decides again.
   const key = headers.get("idempotency-key")
   expect(key).toBeTruthy()
-  await apiSource.decideApproval(ORG, APPROVAL, REVISION, "rejected")
+  await apiSource.decideApproval(APPROVAL, REVISION, "rejected")
   expect(new Headers(calls[1]?.init?.headers).get("idempotency-key")).toBe(key)
 })
 
@@ -452,7 +476,7 @@ for (const [status, code, reason] of [
   it(`says why a decision was refused: ${code}`, async () => {
     answers[`POST /approvals/${APPROVAL}/decision`] = refusal(status, code)
     expect(
-      await apiSource.decideApproval(ORG, APPROVAL, REVISION, "approved")
+      await apiSource.decideApproval(APPROVAL, REVISION, "approved")
     ).toEqual({ recorded: false, reason })
   })
 }
@@ -463,7 +487,7 @@ it("throws on any other refusal, so nothing looks recorded", async () => {
     "approval.impersonated"
   )
   await expect(
-    apiSource.decideApproval(ORG, APPROVAL, REVISION, "approved")
+    apiSource.decideApproval(APPROVAL, REVISION, "approved")
   ).rejects.toThrow()
 })
 
@@ -476,11 +500,11 @@ it("names an item raised by someone outside the directory as Reme", async () => 
     request: { ...approval.request, requested_by_staff_id: stranger },
   }
   answers["GET /workspace"] = { ...workspace, attention: [unknown] }
-  const [listed] = await apiSource.approvals(ORG)
+  const [listed] = await apiSource.approvals()
   expect(listed?.requestedBy).toBe("Reme")
   const {
     attention: [card],
-  } = await apiSource.workspace(ORG, Promise.resolve([alex]))
+  } = await apiSource.workspace(Promise.resolve([alex]))
   expect(card?.raisedBy).toBe("Reme")
 })
 
@@ -568,22 +592,22 @@ it("counts a queued build as open but not working", async () => {
 
 it("refuses an id that is not a uuid before any request is made", async () => {
   // `new URL` collapses dot segments, so ".." would reach another route.
-  await expect(apiSource.answer(ORG, "..", REQUEST, "x", "k")).rejects.toThrow()
-  await expect(apiSource.cancelBuild(ORG, "../changes")).rejects.toThrow()
-  await expect(apiSource.preview(ORG, ".")).rejects.toThrow()
-  await expect(apiSource.conversation(ORG, "..")).rejects.toThrow()
+  await expect(apiSource.answer("..", REQUEST, "x", "k")).rejects.toThrow()
+  await expect(apiSource.cancelBuild("../changes")).rejects.toThrow()
+  await expect(apiSource.preview(".")).rejects.toThrow()
+  await expect(apiSource.conversation("..")).rejects.toThrow()
   await expect(
-    apiSource.decideApproval(ORG, "..", REVISION, "approved")
+    apiSource.decideApproval("..", REVISION, "approved")
   ).rejects.toThrow()
   await expect(
-    apiSource.updateConversation(ORG, "..", { archived: true }, "k")
+    apiSource.updateConversation("..", { archived: true }, "k")
   ).rejects.toThrow()
-  await expect(apiSource.conversationMessages(ORG, "..")).rejects.toThrow()
+  await expect(apiSource.conversationMessages("..")).rejects.toThrow()
   expect(calls).toEqual([])
 })
 
 it("reads no history for a conversation that is not the owner's", async () => {
-  expect(await apiSource.conversationMessages(ORG, CONVERSATION)).toEqual([])
+  expect(await apiSource.conversationMessages(CONVERSATION)).toEqual([])
 })
 
 it("shows the question /workspace says the build waits on, and no other", async () => {
@@ -609,9 +633,9 @@ it("sends an answer to the build it blocks, with the caller's key", async () => 
     { status: 202 }
   )
   const value = { open: "08:00", close: "17:00" }
-  expect(
-    await apiSource.answer(ORG, ASSIGNMENT, REQUEST, value, "k-1")
-  ).toEqual({ done: true })
+  expect(await apiSource.answer(ASSIGNMENT, REQUEST, value, "k-1")).toEqual({
+    done: true,
+  })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     request_id: REQUEST,
     value,
@@ -621,7 +645,7 @@ it("sends an answer to the build it blocks, with the caller's key", async () => 
 
 it("says why an answer was refused, including one already answered differently", async () => {
   answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(400, "answer.invalid")
-  expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
     done: false,
     reason: expect.stringContaining("does not fit the question"),
   })
@@ -631,7 +655,7 @@ it("says why an answer was refused, including one already answered differently",
   )
   // A different answer is on record: this one was not, and the question is
   // gone from the build.
-  expect(await apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
     done: false,
     gone: true,
     reason: expect.stringContaining("already answered"),
@@ -640,7 +664,7 @@ it("says why an answer was refused, including one already answered differently",
     status: 502,
   })
   await expect(
-    apiSource.answer(ORG, ASSIGNMENT, REQUEST, "x", "k")
+    apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")
   ).rejects.toThrow()
 })
 
@@ -649,25 +673,25 @@ it("stops a build once, however often Stop is pressed", async () => {
     assignment_id: ASSIGNMENT,
     state: "cancelled",
   }
-  expect(await apiSource.cancelBuild(ORG, ASSIGNMENT)).toEqual({ done: true })
+  expect(await apiSource.cancelBuild(ASSIGNMENT)).toEqual({ done: true })
   expect(calls[0]?.init?.body).toBeUndefined()
   expect(headerOf(calls[0], "idempotency-key")).toBe(`cancel:${ASSIGNMENT}`)
 })
 
 it("deletes the account with DELETE and one key, and words the refusals", async () => {
   answers["DELETE /account"] = new Response(null, { status: 204 })
-  expect(await apiSource.deleteAccount(ORG)).toEqual({ done: true })
+  expect(await apiSource.deleteAccount()).toEqual({ done: true })
   expect(calls[0]?.init?.method).toBe("DELETE")
   expect(calls[0]?.init?.body).toBeUndefined()
   expect(headerOf(calls[0], "idempotency-key")).toBe("account:delete")
 
   answers["DELETE /account"] = refusal(409, "account.other_members")
-  expect(await apiSource.deleteAccount(ORG)).toEqual({
+  expect(await apiSource.deleteAccount()).toEqual({
     done: false,
     reason: expect.stringContaining("Remove them first"),
   })
   answers["DELETE /account"] = new Response(null, { status: 503 })
-  await expect(apiSource.deleteAccount(ORG)).rejects.toThrow()
+  await expect(apiSource.deleteAccount()).rejects.toThrow()
 })
 
 it("reads a build's preview and its three screenshots", async () => {
@@ -680,7 +704,7 @@ it("reads a build's preview and its three screenshots", async () => {
     expires_at: EXPIRES,
   }
   answers[`GET /builds/${ASSIGNMENT}/preview`] = link
-  expect(await apiSource.preview(ORG, ASSIGNMENT)).toEqual({
+  expect(await apiSource.preview(ASSIGNMENT)).toEqual({
     revisionId: REVISION,
     url: link.url,
     screenshots: link.screenshots,
@@ -690,7 +714,7 @@ it("reads a build's preview and its three screenshots", async () => {
 
 it("sends a change in the owner's words, and says why one is refused", async () => {
   answers["POST /changes"] = refusal(409, "change.question_open")
-  expect(await apiSource.requestChange(ORG, "Bigger logo", "k-2")).toEqual({
+  expect(await apiSource.requestChange("Bigger logo", "k-2")).toEqual({
     done: false,
     reason: expect.stringContaining("Answer the question"),
   })
@@ -701,7 +725,7 @@ it("sends a change in the owner's words, and says why one is refused", async () 
 
 it("says a cancelled change was cancelled, not that the page is stale", async () => {
   answers["POST /changes"] = refusal(409, "change.cancelled")
-  expect(await apiSource.requestChange(ORG, "Bigger logo", "k-3")).toEqual({
+  expect(await apiSource.requestChange("Bigger logo", "k-3")).toEqual({
     done: false,
     reason: "That change was cancelled. Ask for it again.",
   })
@@ -711,9 +735,9 @@ it("lists, fetches and creates conversations over the contract", async () => {
   answers["GET /conversations"] = { conversations: [conversation] }
   answers[`GET /conversations/${CONVERSATION}`] = conversation
   answers["POST /conversations"] = conversation
-  expect(await apiSource.conversations(ORG)).toEqual([conversation])
-  expect(await apiSource.conversation(ORG, CONVERSATION)).toEqual(conversation)
-  expect(await apiSource.createConversation(ORG, "__LOCALID_abc")).toEqual(
+  expect(await apiSource.conversations()).toEqual([conversation])
+  expect(await apiSource.conversation(CONVERSATION)).toEqual(conversation)
+  expect(await apiSource.createConversation("__LOCALID_abc")).toEqual(
     conversation
   )
   const create = calls.at(-1)
@@ -723,12 +747,12 @@ it("lists, fetches and creates conversations over the contract", async () => {
 })
 
 it("answers null for a conversation that is not the owner's", async () => {
-  expect(await apiSource.conversation(ORG, CONVERSATION)).toBeNull()
+  expect(await apiSource.conversation(CONVERSATION)).toBeNull()
 })
 
 it("renames and archives with a PATCH of one field", async () => {
   answers[`PATCH /conversations/${CONVERSATION}`] = conversation
-  await apiSource.updateConversation(ORG, CONVERSATION, { archived: true }, "k")
+  await apiSource.updateConversation(CONVERSATION, { archived: true }, "k")
   expect(calls[0]?.init?.method).toBe("PATCH")
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ archived: true })
 })
@@ -738,7 +762,6 @@ it("rates a reply with a POST keyed by the press", async () => {
     status: 204,
   })
   await apiSource.rateMessage(
-    ORG,
     CONVERSATION,
     { message_id: "msg_2", rating: "down" },
     "press-1"
@@ -766,20 +789,14 @@ it("reads a conversation's messages, oldest first, as stored", async () => {
   answers[`GET /conversations/${CONVERSATION}/messages`] = {
     messages: [message],
   }
-  expect(await apiSource.conversationMessages(ORG, CONVERSATION)).toEqual([
-    message,
-  ])
+  expect(await apiSource.conversationMessages(CONVERSATION)).toEqual([message])
 })
 
 const NOTE = "00000000-0000-4000-8000-00000000000b"
 
 it("says why a reminder's time was refused, in the owner's words", async () => {
   const add = () =>
-    apiSource.createReminder(
-      ORG,
-      { title: "Order more cloths", due_at: AT },
-      "k-4"
-    )
+    apiSource.createReminder({ title: "Order more cloths", due_at: AT }, "k-4")
   answers["POST /reminders"] = refusal(400, "reminder.due_past")
   expect(await add()).toEqual({
     done: false,
@@ -799,14 +816,14 @@ it("says why a reminder's time was refused, in the owner's words", async () => {
 
 it("marks a reminder done once, however often Done is pressed", async () => {
   answers[`PATCH /reminders/${NOTE}`] = {}
-  expect(await apiSource.completeReminder(ORG, NOTE)).toEqual({ done: true })
+  expect(await apiSource.completeReminder(NOTE)).toEqual({ done: true })
   expect(calls[0]?.init?.method).toBe("PATCH")
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ done: true })
   expect(headerOf(calls[0], "idempotency-key")).toBe(`done:${NOTE}`)
 
   // Gone from this business: the panel reads again rather than retrying.
   answers[`PATCH /reminders/${NOTE}`] = refusal(404, "reminder.not_found")
-  expect(await apiSource.completeReminder(ORG, NOTE)).toMatchObject({
+  expect(await apiSource.completeReminder(NOTE)).toMatchObject({
     done: false,
     gone: true,
   })
