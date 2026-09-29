@@ -79,7 +79,7 @@
       ],
       "vars": {
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
-        "SERVICE_HOSTS": "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk"
+        "SERVICE_HOSTS": "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk,staging.remeai.co.uk,staging-api.remeai.co.uk,staging-orchestrator.remeai.co.uk"
       },
       "observability": { "enabled": true },
       "preview_urls": false,
@@ -89,7 +89,9 @@
         { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" }
       ],
       // The one bucket, as on staging: every key carries its own site id.
-      "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+      "r2_buckets": [
+        { "binding": "SITES", "bucket_name": "reme-sites-production" }
+      ],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],

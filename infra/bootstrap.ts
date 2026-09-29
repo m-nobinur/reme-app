@@ -75,7 +75,7 @@ const environments = {
         "WORKOS_COOKIE_PASSWORD",
         // The Chief of Staff's model key (ADR-034). This run sets it from
         // .env.local only where it is missing, so a dedicated key put on the
-        // Worker by hand stays. Production waits for the owner.
+        // Worker by hand stays.
         "OPENROUTER_API_KEY",
       ],
       // The console bearer, the spec signing key and the model plane: this
@@ -125,6 +125,7 @@ const environments = {
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
+        "OPENROUTER_API_KEY",
       ],
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",
