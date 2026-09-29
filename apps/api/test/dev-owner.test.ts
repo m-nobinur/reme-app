@@ -15,7 +15,7 @@ import {
   startPlan,
   // @ts-expect-error plain ESM, deliberately runnable without a build
 } from "../scripts/dev-owner.mjs"
-import { createOrg, type Directory } from "../src/org.ts"
+import { createOrg, type Directory, EmailTaken } from "../src/org.ts"
 import {
   COOKIE_PASSWORD,
   OTHER_PASSWORD,
@@ -464,9 +464,7 @@ describe.skipIf(!process.env.DATABASE_URL)("the local mirror", () => {
     await signup(first)
 
     // The reason it exists: the old row holds the address.
-    await expect(signup(second)).rejects.toThrow(
-      "neither inserted nor readable"
-    )
+    await expect(signup(second)).rejects.toBeInstanceOf(EmailTaken)
 
     expect(await clearOwner(email, orgName)).toEqual({ orgs: 1, users: 1 })
     expect(
