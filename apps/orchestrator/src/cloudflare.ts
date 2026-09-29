@@ -59,6 +59,7 @@ import {
   sandboxFor,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
+import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
@@ -915,11 +916,16 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
 
 /**
  * flue forwards every non-HTTP handler exported here into the Worker's
- * default export. The cron creates the hour's sweep; a second firing for the
- * same hour is refused by the instance id and swallowed.
+ * default export. The five-minute cron is the uptime check, which only
+ * production schedules. The hourly cron creates the hour's sweep; a second
+ * firing for the same hour is refused by the instance id and swallowed.
  */
 export default {
   async scheduled(controller: ScheduledController, env: Env) {
+    if (controller.cron === UPTIME_CRON) {
+      await checkUptime(env)
+      return
+    }
     const hour = sweepHour(controller.scheduledTime)
     try {
       await env.SWEEPS.create({ id: `sweep-${hour}`, params: { hour } })

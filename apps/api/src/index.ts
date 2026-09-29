@@ -37,6 +37,12 @@ import { readSession, type Session, workos } from "./session.ts"
  * somebody has to remember to write.
  */
 
+/**
+ * What the catch-all logs beside the code: the path, and the org once the
+ * session has resolved to one. Never the user, their email or any content.
+ */
+type Where = { at: string; org_id?: string }
+
 const UNAUTHENTICATED = {
   class: "permission",
   code: "session.absent",
@@ -54,7 +60,8 @@ const UNAUTHENTICATED = {
  */
 async function currentOrg(
   session: Session,
-  kit: Tenancy
+  kit: Tenancy,
+  where: Where
 ): Promise<Owner | { response: Response }> {
   if (!session) return { response: failure(401, UNAUTHENTICATED) }
   const orgId = session.workosOrganizationId
@@ -73,6 +80,7 @@ async function currentOrg(
       }),
     }
   }
+  where.org_id = orgId
   return { orgId, session }
 }
 
@@ -193,7 +201,8 @@ async function route(
   request: Request,
   env: Env,
   kit: Tenancy,
-  waitUntil: (promise: Promise<unknown>) => void
+  waitUntil: (promise: Promise<unknown>) => void,
+  where: Where
 ): Promise<Response> {
   const { pathname } = new URL(request.url)
   const method = request.method
@@ -232,7 +241,7 @@ async function route(
     (pathname === "/org" || pathname === "/staff") &&
     (method === "GET" || method === "HEAD")
   ) {
-    const resolved = await currentOrg(session, kit)
+    const resolved = await currentOrg(session, kit, where)
     if ("response" in resolved) return resolved.response
     if (pathname === "/staff") {
       return Response.json(await readStaffDirectory(kit, resolved.orgId))
@@ -251,7 +260,7 @@ async function route(
   }
 
   if (OWNER_PATH.test(pathname)) {
-    const resolved = await currentOrg(session, kit)
+    const resolved = await currentOrg(session, kit, where)
     if ("response" in resolved) return resolved.response
     const answered = await ownerRoute(request, env, kit, resolved, waitUntil)
     if (answered) return answered
@@ -273,11 +282,18 @@ export default {
     // the response left running, such as a chat turn still streaming.
     const kit = tenancy(env.HYPERDRIVE.connectionString)
     const running: Promise<unknown>[] = []
+    const where: Where = { at: new URL(request.url).pathname }
     try {
-      return await route(request, env, kit, (promise) => running.push(promise))
+      return await route(
+        request,
+        env,
+        kit,
+        (promise) => running.push(promise),
+        where
+      )
     } catch (error) {
       if (error instanceof BodyTooLarge) return tooLarge()
-      logFailure({ at: new URL(request.url).pathname }, error)
+      logFailure(where, error)
       return failure(503, REQUEST_FAILED)
     } finally {
       ctx.waitUntil(Promise.allSettled(running).then(() => kit.close()))

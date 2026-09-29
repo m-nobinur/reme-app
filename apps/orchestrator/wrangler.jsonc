@@ -54,7 +54,7 @@
     }
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
-  // in src/cloudflare.ts. Production inherits it.
+  // in src/cloudflare.ts. Production restates it beside the uptime check.
   "triggers": { "crons": ["0 * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
   // by nothing else in this Worker; a test holds that.
@@ -107,8 +107,13 @@
       ],
       "vars": {
         "SANDBOX_TRANSPORT": "rpc",
-        "SITE_HOST_SUFFIX": ".remeai.co.uk"
+        "SITE_HOST_SUFFIX": ".remeai.co.uk",
+        // What the five-minute uptime check fetches (src/uptime.ts).
+        "HEALTH_URLS": "https://api.remeai.co.uk/health https://orchestrator.remeai.co.uk/health https://preview.remeai.co.uk/"
       },
+      // The sweep, and the uptime check every five minutes. Staging keeps
+      // the sweep only.
+      "triggers": { "crons": ["0 * * * *", "*/5 * * * *"] },
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],
