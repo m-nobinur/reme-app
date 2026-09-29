@@ -136,12 +136,11 @@ const app = new Hono<ConsoleEnv>()
 app.get("/health", (c) => c.json({ status: "ok" }))
 
 /**
- * The console: a bearer, then `?org=<slug>` resolved here and nowhere else.
- * `bearerAuth` compares in constant time and refuses by throwing its typed
- * 401, before any query. A Worker with no token configured refuses
- * everything rather than accepting everything: fail closed.
+ * The console's bearer. `bearerAuth` compares in constant time and refuses by
+ * throwing its typed 401, before any query. A Worker with no token configured
+ * refuses everything rather than accepting everything: fail closed.
  */
-export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
+async function refuseBearer(c: Context<ConsoleEnv>): Promise<Response | null> {
   if (!c.env.ORCHESTRATOR_TOKEN) {
     return failure(c, 503, {
       class: "resource",
@@ -159,6 +158,27 @@ export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
     invalidTokenMessage: unauthenticated,
   }) as unknown as MiddlewareHandler<ConsoleEnv>
   await guard(c, async () => undefined)
+  return null
+}
+
+/**
+ * The live sandbox probe each deploy runs, see sandbox.ts. Behind the bearer
+ * alone, since production holds no org to run it under, and it takes nothing
+ * from the request: the commands are a constant. The result goes to Workers
+ * Logs, so a probe leaves a trace.
+ */
+app.get("/sandbox/probe", async (c) => {
+  const denied = await refuseBearer(c)
+  if (denied) return denied
+  const result = await probe(c.env, "console")
+  console.log(JSON.stringify({ type: "sandbox.probed", ...result }))
+  return c.json(result)
+})
+
+/** The console: the bearer, then `?org=<slug>` resolved here and nowhere else. */
+export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
+  const denied = await refuseBearer(c)
+  if (denied) return denied
   const slug = c.req.query("org")?.trim()
   const orgId = slug ? await resolveOrgBySlug(c.get("kit"), slug) : null
   if (!orgId) {
@@ -233,27 +253,6 @@ const bridge = new Hono<ConsoleEnv>()
 
 /** Everything else: the console's alone, and 404 in owner mode. */
 const consoleOnly = new Hono<ConsoleEnv>()
-
-/**
- * The live sandbox probe the staging deploy runs, see sandbox.ts. Behind the
- * bearer and the org, and it takes nothing else from the request: the
- * commands are a constant. The result is appended like any other execution,
- * so a probe leaves a trace.
- */
-consoleOnly.get("/sandbox/probe", async (c) => {
-  const orgId = c.get("orgId")
-  const result = await probe(c.env, orgId)
-  await c.get("kit").withOrg({ orgId }, (db) =>
-    appendEvent(db, {
-      orgId,
-      assignmentId: null,
-      staffId: null,
-      type: "sandbox.probed",
-      payload: result,
-    })
-  )
-  return c.json(result)
-})
 
 consoleOnly.get("/", async (c) => {
   const rows = await c

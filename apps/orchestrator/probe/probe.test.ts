@@ -34,7 +34,7 @@ const run = () => {
   cached ??= (async () => {
     let res: Response
     for (let attempt = 1; ; attempt++) {
-      res = await fetch(`${url}/assignments/sandbox/probe?org=brightclean`, {
+      res = await fetch(`${url}/sandbox/probe`, {
         headers: { authorization: `Bearer ${token}` },
       })
       if (res.status !== 503 || attempt === ATTEMPTS) break
