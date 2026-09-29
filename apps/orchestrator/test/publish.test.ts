@@ -1,5 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs"
-import { formatSiteRevision, SITE_REVISION_HEADER } from "@workspace/contracts"
+import {
+  formatSiteRevision,
+  SITE_PROBE_HEADER,
+  SITE_REVISION_HEADER,
+} from "@workspace/contracts"
 import {
   approvals,
   assignments,
@@ -505,21 +509,27 @@ describe("the artifact check and the probe", () => {
     const MINE = "10000001-0000-4000-8000-00000000000a"
     const OLDER = "10000001-0000-4000-8000-00000000000b"
     const NEWER = "10000001-0000-4000-8000-00000000000c"
-    const mine = { revision_id: MINE, config_version: 2 }
+    const mine = { revision_id: MINE, config_version: 2, proof: "proof-for-x" }
     const tag = (revision_id: string, config_version: number) => ({
       [SITE_REVISION_HEADER]: formatSiteRevision({
         revision_id,
         config_version,
       }),
     })
-    // Answers in turn, then this revision's own tagged page for good.
+    // Answers in turn, then this revision's own tagged page for good, and
+    // keeps the proof each request carried.
+    const proofs: (string | null)[] = []
     const router = (answers: Response[], body: string) =>
-      (async () =>
-        answers.shift() ??
-        new Response(body, {
-          status: 200,
-          headers: tag(MINE, 2),
-        })) as unknown as typeof fetch
+      (async (_url: string, init: RequestInit) => {
+        proofs.push(new Headers(init.headers).get(SITE_PROBE_HEADER))
+        return (
+          answers.shift() ??
+          new Response(body, {
+            status: 200,
+            headers: tag(MINE, 2),
+          })
+        )
+      }) as unknown as typeof fetch
     const older = () =>
       new Response("<p>older</p>", { status: 200, headers: tag(OLDER, 1) })
     const broken = GOOD_HTML.replace("$35", "$49")
@@ -534,6 +544,8 @@ describe("the artifact check and the probe", () => {
       )
     ).toMatchObject({ ok: false, reason: "blank page" })
     expect(waits).toHaveLength(2)
+    // Every ask proves it is the probe, or the router names no revision.
+    expect(proofs).toEqual(["proof-for-x", "proof-for-x", "proof-for-x"])
     // Untagged answers are not this version's either: a cached "nobody" 404,
     // the limiter's 429, the router's own 503, a page with no tag.
     waits.length = 0

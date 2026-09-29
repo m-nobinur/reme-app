@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   contentType,
   previewHeaders,
+  probeProof,
   resolvePreviewPath,
   signPreview,
   verifyPreview,
+  verifyProbe,
 } from "../src/preview.ts"
 
 const KEY = "preview-key-for-this-suite-only"
@@ -44,6 +46,28 @@ async function signRaw(body: unknown): Promise<string> {
   )
   return `${encoded}.${b64(new Uint8Array(mac))}`
 }
+
+describe("the probe proof", () => {
+  const SITE = "brightclean-stg.remeai.co.uk"
+
+  it("verifies for its own host under the key", async () => {
+    expect(await verifyProbe(await probeProof(SITE, KEY), SITE, KEY)).toBe(true)
+  })
+
+  it("refuses another host, another key, no key, junk and a preview token", async () => {
+    const proof = await probeProof(SITE, KEY)
+    expect(await verifyProbe(proof, HOST, KEY)).toBe(false)
+    expect(await verifyProbe(proof, SITE, "another-key")).toBe(false)
+    expect(await verifyProbe(proof, SITE, "")).toBe(false)
+    for (const junk of [undefined, "", "a", "!!"]) {
+      expect(await verifyProbe(junk, SITE, KEY)).toBe(false)
+    }
+    const token = await signPreview(claim, KEY)
+    for (const part of [token, ...token.split(".")]) {
+      expect(await verifyProbe(part, HOST, KEY)).toBe(false)
+    }
+  })
+})
 
 describe("the preview token", () => {
   it("round-trips a claim signed with the key", async () => {
