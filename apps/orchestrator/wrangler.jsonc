@@ -114,6 +114,9 @@
       // The sweep, and the uptime check every five minutes. Staging keeps
       // the sweep only.
       "triggers": { "crons": ["0 * * * *", "*/5 * * * *"] },
+      // The uptime check's alert email (src/uptime.ts). No destination
+      // restriction: `ALERT_TO`, a secret, picks a verified address.
+      "send_email": [{ "name": "ALERTS" }],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],

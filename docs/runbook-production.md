@@ -209,7 +209,7 @@ Every run writes one line to Workers Logs for `reme-orchestrator-production`:
 ```
 
 Query `type = uptime.checked` there for the history. A run with a failure also sends one email,
-once email is set up, so an outage sends one every five minutes until it ends. A failed send logs
+so an outage sends one every five minutes until it ends. A failed send logs
 `uptime.alert_failed` with its code.
 
 The check fetches the public hostnames, so it tests the same path a visitor takes. Cloudflare's
@@ -218,33 +218,21 @@ hostnames has both. Read the first `uptime.checked` line after the deploy before
 if every check fails with no `status` while `curl` from outside answers 200, the same-zone fetch is
 the cause, and the check needs a service binding instead of a URL.
 
-### Setting up the email, once
+### The alert email
 
-The code sends through a `send_email` binding named `ALERTS`, and that binding is not in
-`apps/orchestrator/wrangler.jsonc` yet. Cloudflare requires Email Routing on the zone and a
-verified destination address before a Worker can bind to it, so adding it first would risk every
-production deploy. Until the steps below are done, the check runs and logs and sends nothing.
+The check sends through the `send_email` binding `ALERTS` in the production block of
+`apps/orchestrator/wrangler.jsonc`, from `alerts@remeai.co.uk` to the address in the `ALERT_TO`
+secret, which keeps the address out of the repo. Email Routing is enabled on `remeai.co.uk`
+(2026-09-29, `wrangler email routing enable`), and the binding can reach any verified destination
+address on the account. To change the recipient, verify the new address under Email Routing, then:
 
-1. In the Cloudflare dashboard, enable Email Routing on `remeai.co.uk`.
-2. Under Email Routing, add the address the alerts go to as a destination address, and open the
-   verification email Cloudflare sends to it.
-3. Put that address on the Worker, so it never enters the repo:
+```sh
+pnpm --filter orchestrator exec wrangler secret put ALERT_TO --env production
+```
 
-   ```sh
-   pnpm --filter orchestrator exec wrangler secret put ALERT_TO --env production
-   ```
-
-4. Add the binding to the `production` block of `apps/orchestrator/wrangler.jsonc`, in its own PR:
-
-   ```jsonc
-   "send_email": [{ "name": "ALERTS" }],
-   ```
-
-   With no destination restriction the binding can send to any verified destination address on
-   the account, and `ALERT_TO` picks which one. The sender is `alerts@remeai.co.uk`.
-5. Prove it once. Deploy with `https://api.remeai.co.uk/uptime-drill` added to `HEALTH_URLS`,
-   which the api answers 404, time the gap from the failing run's log line to the email, then
-   deploy again without it.
+Prove it once. Deploy with `https://api.remeai.co.uk/uptime-drill` added to `HEALTH_URLS`, which
+the api answers 404, time the gap from the failing run's log line to the email, then deploy again
+without it.
 
 ## What is not drilled yet
 
