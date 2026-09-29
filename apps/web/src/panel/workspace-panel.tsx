@@ -21,6 +21,7 @@ import {
 } from "@workspace/ui/components/live-panel"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { cn } from "@workspace/ui/lib/utils"
+import { browserZone } from "@workspace/ui/lib/zone"
 import { useEffect, useState, useSyncExternalStore } from "react"
 import {
   answerQuestion,
@@ -359,11 +360,7 @@ function FirstStep({ workspace }: { workspace: Workspace }) {
  */
 const noSubscription = () => () => undefined
 function useBrowserZone(): string | null {
-  return useSyncExternalStore(
-    noSubscription,
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-    () => null
-  )
+  return useSyncExternalStore(noSubscription, browserZone, () => null)
 }
 
 /** A written reminder with its own Done, shown done while the write runs. */

@@ -20,19 +20,15 @@ import {
 } from "@workspace/ui/components/collapsible"
 import { stageWord } from "@workspace/ui/components/live-panel"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
+import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   decisionView,
   type ReadView,
   readView,
 } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
-import {
-  browserZone,
-  wallText,
-  zonedText,
-  zoneLabel,
-} from "@workspace/ui/lib/zone"
+import { cn, META } from "@workspace/ui/lib/utils"
+import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
 import { createContext, type ReactNode, useContext } from "react"
 
 /**
@@ -42,8 +38,6 @@ import { createContext, type ReactNode, useContext } from "react"
  * will do. No tool name, id or raw output reaches the screen, and the api's
  * error text, which is written for the model, never does either.
  */
-
-const META = "text-[0.8125rem] text-muted-foreground"
 
 /* Reads ----------------------------------------------------------------- */
 
@@ -122,7 +116,7 @@ function Rows({ rows }: { rows: { label: string; value: ReactNode }[] }) {
 /** An instant on the owner's clock, with its zone named. */
 const useOwnerTime = () => {
   const { zone } = useCosTools()
-  return (at: string) => `${zonedText(at, zone) ?? at} ${zoneLabel(zone)}`
+  return (at: string) => `${formatDateTime(at, zone) ?? at} ${zoneLabel(zone)}`
 }
 
 const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
@@ -338,7 +332,7 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
       done={(output) =>
         output?.outcome === "created" && output.due_at ? (
           <Done>
-            Added to Reminders. {due(zonedText(output.due_at, zone))}.
+            Added to Reminders. {due(formatDateTime(output.due_at, zone))}.
           </Done>
         ) : (
           <Done>Added to Reminders.</Done>

@@ -52,6 +52,7 @@ import { LogoMark } from "@workspace/ui/components/logo"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
+import { localMidnight } from "@workspace/ui/lib/zone"
 import {
   type ComponentType,
   createContext,
@@ -352,8 +353,7 @@ const LOCAL_DAY = new Intl.DateTimeFormat("en-GB", {
 const localDay = (at: string | null): number | null => {
   if (!at) return null
   const date = new Date(at)
-  if (Number.isNaN(date.getTime())) return null
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  return Number.isNaN(date.getTime()) ? null : localMidnight(date)
 }
 
 const ThreadScrollToBottom: FC = () => {

@@ -1,4 +1,5 @@
-import { wallText, zonedText, zoneLabel } from "@workspace/ui/lib/zone"
+import { formatDateTime } from "@workspace/ui/lib/format"
+import { wallText, zoneLabel } from "@workspace/ui/lib/zone"
 import { expect, it } from "vitest"
 
 // The api reads a reminder's due time as wall time in the owner's zone,
@@ -14,10 +15,10 @@ it("shows the digits a due time was written with, whatever its offset", () => {
 
 it("shows a stored instant on the owner's own clock", () => {
   // 08:00 in Sydney (UTC+10 on 2 Oct) and 08:00 in New York (UTC-4).
-  expect(zonedText("2026-10-01T22:00:00.000Z", "Australia/Sydney")).toBe(
+  expect(formatDateTime("2026-10-01T22:00:00.000Z", "Australia/Sydney")).toBe(
     "2 Oct 2026, 08:00"
   )
-  expect(zonedText("2026-10-02T12:00:00.000Z", "America/New_York")).toBe(
+  expect(formatDateTime("2026-10-02T12:00:00.000Z", "America/New_York")).toBe(
     "2 Oct 2026, 08:00"
   )
 })
