@@ -94,15 +94,13 @@ function assertNoOrg(value: unknown, allow: Set<string>, depth: number): void {
  * Every server function payload passes through here, which is why the tenancy
  * check lives here and not in each handler.
  *
- * `allowOrgKeys` has two callers, and both are the same act: choosing which
- * organisation the request is for. `/choose-organisation` picks between the
- * ones WorkOS offered during sign-in, where there is no session yet and the
- * value is checked against the sealed list that was offered; the organisation
- * switcher picks between the ones the owner belongs to, and the value is
- * checked against that list on the server. In both the payload is a claim that
- * is resolved, never a value that is used. Nothing else has a reason to pass
- * it, and passing the field under a name this check does not recognise is the
- * failure the escape hatch exists to make unnecessary.
+ * `allowOrgKeys` has one caller, and one act: choosing which organisation
+ * the request is for. `/choose-organisation` picks between the ones WorkOS
+ * offered during sign-in, where there is no session yet and the value is
+ * checked against the sealed list that was offered. The payload is a claim
+ * that is resolved, never a value that is used. Nothing else has a reason to
+ * pass it, and passing the field under a name this check does not recognise
+ * is the failure the escape hatch exists to make unnecessary.
  */
 export function record(
   value: unknown,

@@ -1,9 +1,5 @@
 import { createServerFn } from "@tanstack/react-start"
-import {
-  getCookie,
-  getRequestProtocol,
-  setCookie,
-} from "@tanstack/react-start/server"
+import { getCookie } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
 import {
   GOAL_MAX,
@@ -41,18 +37,9 @@ import type {
  * No function here names an organisation, and none accepts one: `apps/api`
  * resolves it from the forwarded session and refuses a session with none,
  * which is the shape §9.2 layer 1 requires and R3 states as "org_id never
- * comes from client input". Only the frame reads the owner's organisations,
- * for the switcher. The cookie below holds a slug the owner picked, and a slug
- * that is not one of their organisations is discarded rather than trusted.
+ * comes from client input". Only the frame reads the organisation, for the
+ * business name in the rail: a session belongs to at most one.
  */
-
-const ORG_COOKIE = "reme-org"
-
-/** The organisation the cookie picked, if it is one of the owner's own. */
-function pickOrg(orgs: OrgSummary[]): OrgSummary | null {
-  const picked = getCookie(ORG_COOKIE)
-  return orgs.find((org) => org.slug === picked) ?? orgs[0] ?? null
-}
 
 /** An id off the wire: a UUID, or a refusal. */
 function id(value: unknown): string {
@@ -93,14 +80,13 @@ async function readConversations(): Promise<Conversation[] | null> {
 }
 
 /**
- * What the workspace frame needs on every /app page: the switcher's options
- * and selection, whether the panel is open, and what is waiting on the owner.
+ * What the workspace frame needs on every /app page: the session's
+ * organisation, whether the panel is open, and what is waiting on the owner.
  * The panel state is read here, on the server, so the first paint already has
  * the panel where the owner left it.
  */
 export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
   async (): Promise<{
-    orgs: OrgSummary[]
     active: OrgSummary | null
     panelOpen: boolean
     /**
@@ -120,11 +106,9 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     /** The newest notification the owner has seen in `active`, from their cookie. */
     seenAt: string | null
   }> => {
-    const orgs = await source.orgs()
-    const active = pickOrg(orgs)
+    const active = await source.org()
     if (!active) {
       return {
-        orgs,
         active,
         panelOpen: getCookie(PANEL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
@@ -143,7 +127,6 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       readActivity(),
     ])
     return {
-      orgs,
       active,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
       workspace,
@@ -344,41 +327,6 @@ export const getConversationMessages = createServerFn({ method: "GET" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<TransportedMessage[]> => {
     return await source.conversationMessages(data.id)
-  })
-
-/**
- * Switching organisation is the one act that legitimately names one, which is
- * why this is the second caller of `record`'s `allowOrgKeys` escape hatch after
- * `/choose-organisation`. The guard still fires on every other key, and naming
- * the field `organisation` rather than something the check does not recognise
- * is the point: an exception that has to be declared is reviewable, and one
- * that is spelled around is not.
- *
- * The value is a claim, not an answer. The handler resolves it against the
- * owner's own organisations and writes nothing if it is not one of them, so the
- * organisation the screens read still comes from the server.
- */
-export const selectOrg = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({
-    slug: text(record(input, ["organisation"]).organisation, 64),
-  }))
-  .handler(async ({ data }): Promise<{ slug: string | null }> => {
-    // Membership decides, not the request. An unknown slug writes nothing.
-    const orgs = await source.orgs()
-    const chosen = orgs.find((org) => org.slug === data.slug)
-    if (!chosen) {
-      return { slug: null }
-    }
-    setCookie(ORG_COOKIE, chosen.slug, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      // Dev runs on http and deployments on https, so this is read from the
-      // request rather than hard-coded either way.
-      secure: getRequestProtocol() === "https",
-      maxAge: 60 * 60 * 24 * 30,
-    })
-    return { slug: chosen.slug }
   })
 
 export const getStaffDirectory = createServerFn({ method: "GET" }).handler(

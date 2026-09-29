@@ -74,8 +74,8 @@ function apiUrl(): string {
  * One read, with the session forwarded.
  *
  * Only the session cookie is forwarded, rebuilt by name rather than by passing
- * the browser's `Cookie` header through: the organisation the owner picked and
- * anything else a page has set are ours and are not `apps/api`'s business.
+ * the browser's `Cookie` header through: anything else a page has set is ours
+ * and is not `apps/api`'s business.
  *
  * 401 and 403 answer null rather than throwing. Both mean "this session has no
  * organisation to read", which every screen renders as its empty state: 403
@@ -638,12 +638,7 @@ async function factsOf(): Promise<TransportedFact[]> {
 }
 
 export const apiSource: OwnerDataSource = {
-  // The switcher's list. One organisation per session today, because that is
-  // what a session's `org_id` claim resolves to and what signup creates.
-  orgs: async () => {
-    const org = await currentOrg()
-    return org ? [org] : []
-  },
+  org: currentOrg,
   staff: staffOf,
   directory: async () => {
     const staff = await staffOf()

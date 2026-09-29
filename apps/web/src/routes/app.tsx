@@ -32,7 +32,6 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
   ConversationMenu,
@@ -43,7 +42,6 @@ import { formatDate } from "@workspace/ui/lib/format"
 import {
   getWorkspaceFrame,
   pollWorkspace,
-  selectOrg,
   updateConversation,
 } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
@@ -112,7 +110,6 @@ const conversationTitle = (conversation: Conversation) =>
 function AppLayout() {
   const {
     owner,
-    orgs,
     active,
     panelOpen,
     workspace,
@@ -130,7 +127,6 @@ function AppLayout() {
         notificationsOf(live.workspace?.attention ?? [], activity ?? []),
         seenAt
       )
-  // The conversation owns its height and scroll; every other page is padded.
   // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
     select: (matches) =>
@@ -212,22 +208,12 @@ function AppLayout() {
         }
         rail={
           <>
-            <OrgSwitcher
-              onChange={async (event) => {
-                // The server decides. This posts the slug the owner picked and
-                // then reloads every loader, so the screens read whatever
-                // organisation the server resolved rather than what the select
-                // now shows.
-                await selectOrg({
-                  data: { organisation: event.target.value },
-                })
-                await router.invalidate()
-              }}
-              // The option value is the slug, because that is what the server
-              // accepts: an organisation id never travels through the client.
-              orgs={orgs.map((org) => ({ id: org.slug, name: org.name }))}
-              value={active?.slug ?? ""}
-            />
+            <p
+              className="truncate px-2 font-medium text-sm"
+              title={active?.name}
+            >
+              {active?.name ?? "No organisation"}
+            </p>
             <Link
               activeOptions={{ exact: true }}
               className={navLinkClass}

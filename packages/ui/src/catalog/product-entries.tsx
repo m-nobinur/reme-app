@@ -13,7 +13,6 @@ import {
 } from "@workspace/ui/components/card"
 import { DefinitionList } from "@workspace/ui/components/definition-list"
 import { OrgTree } from "@workspace/ui/components/org-tree"
-import { StatTile } from "@workspace/ui/components/stat-tile"
 import {
   Table,
   TableBody,
@@ -284,16 +283,6 @@ const productCatalog: Entry[] = [
   { name: "CardAction", render: () => <CardSample /> },
   { name: "CardContent", render: () => <CardSample /> },
   { name: "CardFooter", render: () => <CardSample /> },
-  {
-    name: "StatTile",
-    render: () => (
-      <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-        <StatTile hint="active" label="Staff" value={7} />
-        <StatTile hint="items" label="Waiting on you" value={4} />
-        <StatTile hint="need an action" label="Pipeline" value={4} />
-      </div>
-    ),
-  },
   { name: "Table", render: () => <TableSample /> },
   { name: "TableHeader", render: () => <TableSample /> },
   { name: "TableBody", render: () => <TableSample /> },

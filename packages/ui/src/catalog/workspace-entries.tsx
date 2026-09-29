@@ -22,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import {
   Sheet,
   SheetContent,
@@ -80,7 +79,7 @@ function AccountMenu() {
 function Rail() {
   return (
     <>
-      <OrgSwitcher orgs={[{ id: "brightclean", name: "Brightclean" }]} />
+      <p className="truncate px-2 font-medium text-sm">Brightclean</p>
       <a aria-current="page" className={navLinkClass} href="#new">
         <NotePencilIcon aria-hidden />
         New chat

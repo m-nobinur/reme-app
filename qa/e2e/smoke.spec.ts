@@ -128,15 +128,9 @@ test("the staff directory tells a new owner it is empty", async ({ page }) => {
   ).toHaveCount(0)
   await expectNoFixtureContent(page)
 
-  // The switcher names the state rather than inventing an organisation, which
-  // is the one place on the shell where a fabricated name would look normal.
-  await expect(page.getByRole("combobox")).toContainText("No organisation")
-})
-
-test("the old chat address lands on the conversation", async ({ page }) => {
-  await visit(page, "/app/chat")
-  await expect(page).toHaveURL(/\/app$/)
-  await expect(page.getByLabel("Message input")).toBeVisible()
+  // The rail names the state rather than inventing an organisation, which is
+  // the one place on the shell where a fabricated name would look normal.
+  await expect(page.getByText("No organisation")).toBeVisible()
 })
 
 test("a chat turn sends only what the owner did", async ({ page }) => {

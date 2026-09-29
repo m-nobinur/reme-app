@@ -124,7 +124,7 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   // A new owner lands in onboarding, with the org's own first steps beside it.
   await visit(page, "/app")
   await expect(page).toHaveURL(/\/app\/c\/[0-9a-f-]{36}$/)
-  await expect(page.getByRole("combobox")).toContainText(name)
+  await expect(page.getByTitle(name, { exact: true })).toHaveText(name)
   const steps = panel(page)
     .getByRole("region", { name: "First steps" })
     .getByRole("listitem")

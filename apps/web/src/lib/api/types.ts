@@ -215,15 +215,18 @@ export type DecisionOutcome =
  * interchangeable and `source.ts` is the only file that knows which is in use.
  */
 export type OwnerDataSource = {
-  /** The organisations the signed-in owner belongs to. */
-  orgs: () => Promise<OrgSummary[]>
+  /**
+   * The session's organisation: at most one, because that is what a
+   * session's `org_id` claim resolves to and what signup creates.
+   */
+  org: () => Promise<OrgSummary | null>
   staff: () => Promise<StaffMember[]>
   /** The directory and its reporting lines, from one read. */
   directory: () => Promise<{ staff: StaffMember[]; tree: OrgNode[] }>
   /** `staff` is the directory the caller has already read, for names. */
   workspace: (staff: Promise<StaffMember[]>) => Promise<Workspace>
   pipeline: () => Promise<PipelineItem[]>
-  /** Null where the session has no organisation, the same as `orgs()` empty. */
+  /** Null where the session has no organisation, the same as `org()`. */
   profile: () => Promise<BusinessProfile | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
