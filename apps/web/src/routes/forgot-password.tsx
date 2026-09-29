@@ -9,6 +9,7 @@ import { requestPasswordReset } from "@/lib/auth/actions"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/forgot-password")({
+  head: () => ({ meta: [{ title: "Reset your password · Reme" }] }),
   component: ForgotPassword,
 })
 
@@ -35,7 +36,7 @@ function ForgotPassword() {
       }
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Back to sign in

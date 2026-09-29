@@ -24,6 +24,7 @@ export const Route = createFileRoute("/mfa-setup")({
     }
     return pending
   },
+  head: () => ({ meta: [{ title: "Set up two-step verification · Reme" }] }),
   component: MfaSetup,
 })
 
@@ -59,7 +60,7 @@ function MfaSetup() {
       description="An authenticator app gives a fresh code every thirty seconds, so a stolen password is not enough on its own."
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Use a different account

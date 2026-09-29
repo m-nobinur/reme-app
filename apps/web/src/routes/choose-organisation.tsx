@@ -17,6 +17,7 @@ export const Route = createFileRoute("/choose-organisation")({
     }
     return pending
   },
+  head: () => ({ meta: [{ title: "Choose an organisation · Reme" }] }),
   component: ChooseOrganisation,
 })
 
@@ -45,7 +46,7 @@ function ChooseOrganisation() {
       }
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Use a different account

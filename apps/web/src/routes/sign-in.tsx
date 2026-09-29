@@ -41,6 +41,7 @@ export const Route = createFileRoute("/sign-in")({
       ? (search.error as CallbackError)
       : undefined,
   }),
+  head: () => ({ meta: [{ title: "Sign in · Reme" }] }),
   component: SignIn,
 })
 
@@ -67,19 +68,19 @@ function SignIn() {
           <Logo />
         </Link>
       }
-      description="Use the email your account was set up with."
+      description="Sign in to see what needs you today."
       footer={
         <>
-          No account yet?{" "}
+          New to Reme?{" "}
           <Link
-            className="text-foreground underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4"
             to="/sign-up"
           >
-            Create one
+            Create an account
           </Link>
         </>
       }
-      title="Sign in"
+      title="Welcome back"
     >
       <AuthForm
         onSubmit={async (values) => {
@@ -142,17 +143,18 @@ function SignIn() {
         </SubmitButton>
       </AuthForm>
 
-      <div className="mt-6 flex items-center gap-3">
+      <div className="my-6 flex items-center gap-3">
         <span aria-hidden className="h-px flex-1 bg-border" />
         <span className="text-muted-foreground text-xs">or</span>
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
 
-      <div className="mt-6 flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         {SOCIAL.map((option) => (
           <a
             className={buttonVariants({
               variant: "outline",
+              size: "lg",
               className: "w-full",
             })}
             // A plain link, not a fetch: the provider redirect has to be a
@@ -168,6 +170,7 @@ function SignIn() {
         <Link
           className={buttonVariants({
             variant: "outline",
+            size: "lg",
             className: "w-full",
           })}
           search={{ returnTo }}

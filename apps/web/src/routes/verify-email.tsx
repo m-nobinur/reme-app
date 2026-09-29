@@ -25,6 +25,7 @@ export const Route = createFileRoute("/verify-email")({
     }
     return pending
   },
+  head: () => ({ meta: [{ title: "Verify your email · Reme" }] }),
   component: VerifyEmail,
 })
 
@@ -56,7 +57,7 @@ function VerifyEmail() {
       }
       footer={
         <Link
-          className="text-foreground underline underline-offset-4"
+          className="font-medium text-foreground underline underline-offset-4"
           to="/sign-in"
         >
           Use a different account
@@ -119,7 +120,7 @@ function VerifyEmail() {
           {resend.pending ? "Sending…" : "Send a new code"}
         </Button>
 
-        <p className="text-muted-foreground text-xs leading-relaxed">
+        <p className="text-balance text-center text-muted-foreground text-xs leading-relaxed">
           Once this is verified you go straight into your workspace. Nothing is
           sent to any of your customers.
         </p>
