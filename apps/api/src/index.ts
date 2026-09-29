@@ -1,7 +1,7 @@
 import { CreateOrgRequest } from "@workspace/contracts"
 import { failureCode, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
-import { type Accounts, deleteAccount } from "./account.ts"
-import type { Owner } from "./changes.ts"
+import { type Accounts, deleteAccount, type Takedown } from "./account.ts"
+import { bridge, type Owner } from "./changes.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -146,7 +146,19 @@ async function removeAccount(
   session: Session
 ): Promise<Response> {
   if (!session) return failure(401, UNAUTHENTICATED)
-  if (!idempotencyKey(request)) return keyMissing()
+  const key = idempotencyKey(request)
+  if (!key) return keyMissing()
+  // Anything but the 204 leaves the route failing, before WorkOS is touched.
+  const takedown: Takedown = async (orgId) => {
+    const result = await bridge(env, { orgId, session }, "/site/takedown", {
+      key,
+    })
+    if (result.status !== 204) {
+      throw Object.assign(new Error("the site was not taken down"), {
+        code: "site.takedown_failed",
+      })
+    }
+  }
   const client = workos(env)
   const accounts: Accounts = {
     listOrganizationMemberships: (options) =>
@@ -154,7 +166,7 @@ async function removeAccount(
     deleteOrganization: (id) => client.organizations.deleteOrganization(id),
     deleteUser: (id) => client.userManagement.deleteUser(id),
   }
-  switch (await deleteAccount(kit, accounts, session)) {
+  switch (await deleteAccount(kit, accounts, takedown, session)) {
     case "deleted":
       return new Response(null, { status: 204 })
     case "not_owner":

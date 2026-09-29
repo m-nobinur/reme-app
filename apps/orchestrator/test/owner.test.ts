@@ -83,8 +83,8 @@ vi.mock("@workspace/facade", async (importOriginal) => {
 const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
 const { requestReview } = await import("../src/publish.ts")
-const { advance } = await import("../src/state.ts")
-const { kit, previewed } = await import("./site.ts")
+const { advance, cancel } = await import("../src/state.ts")
+const { kit, previewed, stateOf } = await import("./site.ts")
 
 /**
  * Owner mode against a real database, through the `OwnerApi` entrypoint the
@@ -798,5 +798,57 @@ live("an owner deciding a review", () => {
       decision: "rejected",
       decided_by: { kind: "owner_session", user_id: USER, session_id: SESSION },
     })
+  })
+})
+
+live("an owner deleting their account", () => {
+  it("cancels every open build, removes the site's pointer, and answers the same again", async () => {
+    const orgId = await freshOrg(kit)
+    const open = await newAssignment(kit, orgId)
+    const done = await newAssignment(kit, orgId)
+    await cancel(kit, done)
+    const host = `state-test-${orgId.slice(0, 8)}-stg.remeai.co.uk`
+    const elsewhere = "host:someone-else-stg.remeai.co.uk"
+    const pointers = new Map([
+      [`host:${host}`, "{}"],
+      [elsewhere, "{}"],
+    ])
+    const terminated: string[] = []
+    const api = new OwnerApi(
+      undefined as never,
+      {
+        ...env,
+        ASSIGNMENTS: {
+          get: async (id: string) => ({
+            terminate: async () => {
+              terminated.push(id)
+            },
+          }),
+        },
+        ROUTES: {
+          delete: async (key: string) => {
+            pointers.delete(key)
+          },
+        },
+      } as unknown as Env
+    )
+    const takedown = () =>
+      api.fetch(
+        new Request("https://orchestrator/assignments/site/takedown", {
+          method: "POST",
+          headers: as(orgId),
+        })
+      )
+
+    const first = await takedown()
+    expect(first.status).toBe(204)
+    expect(await stateOf(open)).toBe("cancelled")
+    expect(terminated).toEqual([open.assignmentId])
+    expect([...pointers.keys()]).toEqual([elsewhere])
+
+    const again = await takedown()
+    expect(again.status).toBe(204)
+    expect(terminated).toEqual([open.assignmentId])
+    expect([...pointers.keys()]).toEqual([elsewhere])
   })
 })

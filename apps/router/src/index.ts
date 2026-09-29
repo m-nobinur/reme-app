@@ -8,6 +8,7 @@ import {
 import {
   deployments,
   failureCode,
+  orgOpen,
   resolveOrgBySlug,
   sql,
   tenancy,
@@ -29,7 +30,8 @@ import { getCookie, setCookie } from "hono/cookie"
  * KV and a read from R2; a preview host is a signed claim and a read from
  * R2. Nothing here reads an org from the request: the org comes out of the
  * pointer or the claim, both written by the orchestrator (§11.1.8). Postgres
- * is asked one thing only, on a pointer miss, and the way to it is narrow.
+ * is asked on a pointer miss, and whether a preview's org is still open, and
+ * the way to it is narrow.
  */
 
 type Bindings = Env
@@ -43,6 +45,14 @@ const notHere = (c: Context<App>) => c.text("No site here.", 404, NO_STORE)
 /** One constant answer for every cookie that does not open this preview. No scheme is offered, so no `WWW-Authenticate`. */
 const noPreview = (c: Context<App>) =>
   c.text("No preview here. Open a fresh preview link.", 401, NO_STORE)
+
+/**
+ * A site, or a preview, whose owner deleted their account (ADR-035). Said
+ * only for a name a business held, so it tells a guess no more than a live
+ * site would.
+ */
+const gone = (c: Context<App>) =>
+  c.text("This site is no longer available.", 410, NO_STORE)
 
 /** Says nothing about the host, so a guess still learns nothing. */
 const tooMany = (c: Context<App>) =>
@@ -149,11 +159,11 @@ const KEEP = "public, max-age=31536000, immutable"
 /** How long an answer from Postgres about a name is believed here before it is asked again. */
 const BELIEVED_FOR = "public, max-age=60"
 
-/** Keep what Postgres said about a host: its pointer, or that nobody holds it. */
+/** Keep what Postgres said about a host: its pointer, that nobody holds it, or whether its org is open. */
 async function believe(
   c: Context<App>,
   host: string,
-  what: "pointer" | "nobody",
+  what: "pointer" | "nobody" | "open" | "closed",
   body: string | null
 ) {
   const put = edge()?.put(
@@ -268,32 +278,59 @@ async function serve(
  * The pointer Postgres would give for a host: the org the slug names, read
  * the way the console resolves one, then its newest deployment under that
  * org's own row security. Null for a slug no business holds or a site that
- * was never published. Read on a KV miss only, so the hot path never opens
- * a connection.
+ * was never published, and `closed` for an org whose owner deleted their
+ * account, published or not. Read on a KV miss only, so the hot path never
+ * opens a connection.
  */
 async function pointerFromTruth(
   c: Context<App>,
   host: string
-): Promise<SitePointer | null> {
+): Promise<SitePointer | "closed" | null> {
   const slug = host.slice(0, -c.env.SITE_HOST_SUFFIX.length)
   const kit = tenancy(c.env.HYPERDRIVE.connectionString)
   try {
     const orgId = await resolveOrgBySlug(kit, slug)
     if (!orgId) return null
-    const [row] = await kit.withOrg({ orgId }, (db) =>
-      db
+    const row = await kit.withOrg({ orgId }, async (db) => {
+      if (!(await orgOpen(db))) return "closed" as const
+      const [newest] = await db
         .select()
         .from(deployments)
         .orderBy(sql`${deployments.configVersion} desc`)
         .limit(1)
-    )
-    if (!row) return null
+      return newest ?? null
+    })
+    if (row === "closed" || !row) return row
     return SitePointer.parse({
       org_id: orgId,
       site_id: row.siteId,
       revision_id: row.revisionId,
       config_version: row.configVersion,
     })
+  } finally {
+    await later(c, kit.close())
+  }
+}
+
+/**
+ * Whether a preview's org is still open. A claim is good for a day and
+ * carries no one's say-so after it is signed, so a deleted account's previews
+ * are refused here. Believed for a minute either way, like a pointer; a
+ * preview is one person's and seldom, so this is the cost of each first
+ * request a minute, not of every one.
+ */
+async function previewOpen(
+  c: Context<App>,
+  host: string,
+  orgId: string
+): Promise<boolean> {
+  if (await edge()?.match(edgeKey(host, "open"))) return true
+  if (await edge()?.match(edgeKey(host, "closed"))) return false
+  const kit = tenancy(c.env.HYPERDRIVE.connectionString)
+  try {
+    const open = await kit.withOrg({ orgId }, orgOpen)
+    await believe(c, host, open ? "open" : "closed", null)
+    return open
   } finally {
     await later(c, kit.close())
   }
@@ -370,6 +407,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
             "site"
           )
     if (!claim || claim.host !== host) return noPreview(c)
+    if (!(await previewOpen(c, host, claim.org_id))) return gone(c)
     const found = await manifestFor(c, null, claim)
     if (!found) return notHere(c)
     const resolved = resolvePreviewPath(url.pathname, found.manifest.files)
@@ -383,8 +421,9 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   }
   // KV is the cache and Postgres the truth (§11.1.3): a miss reads the
   // newest deployment for the org the slug names and writes the pointer
-  // back. A pointer that does not parse is our bug and is logged as one, and
-  // the visitor still sees the same 404.
+  // back, unless the org is closed, which answers 410 and writes nothing. A
+  // pointer that does not parse is our bug and is logged as one, and the
+  // visitor still sees the same 404.
   const raw = await c.env.ROUTES.get(`host:${host}`, "json")
   let pointer: SitePointer | null = null
   if (raw !== null) {
@@ -407,9 +446,15 @@ app.on(["GET", "HEAD"], "*", async (c) => {
       pointer = SitePointer.parse(await known.json())
     } else {
       if (await edge()?.match(edgeKey(host, "nobody"))) return unserved(c)
+      if (await edge()?.match(edgeKey(host, "closed"))) return gone(c)
       const { success } = await c.env.MISSES.limit({ key: asker(c) })
       if (!success) return tooMany(c)
-      pointer = await pointerFromTruth(c, host)
+      const truth = await pointerFromTruth(c, host)
+      if (truth === "closed") {
+        await believe(c, host, "closed", null)
+        return gone(c)
+      }
+      pointer = truth
       if (pointer) {
         const found = JSON.stringify(pointer)
         await later(c, c.env.ROUTES.put(`host:${host}`, found))

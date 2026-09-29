@@ -50,6 +50,7 @@ import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import {
   activeDeployment,
+  clearPointers,
   type DecidedBy,
   decideApproval,
   rejectApproval,
@@ -253,6 +254,9 @@ const bridge = new Hono<ConsoleEnv>()
 
 /** Everything else: the console's alone, and 404 in owner mode. */
 const consoleOnly = new Hono<ConsoleEnv>()
+
+/** The owner's alone, and 404 on the console's app: the account's takedown. */
+const ownerOnly = new Hono<ConsoleEnv>()
 
 consoleOnly.get("/", async (c) => {
   const rows = await c
@@ -710,19 +714,55 @@ bridge.post("/:id/cancel", async (c) => {
     }
     throw error
   }
+  await halt(c.env, c.get("orgId"), id)
+  return c.json({ assignment_id: id, state })
+})
+
+/** A cancelled assignment's instance and container, after its row. */
+async function halt(env: Env, orgId: string, id: string) {
   try {
-    const instance = await c.env.ASSIGNMENTS.get(id)
+    const instance = await env.ASSIGNMENTS.get(id)
     await instance.terminate()
   } catch {
     // No instance, or one that already settled. The row is what counts.
   }
   try {
     // §13 rule 3: a cancelled assignment's container does not outlive it.
-    await endSandbox(c.env, { orgId: c.get("orgId"), assignmentId: id })
+    await endSandbox(env, { orgId, assignmentId: id })
   } catch {
     // Never started, or already gone.
   }
-  return c.json({ assignment_id: id, state })
+}
+
+/**
+ * The owner deleting their account (ADR-035): every open build is cancelled
+ * the way `/:id/cancel` does it, then the site's routing pointer goes, so the
+ * router asks Postgres and answers 410 for the closed org. The api calls it
+ * only after the org reads as closed, so nothing puts the pointer back. Safe
+ * to repeat: a second call finds nothing open and deletes a missing key.
+ */
+ownerOnly.post("/site/takedown", async (c) => {
+  const orgId = c.get("orgId")
+  const open = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) =>
+      db
+        .select({ id: assignments.id })
+        .from(assignments)
+        .where(
+          sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+        )
+    )
+  for (const { id } of open) {
+    await cancel(
+      c.get("kit"),
+      { orgId, assignmentId: id },
+      "the owner deleted their account"
+    )
+    await halt(c.env, orgId, id)
+  }
+  await clearPointers(c.env, c.get("kit"), orgId)
+  return c.body(null, 204)
 })
 
 /**
@@ -1286,8 +1326,8 @@ function tree(
 /** Every route, behind the bearer and the slug. */
 export const consoleRoutes = () => tree(consoleAuth, bridge, consoleOnly)
 
-/** The bridge alone, so nothing else is there to reach. */
-export const ownerRoutes = () => tree(ownerAuth, bridge)
+/** The bridge and the owner's own route, so nothing else is there to reach. */
+export const ownerRoutes = () => tree(ownerAuth, bridge, ownerOnly)
 
 /**
  * §28.1 for a path nothing serves, on the console's app and the owner's.

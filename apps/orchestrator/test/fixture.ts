@@ -9,17 +9,35 @@ import {
 } from "@workspace/db"
 
 /**
- * A fresh fictional org per case with the two staff rows an assignment needs,
- * written through `withOrg` so the suite holds nothing the app role cannot.
- * Rows stay behind: `events` is append-only, so nothing here can delete them.
+ * A fresh fictional org per case with the two staff rows an assignment needs
+ * and an owner, since the publisher points nothing at an org nobody holds
+ * (ADR-035), written through `withOrg` so the suite holds nothing the app
+ * role cannot. Rows stay behind: `events` is append-only, so nothing here can
+ * delete them.
  */
 export async function freshOrg(kit: Tenancy): Promise<string> {
   const orgId = crypto.randomUUID()
-  await kit.withOrg({ orgId }, async (db) => {
+  const workosUserId = `user_probe_${orgId}`
+  await kit.withOrg({ orgId, workosUserId }, async (db) => {
     await db.insert(orgs).values({
       id: orgId,
       slug: `state-test-${orgId.slice(0, 8)}`,
       name: "State machine probe (fixture)",
+    })
+    await db.insert(users).values({
+      workosUserId,
+      email: `probe-${orgId}@example.test`,
+    })
+    const [person] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.workosUserId, workosUserId))
+    await db.insert(memberships).values({
+      orgId,
+      userId: person?.id as string,
+      workosMembershipId: `om_probe_${orgId}`,
+      role: "owner",
+      status: "active",
     })
     // One root per org: the Chief is the root and the Developer reports to it.
     const [chief] = await db

@@ -364,7 +364,11 @@ export function parkForBudget(
  * Returns the row's state afterwards, `cancelled` or the terminal state it was
  * already in.
  */
-export function cancel(kit: Tenancy, ids: Ids): Promise<AssignmentState> {
+export function cancel(
+  kit: Tenancy,
+  ids: Ids,
+  reason = "cancelled from the console"
+): Promise<AssignmentState> {
   return kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const row = await lockRow(db, ids.assignmentId)
     if (TERMINAL.includes(row.state)) return row.state
@@ -372,7 +376,7 @@ export function cancel(kit: Tenancy, ids: Ids): Promise<AssignmentState> {
       ...ids,
       to: "cancelled",
       expectedVersion: row.version,
-      reason: "cancelled from the console",
+      reason,
     })
     return "cancelled"
   })
