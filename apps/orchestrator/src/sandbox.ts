@@ -169,7 +169,7 @@ export async function endSandbox(env: Env, ids: Ids): Promise<void> {
 
 /**
  * The live probe list, run by `pnpm --filter orchestrator test:probe` after
- * every staging deploy. The commands are a constant and the request
+ * every deploy. The commands are a constant and the request
  * contributes nothing to them: the route runs exactly this list, in this
  * order, in a container of its own. It stays a route because a Durable
  * Object runs the deployed class only, so nothing but the deployed Worker
@@ -179,7 +179,7 @@ export async function endSandbox(env: Env, ids: Ids): Promise<void> {
  * answers. `env` proves no key, token or connection string reached the
  * container. The build is the number the sandbox story quotes.
  */
-export const PROBE_COMMANDS = [
+const PROBE_COMMANDS = [
   // `-f`, so a refusal at the proxy (a 520) is a non-zero exit and not a
   // 200-shaped success.
   {
@@ -211,14 +211,14 @@ export type ProbeResult = {
 
 /**
  * Run the probe list in a container that can never be an assignment's: the
- * id carries the org and a prefix no assignment id has, and the container is
- * destroyed before this returns. The suffix gives every probe its own
+ * id carries the caller's label and a prefix no assignment id has, and the
+ * container is destroyed before this returns. The suffix gives every probe its own
  * Durable Object, because a probe whose container crashed leaves its object
  * retrying the control connection for three minutes, and the next probe on
  * the same id would be interrupted by that (measured 2026-09-15).
  */
-export async function probe(env: Env, orgId: string): Promise<ProbeResult> {
-  const id = `probe-${orgId}-${Date.now()}`
+export async function probe(env: Env, label: string): Promise<ProbeResult> {
+  const id = `probe-${label}-${Date.now()}`
   const sandbox = sandboxFor(env, id)
   const started = Date.now()
   try {

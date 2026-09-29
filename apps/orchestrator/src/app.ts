@@ -168,7 +168,7 @@ app.get("/sandbox/probe", async (c) => {
 })
 
 /** The console: the bearer, then `?org=<slug>` resolved here and nowhere else. */
-export const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
+const consoleAuth: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
   const denied = await refuseBearer(c)
   if (denied) return denied
   const slug = c.req.query("org")?.trim()
@@ -396,8 +396,8 @@ async function createAssignment(
           "Every price, hour and service area on the site matches a canonical fact",
           "The site builds and every gate passes",
         ],
-        // The snapshot id is a placeholder until the resolver exists (N2);
-        // the stub Developer reads no facts.
+        // A placeholder: the Workflow's first step takes the snapshot and
+        // writes its id here (`takeSnapshot`).
         factSnapshotId: crypto.randomUUID(),
         packRefs: [{ key: "cleaning", version: "0.1.0" }],
         budgetUsd: 5,
@@ -1311,7 +1311,7 @@ function tree(
 }
 
 /** Every route, behind the bearer and the slug. */
-export const consoleRoutes = () => tree(consoleAuth, bridge, consoleOnly)
+const consoleRoutes = () => tree(consoleAuth, bridge, consoleOnly)
 
 /** The bridge and the owner's own route, so nothing else is there to reach. */
 export const ownerRoutes = () => tree(ownerAuth, bridge, ownerOnly)

@@ -12,21 +12,10 @@
 import { execFileSync } from "node:child_process"
 import { randomBytes } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
 import postgres from "postgres"
+import { bad, note, ok, repoRoot } from "../scripts/lib.mjs"
 
-const repoRoot = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(repoRoot)
-
-const ok = (message: string) => console.log(`\x1b[32m✓\x1b[0m ${message}`)
-const bad = (message: string) => console.log(`\x1b[31m✖\x1b[0m ${message}`)
-const note = (message: string) =>
-  console.log(
-    String(message)
-      .split("\n")
-      .map((line) => `  ${line}`)
-      .join("\n")
-  )
 
 /** Padded so the state words read as a column. */
 const state = (word: string) => word.padEnd(13)

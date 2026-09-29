@@ -92,7 +92,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-export const PREFIX_VERSION = "4"
+const PREFIX_VERSION = "4"
 
 export const INSTRUCTIONS = `You are Maya, the Chief of Staff for a small cleaning business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
@@ -129,12 +129,12 @@ const DESCRIPTIONS: Record<CosToolName, string> = {
     "Set a reminder for the owner, which they approve on a card. Use it only when the owner asked to be reminded of something: never on your own initiative, and never to track builds, the Developer's questions or reviews, which remind the owner already. title is the owner's words with nothing added. due_at is the time the owner gave, as their local time in ISO 8601; the offset is corrected for you. null when they gave no time. Never invent a time.",
 }
 
-export const READ_TOOLS: readonly CosToolName[] = [
+const READ_TOOLS: readonly CosToolName[] = [
   "get_workspace",
   "get_facts",
   "get_preview",
 ]
-export const ACT_TOOLS: readonly CosToolName[] = [
+const ACT_TOOLS: readonly CosToolName[] = [
   "request_change",
   "answer_question",
   "create_reminder",
@@ -279,7 +279,7 @@ function workspaceTaint(workspace: CosWorkspace): TaintLabel[] {
 }
 
 /** The labels a tool's output carries, by the text in it (architecture §14). */
-export function resultTaint(result: CosToolResult): TaintLabel[] {
+function resultTaint(result: CosToolResult): TaintLabel[] {
   switch (result.tool) {
     case "get_workspace":
       return workspaceTaint(result.output)
@@ -552,7 +552,7 @@ function toolsFor(run: AgentTurn) {
  * them: the history through `convertToModelMessages`, then the steps the
  * turn has logged.
  */
-export async function derivedCall(
+async function derivedCall(
   run: Pick<AgentTurn, "kit" | "turn">,
   tools: ToolSet
 ): Promise<ModelMessage[]> {

@@ -286,9 +286,7 @@ export async function validateRevision(
 }
 
 /** The change summary a kept revision carries: the reasons, or the report's one line. */
-export const summaryOf = (
-  report: Pick<CompletionReport, "changes" | "summary">
-) =>
+const summaryOf = (report: Pick<CompletionReport, "changes" | "summary">) =>
   report.changes.length > 0
     ? report.changes.map((c) => c.reason).join("; ")
     : report.summary

@@ -371,7 +371,7 @@ export async function sessionState(
 }
 
 /** ADR-034's cap on an org's CoS spend per UTC day. */
-export const DAILY_CAP_USD = 1
+const DAILY_CAP_USD = 1
 
 /**
  * Whether the org's CoS spend today, with `amount` added, stays within the

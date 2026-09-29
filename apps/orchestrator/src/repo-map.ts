@@ -93,7 +93,7 @@ export function repoMap(files: Record<string, string>): string {
 }
 
 /** 3,000 characters is about 880 tokens at the measured 3.4 characters a token. */
-export const DIGEST_MAX_CHARS = 3_000
+const DIGEST_MAX_CHARS = 3_000
 
 /**
  * The starter's components as the Developer is shown them (architect ruling
