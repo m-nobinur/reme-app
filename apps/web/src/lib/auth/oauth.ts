@@ -23,11 +23,11 @@ import { redirectUri } from "./workos"
  */
 
 /**
- * Checked against the staging environment's own settings on 2026-08-27:
- * `isGoogleOauthEnabled` and `isMicrosoftOauthEnabled` were both true. A
- * provider that is not on this list never reaches WorkOS.
+ * Google is the one social provider, by the owner's choice on 2026-09-30. A
+ * provider that is not on this list never reaches WorkOS, whatever the WorkOS
+ * environment has enabled.
  */
-const PROVIDERS = new Set(["GoogleOAuth", "MicrosoftOAuth"])
+const PROVIDERS = new Set(["GoogleOAuth"])
 
 const STATE_COOKIE = "reme-oauth-state"
 

@@ -1,4 +1,4 @@
-import { GoogleLogoIcon, MicrosoftOutlookLogoIcon } from "@phosphor-icons/react"
+import { GoogleLogoIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -44,17 +44,12 @@ export const Route = createFileRoute("/sign-in")({
   component: SignIn,
 })
 
-/** The providers this environment has enabled, checked against it on 2026-08-27. */
+/** The social providers WorkOS has enabled; see `PROVIDERS` in oauth.ts. */
 const SOCIAL = [
   {
     provider: "GoogleOAuth",
     label: "Continue with Google",
     icon: GoogleLogoIcon,
-  },
-  {
-    provider: "MicrosoftOAuth",
-    label: "Continue with Microsoft",
-    icon: MicrosoftOutlookLogoIcon,
   },
 ] as const
 
