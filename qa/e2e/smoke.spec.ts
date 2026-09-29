@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { AXE_TAGS } from "./axe"
 import { visit } from "./visit"
 
 /**
@@ -247,13 +248,21 @@ test("each page opens at the top, and Back returns to where the owner was", asyn
   // An account with no business has no page tall enough to scroll, so main is
   // given the height. The node sits outside React's tree and survives the
   // navigation, which is what lets the reset be seen.
-  await page.locator("main").evaluate((main) => {
-    const spacer = document.createElement("div")
-    spacer.style.height = "4000px"
-    main.append(spacer)
-    main.scrollTop = 1200
-  })
-  await page.waitForTimeout(300)
+  // The router records a position from its capturing scroll listener on the
+  // document, added before this one, so this one firing means it is recorded.
+  await page.locator("main").evaluate(
+    (main) =>
+      new Promise<void>((recorded) => {
+        const spacer = document.createElement("div")
+        spacer.style.height = "4000px"
+        main.append(spacer)
+        document.addEventListener("scroll", () => recorded(), {
+          capture: true,
+          once: true,
+        })
+        main.scrollTop = 1200
+      })
+  )
 
   await page.getByRole("link", { name: "Pipeline" }).click()
   await expect(page).toHaveURL(/\/app\/pipeline/)
@@ -318,21 +327,7 @@ for (const path of [
     await visit(page, path)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      // `best-practice` on top of the WCAG tags, and it is the half that
-      // matters here: axe files `heading-order` as best practice rather than as
-      // a WCAG failure, so a page whose outline jumps h1 to h3 passes a
-      // WCAG-only scan. That is the exact defect that reached this page past a
-      // green component catalog. Measured both ways before it was added.
-      .withTags([
-        "wcag2a",
-        "wcag2aa",
-        "wcag21a",
-        "wcag21aa",
-        "wcag22aa",
-        "best-practice",
-      ])
-      .analyze()
+    const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
 
     expect(
       results.violations.map((violation) => violation.id),

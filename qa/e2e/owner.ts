@@ -25,8 +25,12 @@ export function apiUrl(): string {
   throw new Error(`Set E2E_API_URL: no api is known beside ${web.origin}.`)
 }
 
-export async function signIn(page: Page, user: ProbeUser) {
-  await visit(page, "/sign-in", 'button[type="submit"]')
+/** Through the sign-in form, to `/app` or to `returnTo` when given. */
+export async function signIn(page: Page, user: ProbeUser, returnTo?: string) {
+  const path = returnTo
+    ? `/sign-in?returnTo=${encodeURIComponent(returnTo)}`
+    : "/sign-in"
+  await visit(page, path, 'button[type="submit"]')
   await page.getByLabel("Email").fill(user.email)
   await page.getByLabel("Password").fill(user.password)
   await page.getByRole("button", { name: "Sign in" }).click()
@@ -138,4 +142,45 @@ export const ANSWERS: Record<string, (form: Locator) => Promise<void>> = {
     await form.getByLabel("Town or postcode you work from").fill("Leeds")
     await form.getByLabel("Distance you travel, in km").fill("15")
   },
+}
+
+/**
+ * The onboarding conversation answered through its cards until the offer of
+ * the first build shows, pricing skipped. Signup recorded the name, so it asks
+ * five: phone, email, hours, area and price. One round more than that is the
+ * guard against a script that never ends, and the count then fails.
+ */
+export async function answerOnboarding(page: Page): Promise<void> {
+  // Each answer is a server round trip, and both callers run against a
+  // deployment reading the staging database from wherever the run is.
+  const slow = expect.configure({ timeout: 30_000 })
+  const pending = page.locator('[data-slot="ask-fact"] form')
+  const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
+  const card = page.locator('[data-slot="request-change"]')
+  const asked = 5
+  let count = 0
+  while (count <= asked) {
+    await slow(pending.or(card).first()).toBeVisible()
+    if (await card.count()) break
+    // The next question takes the focus, so Enter answers it rather than
+    // sending the composer's text over it.
+    await slow(pending.locator("input").first()).toBeFocused()
+    const question = await page
+      .locator('[data-slot="ask-fact"]:has(form) p')
+      .first()
+      .innerText()
+    const skip = pending.getByRole("button", { name: "Skip for now" })
+    if (await skip.count()) {
+      // Pricing, the one fact an owner may leave for later.
+      await skip.click()
+    } else {
+      const answer = ANSWERS[question]
+      expect(answer, `no answer for "${question}"`).toBeDefined()
+      await answer?.(pending)
+      await pending.getByRole("button", { name: "Save" }).click()
+    }
+    count += 1
+    await slow(answered).toHaveCount(count)
+  }
+  expect(count, "questions asked before the offer of a build").toBe(asked)
 }
