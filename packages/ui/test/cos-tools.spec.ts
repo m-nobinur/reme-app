@@ -1,17 +1,12 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, type Page, test } from "@playwright/test"
+import { expect, test } from "@playwright/test"
+import { open, WCAG } from "./helpers"
 
 /**
  * The Chief of Staff's tools in every state: reads as quiet lines that open
  * onto what they found, and cards that wait for the owner's yes. None shows
  * a tool name, an id, raw output or the api's model-facing error text.
  */
-
-async function open(page: Page, entry: string, width = 1024, theme = "light") {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=${entry}&theme=${theme}`)
-  await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-}
 
 const WIRE =
   /get_|_question|_reminder|call_|approval_|unknown_outcome|tool_failed|[{}]/
@@ -147,7 +142,7 @@ for (const theme of ["light", "dark"] as const) {
         }
         const results = await new AxeBuilder({ page })
           .include(`[data-entry="${entry}"]`)
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .analyze()
         expect(
           results.violations.map((violation) => violation.id),
@@ -191,7 +186,7 @@ for (const theme of ["light", "dark"] as const) {
       await open(page, "ReplyFeedback", width, theme)
       const results = await new AxeBuilder({ page })
         .include('[data-entry="ReplyFeedback"]')
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .withTags(WCAG)
         .analyze()
       expect(
         results.violations.map((violation) => violation.id),

@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { axe, open } from "./helpers"
 
 /**
  * The workspace shell at the three widths the owner uses it at: a phone in the
@@ -10,24 +10,6 @@ import { expect, type Page, test } from "@playwright/test"
 
 const WIDTHS = { phone: 390, tablet: 768, desktop: 1440 } as const
 const HEIGHT = 900
-
-async function open(page: Page, width: number, theme = "light") {
-  await page.setViewportSize({ width, height: HEIGHT })
-  await page.goto(`/?entry=WorkspaceShell&theme=${theme}`)
-  await expect(page.locator('[data-slot="workspace-shell"]')).toBeVisible()
-}
-
-async function axe(page: Page, label: string) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze()
-  expect
-    .soft(
-      results.violations.map((violation) => `${label}: ${violation.id}`),
-      JSON.stringify(results.violations, null, 2)
-    )
-    .toEqual([])
-}
 
 const railToggle = (page: Page) =>
   page.getByRole("button", { name: "Show menu" })
@@ -79,7 +61,7 @@ for (const theme of ["light", "dark"] as const) {
     test(`the shell has no accessibility violations on a ${name} in ${theme}`, async ({
       page,
     }) => {
-      await open(page, width, theme)
+      await open(page, "WorkspaceShell", width, theme)
       await axe(page, `${name} ${theme}`)
 
       if (width < 768) {
@@ -100,19 +82,19 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   const rail = page.getByRole("complementary", { name: "Workspace" })
   const panel = page.getByRole("complementary", { name: "Panel" })
 
-  await open(page, WIDTHS.desktop)
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
   expect((await rail.boundingBox())?.width).toBe(240)
   expect((await panel.boundingBox())?.width).toBe(320)
   await expect(railToggle(page)).toBeHidden()
   await expect(panelSheetToggle(page)).toBeHidden()
 
-  await open(page, WIDTHS.tablet)
+  await open(page, "WorkspaceShell", WIDTHS.tablet)
   await expect(rail).toBeVisible()
   await expect(panel).toBeHidden()
   await expect(railToggle(page)).toBeHidden()
   await expect(panelSheetToggle(page)).toBeVisible()
 
-  await open(page, WIDTHS.phone)
+  await open(page, "WorkspaceShell", WIDTHS.phone)
   await expect(rail).toBeHidden()
   await expect(panel).toBeHidden()
   await expect(railToggle(page)).toBeVisible()
@@ -128,7 +110,7 @@ for (const [label, width, toggle] of [
   ["the panel sheet on a tablet", WIDTHS.tablet, panelSheetToggle],
 ] as const) {
   test(`${label} traps focus and returns it on close`, async ({ page }) => {
-    await open(page, width)
+    await open(page, "WorkspaceShell", width)
     await toggle(page).focus()
     await page.keyboard.press("Enter")
     await expect(sheet(page)).toBeVisible()
@@ -141,7 +123,7 @@ for (const [label, width, toggle] of [
 }
 
 test("a link in a sheet closes it", async ({ page }) => {
-  await open(page, WIDTHS.phone)
+  await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
   await sheet(page).getByRole("link", { name: "Staff" }).click()
   await expect(sheet(page)).toHaveCount(0)
@@ -150,7 +132,7 @@ test("a link in a sheet closes it", async ({ page }) => {
 test("the panel toggle hides the panel and remembers it in a cookie", async ({
   page,
 }) => {
-  await open(page, WIDTHS.desktop)
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
   const panel = page.getByRole("complementary", { name: "Panel" })
   const cookie = async () =>
     (await page.context().cookies()).find(
@@ -172,7 +154,7 @@ test("the panel toggle hides the panel and remembers it in a cookie", async ({
 test("an open sheet closes when the viewport grows past its breakpoint", async ({
   page,
 }) => {
-  await open(page, WIDTHS.tablet)
+  await open(page, "WorkspaceShell", WIDTHS.tablet)
   await panelSheetToggle(page).click()
   await expect(sheet(page)).toBeVisible()
   await page.setViewportSize({ width: WIDTHS.desktop, height: HEIGHT })
@@ -190,7 +172,7 @@ test("an open sheet closes when the viewport grows past its breakpoint", async (
 })
 
 test("a modified click on a link leaves the sheet open", async ({ page }) => {
-  await open(page, WIDTHS.phone)
+  await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
   // Dispatched rather than clicked: a real modified click opens a new tab,
   // which is the browser's business and not what this asserts.
@@ -204,7 +186,7 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
 })
 
 test("a reminder moves focus to the item it is about", async ({ page }) => {
-  await open(page, WIDTHS.desktop)
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
   const panel = page.getByRole("complementary", { name: "Panel" })
   await panel
     .getByRole("link", { name: "Review version 4 before it closes" })
