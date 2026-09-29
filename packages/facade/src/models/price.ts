@@ -28,6 +28,8 @@ export type ListedModel = {
 /** One provider serving a model, from `/api/v1/models/{id}/endpoints`. */
 export type Endpoint = {
   provider_name?: string
+  /** The provider's slug, then `/` and a variant when it runs more than one. */
+  tag?: string
   /** 0 while the provider is up; negative while OpenRouter sees it degraded. */
   status?: number
   pricing?: Pricing
@@ -43,6 +45,32 @@ export type Endpoint = {
  * admitted three live providers for the Developer's primary model that day.
  */
 export const ROUTING_CAP_FACTOR = 2.1
+
+/**
+ * What every OpenRouter request asks of its host, as `provider` preferences:
+ * skip hosts based in China, and use only hosts that neither train on nor
+ * keep prompts. Slugs from `/api/v1/providers` on 2026-09-30, which lists
+ * deepseek, tencent, baidu, nex-agi, xiaomi and streamlake in CN; the rest
+ * are listed in SG or with no headquarters, and their parents are in China.
+ */
+export const HOST_ROUTING = {
+  ignore: [
+    "alibaba",
+    "baidu",
+    "deepseek",
+    "minimax",
+    "moonshotai",
+    "nex-agi",
+    "seed",
+    "siliconflow",
+    "stepfun",
+    "streamlake",
+    "tencent",
+    "xiaomi",
+    "z-ai",
+  ],
+  data_collection: "deny" as const,
+}
 
 /**
  * The fewest live providers a model's cap must admit, or the generator stops.
@@ -128,12 +156,14 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       Math.max(...listed.map(rate("completion"))) * ROUTING_CAP_FACTOR
     ),
   }
-  const admitted = endpoints.filter((e) =>
-    hours(e.pricing).some(
-      (r) =>
-        rate("prompt")(r) <= cap.prompt &&
-        rate("completion")(r) <= cap.completion
-    )
+  const admitted = endpoints.filter(
+    (e) =>
+      !HOST_ROUTING.ignore.includes(e.tag?.split("/")[0] ?? "") &&
+      hours(e.pricing).some(
+        (r) =>
+          rate("prompt")(r) <= cap.prompt &&
+          rate("completion")(r) <= cap.completion
+      )
   )
   const tiers = longContextTiers(model.pricing)
   const least = (values: (number | null | undefined)[]) => {
@@ -170,7 +200,7 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       0,
     compat: {
       thinkingFormat: "openrouter",
-      openRouterRouting: { max_price: cap },
+      openRouterRouting: { max_price: cap, ...HOST_ROUTING },
     },
   }
   const live = new Set(

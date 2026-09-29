@@ -189,30 +189,21 @@ export function priceOf(modelId: string): Price | null {
 }
 
 /**
- * The CoS's model through OpenRouter, capped at the table's routing price
- * so no provider can bill more than the reservation assumes, and asking for
- * the billed cost on each finish part. Null for a model the table does not
- * hold, which the chat treats as no model at all.
+ * The CoS's model through OpenRouter, with the table's routing: capped at
+ * its price so no provider can bill more than the reservation assumes, and
+ * kept off the hosts the table excludes. Asks for the billed cost on each
+ * finish part. Null for a model the table does not hold, which the chat
+ * treats as no model at all.
  */
 export function openrouterModel(
   apiKey: string,
   modelId: string
 ): LanguageModel | null {
-  const entry = (
-    models as {
-      id: string
-      compat?: {
-        openRouterRouting?: {
-          max_price?: { prompt: number; completion: number }
-        }
-      }
-    }[]
-  ).find((m) => m.id === modelId)
-  const cap = entry?.compat?.openRouterRouting?.max_price
-  if (!cap) return null
+  const routing = models.find((m) => m.id === modelId)?.compat.openRouterRouting
+  if (!routing?.max_price) return null
   return createOpenRouter({ apiKey }).chat(modelId, {
     usage: { include: true },
-    provider: { max_price: cap },
+    provider: routing,
   })
 }
 

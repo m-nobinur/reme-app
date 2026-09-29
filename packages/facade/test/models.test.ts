@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { OPENROUTER_IDS, openrouterModels } from "../src/models/index.ts"
+import { HOST_ROUTING } from "../src/models/price.ts"
 
 /**
  * The generated file is what makes a model Pi's catalog lacks resolve, and
@@ -36,6 +37,18 @@ describe("the generated OpenRouter models", () => {
           },
         },
       })
+    }
+  })
+
+  it("keep every model, the catalog's too, off China-based hosts and hosts that keep prompts", () => {
+    for (const model of openrouterModels()) {
+      expect(model.compat?.openRouterRouting, model.id).toMatchObject({
+        ignore: HOST_ROUTING.ignore,
+        data_collection: "deny",
+      })
+    }
+    for (const slug of ["deepseek", "alibaba", "streamlake", "z-ai"]) {
+      expect(HOST_ROUTING.ignore).toContain(slug)
     }
   })
 
