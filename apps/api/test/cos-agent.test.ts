@@ -267,6 +267,12 @@ describe("the CoS's instructions", () => {
       /"User cancelled tool call by sending a new message\." That is neither yes nor no: don't act on it, and ask about it again only if it still matters/
     )
   })
+
+  it("tell the model a started change already has the owner's yes", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /request_change comes back with outcome "started", the owner already said yes and the build has started[^\n]*Never ask them to approve it again/
+    )
+  })
 })
 
 describe("the CoS's model and price", () => {

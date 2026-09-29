@@ -270,7 +270,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       .getByRole("link", { name: "Continue getting started" })
       .click()
     await expect(page).toHaveURL(onboarding)
-    await expect(page.getByLabel("Business name")).toBeVisible()
+    await expect(page.getByLabel("Phone number")).toBeVisible()
     run.blank_state_actions["Continue getting started"] = "clicked"
   })
 
@@ -278,10 +278,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     const pending = page.locator('[data-slot="ask-fact"] form')
     const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
     const card = page.locator('[data-slot="request-change"]')
-    await expect(page.getByLabel("Business name")).toHaveValue(run.business)
-    await pending.getByRole("button", { name: "Save" }).click()
-    let count = 1
-    await expect(answered).toHaveCount(count)
+    // Signup gave the name, so the first question is the phone.
+    let count = 0
     // Six facts at most: a guard against a script that never ends.
     while (count < 7) {
       await expect(pending.or(card).first()).toBeVisible()
@@ -303,7 +301,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       count += 1
       await expect(answered).toHaveCount(count)
     }
-    expect(count).toBe(6)
+    expect(count).toBe(5)
     await expect(card).toContainText("Build my website")
     await card.getByRole("button", { name: "Approve" }).click()
     await expect(card).toContainText("Started. Follow it under Working on.")
