@@ -3,11 +3,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
 import type { Workspace, WorkspacePoll } from "./api/types"
-import { runningBuild } from "./build-state"
 
 /**
  * The panel polls `/workspace`, cheaply, until a push channel replaces it:
@@ -17,16 +17,6 @@ import { runningBuild } from "./build-state"
  * last tag, so an unchanged workspace answers 304 and keeps what is shown.
  */
 export const INTERVAL = { building: 3_000, idle: 30_000, error: 60_000 }
-
-/**
- * Polls per build and how many were 304, to measure what a build costs in
- * polls on staging. Read from the browser console as `__remeWorkspacePolls`;
- * nothing on screen shows it. `idle` counts the polls with no build running.
- */
-export type PollStats = Record<
-  string,
-  { polls: number; unchanged: number; failed: number }
->
 
 type Page = {
   readonly hidden: boolean
@@ -40,12 +30,7 @@ export type Poller = {
   /** Take a workspace read elsewhere (a loader) as the current one. */
   adopt: (workspace: Workspace | null) => void
   stop: () => void
-  stats: PollStats
 }
-
-/** The build a poll is counted against: the one doing work, if any. */
-const statsKey = (workspace: Workspace | null) =>
-  runningBuild(workspace?.builds ?? [])?.assignment_id ?? "idle"
 
 export function startPolling({
   initial,
@@ -70,7 +55,6 @@ export function startPolling({
   // Bumped by `adopt`: a read that began before it answers for an older
   // workspace than the one adopted, so its answer is dropped.
   let generation = 0
-  const stats: PollStats = {}
 
   const schedule = () => {
     clearTimeout(timer)
@@ -81,12 +65,6 @@ export function startPolling({
         ? INTERVAL.building
         : INTERVAL.idle
     timer = setTimeout(tick, delay)
-  }
-
-  const count = (field: "polls" | "unchanged" | "failed") => {
-    const key = statsKey(current)
-    stats[key] ??= { polls: 0, unchanged: 0, failed: 0 }
-    stats[key][field]++
   }
 
   const tick = (): Promise<void> => {
@@ -103,20 +81,16 @@ export function startPolling({
     }
     const began = generation
     inFlight = (async () => {
-      count("polls")
       try {
         const next = await read(current?.etag ?? null)
         if (began !== generation) return
         failed = false
-        if (next === "unchanged") {
-          count("unchanged")
-        } else {
+        if (next !== "unchanged") {
           current = next
           onChange(current, false)
         }
       } catch {
         if (began !== generation) return
-        count("failed")
         failed = true
         onChange(current, true)
       }
@@ -151,7 +125,6 @@ export function startPolling({
       clearTimeout(timer)
       page.removeEventListener("visibilitychange", onVisibility)
     },
-    stats,
   }
 }
 
@@ -188,8 +161,6 @@ export function useLiveWorkspaceState(
       page: document,
     })
     poller.current = started
-    ;(globalThis as { __remeWorkspacePolls?: PollStats }).__remeWorkspacePolls =
-      started.stats
     return started.stop
   }, [])
 
@@ -205,7 +176,7 @@ export function useLiveWorkspaceState(
     () => poller.current?.refresh() ?? Promise.resolve(),
     []
   )
-  return { ...state, refresh }
+  return useMemo(() => ({ ...state, refresh }), [state, refresh])
 }
 
 /** The live workspace, for anything under the /app frame. */

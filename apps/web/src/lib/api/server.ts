@@ -39,13 +39,12 @@ import type {
  * `source` directly, so no implementation reaches the client graph and
  * `source.ts` stays the only module that names one.
  *
- * Each function resolves the organisation itself. No screen passes an
- * organisation id, and none accepts one: the id is looked up from the owner's
- * own list on the server, which is the shape §9.2 layer 1 requires and R3
- * states as "org_id never comes from client input". The cookie below holds a
- * slug the owner picked, and a slug that is not one of their organisations is
- * discarded rather than trusted. When the session carries the organisation
- * (D3), `activeOrg` reads it from there and the cookie goes.
+ * No function here names an organisation, and none accepts one: `apps/api`
+ * resolves it from the forwarded session and refuses a session with none,
+ * which is the shape §9.2 layer 1 requires and R3 states as "org_id never
+ * comes from client input". Only the frame reads the owner's organisations,
+ * for the switcher. The cookie below holds a slug the owner picked, and a slug
+ * that is not one of their organisations is discarded rather than trusted.
  */
 
 const ORG_COOKIE = "reme-org"
@@ -54,19 +53,6 @@ const ORG_COOKIE = "reme-org"
 function pickOrg(orgs: OrgSummary[]): OrgSummary | null {
   const picked = getCookie(ORG_COOKIE)
   return orgs.find((org) => org.slug === picked) ?? orgs[0] ?? null
-}
-
-async function activeOrg(): Promise<OrgSummary | null> {
-  return pickOrg(await source.orgs())
-}
-
-/** The organisation a write acts for. A write with none is refused, never guessed. */
-async function writingOrg(): Promise<OrgSummary> {
-  const org = await activeOrg()
-  if (!org) {
-    throw new Error("no organisation to act for")
-  }
-  return org
 }
 
 /** An id off the wire: a UUID, or a refusal. */
@@ -90,20 +76,18 @@ function localId(value: unknown): string {
 const keyOf = (value: unknown) => text(value, 255) || crypto.randomUUID()
 
 /** Reports and alerts for the rail's count, or null when they could not be read. */
-async function readActivity(orgId: string): Promise<AttentionItem[] | null> {
+async function readActivity(): Promise<AttentionItem[] | null> {
   try {
-    return await source.activity(orgId)
+    return await source.activity()
   } catch {
     return null
   }
 }
 
 /** The conversations list for the rail, or null when it could not be read. */
-async function readConversations(
-  orgId: string
-): Promise<Conversation[] | null> {
+async function readConversations(): Promise<Conversation[] | null> {
   try {
-    return await source.conversations(orgId)
+    return await source.conversations()
   } catch {
     return null
   }
@@ -151,13 +135,13 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
         seenAt: null,
       }
     }
-    const staff = source.staff(active.id)
+    const staff = source.staff()
     const [workspace, conversations, members, activity] = await Promise.all([
-      readWorkspace(() => source.workspace(active.id, staff)),
-      readConversations(active.id),
+      readWorkspace(() => source.workspace(staff)),
+      readConversations(),
       staff.catch(() => []),
       // ponytail: one more API read on every /app/* navigation; cache it, or read it only on the panel's timer, if frame latency shows it.
-      readActivity(active.id),
+      readActivity(),
     ])
     return {
       orgs,
@@ -218,9 +202,7 @@ export const answerQuestion = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    const org = await writingOrg()
     return await source.answer(
-      org.id,
       data.assignmentId,
       data.requestId,
       data.value,
@@ -233,14 +215,12 @@ export const cancelBuild = createServerFn({ method: "POST" })
     assignmentId: id(record(input).assignmentId),
   }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    const org = await writingOrg()
-    return await source.cancelBuild(org.id, data.assignmentId)
+    return await source.cancelBuild(data.assignmentId)
   })
 
 export const deleteAccount = createServerFn({ method: "POST" }).handler(
   async (): Promise<WriteOutcome> => {
-    const org = await writingOrg()
-    return await source.deleteAccount(org.id)
+    return await source.deleteAccount()
   }
 )
 
@@ -249,8 +229,7 @@ export const getPreview = createServerFn({ method: "GET" })
     assignmentId: id(record(input).assignmentId),
   }))
   .handler(async ({ data }): Promise<PreviewLinks | null> => {
-    const org = await activeOrg()
-    return org ? await source.preview(org.id, data.assignmentId) : null
+    return await source.preview(data.assignmentId)
   })
 
 export const askForChanges = createServerFn({ method: "POST" })
@@ -259,11 +238,10 @@ export const askForChanges = createServerFn({ method: "POST" })
     return { text: text(data.text, GOAL_MAX), key: keyOf(data.key) }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    const org = await writingOrg()
     if (!data.text) {
       return { done: false, reason: "Write what should change first." }
     }
-    return await source.requestChange(org.id, data.text, data.key)
+    return await source.requestChange(data.text, data.key)
   })
 
 export const createReminder = createServerFn({ method: "POST" })
@@ -280,12 +258,10 @@ export const createReminder = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    const org = await writingOrg()
     if (!data.title) {
       return { done: false, reason: "Write what to remember first." }
     }
     return await source.createReminder(
-      org.id,
       { title: data.title, due_at: data.dueAt },
       data.key
     )
@@ -294,14 +270,12 @@ export const createReminder = createServerFn({ method: "POST" })
 export const completeReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    const org = await writingOrg()
-    return await source.completeReminder(org.id, data.id)
+    return await source.completeReminder(data.id)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(
   async (): Promise<Conversation[]> => {
-    const org = await activeOrg()
-    return org ? await source.conversations(org.id) : []
+    return await source.conversations()
   }
 )
 
@@ -312,8 +286,7 @@ export const getConversation = createServerFn({ method: "GET" })
     return { id: read.success ? read.data : null }
   })
   .handler(async ({ data }): Promise<Conversation | null> => {
-    const org = data.id ? await activeOrg() : null
-    return org && data.id ? await source.conversation(org.id, data.id) : null
+    return data.id ? await source.conversation(data.id) : null
   })
 
 /**
@@ -324,8 +297,7 @@ export const getConversation = createServerFn({ method: "GET" })
 export const createConversation = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ key: localId(record(input).localId) }))
   .handler(async ({ data }): Promise<Conversation | null> => {
-    const org = await activeOrg()
-    return org ? await source.createConversation(org.id, data.key) : null
+    return await source.createConversation(data.key)
   })
 
 export const updateConversation = createServerFn({ method: "POST" })
@@ -345,8 +317,7 @@ export const updateConversation = createServerFn({ method: "POST" })
     return { id: id(data.id), patch: { title }, key: keyOf(data.key) }
   })
   .handler(async ({ data }): Promise<void> => {
-    const org = await writingOrg()
-    await source.updateConversation(org.id, data.id, data.patch, data.key)
+    await source.updateConversation(data.id, data.patch, data.key)
   })
 
 /**
@@ -367,15 +338,13 @@ export const rateMessage = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<void> => {
-    const org = await writingOrg()
-    await source.rateMessage(org.id, data.id, data.feedback, data.key)
+    await source.rateMessage(data.id, data.feedback, data.key)
   })
 
 export const getConversationMessages = createServerFn({ method: "GET" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<TransportedMessage[]> => {
-    const org = await activeOrg()
-    return org ? await source.conversationMessages(org.id, data.id) : []
+    return await source.conversationMessages(data.id)
   })
 
 /**
@@ -415,30 +384,15 @@ export const selectOrg = createServerFn({ method: "POST" })
 
 export const getStaffDirectory = createServerFn({ method: "GET" }).handler(
   async (): Promise<{
-    org: OrgSummary | null
     staff: StaffMember[]
     tree: OrgNode[]
-  }> => {
-    const org = await activeOrg()
-    if (!org) {
-      return { org, staff: [], tree: [] }
-    }
-    const [staff, tree] = await Promise.all([
-      source.staff(org.id),
-      source.orgTree(org.id),
-    ])
-    return { org, staff, tree }
-  }
+  }> => await source.directory()
 )
 
 export const getApprovals = createServerFn({ method: "GET" }).handler(
-  async (): Promise<{ org: OrgSummary | null; approvals: ApprovalItem[] }> => {
-    const org = await activeOrg()
-    return {
-      org,
-      approvals: org ? await source.approvals(org.id) : [],
-    }
-  }
+  async (): Promise<{ approvals: ApprovalItem[] }> => ({
+    approvals: await source.approvals(),
+  })
 )
 
 export const decideApproval = createServerFn({ method: "POST" })
@@ -452,12 +406,10 @@ export const decideApproval = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<DecisionOutcome> => {
-    const org = await activeOrg()
-    if (!org || !data.approvalId || !data.revisionId) {
+    if (!data.approvalId || !data.revisionId) {
       throw new Error("no approval to decide")
     }
     return await source.decideApproval(
-      org.id,
       data.approvalId,
       data.revisionId,
       data.decision
@@ -465,15 +417,11 @@ export const decideApproval = createServerFn({ method: "POST" })
   })
 
 export const getPipeline = createServerFn({ method: "GET" }).handler(
-  async (): Promise<{ org: OrgSummary | null; items: PipelineItem[] }> => {
-    const org = await activeOrg()
-    return { org, items: org ? await source.pipeline(org.id) : [] }
-  }
+  async (): Promise<{ items: PipelineItem[] }> => ({
+    items: await source.pipeline(),
+  })
 )
 
 export const getBusinessProfile = createServerFn({ method: "GET" }).handler(
-  async (): Promise<BusinessProfile | null> => {
-    const org = await activeOrg()
-    return org ? await source.profile(org.id) : null
-  }
+  async (): Promise<BusinessProfile | null> => await source.profile()
 )

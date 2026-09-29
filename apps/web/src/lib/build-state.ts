@@ -1,4 +1,4 @@
-import type { AssignmentState, BuildSummary } from "@workspace/contracts"
+import type { AssignmentState } from "@workspace/contracts"
 
 /**
  * The states in which a build is doing work: building, checking or
@@ -14,7 +14,3 @@ export const WORKING: ReadonlySet<AssignmentState> = new Set([
   "repairing",
   "release_candidate",
 ])
-
-/** The build doing work now, if any. */
-export const runningBuild = (builds: BuildSummary[]) =>
-  builds.find((build) => WORKING.has(build.state))
