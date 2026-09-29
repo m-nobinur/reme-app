@@ -155,21 +155,6 @@ export type TransportedMessage = Omit<ConversationMessage, "content"> & {
   }
 }
 
-/** An approval as the inbox renders it: the contract, plus who to name. */
-export type ApprovalItem = {
-  request: ApprovalRequest
-  /** The version number of the revision the approval is bound to. */
-  version: number
-  /** The revision a decision names, read from `request.target`. */
-  revisionId: string
-  /** What the owner is being asked, in one line. */
-  title: string
-  /** Display name of the staff member who raised it. */
-  requestedBy: string
-  /** What happens if it expires unanswered. Never "it goes ahead anyway". */
-  onExpiry: string
-}
-
 /** Where a lead sits in the §4 lifecycle, condensed to what an inbox shows. */
 export type PipelineStage =
   | "new"
@@ -243,7 +228,6 @@ export type OwnerDataSource = {
   directory: () => Promise<{ staff: StaffMember[]; tree: OrgNode[] }>
   /** `staff` is the directory the caller has already read, for names. */
   workspace: (staff: Promise<StaffMember[]>) => Promise<Workspace>
-  approvals: () => Promise<ApprovalItem[]>
   pipeline: () => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `orgs()` empty. */
   profile: () => Promise<BusinessProfile | null>
