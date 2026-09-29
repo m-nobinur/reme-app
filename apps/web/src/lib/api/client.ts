@@ -22,7 +22,6 @@ import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { WORKING } from "../build-state"
 import type {
-  ApprovalItem,
   AttentionItem,
   DecisionOutcome,
   OrgNode,
@@ -322,15 +321,6 @@ async function workspaceStatus(
   }
 }
 
-/** `workspaceStatus` for a caller with no tag, which always gets a body. */
-async function currentStatus(): Promise<WorkspaceStatus> {
-  const read = await workspaceStatus()
-  if (read === "unchanged") {
-    throw new Error("apps/api answered 304 to a read with no tag")
-  }
-  return read.status
-}
-
 const namesOf = (staff: StaffMember[]) =>
   new Map(staff.map((member) => [member.id, member.displayName]))
 
@@ -422,36 +412,6 @@ async function workspace(staff: Promise<StaffMember[]>): Promise<Workspace> {
 async function pollWorkspace(etag: string | null): Promise<WorkspacePoll> {
   const read = await workspaceStatus(etag)
   return read === "unchanged" ? read : workspaceOf(read, new Map())
-}
-
-/**
- * `GET /approvals` was dropped: the workspace's attention list carries them.
- * The directory is read only when there is an approval to name.
- */
-async function approvals(): Promise<ApprovalItem[]> {
-  const found = (await currentStatus()).attention.filter(
-    (item) => item.kind === "approval"
-  )
-  if (found.length === 0) {
-    return []
-  }
-  const names = namesOf(await staffOf())
-  return found.flatMap((item) => {
-    const card = toAttention(item, names)
-    const { target } = item.request
-    return card.kind === "approval" && target.kind === "revision"
-      ? [
-          {
-            request: card.request,
-            version: card.version,
-            revisionId: target.revision_id,
-            title: card.title,
-            requestedBy: card.raisedBy,
-            onExpiry: card.onExpiry,
-          },
-        ]
-      : []
-  })
 }
 
 /**
@@ -706,7 +666,6 @@ export const apiSource: OwnerDataSource = {
     return { staff, tree: treeOf(staff) }
   },
   workspace,
-  approvals,
   pipeline: async () => [],
   activity,
   profile: async () => {

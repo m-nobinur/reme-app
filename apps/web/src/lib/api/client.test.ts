@@ -335,26 +335,6 @@ it("reads the live version, and a build only while it is working", async () => {
   })
 })
 
-it("lists only the workspace's approvals, each with its version", async () => {
-  const items = await apiSource.approvals()
-  expect(items).toEqual([
-    {
-      request: approval.request,
-      version: 4,
-      revisionId: REVISION,
-      title: "Version 4 is ready to publish",
-      requestedBy: "Alex",
-      onExpiry: expect.any(String),
-    },
-  ])
-})
-
-it("reads the directory for approvals only when there is one to name", async () => {
-  answers["GET /workspace"] = { ...workspace, attention: [alert, report] }
-  expect(await apiSource.approvals()).toEqual([])
-  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
-})
-
 it("leaves out an approval with no version to decide on", async () => {
   // A decision names a revision, so a domain or spend approval could only
   // offer buttons that do nothing. `/workspace` lists none today.
@@ -362,8 +342,6 @@ it("leaves out an approval with no version to decide on", async () => {
     ...workspace,
     attention: [domainApproval, approval],
   }
-  const listed = await apiSource.approvals()
-  expect(listed.map((item) => item.request.approval_id)).toEqual([APPROVAL])
   const { attention } = await apiSource.workspace(Promise.resolve([alex]))
   expect(
     attention.filter((item) => item.kind === "approval").map((item) => item.id)
@@ -426,7 +404,6 @@ it("answers empty for a session with no organisation", async () => {
   expect(await apiSource.workspace(Promise.resolve([]))).toEqual(
     EMPTY_WORKSPACE
   )
-  expect(await apiSource.approvals()).toEqual([])
   expect(await apiSource.activity()).toEqual([])
   expect(await apiSource.profile()).toBeNull()
 })
@@ -500,8 +477,6 @@ it("names an item raised by someone outside the directory as Reme", async () => 
     request: { ...approval.request, requested_by_staff_id: stranger },
   }
   answers["GET /workspace"] = { ...workspace, attention: [unknown] }
-  const [listed] = await apiSource.approvals()
-  expect(listed?.requestedBy).toBe("Reme")
   const {
     attention: [card],
   } = await apiSource.workspace(Promise.resolve([alex]))

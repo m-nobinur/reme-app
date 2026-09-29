@@ -19,7 +19,6 @@ import { oneOf, record, text } from "@/lib/auth/input"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { source } from "./source"
 import type {
-  ApprovalItem,
   AttentionItem,
   BusinessProfile,
   DecisionOutcome,
@@ -387,12 +386,6 @@ export const getStaffDirectory = createServerFn({ method: "GET" }).handler(
     staff: StaffMember[]
     tree: OrgNode[]
   }> => await source.directory()
-)
-
-export const getApprovals = createServerFn({ method: "GET" }).handler(
-  async (): Promise<{ approvals: ApprovalItem[] }> => ({
-    approvals: await source.approvals(),
-  })
 )
 
 export const decideApproval = createServerFn({ method: "POST" })
