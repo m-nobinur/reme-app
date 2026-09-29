@@ -13,9 +13,9 @@ import {
 import {
   approvals,
   assignments,
+  currentFacts,
   eq,
   events,
-  facts,
   type OrgScopedDb,
   orgs,
   siteRevisions,
@@ -208,12 +208,7 @@ async function readFeed(
 
 /** The org's current facts, one per key. */
 export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {
-  const rows = await db
-    .select()
-    .from(facts)
-    .where(sql`${facts.validTo} is null`)
-    .orderBy(facts.key)
-  return rows.map(toFactRecord)
+  return (await currentFacts(db)).map(toFactRecord)
 }
 
 /** The revision the site serves now, and its host while it serves one. */

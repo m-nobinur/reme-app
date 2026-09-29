@@ -5,8 +5,6 @@ import {
   eq,
   events,
   sql,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
 import fc from "fast-check"
 import { ulid } from "ulid"
@@ -24,6 +22,7 @@ import {
 } from "../src/state.ts"
 import {
   freshOrg as freshOrgIn,
+  kit,
   newAssignment as newAssignmentIn,
 } from "./fixture.ts"
 
@@ -37,7 +36,6 @@ const url = process.env.DATABASE_URL
 // database job is where these count.
 const live = describe.skipIf(!url)
 
-const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
 const freshOrg = () => freshOrgIn(kit)
 const newAssignment = (orgId: string, kind?: string) =>

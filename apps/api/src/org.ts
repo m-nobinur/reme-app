@@ -3,10 +3,12 @@ import {
   asc,
   conversationMessages,
   conversations,
+  ensureStartingTeam,
   eq,
   memberships,
   orgs,
   resolveOrg,
+  rootStaffId,
   staff,
   supersedeFact,
   type Tenancy,
@@ -15,7 +17,6 @@ import {
   users,
 } from "@workspace/db"
 import { firstMessage } from "./chat.ts"
-import { ensureStartingTeam, rootStaffId } from "./staff.ts"
 import { readFacts } from "./workspace.ts"
 
 /**

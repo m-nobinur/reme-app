@@ -1,10 +1,8 @@
 import { PreviewClaim } from "@workspace/contracts"
 import { verifyPreview } from "@workspace/gates/preview"
-import { describe, expect, it, vi } from "vitest"
+import { afterAll, describe, expect, it, vi } from "vitest"
 import { previewHost } from "../src/seed.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
-
-const SUFFIX = "-stg.remeai.co.uk"
+import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 const claim = (host: string) =>
   PreviewClaim.safeParse({
@@ -109,7 +107,7 @@ vi.mock("../src/sandbox.ts", () => ({
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
 const { default: app } = await import("../src/app.ts")
-const { eq, siteRevisions, tenancy } = await import("@workspace/db")
+const { eq, siteRevisions } = await import("@workspace/db")
 
 const KEY = "preview-key-for-this-suite-only"
 const CONSOLE = "https://staging-orchestrator.remeai.co.uk"
@@ -125,7 +123,7 @@ const authed = { headers: { authorization: "Bearer test-token" } }
 const live = describe.skipIf(!url)
 
 live("minting a preview link, against a real database", () => {
-  const kit = tenancy(url ?? "postgres://unused")
+  afterAll(() => kit.close())
 
   async function revision(orgId: string, version = 1) {
     const assignment = await newAssignment(kit, orgId)

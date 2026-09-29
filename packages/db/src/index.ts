@@ -11,10 +11,16 @@ export {
   appendSessionEvent,
   newUlid,
 } from "./events.ts"
-export { supersedeFact } from "./facts.ts"
+export { currentFacts, supersedeFact } from "./facts.ts"
 export * from "./map.ts"
 export { type Waited, waitedOn } from "./questions.ts"
 export * from "./schema.ts"
+export {
+  chiefStaffId,
+  ensureStartingTeam,
+  rootStaffId,
+  STAFF_CODE,
+} from "./staff.ts"
 export { steerByKey, steerKeyHash } from "./steers.ts"
 export type {
   Identity,

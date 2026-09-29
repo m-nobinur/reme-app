@@ -70,3 +70,12 @@ export async function supersedeFact(
     supersededFactId: current?.id ?? null,
   }
 }
+
+/** The org's current facts, one row per key, in key order. */
+export function currentFacts(db: OrgScopedDb) {
+  return db
+    .select()
+    .from(facts)
+    .where(sql`${facts.validTo} is null`)
+    .orderBy(facts.key)
+}

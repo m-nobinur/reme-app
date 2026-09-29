@@ -11,13 +11,11 @@ import {
   siteRevisions,
   sql,
   supersedeFact,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
 import { vi } from "vitest"
 import { takeSnapshot } from "../src/brief.ts"
 import { advance } from "../src/state.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
+import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 /**
  * A site in a fake R2 and a fake KV, with an org, its facts and a build at
@@ -26,9 +24,9 @@ import { freshOrg, newAssignment } from "./fixture.ts"
  */
 
 const url = process.env.DATABASE_URL
-export const kit: Tenancy = tenancy(url ?? "postgres://unused")
 
-export const SUFFIX = "-stg.remeai.co.uk"
+export { kit, SUFFIX }
+
 export const sha = (bytes: string) =>
   createHash("sha256").update(bytes).digest("hex")
 export const HEADERS = { "x-frame-options": "DENY" }

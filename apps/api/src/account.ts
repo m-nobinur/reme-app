@@ -3,13 +3,13 @@ import {
   eq,
   memberships,
   resolveOrg,
+  rootStaffId,
   sql,
   type Tenancy,
   tombstone,
   users,
 } from "@workspace/db"
 import type { Session } from "./session.ts"
-import { rootStaffId } from "./staff.ts"
 
 /**
  * Deleting an owner's account (ADR-035): the site goes offline, the email is

@@ -11,6 +11,7 @@ import {
   appendEvent,
   approvals,
   assignments,
+  chiefStaffId,
   deployments,
   eq,
   type OrgScopedDb,
@@ -18,7 +19,6 @@ import {
   orgs,
   siteRevisions,
   sql,
-  staff,
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
@@ -116,10 +116,7 @@ export function requestReview(
         "the assignment's latest revision is not a preview"
       )
     }
-    const [chief] = await db
-      .select({ id: staff.id })
-      .from(staff)
-      .where(eq(staff.staffCode, "COS-001"))
+    const chief = await chiefStaffId(db)
     const now = Date.now()
     const [inserted] = await db
       .insert(approvals)
@@ -127,7 +124,7 @@ export function requestReview(
         orgId: row.orgId,
         assignmentId: row.id,
         requestedByStaffId: row.staffId,
-        approverStaffId: chief?.id ?? row.createdByStaffId,
+        approverStaffId: chief ?? row.createdByStaffId,
         actionKind: ACTION_KIND,
         target: { kind: "revision", revision_id: revision.id },
         revisionId: revision.id,
