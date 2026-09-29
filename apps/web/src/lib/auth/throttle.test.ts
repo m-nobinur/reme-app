@@ -5,8 +5,8 @@ import {
   type Limiter,
   SIGN_IN_ATTEMPTS,
   SIGN_IN_WINDOW_SECONDS,
-  signInKey,
-  throttleSignIn,
+  throttle,
+  throttleKey,
 } from "./throttle"
 
 /**
@@ -42,21 +42,21 @@ describe("the key one address is counted under", () => {
         "dana@brightclean.invalid",
         "Dana@Brightclean.Invalid",
         "  dana@brightclean.invalid  ",
-      ].map(signInKey)
+      ].map((email) => throttleKey("sign-in", email))
     )
     expect(keys.size).toBe(1)
   })
 
   it("is a different bucket for a different address", () => {
-    expect(signInKey("dana@brightclean.invalid")).not.toBe(
-      signInKey("kit@mopandbucket.invalid")
+    expect(throttleKey("sign-in", "dana@brightclean.invalid")).not.toBe(
+      throttleKey("sign-in", "kit@mopandbucket.invalid")
     )
   })
 
   it("puts blank submissions in one bucket rather than none", () => {
     // Not a pass. Every empty form shares a counter, which limits more.
-    expect(signInKey("")).toBe(signInKey("   "))
-    expect(signInKey("")).toBeTruthy()
+    expect(throttleKey("sign-in", "")).toBe(throttleKey("sign-in", "   "))
+    expect(throttleKey("sign-in", "")).toBeTruthy()
   })
 })
 
@@ -67,12 +67,12 @@ describe("the limit trips", () => {
 
     for (let attempt = 1; attempt <= SIGN_IN_ATTEMPTS; attempt += 1) {
       expect(
-        await throttleSignIn(limiter, email),
+        await throttle(limiter, "sign-in", email),
         `attempt ${attempt} was refused`
       ).toBeNull()
     }
 
-    const refused = await throttleSignIn(limiter, email)
+    const refused = await throttle(limiter, "sign-in", email)
     expect(refused).not.toBeNull()
     expect(refused?.code).toBe("rate_limited")
     // Rendered as a form-level message by sign-in.tsx, which shows a failure
@@ -90,9 +90,30 @@ describe("the limit trips", () => {
     // failure, so the assertion that matters is that this answers without
     // needing anything but the limiter.
     const limiter = counter(0)
-    const refused = await throttleSignIn(limiter, "dana@brightclean.invalid")
+    const refused = await throttle(
+      limiter,
+      "sign-in",
+      "dana@brightclean.invalid"
+    )
     expect(refused?.code).toBe("rate_limited")
     expect(limiter.calls).toHaveLength(1)
+  })
+})
+
+describe("each form counts on its own", () => {
+  it("leaves sign-in open after the reset emails run out", async () => {
+    // One binding, four sets of buckets: a person who asked for too many
+    // reset emails can still sign in with the password they remember.
+    const limiter = counter(SIGN_IN_ATTEMPTS)
+    const email = "dana@brightclean.invalid"
+    for (let attempt = 1; attempt <= SIGN_IN_ATTEMPTS; attempt += 1) {
+      await throttle(limiter, "reset-request", email)
+    }
+    expect((await throttle(limiter, "reset-request", email))?.code).toBe(
+      "rate_limited"
+    )
+    expect(await throttle(limiter, "sign-in", email)).toBeNull()
+    expect(await throttle(limiter, "sign-up", email)).toBeNull()
   })
 })
 
@@ -102,7 +123,7 @@ describe("a legitimate person is not caught", () => {
     const limiter = counter(SIGN_IN_ATTEMPTS)
     const email = "kit@mopandbucket.invalid"
     for (let attempt = 1; attempt <= SIGN_IN_ATTEMPTS; attempt += 1) {
-      expect(await throttleSignIn(limiter, email)).toBeNull()
+      expect(await throttle(limiter, "sign-in", email)).toBeNull()
     }
   })
 
@@ -115,7 +136,7 @@ describe("a legitimate person is not caught", () => {
       (_, i) => `person${i}@brightclean.invalid`
     )
     for (const email of office) {
-      expect(await throttleSignIn(limiter, email), email).toBeNull()
+      expect(await throttle(limiter, "sign-in", email), email).toBeNull()
     }
   })
 
@@ -125,16 +146,26 @@ describe("a legitimate person is not caught", () => {
     const email = "dana@brightclean.invalid"
     const first = counter(SIGN_IN_ATTEMPTS)
     for (let attempt = 1; attempt <= SIGN_IN_ATTEMPTS; attempt += 1) {
-      await throttleSignIn(first, email)
+      await throttle(first, "sign-in", email)
     }
-    expect(await throttleSignIn(first, email)).not.toBeNull()
-    expect(await throttleSignIn(counter(SIGN_IN_ATTEMPTS), email)).toBeNull()
+    expect(await throttle(first, "sign-in", email)).not.toBeNull()
+    expect(
+      await throttle(counter(SIGN_IN_ATTEMPTS), "sign-in", email)
+    ).toBeNull()
   })
 })
 
+type Limits = {
+  ratelimits?: Array<{
+    name: string
+    namespace_id: string
+    simple: { limit: number; period: number }
+  }>
+}
+
 describe("the Worker is configured to have a limiter", () => {
   /**
-   * `throttleSignIn` lets the attempt through when the binding is absent,
+   * `throttle` lets the attempt through when the binding is absent,
    * because failing closed would lock everyone out of an app whose only door is
    * this form. That is only safe if a Worker cannot be deployed without the
    * binding, and this is what makes it so.
@@ -146,34 +177,34 @@ describe("the Worker is configured to have a limiter", () => {
       // The file is jsonc. Only `//` line comments are used in it, and a `//`
       // inside a string would be a URL, of which it has none.
     ).replace(/^\s*\/\/.*$/gm, "")
-  ) as {
-    ratelimits?: Array<{
-      name: string
-      namespace_id: string
-      simple: { limit: number; period: number }
-    }>
+  ) as Limits & { env?: Record<string, Limits> }
+
+  // Bindings do not inherit, so production declares its own.
+  const blocks = [
+    ["staging", config],
+    ...Object.entries(config.env ?? {}),
+  ] as const
+
+  for (const [name, block] of blocks) {
+    const binding = block.ratelimits?.find(
+      (entry) => entry.name === "SIGN_IN_LIMIT"
+    )
+
+    it(`${name} declares the binding the handlers read`, () => {
+      expect(
+        binding,
+        `apps/web/wrangler.jsonc (${name}) has no SIGN_IN_LIMIT ratelimit binding, so the deployed auth forms have no limit`
+      ).toBeDefined()
+      expect(binding?.namespace_id).toMatch(/^[1-9]\d*$/)
+    })
+
+    it(`${name} configures it with the numbers this module reasons about`, () => {
+      // Two copies of a number drift, and the copy that drifts is the one
+      // nobody reads. Cloudflare accepts only 10 or 60 for the period, so the
+      // window is not free to be anything.
+      expect(binding?.simple.limit).toBe(SIGN_IN_ATTEMPTS)
+      expect(binding?.simple.period).toBe(SIGN_IN_WINDOW_SECONDS)
+      expect([10, 60]).toContain(binding?.simple.period)
+    })
   }
-
-  it("declares the binding the sign-in handler reads", () => {
-    const binding = config.ratelimits?.find(
-      (entry) => entry.name === "SIGN_IN_LIMIT"
-    )
-    expect(
-      binding,
-      "apps/web/wrangler.jsonc has no SIGN_IN_LIMIT ratelimit binding, so the deployed sign-in form has no limit"
-    ).toBeDefined()
-    expect(binding?.namespace_id).toMatch(/^[1-9]\d*$/)
-  })
-
-  it("configures it with the numbers this module reasons about", () => {
-    // Two copies of a number drift, and the copy that drifts is the one nobody
-    // reads. Cloudflare accepts only 10 or 60 for the period, so the window is
-    // not free to be anything.
-    const binding = config.ratelimits?.find(
-      (entry) => entry.name === "SIGN_IN_LIMIT"
-    )
-    expect(binding?.simple.limit).toBe(SIGN_IN_ATTEMPTS)
-    expect(binding?.simple.period).toBe(SIGN_IN_WINDOW_SECONDS)
-    expect([10, 60]).toContain(binding?.simple.period)
-  })
 })

@@ -1,7 +1,8 @@
 import type { AuthFailure } from "./failure"
 
 /**
- * A limit on how often one address may be offered a password.
+ * A limit on how often one address may be offered a password, sign up, or ask
+ * for a reset email, and how often one reset link may be tried.
  *
  * There was none before this. `failure.ts` turns WorkOS's own 429 into a
  * message, which is WorkOS rate-limiting us across the whole environment and
@@ -31,15 +32,32 @@ export type Limiter = {
 }
 
 /**
- * One bucket per address, case-folded and trimmed.
+ * The forms that are counted, each in its own buckets on the one binding, so a
+ * person who asked for three reset emails still has five sign-ins left. What
+ * each is keyed on: the address, except `reset`, which has none and is keyed
+ * on its link's token.
+ */
+export type Throttled = "sign-in" | "sign-up" | "reset-request" | "reset"
+
+const REFUSED: Record<Throttled, string> = {
+  "sign-in": "Too many sign-in attempts for that email.",
+  "sign-up": "Too many sign-up attempts for that email.",
+  "reset-request": "Too many reset emails asked for that address.",
+  reset: "Too many attempts with this reset link.",
+}
+
+/**
+ * One bucket per form and address, case-folded and trimmed.
  *
  * WorkOS lowercases on store, so `Dana@` and `dana@` are the same account and
  * have to be the same bucket; without the fold, changing one letter's case is
  * a free reset. An empty address gets the empty bucket rather than a pass:
  * every blank submission then shares one counter, which limits more, not less.
+ * Folding a reset token can only merge two links' buckets, which also limits
+ * more.
  */
-export function signInKey(email: string): string {
-  return `sign-in:${email.trim().toLowerCase()}`
+export function throttleKey(form: Throttled, value: string): string {
+  return `${form}:${value.trim().toLowerCase()}`
 }
 
 /**
@@ -56,14 +74,15 @@ export function signInKey(email: string): string {
  * closed instead would mean an unconfigured environment locks everybody out of
  * an app whose only way in is this form.
  */
-export async function throttleSignIn(
+export async function throttle(
   limiter: Limiter | undefined,
-  email: string
+  form: Throttled,
+  value: string
 ): Promise<AuthFailure | null> {
   if (!limiter) {
     return null
   }
-  const { success } = await limiter.limit({ key: signInKey(email) })
+  const { success } = await limiter.limit({ key: throttleKey(form, value) })
   if (success) {
     return null
   }
@@ -71,7 +90,7 @@ export async function throttleSignIn(
   // through the branch it already has and no route changes.
   return {
     code: "rate_limited",
-    message: `Too many sign-in attempts for that email. Try again in ${SIGN_IN_WINDOW_SECONDS} seconds.`,
+    message: `${REFUSED[form]} Try again in ${SIGN_IN_WINDOW_SECONDS} seconds.`,
     retryAfter: SIGN_IN_WINDOW_SECONDS,
   }
 }
