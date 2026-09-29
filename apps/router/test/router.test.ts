@@ -4,6 +4,34 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import app from "../src/index.ts"
 
 /**
+ * Postgres for the cases without one: `postgres://stub` is a database in
+ * which every org is open unless `closed` names it, which is all a preview
+ * asks. A real URL, in the live cases below, reaches the real kit.
+ */
+const closed = vi.hoisted(() => new Set<string>())
+vi.mock("@workspace/db", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@workspace/db")>()
+  type Stub = { stubOrg: string }
+  return {
+    ...real,
+    tenancy: (connection: string, options?: { max?: number }) =>
+      connection === "postgres://stub"
+        ? {
+            close: async () => undefined,
+            withOrg: async (
+              ctx: { orgId: string },
+              fn: (db: Stub) => Promise<unknown>
+            ) => fn({ stubOrg: ctx.orgId }),
+          }
+        : real.tenancy(connection, options),
+    orgOpen: async (db: unknown) =>
+      typeof db === "object" && db !== null && "stubOrg" in db
+        ? !closed.has((db as Stub).stubOrg)
+        : real.orgOpen(db as never),
+  }
+})
+
+/**
  * The router without a binding in sight: R2 and KV are maps, the claim is
  * signed with the suite's key, and every answer is read off the response.
  */
@@ -270,7 +298,8 @@ describe("the edge cache", () => {
       headers: cookie(await claimFor()),
     })
     expect(res.status).toBe(200)
-    expect(stored.size).toBe(0)
+    // Only that the org is open, which is no one's file.
+    expect([...stored.keys()]).toEqual([`https://${PREVIEW_HOST}/.edge/open`])
   })
 
   it("answers HEAD from the cache with no body", async () => {
@@ -520,6 +549,38 @@ describe("a preview host", () => {
     expect(set).toMatch(/Max-Age=3[56]\d\d/)
   })
 
+  it("answers 410 for a closed org's preview, and reads no file", async () => {
+    closed.add(ORG)
+    try {
+      const c = cookie(await claimFor())
+      for (const path of ["/", "/_astro/index.C1.css"]) {
+        const res = await get(PREVIEW_HOST, path, { headers: c })
+        expect(res.status, path).toBe(410)
+        expect(await res.text()).toBe("This site is no longer available.")
+        expect(res.headers.get("cache-control")).toBe("no-store")
+      }
+      const shots = await claimFor({ scope: "screenshots" })
+      const shot = await get(
+        PREVIEW_HOST,
+        `/screenshots/home-390.png?t=${shots}`
+      )
+      expect(shot.status).toBe(410)
+      expect(reads).toEqual([])
+    } finally {
+      closed.delete(ORG)
+    }
+  })
+
+  it("believes a preview's org closed for a minute, without asking again", async () => {
+    const stored = withEdgeCache()
+    closed.add(ORG)
+    const c = cookie(await claimFor())
+    expect((await get(PREVIEW_HOST, "/", { headers: c })).status).toBe(410)
+    closed.delete(ORG)
+    expect([...stored.keys()]).toEqual([`https://${PREVIEW_HOST}/.edge/closed`])
+    expect((await get(PREVIEW_HOST, "/", { headers: c })).status).toBe(410)
+  })
+
   it("refuses a bad link with 401 and sets no cookie", async () => {
     const bad = await get(PREVIEW_HOST, "/open?t=forged.token")
     expect(bad.status).toBe(401)
@@ -766,73 +827,117 @@ describe("a published host", () => {
 
 // A KV miss reads Postgres and writes the pointer back (§11.1.3). The rows
 // are written under `withOrg`, the way the publisher writes them.
-const { deployments, orgs, siteRevisions, staff, assignments, tenancy } =
-  await import("@workspace/db")
+const {
+  deployments,
+  memberships,
+  orgs,
+  siteRevisions,
+  staff,
+  assignments,
+  sql,
+  tenancy,
+  tombstone,
+  users,
+} = await import("@workspace/db")
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
 
-live("a published host, against a real database", () => {
-  it("serves the newest deployment on a KV miss and caches the pointer", async () => {
-    const kit = tenancy(url ?? "postgres://unused")
-    const orgId = crypto.randomUUID()
-    const slug = `router-test-${orgId.slice(0, 8)}`
-    const revisionId = crypto.randomUUID()
-    await kit.withOrg({ orgId }, async (db) => {
-      await db
-        .insert(orgs)
-        .values({ id: orgId, slug, name: "Router probe (fixture)" })
-      const [dev] = await db
-        .insert(staff)
-        .values({
-          orgId,
-          staffCode: "DEV-001",
-          displayName: "Dev",
-          kind: "agent",
-          status: "active",
-        })
-        .returning({ id: staff.id })
-      const [assignment] = await db
-        .insert(assignments)
-        .values({
-          orgId,
-          staffId: dev?.id ?? orgId,
-          createdByStaffId: dev?.id ?? orgId,
-          kind: "site.build",
-          goal: "probe",
-          acceptanceCriteria: ["probe"],
-          factSnapshotId: crypto.randomUUID(),
-          budgetUsd: 1,
-          idempotencyKey: crypto.randomUUID(),
-        })
-        .returning({ id: assignments.id })
-      const prefix = `sites/${orgId}/${revisionId}/`
-      await db.insert(siteRevisions).values({
-        id: revisionId,
-        orgId,
-        siteId: orgId,
-        assignmentId: assignment?.id ?? orgId,
-        version: 1,
-        sourceKey: `${prefix}source.tar.zst`,
-        artifactPrefix: `${prefix}dist/`,
-        manifestKey: `${prefix}manifest.json`,
-        status: "published",
-      })
-      await db.insert(deployments).values({
-        orgId,
-        siteId: orgId,
-        revisionId,
-        configVersion: 1,
-        kind: "rollback",
-        reason: "probe",
-      })
+/**
+ * A fictional org with one published deployment and its owner, who is still
+ * here (`open`), deleted their account (`deleted`, the tombstone
+ * `DELETE /account` writes first) or has left (`left`, the membership it
+ * ends last).
+ */
+async function publishedOrg(owner: "open" | "deleted" | "left") {
+  const kit = tenancy(url ?? "postgres://unused")
+  const orgId = crypto.randomUUID()
+  const workosUserId = `user_router_probe_${orgId}`
+  const slug = `router-test-${orgId.slice(0, 8)}`
+  const revisionId = crypto.randomUUID()
+  await kit.withOrg({ orgId, workosUserId }, async (db) => {
+    await db
+      .insert(orgs)
+      .values({ id: orgId, slug, name: "Router probe (fixture)" })
+    await db
+      .insert(users)
+      .values({ workosUserId, email: `router-${orgId}@example.test` })
+    const [person] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(sql`${users.workosUserId} = ${workosUserId}`)
+    const personId = person?.id as string
+    await db.insert(memberships).values({
+      orgId,
+      userId: personId,
+      workosMembershipId: `om_router_probe_${orgId}`,
+      role: "owner",
+      status: owner === "left" ? "inactive" : "active",
     })
-    await kit.close()
-    revision(orgId, revisionId)
+    if (owner === "deleted") {
+      await db
+        .update(users)
+        .set({ email: tombstone(personId) })
+        .where(sql`${users.id} = ${personId}`)
+    }
+    const [dev] = await db
+      .insert(staff)
+      .values({
+        orgId,
+        staffCode: "DEV-001",
+        displayName: "Dev",
+        kind: "agent",
+        status: "active",
+      })
+      .returning({ id: staff.id })
+    const [assignment] = await db
+      .insert(assignments)
+      .values({
+        orgId,
+        staffId: dev?.id ?? orgId,
+        createdByStaffId: dev?.id ?? orgId,
+        kind: "site.build",
+        goal: "probe",
+        acceptanceCriteria: ["probe"],
+        factSnapshotId: crypto.randomUUID(),
+        budgetUsd: 1,
+        idempotencyKey: crypto.randomUUID(),
+      })
+      .returning({ id: assignments.id })
+    const prefix = `sites/${orgId}/${revisionId}/`
+    await db.insert(siteRevisions).values({
+      id: revisionId,
+      orgId,
+      siteId: orgId,
+      assignmentId: assignment?.id ?? orgId,
+      version: 1,
+      sourceKey: `${prefix}source.tar.zst`,
+      artifactPrefix: `${prefix}dist/`,
+      manifestKey: `${prefix}manifest.json`,
+      status: "published",
+    })
+    await db.insert(deployments).values({
+      orgId,
+      siteId: orgId,
+      revisionId,
+      configVersion: 1,
+      kind: "rollback",
+      reason: "probe",
+    })
+  })
+  await kit.close()
+  revision(orgId, revisionId)
+  return { orgId, slug, revisionId }
+}
+
+live("a published host, against a real database", () => {
+  const liveEnv = {
+    ...env,
+    HYPERDRIVE: { connectionString: url },
+  } as unknown as Env
+
+  it("serves the newest deployment on a KV miss and caches the pointer", async () => {
+    const { orgId, slug, revisionId } = await publishedOrg("open")
     const host = `${slug}${SUFFIX}`
-    const liveEnv = {
-      ...env,
-      HYPERDRIVE: { connectionString: url },
-    } as unknown as Env
     expect(pointers.has(`host:${host}`)).toBe(false)
     const res = await app.request(`https://${host}/`, {}, liveEnv)
     expect(res.status).toBe(200)
@@ -896,5 +1001,105 @@ live("a published host, against a real database", () => {
     expect(res.status).toBe(299)
     expect(seen).toEqual([`https://${host}/`])
     expect(pointers.has(`host:${host}`)).toBe(false)
+  })
+
+  // ADR-035: once the owner deletes their account the takedown removes the
+  // pointer, and a miss must not put it back.
+  it("answers 410 on a KV miss for a closed org and writes no pointer", async () => {
+    for (const owner of ["deleted", "left"] as const) {
+      const { slug } = await publishedOrg(owner)
+      const host = `${slug}${SUFFIX}`
+      const res = await app.request(`https://${host}/`, {}, liveEnv)
+      expect(res.status, owner).toBe(410)
+      expect(await res.text()).toBe("This site is no longer available.")
+      expect(res.headers.get(SITE_REVISION_HEADER)).toBeNull()
+      expect(pointers.has(`host:${host}`), owner).toBe(false)
+    }
+  })
+
+  it("answers 410 for a closed org on production rather than passing it through", async () => {
+    const { slug } = await publishedOrg("deleted")
+    const host = `${slug}${PROD_SUFFIX}`
+    const { res, seen } = await passedThrough(host, "/", {
+      ...prodEnv,
+      HYPERDRIVE: { connectionString: url },
+    } as unknown as Env)
+    expect(res.status).toBe(410)
+    expect(seen).toEqual([])
+    expect(pointers.has(`host:${host}`)).toBe(false)
+  })
+
+  it("believes a closed org for a minute, without asking again", async () => {
+    const { slug } = await publishedOrg("deleted")
+    const host = `${slug}${SUFFIX}`
+    const stored = withEdgeCache()
+    expect((await app.request(`https://${host}/`, {}, liveEnv)).status).toBe(
+      410
+    )
+    expect([...stored.keys()]).toEqual([`https://${host}/.edge/closed`])
+    limited = true
+    expect((await app.request(`https://${host}/`, {}, liveEnv)).status).toBe(
+      410
+    )
+  })
+
+  it("leaves the hot path alone: a pointer in KV is served without asking", async () => {
+    // The takedown is what removes it; the router never reads Postgres on a hit.
+    const { orgId, slug, revisionId } = await publishedOrg("deleted")
+    const host = `${slug}${SUFFIX}`
+    pointers.set(`host:${host}`, {
+      org_id: orgId,
+      site_id: orgId,
+      revision_id: revisionId,
+      config_version: 1,
+    })
+    limited = true
+    const res = await app.request(`https://${host}/`, {}, env)
+    expect(res.status).toBe(200)
+    expect(askers).toEqual([])
+    pointers.delete(`host:${host}`)
+  })
+
+  it("answers 410 for a closed org's preview, from the real database", async () => {
+    const { orgId, revisionId } = await publishedOrg("deleted")
+    const host = `preview-v1-router-closed${SUFFIX}`
+    const token = await signPreview(
+      {
+        org_id: orgId,
+        site_id: orgId,
+        revision_id: revisionId,
+        host,
+        scope: "site",
+        exp: soon(),
+      } as never,
+      KEY
+    )
+    const res = await app.request(
+      `https://${host}/`,
+      { headers: cookie(token) },
+      liveEnv
+    )
+    expect(res.status).toBe(410)
+    const open = await publishedOrg("open")
+    const served = await app.request(
+      `https://${host}/`,
+      {
+        headers: cookie(
+          await signPreview(
+            {
+              org_id: open.orgId,
+              site_id: open.orgId,
+              revision_id: open.revisionId,
+              host,
+              scope: "site",
+              exp: soon(),
+            } as never,
+            KEY
+          )
+        ),
+      },
+      liveEnv
+    )
+    expect(served.status).toBe(200)
   })
 })

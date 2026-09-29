@@ -1,9 +1,22 @@
-import { ErrorEnvelope } from "@workspace/contracts"
-import { eq, memberships, resolveOrg, sql, tenancy, users } from "@workspace/db"
+import { ErrorEnvelope, OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
+import {
+  eq,
+  memberships,
+  orgOpen,
+  resolveOrg,
+  sql,
+  tenancy,
+  users,
+} from "@workspace/db"
 import { clearOrgs, type Tx } from "@workspace/db/fixtures/seed"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { type Accounts, deleteAccount, tombstone } from "../src/account.ts"
+import {
+  type Accounts,
+  deleteAccount,
+  type Takedown,
+  tombstone,
+} from "../src/account.ts"
 import worker from "../src/index.ts"
 import { createOrg, type Directory, EmailTaken } from "../src/org.ts"
 import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
@@ -68,22 +81,47 @@ describe("the route, before the database", () => {
 
 const notFound = () => Object.assign(new Error("not found"), { status: 404 })
 
+/**
+ * The orchestrator's takedown as deletion sees it: which orgs it was asked
+ * for, in order, and how many calls to fail first.
+ */
+function fakeTakedown(calls: string[] = []) {
+  let failures = 0
+  const takedown: Takedown = async (orgId) => {
+    calls.push(`takedown ${orgId}`)
+    if (failures > 0) {
+      failures -= 1
+      throw new Error("orchestrator unavailable")
+    }
+  }
+  return {
+    takedown,
+    calls,
+    failNext: () => {
+      failures += 1
+    },
+  }
+}
+
 /** WorkOS as far as deletion sees it: who is in which org, and what is gone. */
-function fakeWorkos(members: Record<string, string[]>) {
+function fakeWorkos(members: Record<string, string[]>, calls: string[] = []) {
   const gone: string[] = []
   let failures = 0
   const accounts: Accounts = {
     listOrganizationMemberships: async ({ organizationId }) => {
+      calls.push("workos list")
       if (gone.includes(organizationId)) throw notFound()
       return {
         data: (members[organizationId] ?? []).map((userId) => ({ userId })),
       }
     },
     deleteOrganization: async (id) => {
+      calls.push("workos delete organization")
       if (gone.includes(id)) throw notFound()
       gone.push(id)
     },
     deleteUser: async (id) => {
+      calls.push("workos delete user")
       if (failures > 0) {
         failures -= 1
         throw Object.assign(new Error("unavailable"), { status: 503 })
@@ -169,7 +207,14 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       [session.workosOrganizationId]: [session.workosUserId],
     })
 
-    expect(await deleteAccount(kit, workos.accounts, session)).toBe("deleted")
+    expect(
+      await deleteAccount(
+        kit,
+        workos.accounts,
+        fakeTakedown().takedown,
+        session
+      )
+    ).toBe("deleted")
 
     const row = await person(session.workosUserId)
     expect(row?.email).toBe(tombstone(row?.id as string))
@@ -185,7 +230,14 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     ])
 
     // A second call finds everything gone and still succeeds.
-    expect(await deleteAccount(kit, workos.accounts, session)).toBe("deleted")
+    expect(
+      await deleteAccount(
+        kit,
+        workos.accounts,
+        fakeTakedown().takedown,
+        session
+      )
+    ).toBe("deleted")
     expect(await logged(orgId)).toBe(1)
 
     // The same email signs up again under a new WorkOS user.
@@ -201,13 +253,20 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     })
     workos.failNextUserDelete()
 
-    await expect(deleteAccount(kit, workos.accounts, session)).rejects.toThrow(
-      "unavailable"
-    )
+    await expect(
+      deleteAccount(kit, workos.accounts, fakeTakedown().takedown, session)
+    ).rejects.toThrow("unavailable")
     expect(await resolveOrg(kit, session)).toBeNull()
     expect(workos.gone).toEqual([session.workosOrganizationId])
 
-    expect(await deleteAccount(kit, workos.accounts, session)).toBe("deleted")
+    expect(
+      await deleteAccount(
+        kit,
+        workos.accounts,
+        fakeTakedown().takedown,
+        session
+      )
+    ).toBe("deleted")
     expect(workos.gone).toEqual([
       session.workosOrganizationId,
       session.workosUserId,
@@ -235,12 +294,13 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       })
     })
     const workos = fakeWorkos({})
+    const down = fakeTakedown()
 
-    expect(await deleteAccount(kit, workos.accounts, session)).toBe(
-      "other_members"
-    )
     expect(
-      await deleteAccount(kit, workos.accounts, {
+      await deleteAccount(kit, workos.accounts, down.takedown, session)
+    ).toBe("other_members")
+    expect(
+      await deleteAccount(kit, workos.accounts, down.takedown, {
         ...session,
         workosUserId: other,
       })
@@ -249,18 +309,90 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(await resolveOrg(kit, session)).toBe(orgId)
     expect(await logged(orgId)).toBe(0)
     expect(workos.gone).toEqual([])
+    // A refusal takes nothing down.
+    expect(down.calls).toEqual([])
+    expect(await kit.withOrg({ orgId }, orgOpen)).toBe(true)
+  })
+
+  it("takes the site down once the org reads closed, before WorkOS and while the org still resolves", async () => {
+    const { orgId, session } = await signup("order")
+    const calls: string[] = []
+    const workos = fakeWorkos(
+      { [session.workosOrganizationId]: [session.workosUserId] },
+      calls
+    )
+    const seen: { open: boolean; resolves: string | null }[] = []
+    const takedown: Takedown = async (id) => {
+      calls.push(`takedown ${id}`)
+      seen.push({
+        open: await kit.withOrg({ orgId: id }, orgOpen),
+        resolves: await resolveOrg(kit, session),
+      })
+    }
+
+    expect(await deleteAccount(kit, workos.accounts, takedown, session)).toBe(
+      "deleted"
+    )
+    expect(calls).toEqual([
+      `takedown ${orgId}`,
+      "workos list",
+      "workos delete organization",
+      "workos delete user",
+    ])
+    // Closed to the router and the publisher, still the owner's to finish.
+    expect(seen).toEqual([{ open: false, resolves: orgId }])
+    expect(await kit.withOrg({ orgId }, orgOpen)).toBe(false)
+  })
+
+  it("fails when the takedown fails, with nothing gone at WorkOS, and a retry finishes", async () => {
+    const { orgId, session } = await signup("takedown")
+    const calls: string[] = []
+    const workos = fakeWorkos(
+      { [session.workosOrganizationId]: [session.workosUserId] },
+      calls
+    )
+    const down = fakeTakedown(calls)
+    down.failNext()
+
+    await expect(
+      deleteAccount(kit, workos.accounts, down.takedown, session)
+    ).rejects.toThrow("orchestrator unavailable")
+    expect(calls).toEqual([`takedown ${orgId}`])
+    expect(workos.gone).toEqual([])
+    // The org still resolves, so the retry can take the site down again.
+    expect(await resolveOrg(kit, session)).toBe(orgId)
+    expect(await logged(orgId)).toBe(0)
+
+    expect(
+      await deleteAccount(kit, workos.accounts, down.takedown, session)
+    ).toBe("deleted")
+    expect(calls.filter((c) => c.startsWith("takedown"))).toEqual([
+      `takedown ${orgId}`,
+      `takedown ${orgId}`,
+    ])
+    expect(workos.gone).toEqual([
+      session.workosOrganizationId,
+      session.workosUserId,
+    ])
+    expect(await resolveOrg(kit, session)).toBeNull()
+    expect(await logged(orgId)).toBe(1)
   })
 
   it("refuses a session with no org it resolves and no deleted row", async () => {
     const workos = fakeWorkos({})
-    const outcome = await deleteAccount(kit, workos.accounts, {
-      workosUserId: `user_probe_account_stranger_${run}`,
-      workosOrganizationId: "org_probe_account_stranger",
-      sessionId: "session_stranger",
-      impersonated: false,
-      email: "stranger@account.invalid",
-      name: null,
-    })
+    const outcome = await deleteAccount(
+      kit,
+      workos.accounts,
+      fakeTakedown().takedown,
+      {
+        workosUserId: `user_probe_account_stranger_${run}`,
+        workosOrganizationId: "org_probe_account_stranger",
+        sessionId: "session_stranger",
+        impersonated: false,
+        email: "stranger@account.invalid",
+        name: null,
+      }
+    )
     expect(outcome).toBe("unresolved")
     expect(workos.gone).toEqual([])
   })
@@ -294,7 +426,7 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(asked).toBe(0)
   })
 
-  it("deletes through the route with a real session and the SDK's own calls", async () => {
+  it("deletes through the route with a real session, the bridge and the SDK's own calls", async () => {
     const { orgId, session } = await signup("route")
     const asked: string[] = []
     workosApi = async (request) => {
@@ -321,6 +453,18 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       return new Response(null, { status: 202 })
     }
 
+    // The orchestrator fails the first takedown and takes the second.
+    let takedown = 503
+    const orchestrator = {
+      fetch: async (request: Request) => {
+        const { pathname } = new URL(request.url)
+        const org = request.headers.get(OWNER_BRIDGE_HEADERS.orgId)
+        asked.push(`${request.method} orchestrator ${pathname} ${org}`)
+        return takedown === 204
+          ? new Response(null, { status: 204 })
+          : Response.json({}, { status: takedown })
+      },
+    }
     const headers = {
       ...(await cookieHeader({
         sub: session.workosUserId,
@@ -328,16 +472,28 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       })),
       "idempotency-key": "delete-account",
     }
-    const response = await worker.fetch(
-      new Request("http://api.invalid/account", {
-        method: "DELETE",
-        headers,
-      }),
-      env(url as string),
-      ctx
-    )
+    const remove = () =>
+      worker.fetch(
+        new Request("http://api.invalid/account", {
+          method: "DELETE",
+          headers,
+        }),
+        { ...env(url as string), ORCHESTRATOR: orchestrator } as Env,
+        ctx
+      )
+    const bridged = `POST orchestrator /assignments/site/takedown ${orgId}`
+
+    const failed = await remove()
+    expect(failed.status).toBe(503)
+    expect(asked).toEqual([bridged])
+    expect(await resolveOrg(kit, session)).toBe(orgId)
+
+    asked.length = 0
+    takedown = 204
+    const response = await remove()
     expect(response.status).toBe(204)
     expect(asked).toEqual([
+      bridged,
       "GET /user_management/organization_memberships",
       `DELETE /organizations/${session.workosOrganizationId}`,
       `DELETE /user_management/users/${session.workosUserId}`,

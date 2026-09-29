@@ -292,8 +292,8 @@ describe("owner mode", () => {
     [OWNER_BRIDGE_HEADERS.sessionId]: "session_1",
   }
 
-  // The seven routes that cross the bridge, and every route the console has
-  // besides. A route added to either tree lands in one of these lists.
+  // The seven routes that cross the bridge, the owner's own, and every route
+  // the console has besides. A route added to any tree lands in one of these.
   const BRIDGE: [string, string][] = [
     ["POST", "/assignments"],
     ["POST", "/assignments/x/answer"],
@@ -302,6 +302,9 @@ describe("owner mode", () => {
     ["GET", "/assignments/x/preview"],
     ["POST", "/assignments/x/approve"],
     ["POST", "/assignments/x/reject"],
+  ]
+  const OWNER_ONLY: [string, string][] = [
+    ["POST", "/assignments/site/takedown"],
   ]
   const CONSOLE_ONLY: [string, string][] = [
     ["GET", "/assignments"],
@@ -318,7 +321,7 @@ describe("owner mode", () => {
   ]
 
   it("is not reachable through the default export with forged owner headers", async () => {
-    for (const [method, path] of BRIDGE) {
+    for (const [method, path] of [...BRIDGE, ...OWNER_ONLY]) {
       const res = await app.request(
         `${path}?org=brightclean`,
         { method, headers: identity },
@@ -351,7 +354,7 @@ describe("owner mode", () => {
   })
 
   it("answers the bridge routes and 404s every other one", async () => {
-    for (const [method, path] of BRIDGE) {
+    for (const [method, path] of [...BRIDGE, ...OWNER_ONLY]) {
       const res = await owner.request(path, { method, headers: identity }, env)
       expect(res.status, `${method} ${path}`).not.toBe(404)
       expect(res.status, `${method} ${path}`).not.toBe(401)
@@ -370,6 +373,18 @@ describe("owner mode", () => {
         env
       )
       expect(res.status, `${method} ${path}`).not.toBe(404)
+    }
+  })
+
+  it("keeps the owner's own routes off the console's app, bearer or not", async () => {
+    for (const [method, path] of OWNER_ONLY) {
+      const res = await app.request(
+        `${path}?org=brightclean`,
+        { method, headers: { authorization: "Bearer test-token" } },
+        env
+      )
+      expect(res.status, `${method} ${path}`).toBe(404)
+      expect((await envelope(res)).code).toBe("route.not_found")
     }
   })
 

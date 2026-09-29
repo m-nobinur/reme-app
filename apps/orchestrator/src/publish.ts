@@ -14,6 +14,7 @@ import {
   deployments,
   eq,
   type OrgScopedDb,
+  orgOpen,
   orgs,
   siteRevisions,
   sql,
@@ -750,11 +751,12 @@ export async function readTarget(
 /**
  * The routing pointer (§11.1.3): KV is the cache and Postgres the truth, so
  * every write puts the site's newest deployment as Postgres has it now, and a
- * late or retried write can only repeat what is live. The KV write follows
- * the read's commit rather than running inside it, so no transaction is held
- * open on KV. The binding is optional in the generated types because
- * production has no namespace yet; a publish without one is a configuration
- * error, not a retry.
+ * late or retried write can only repeat what is live. An org whose account
+ * was deleted gets no pointer at all (ADR-035), and the refusal is final. The
+ * KV write follows the read's commit rather than running inside it, so no
+ * transaction is held open on KV. The binding is optional in the generated
+ * types because production has no namespace yet; a publish without one is a
+ * configuration error, not a retry.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
@@ -765,9 +767,12 @@ export async function writePointer(
 ): Promise<{ host: string }> {
   if (!env.ROUTES)
     throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
-  const live = await kit.withOrg({ orgId }, (db) =>
-    activeDeployment(db, siteId)
+  const live = await kit.withOrg({ orgId }, async (db) =>
+    (await orgOpen(db)) ? activeDeployment(db, siteId) : "closed"
   )
+  if (live === "closed") {
+    throw new TransitionError("org.closed", "resource", "the org is closed")
+  }
   if (!live) throw new Error("no deployment to point at")
   await env.ROUTES.put(
     `host:${host}`,
@@ -781,4 +786,24 @@ export async function writePointer(
     )
   )
   return { host }
+}
+
+/**
+ * Every pointer the org's site answers on, gone (ADR-035): its one live host
+ * (ADR-030). Previews carry signed claims, not pointers, and the router
+ * refuses those itself for a closed org. Deleting a key that is not there is
+ * success, so a repeat is too.
+ */
+export async function clearPointers(
+  env: Pick<Env, "ROUTES" | "SITE_HOST_SUFFIX">,
+  kit: Pick<Tenancy, "withOrg">,
+  orgId: string
+): Promise<void> {
+  if (!env.ROUTES)
+    throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
+  const [org] = await kit.withOrg({ orgId }, (db) =>
+    db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
+  )
+  if (org)
+    await env.ROUTES.delete(`host:${siteHost(org.slug, env.SITE_HOST_SUFFIX)}`)
 }

@@ -73,3 +73,35 @@ workflow in §10.5. It needs its own ADR and runs as the migrator.
 
 The first org with more than one active member whose owner wants to leave, or the first erasure
 request. The first needs ownership transfer; the second needs the §10.5 workflow.
+
+## Amendment, 2026-09-29: deletion takes the site offline at once
+
+The owner decided that deleting an account takes the website offline immediately. This replaces
+"The published site stays live" above and the order in step 3 of the decision.
+
+What makes an org closed is `orgOpen` in `packages/db`: no active membership held by a person whose
+`users.email` is not a tombstone. `DELETE /account` now runs in this order:
+
+1. The same refusals, then the caller's row becomes a tombstone. From this commit the org is closed,
+   and the membership is still active, so the org still resolves for the owner.
+2. The api calls the orchestrator's `POST /assignments/site/takedown` over the owner binding. It
+   cancels every non-terminal assignment through the state machine, terminates each Workflow
+   instance and ends each sandbox, then deletes the `host:<host>` routing key. It answers 204, and
+   a repeat answers 204 again. The route is in the owner's tree only; the console's app answers 404.
+   A takedown that does not answer 204 fails the route before anything reaches WorkOS.
+3. The membership becomes inactive and `account.deleted` is appended, as before.
+4. WorkOS, as before.
+
+A retry after a failed takedown still resolves the org and takes the site down again. The takedown
+runs after the org is closed so that nothing can write the key back: on a KV miss the router answers
+410 "This site is no longer available." for a closed org and writes nothing to KV, on production as
+on staging, where an unknown host would otherwise pass through. `writePointer` refuses a closed org
+with `org.closed`, which ends a publish Workflow that was already running. A preview's signed claim
+lasts a day, so the router also asks Postgres whether a preview's org is open and answers 410 when it
+is not.
+
+"At once" is bounded by caching. KV can go on returning a deleted key for up to a minute, and a data
+centre that read the pointer from Postgres believes it for a minute (the router's `pointer` belief).
+Each preview host's open or closed answer is believed for a minute the same way.
+
+Erasing the org's rows stays the §10.5 job. So do the R2 artifacts, which are never mutated.

@@ -612,6 +612,26 @@ describe("the artifact check and the probe", () => {
     expect(signal).toBeInstanceOf(AbortSignal)
   })
 
+  it("points nothing at an org whose owner deleted their account, and says so for good", async () => {
+    const puts: string[] = []
+    const db = { execute: async () => [{ open: false }] }
+    const reading = {
+      withOrg: async (_ctx: unknown, fn: (db: never) => Promise<unknown>) =>
+        fn(db as never),
+    }
+    const env = {
+      ROUTES: {
+        put: async (key: string) => {
+          puts.push(key)
+        },
+      },
+    } as unknown as Env
+    await expect(
+      writePointer(env, reading as never, "o", "s", "h")
+    ).rejects.toMatchObject({ code: "org.closed", errorClass: "resource" })
+    expect(puts).toEqual([])
+  })
+
   it("points the host at what Postgres says is live, whatever KV holds, after the read commits", async () => {
     const store = storage()
     const site = "10000001-0000-4000-8000-000000000001"
@@ -622,6 +642,8 @@ describe("the artifact check and the probe", () => {
       configVersion: 3,
     }
     const db = {
+      // `orgOpen`: the org still has its owner.
+      execute: async () => [{ open: true }],
       select: () => ({
         from: () => ({
           where: () => ({ orderBy: () => ({ limit: async () => [newest] }) }),
