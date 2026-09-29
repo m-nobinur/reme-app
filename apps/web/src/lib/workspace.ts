@@ -11,7 +11,7 @@ import { runningBuild } from "./build-state"
 
 /**
  * The panel polls `/workspace`, cheaply, until a push channel replaces it:
- * every 3 s while a build runs, 30 s otherwise, 60 s after a failed read. A
+ * every 3 s while a build is queued or runs, 30 s otherwise, 60 s after a failed read. A
  * hidden tab does not poll, and a tab coming back reads at once. An owner
  * action or the end of a chat turn reads at once too. Each poll sends the
  * last tag, so an unchanged workspace answers 304 and keeps what is shown.
@@ -77,7 +77,7 @@ export function startPolling({
     if (stopped || page.hidden) return
     const delay = failed
       ? INTERVAL.error
-      : current?.building
+      : current?.building || current?.builds.some((b) => b.state === "queued")
         ? INTERVAL.building
         : INTERVAL.idle
     timer = setTimeout(tick, delay)

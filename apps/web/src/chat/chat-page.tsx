@@ -69,11 +69,14 @@ export function ChatPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
   const router = useRouter()
-  const { active, workspace } = frame.useLoaderData()
+  const { active } = frame.useLoaderData()
+  // The polled workspace, not the loader's: a build that goes live after the
+  // turn ends would otherwise leave the line above the composer a version
+  // behind the panel until a reload.
   const live = useLiveWorkspace()
   const briefing = useMemo(
-    () => briefingOf(active, workspace),
-    [active, workspace]
+    () => briefingOf(active, live.workspace),
+    [active, live.workspace]
   )
   // Client only (the route has `ssr: false`), so storage can be read here.
   const [mode, setMode] = useState(storedMode)
