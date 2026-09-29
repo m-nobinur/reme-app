@@ -1,5 +1,5 @@
 import { PreviewClaim } from "@workspace/contracts"
-import { resolveSitePath } from "./page.ts"
+import { resolveSitePath } from "./site-path.ts"
 
 /**
  * The preview seam the orchestrator and the router share (ADR-032): the

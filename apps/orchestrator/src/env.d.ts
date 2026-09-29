@@ -1,4 +1,25 @@
-/** Secrets from `.dev.vars` locally and Worker secrets deployed (R9). */
-interface Env {
+/**
+ * The secrets this Worker reads, declared by hand for the reason apps/api
+ * gives: a secret in a committed config is a secret in the repo (R9), so
+ * `wrangler types` never sees it. Local values live in
+ * `apps/orchestrator/.dev.vars`, and `cf-typegen` passes `--env-file
+ * /dev/null` so that file never reaches the generated types. Every name here
+ * is one `infra/bootstrap.ts` sets on each deploy.
+ *
+ * Merged into the generated base that both `Env` and `Cloudflare.Env` extend,
+ * since the Developer reads its bindings through `cloudflare:workers`, which
+ * types them as the latter.
+ */
+interface __BaseEnv_Env {
+  /** The console's bearer. */
   ORCHESTRATOR_TOKEN: string
+  /** Signs the RuntimeSpec the Developer verifies. */
+  RUNTIME_SPEC_KEY: string
+  /** Signs preview claims here; the router verifies them (ADR-032). */
+  PREVIEW_KEY: string
+  OPENROUTER_API_KEY: string
+  /** The model plane's settings, set as secrets so one list says what the Worker reads. */
+  REME_MODEL_PRIMARY: string
+  REME_MODEL_DEFAULT: string
+  REME_MODEL_FALLBACK: string
 }

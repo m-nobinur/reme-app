@@ -1,5 +1,7 @@
 /**
- * The same gate `apps/api` runs, against this Worker.
+ * The Worker size gate for `apps/<app>`, the same gate `apps/web` runs.
+ *
+ *   node ../../scripts/size.mjs <app> [--config <path>] [--forbid <marker>]
  *
  * `wrangler deploy --dry-run` does the real bundling, then we gzip its output
  * the way wrangler does, every uploaded module concatenated at zlib defaults, so
@@ -7,35 +9,48 @@
  * parsed and compared rather than trusted, because our sort order and its
  * collection order agree only by coincidence of today's chunk names.
  *
- * `limit` is the 3 MiB early-warning line from ADR-027. `baseline` is what this
- * branch measures, and drift is checked in both directions: growth past 2%
- * raises the baseline in the same diff, and a collapse is a build that silently
- * emitted less, which is the failure a size gate exists to catch.
+ * `limit` in the app's `size-budget.json` is the 3 MiB early-warning line from
+ * ADR-027. `baseline` is what this branch measures, and drift is checked in both
+ * directions: growth past 2% raises the baseline in the same diff, and a
+ * collapse is a build that silently emitted less, which is the failure a size
+ * gate exists to catch.
  *
- * There is no build step to depend on. This Worker is `src/index.ts` and
- * `wrangler.jsonc`; wrangler bundles it here and nowhere else.
+ * `--config` names a built config to bundle from, for a Worker that Vite builds
+ * first (the orchestrator); without it wrangler bundles `src/` from the app's
+ * `wrangler.jsonc`. `--forbid` fails the gate when the bundle holds a string:
+ * one of parse5's error codes, for a Worker that must not carry the content
+ * gate the `@workspace/gates` root pulls in.
  *
- * The comparison is a copy of the one in `apps/web/scripts/size-check.mjs`
- * rather than an import: an app importing another app's file is the boundary
- * this repo lints against. The fix is to lift it to the root `scripts/`, which
- * touches `apps/web` and belongs in a PR that owns that file.
+ * `apps/web` keeps its own copy in `apps/web/scripts/size-check.mjs`, which the
+ * frontend owns.
  */
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
 
-const app = fileURLToPath(new URL("..", import.meta.url))
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: { config: { type: "string" }, forbid: { type: "string" } },
+})
+const name = positionals[0]
+if (!name || positionals.length > 1) {
+  console.error("usage: size.mjs <app> [--config <path>] [--forbid <marker>]")
+  process.exit(1)
+}
+const app = fileURLToPath(new URL(`../apps/${name}/`, import.meta.url))
 const kib = (bytes) => `${(bytes / 1024).toFixed(2)} KiB`
 
 function measure() {
-  const outdir = mkdtempSync(join(tmpdir(), "reme-router-size-"))
+  const outdir = mkdtempSync(join(tmpdir(), `reme-${name}-size-`))
   try {
+    const config = values.config ? ["--config", values.config] : []
     const stdout = execFileSync(
       "wrangler",
-      ["deploy", "--dry-run", "--outdir", outdir],
+      ["deploy", "--dry-run", ...config, "--outdir", outdir],
       { cwd: app, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
     )
     const modules = readdirSync(outdir, {
@@ -57,6 +72,9 @@ function measure() {
     const bytes = modules.map((path) => readFileSync(path))
     const printed = /gzip:\s*([\d.]+)\s*KiB/.exec(stdout)
     return {
+      forbidden:
+        values.forbid !== undefined &&
+        bytes.some((buffer) => buffer.includes(values.forbid)),
       raw: bytes.reduce((total, buffer) => total + buffer.length, 0),
       gzip: gzipSync(Buffer.concat(bytes)).length,
       printed: printed ? Number(printed[1]) : null,
@@ -71,7 +89,7 @@ try {
   budget = JSON.parse(readFileSync(join(app, "size-budget.json"), "utf8"))
 } catch (error) {
   console.error(
-    `size: apps/router/size-budget.json is unreadable. ${error.message}`
+    `size: apps/${name}/size-budget.json is unreadable. ${error.message}`
   )
   process.exit(1)
 }
@@ -82,7 +100,7 @@ const missing = ["limit", "baseline", "drift"].filter(
 )
 if (missing.length > 0) {
   console.error(
-    `size: apps/router/size-budget.json has no usable ${missing.join(", ")}. ` +
+    `size: apps/${name}/size-budget.json has no usable ${missing.join(", ")}. ` +
       "A missing or misspelt key makes every comparison NaN, which passes silently."
   )
   process.exit(1)
@@ -100,6 +118,14 @@ if (size.printed != null && Math.abs(size.gzip / 1024 - size.printed) > 0.02) {
   console.error(
     `size: measured ${(size.gzip / 1024).toFixed(2)} KiB but wrangler reported ${size.printed.toFixed(2)} KiB. ` +
       "The module set or its concatenation order no longer matches wrangler's, so this number is not what Cloudflare receives."
+  )
+  process.exit(1)
+}
+
+if (size.forbidden) {
+  console.error(
+    `size: the bundle carries "${values.forbid}", which apps/${name} forbids. ` +
+      "Import a parse5-free subpath of @workspace/gates, not its root."
   )
   process.exit(1)
 }

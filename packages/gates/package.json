@@ -19,6 +19,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./fields": "./src/fields.ts",
-    "./preview": "./src/preview.ts"
+    "./preview": "./src/preview.ts",
+    "./site-path": "./src/site-path.ts"
   }
 }

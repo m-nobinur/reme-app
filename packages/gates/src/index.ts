@@ -5,7 +5,8 @@ import {
   type GateResult,
 } from "@workspace/contracts"
 import { claimFindings } from "./claims.ts"
-import { type Located, type Page, parsePage, resolveSitePath } from "./page.ts"
+import { type Located, type Page, parsePage } from "./page.ts"
+import { resolveSitePath } from "./site-path.ts"
 import {
   type ContentClaim,
   type ContentKind,
@@ -21,7 +22,8 @@ export {
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
-export { type Page, parsePage, resolveSitePath } from "./page.ts"
+export { type Page, parsePage } from "./page.ts"
+export { resolveSitePath } from "./site-path.ts"
 export { factsForContent } from "./text.ts"
 
 /**

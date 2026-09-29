@@ -17,7 +17,6 @@ import {
   sql,
   tenancy,
 } from "@workspace/db"
-import { resolveSitePath } from "@workspace/gates"
 import {
   PREVIEW_COOKIE,
   previewHeaders,
@@ -25,6 +24,7 @@ import {
   SCREENSHOTS,
   verifyPreview,
 } from "@workspace/gates/preview"
+import { resolveSitePath } from "@workspace/gates/site-path"
 import { type Context, Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 
