@@ -1,3 +1,4 @@
+import { localMidnight } from "@workspace/ui/lib/zone"
 import type { OrgSummary, Workspace } from "./api/types"
 import { factsNeeded, questionOf } from "./reminders"
 
@@ -21,9 +22,9 @@ const NOTHING: Briefing = { line: null, context: null, suggestions: [] }
  */
 function due(at: string, now: Date): string {
   const date = new Date(at)
-  const day = (value: Date) =>
-    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
-  const days = Math.round((day(date) - day(now)) / 86_400_000)
+  const days = Math.round(
+    (localMidnight(date) - localMidnight(now)) / 86_400_000
+  )
   const when =
     days <= 0
       ? "today"

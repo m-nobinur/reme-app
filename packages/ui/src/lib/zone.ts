@@ -20,20 +20,6 @@ export function wallText(iso: string): string | null {
   )
 }
 
-/** An instant as the clock in `zone` shows it. */
-export function zonedText(iso: string, zone: string): string | null {
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return null
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: zone,
-  }).format(at)
-}
-
 /** A zone as the owner reads it: "Sydney time", or "UTC". */
 export function zoneLabel(zone: string): string {
   if (/^(Etc\/)?(UTC|GMT|Universal|Zulu)$/.test(zone)) return "UTC"
@@ -43,3 +29,7 @@ export function zoneLabel(zone: string): string {
 /** The zone this browser keeps, which is the one a turn carries. */
 export const browserZone = () =>
   Intl.DateTimeFormat().resolvedOptions().timeZone
+
+/** Midnight of `at`'s day on this browser's clock, as a number to compare. */
+export const localMidnight = (at: Date): number =>
+  new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime()

@@ -19,8 +19,9 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
-import { WORKING } from "../build-state"
+import { refusalText } from "@workspace/ui/lib/refusal"
 import type {
   AttentionItem,
   DecisionOutcome,
@@ -430,26 +431,9 @@ const REFUSED: Record<
 }
 
 /**
- * The refusals an owner can act on from the panel, in their words. Any other
- * 4xx is a stale screen; a 5xx is a defect and throws.
+ * A refusal the owner can act on from the panel is worded by `refusalText`;
+ * any other 4xx is a stale screen, and a 5xx is a defect and throws.
  */
-const REFUSALS: Record<string, string> = {
-  "answer.invalid":
-    "That answer does not fit the question. Check it and send it again.",
-  "answer.already_given":
-    "That question was already answered, so this answer was not recorded.",
-  "change.question_open":
-    "Answer the question waiting on you first, then ask again.",
-  "change.build_busy":
-    "A build is finishing. Ask again once it is ready for you.",
-  "change.cancelled": "That change was cancelled. Ask for it again.",
-  "reminder.due_past": "That time has already passed.",
-  "reminder.due_far": "Pick a time within a year.",
-  "reminder.not_found": "That reminder is no longer open.",
-  "account.other_members":
-    "Other people still belong to this business. Remove them first.",
-  "account.not_owner": "Only the owner can delete this account.",
-}
 const STALE = "That has changed since this page loaded. Look again and retry."
 
 /** Refusals that mean the item no longer waits on the owner. */
@@ -475,7 +459,7 @@ async function outcome(
     refusal.success &&
     code !== "org.unresolved"
   ) {
-    const reason = REFUSALS[code] ?? STALE
+    const reason = refusalText(code, STALE)
     return GONE.has(code)
       ? { done: false, reason, gone: true }
       : { done: false, reason }

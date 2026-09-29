@@ -56,12 +56,6 @@ export type OrgNode = {
   reports: OrgNode[]
 }
 
-/**
- * The owner attention contract (§7.3): exactly four types, no fifth. A fifth
- * is a product-policy change and an ADR, not a screen decision.
- */
-export type AttentionKind = "question" | "approval" | "report" | "alert"
-
 type AttentionBase = {
   id: string
   title: string

@@ -6,6 +6,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
+import { META } from "@workspace/ui/lib/utils"
 import type { ReactNode } from "react"
 
 /**
@@ -26,8 +27,6 @@ type NotificationItem = {
   onExpiry: string
   action?: ReactNode
 }
-
-const META = "text-[0.8125rem] text-muted-foreground"
 
 function NotificationList({
   items,
