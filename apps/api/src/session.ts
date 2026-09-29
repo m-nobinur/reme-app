@@ -50,6 +50,33 @@ function required(
 
 let client: WorkOS | undefined
 
+/**
+ * How long one WorkOS API call may take, the SDK's own retries included.
+ * Ten membership lists against staging on 2026-09-30 took 360 to 954 ms each
+ * from outside Europe, TLS included. Signup's three calls in a row still
+ * answer inside the web's 10 s `API_TIMEOUT_MS`, so the owner sees this
+ * answer rather than the web's. The SDK's `timeout` option is no bound: its
+ * Worker build drops it, so each try waits 60 s, and it tries four times.
+ */
+export const WORKOS_TIMEOUT_MS = 3_000
+
+/** A WorkOS call not answered in `WORKOS_TIMEOUT_MS`; `index.ts` answers 503. */
+export class WorkosTimeout extends Error {
+  override name = "WorkosTimeout"
+}
+
+/**
+ * `call`, or a `WorkosTimeout` once `WORKOS_TIMEOUT_MS` passes. The call is
+ * no longer waited for, not stopped: the SDK takes no signal.
+ */
+export function bounded<T>(call: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new WorkosTimeout()), WORKOS_TIMEOUT_MS)
+  })
+  return Promise.race([call, late]).finally(() => clearTimeout(timer))
+}
+
 export function workos(env: Env): WorkOS {
   client ??= new WorkOS(required(env, "WORKOS_API_KEY"), {
     clientId: required(env, "WORKOS_CLIENT_ID"),

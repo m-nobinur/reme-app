@@ -10,7 +10,7 @@ import {
 } from "@workspace/db"
 import { clearOrgs, type Tx } from "@workspace/db/fixtures/seed"
 import postgres from "postgres"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   type Accounts,
   deleteAccount,
@@ -19,6 +19,7 @@ import {
 } from "../src/account.ts"
 import worker from "../src/index.ts"
 import { createOrg, type Directory, EmailTaken } from "../src/org.ts"
+import { WORKOS_TIMEOUT_MS } from "../src/session.ts"
 import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
@@ -478,7 +479,7 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
           method: "DELETE",
           headers,
         }),
-        { ...env(url as string), ORCHESTRATOR: orchestrator } as Env,
+        { ...env(url as string), ORCHESTRATOR: orchestrator } as unknown as Env,
         ctx
       )
     const bridged = `POST orchestrator /assignments/site/takedown ${orgId}`
@@ -501,4 +502,80 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(await resolveOrg(kit, session)).toBeNull()
     expect(await logged(orgId)).toBe(1)
   })
+
+  /** Never answers, and ignores the abort: the worst a vendor can do. */
+  const stalled = () => new Promise<Response>(() => undefined)
+
+  /** The route's answer to a stalled WorkOS, and how long it took. */
+  const timed = async (call: () => Promise<Response>) => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const started = performance.now()
+    try {
+      const response = await call()
+      const took = performance.now() - started
+      expect(response.status).toBe(503)
+      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+        "workos.timeout"
+      )
+      expect(took).toBeGreaterThanOrEqual(WORKOS_TIMEOUT_MS)
+      expect(took).toBeLessThan(WORKOS_TIMEOUT_MS + 1_500)
+    } finally {
+      quiet.mockRestore()
+    }
+  }
+
+  it("answers a stalled WorkOS on delete with 503 at the bound, and a retry finishes", async () => {
+    const { session } = await signup("stall")
+    const orchestrator = {
+      fetch: async () => new Response(null, { status: 204 }),
+    }
+    const remove = async () =>
+      worker.fetch(
+        new Request("http://api.invalid/account", {
+          method: "DELETE",
+          headers: {
+            ...(await cookieHeader({
+              sub: session.workosUserId,
+              org_id: session.workosOrganizationId,
+            })),
+            "idempotency-key": "delete-stalled",
+          },
+        }),
+        { ...env(url as string), ORCHESTRATOR: orchestrator } as unknown as Env,
+        ctx
+      )
+
+    workosApi = stalled
+    await timed(remove)
+
+    workosApi = async (request) =>
+      request.method === "GET"
+        ? Response.json({
+            object: "list",
+            data: [],
+            list_metadata: { before: null, after: null },
+          })
+        : new Response(null, { status: 202 })
+    expect((await remove()).status).toBe(204)
+  }, 15_000)
+
+  it("answers a stalled WorkOS on signup with 503 at the bound", async () => {
+    const workosUserId = `user_probe_account_signup_stall_${run}`
+    workosApi = stalled
+    await timed(async () =>
+      worker.fetch(
+        new Request("http://api.invalid/org", {
+          method: "POST",
+          headers: {
+            ...(await cookieHeader({ sub: workosUserId })),
+            "idempotency-key": "signup-stalled",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ name: "Probe Stall Cleaning Co. (fixture)" }),
+        }),
+        env(url as string),
+        ctx
+      )
+    )
+  }, 15_000)
 })

@@ -86,6 +86,18 @@
   // The suffix the router serves sites on (ADR-030), for the live site's host
   // in `/workspace`. The orchestrator and the router carry the same value.
   "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk" },
+  // Each signed-in person's writes a minute; the number is argued in
+  // src/limit.ts and a test holds this block to it. `period` takes 10 or 60.
+  // A `namespace_id` is shared by every binding in the account that names it,
+  // counters and all, so this one is its own: 1001 is the web's sign-in
+  // limit, 1002 the router's misses, 1004 production's copy of this one.
+  "ratelimits": [
+    {
+      "name": "WRITE_LIMIT",
+      "namespace_id": "1003",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
   // Production. Everything above is staging, which is what the default
   // environment has always been; naming that is a later cleanup.
   //
@@ -125,7 +137,16 @@
           "entrypoint": "OwnerApi"
         }
       ],
-      "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" }
+      "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" },
+      // Its own namespace: staging and production people share one WorkOS
+      // environment until the split, so a shared id would share their counts.
+      "ratelimits": [
+        {
+          "name": "WRITE_LIMIT",
+          "namespace_id": "1004",
+          "simple": { "limit": 30, "period": 60 }
+        }
+      ]
     }
   }
 }
