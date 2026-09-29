@@ -1,4 +1,9 @@
-import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router"
+import {
+  createRootRoute,
+  HeadContent,
+  Scripts,
+  useRouter,
+} from "@tanstack/react-router"
 import { formGuardScript } from "@workspace/ui/components/auth-card"
 import { themeInitScript } from "@workspace/ui/components/theme-toggle"
 
@@ -21,19 +26,7 @@ export const Route = createRootRoute({
       {
         title: "Reme",
       },
-      // Images load only from the app, data URLs (the MFA QR code) and any
-      // host on remeai.co.uk. That zone holds the signed preview hosts the
-      // screenshots come from, but also every tenant site and the api hosts,
-      // all of them ours. A backstop for the chat's markdown, which drops
-      // images itself. Unsafe once a tenant site answers
-      // `{slug}.remeai.co.uk/api/*` (Phase 3, reserved in
-      // apps/router/src/index.ts), since an image request could then deliver
-      // what its URL carries to that site's API. Screenshots must then come
-      // from one fixed host or through 'self', and this narrows to match.
-      {
-        httpEquiv: "Content-Security-Policy",
-        content: "img-src 'self' data: https://*.remeai.co.uk",
-      },
+      // The content security policy is a response header: see lib/csp.ts.
     ],
     links: [
       {
@@ -46,6 +39,9 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // This request's CSP nonce on the server; none in the browser, which is why
+  // the two scripts below suppress the hydration warning (lib/csp.ts).
+  const nonce = useRouter().options.ssr?.nonce
   return (
     // The theme script adds a class to this element before React hydrates.
     <html lang="en" suppressHydrationWarning>
@@ -56,6 +52,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed literal from this repo, with nothing interpolated into it
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
+          nonce={nonce}
+          suppressHydrationWarning
         />
         {/* Also inline and blocking, and for the same class of reason: it has
             to be listening before the body is parsed, or a submit can happen in
@@ -63,6 +61,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed literal from this repo, with nothing interpolated into it
           dangerouslySetInnerHTML={{ __html: formGuardScript }}
+          nonce={nonce}
+          suppressHydrationWarning
         />
       </head>
       <body>

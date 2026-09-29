@@ -9,6 +9,7 @@ import {
   getAuthkit,
 } from "@workos/authkit-tanstack-react-start"
 import { whyNoUser } from "@/lib/auth/diagnose"
+import { cspMiddleware } from "@/lib/csp"
 
 /**
  * Server functions are same-origin RPC endpoints, and every form in the sign-in
@@ -53,7 +54,15 @@ const noUserLog = createMiddleware().server(
  * and our own server functions read it. It also opens the pending-header channel
  * that `saveSession` writes Set-Cookie through, so a custom page cannot
  * establish a session without it (ADR-026).
+ *
+ * The CSP middleware goes first, so its nonce is in the context `getRouter`
+ * reads and every HTML answer gets the header, whatever runs after it.
  */
 export const startInstance = createStart(() => ({
-  requestMiddleware: [csrfMiddleware, authkitMiddleware(), noUserLog],
+  requestMiddleware: [
+    cspMiddleware,
+    csrfMiddleware,
+    authkitMiddleware(),
+    noUserLog,
+  ],
 }))
