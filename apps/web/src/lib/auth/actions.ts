@@ -121,6 +121,64 @@ export const signUp = createServerFn({ method: "POST" })
     )
   })
 
+// --- sign-in code (Magic Auth) ----------------------------------------------
+
+export const sendSignInCode = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ email: text(record(input).email) }))
+  .handler(
+    async ({ data }): Promise<{ sent: true } | { failure: AuthFailure }> => {
+      // Counted whether or not the address has an account, as for reset.
+      const limited = await throttle(
+        env.SIGN_IN_LIMIT,
+        "sign-in-code",
+        data.email
+      )
+      if (limited) {
+        return { failure: limited }
+      }
+      try {
+        // WorkOS sends the email (the environment's default email setting).
+        // Magic Auth signs up as well as in, so the documented answer for any
+        // address is a code. A 404 is swallowed all the same, as for reset, so
+        // the page can never tell an account from none.
+        await workos().userManagement.createMagicAuth({ email: data.email })
+      } catch (error) {
+        const code = (error as { code?: string }).code
+        if (code !== "entity_not_found") {
+          return { failure: toFailure(error) }
+        }
+      }
+      return { sent: true }
+    }
+  )
+
+export const signInWithCode = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return {
+      email: text(data.email),
+      code: digits(data.code),
+      returnTo: data.returnTo,
+    }
+  })
+  .handler(async ({ data }): Promise<AuthOutcome> => {
+    // The password's bucket: six digits and a password are guessed at the same
+    // account, so they share one count.
+    const limited = await throttle(env.SIGN_IN_LIMIT, "sign-in", data.email)
+    if (limited) {
+      return { status: "failed", failure: limited }
+    }
+    return authenticate(
+      () =>
+        workos().userManagement.authenticateWithMagicAuth({
+          email: data.email,
+          code: data.code,
+          ...sessionOptions(),
+        }),
+      { email: data.email, returnTo: data.returnTo }
+    )
+  })
+
 // --- email verification -----------------------------------------------------
 
 export const verifyEmail = createServerFn({ method: "POST" })

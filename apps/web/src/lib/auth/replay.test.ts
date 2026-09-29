@@ -5,12 +5,10 @@ import { toFailure } from "./failure"
 /**
  * Replaying a one-time credential, at the two places it can be replayed.
  *
- * A magic-auth code has nowhere here to be replayed. We do not implement magic
- * auth: nothing in `actions.ts` calls `createMagicAuth` or
- * `authenticateWithMagicAuth`, so there is no code path to replay one through,
- * and a test that pretended otherwise would be testing a stub.
+ * A sign-in code (`signInWithCode`) holds nothing of ours to replay: the code
+ * goes straight to WorkOS with the address, and WorkOS spends it.
  *
- * What there is, and what these cases cover:
+ * What these cases cover:
  *
  *  1. The provider refuses a spent one-time code. That is WorkOS's semantics,
  *     not ours, and it was proved against staging on 2026-08-28 rather than

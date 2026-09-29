@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
@@ -46,6 +47,11 @@ const SignUpRoute = SignUpRouteImport.update({
 const SignOutRoute = SignOutRouteImport.update({
   id: '/sign-out',
   path: '/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInCodeRoute = SignInCodeRouteImport.update({
+  id: '/sign-in-code',
+  path: '/sign-in-code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/mfa-setup': typeof MfaSetupRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
+  '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/mfa-setup': typeof MfaSetupRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
+  '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/mfa-setup': typeof MfaSetupRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
+  '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/reset-password'
     | '/sign-in'
+    | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
     | '/verify-email'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/reset-password'
     | '/sign-in'
+    | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
     | '/verify-email'
@@ -279,6 +290,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/reset-password'
     | '/sign-in'
+    | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
     | '/verify-email'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   MfaSetupRoute: typeof MfaSetupRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignInRoute: typeof SignInRoute
+  SignInCodeRoute: typeof SignInCodeRoute
   SignOutRoute: typeof SignOutRoute
   SignUpRoute: typeof SignUpRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
@@ -334,6 +347,13 @@ declare module '@tanstack/react-router' {
       path: '/sign-out'
       fullPath: '/sign-out'
       preLoaderRoute: typeof SignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in-code': {
+      id: '/sign-in-code'
+      path: '/sign-in-code'
+      fullPath: '/sign-in-code'
+      preLoaderRoute: typeof SignInCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -524,6 +544,7 @@ const rootRouteChildren: RootRouteChildren = {
   MfaSetupRoute: MfaSetupRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignInRoute: SignInRoute,
+  SignInCodeRoute: SignInCodeRoute,
   SignOutRoute: SignOutRoute,
   SignUpRoute: SignUpRoute,
   VerifyEmailRoute: VerifyEmailRoute,
