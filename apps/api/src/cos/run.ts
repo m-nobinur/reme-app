@@ -37,7 +37,7 @@ import { abandonTurn, TurnClosed, writeAsTurn } from "./turns.ts"
  */
 
 /** The sanitised text of any error chunk the owner sees. */
-export const ERROR_TEXT = "Something went wrong on our side. Try again."
+const ERROR_TEXT = "Something went wrong on our side. Try again."
 
 /** A chunk that shows the model has answered: text, reasoning or tool input. */
 const isContent = (chunk: UIMessageChunk) =>
@@ -273,7 +273,7 @@ async function logged(run: AgentTurn): Promise<UIMessage[]> {
  * order: the ones this turn's results just approved, and any a dead turn
  * approved and never finished.
  */
-export async function unsettled(run: AgentTurn): Promise<Call[]> {
+async function unsettled(run: AgentTurn): Promise<Call[]> {
   return (await logged(run)).flatMap((message) =>
     message.role !== "assistant"
       ? []

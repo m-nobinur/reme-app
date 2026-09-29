@@ -24,7 +24,7 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { parseArgs } from "node:util"
-import type { AssignmentState } from "@workspace/contracts"
+import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import { sql as dsql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
@@ -48,13 +48,6 @@ export const STAGING = {
   neonBranch: "br-icy-grass-b2xxiaml",
   hostSuffix: "-stg.remeai.co.uk",
 } as const
-
-/** The states an assignment ends in (the orchestrator's `TERMINAL`). */
-export const FINISHED: readonly AssignmentState[] = [
-  "published",
-  "failed",
-  "cancelled",
-]
 
 const HOUR = 60 * 60 * 1000
 const ROOT = new URL("../../../", import.meta.url)
@@ -95,7 +88,7 @@ export function probeRefusal(
   mode: "probe" | "org"
 ): string | null {
   const open = org.states.filter(
-    (state) => !FINISHED.includes(state as AssignmentState)
+    (state) => !TERMINAL_STATES.includes(state as AssignmentState)
   )
   if (open.length > 0) return `unfinished assignment(s): ${open.join(", ")}`
   if (mode === "org") return null

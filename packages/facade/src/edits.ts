@@ -21,7 +21,7 @@ const lineEnding = (text: string): "\r\n" | "\n" => {
 const toLF = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
 
 /** Pi's forgiving view: trailing whitespace, smart quotes, dashes and odd spaces. Leading indentation is never forgiven. */
-export function normalizeForMatch(text: string): string {
+function normalizeForMatch(text: string): string {
   return text
     .normalize("NFKC")
     .split("\n")

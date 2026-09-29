@@ -5,11 +5,11 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types --env-file /dev/null",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs api-unit -- vitest run --dir test",
     "test:tenancy": "node ../../scripts/floor.mjs api-tenancy -- vitest run --dir tenancy",
-    "size": "node scripts/size.mjs"
+    "size": "node ../../scripts/size.mjs api --forbid abandoned-head-element-child"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "3.1.0",

@@ -334,6 +334,39 @@ describe("the bridge", () => {
   })
 
   it.each([
+    ["/", "/assignments/"],
+    ["/site/takedown", "/assignments/site/takedown"],
+  ])(
+    "logs a call to %s by its own route, naming no build",
+    async (path, route) => {
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        await bridge(
+          {
+            ORCHESTRATOR: { fetch: () => Promise.reject(new TypeError()) },
+          } as unknown as Env,
+          owner,
+          path,
+          { key: "k" }
+        )
+        expect(logged.mock.calls).toEqual([
+          [
+            JSON.stringify({
+              code: "orchestrator.unavailable",
+              route,
+              assignment_id: null,
+            }),
+          ],
+        ])
+      } finally {
+        logged.mockRestore()
+      }
+    }
+  )
+
+  it.each([
     [
       "a timeout",
       () => new Promise<never>(() => undefined),

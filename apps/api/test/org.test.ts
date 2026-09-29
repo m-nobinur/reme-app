@@ -1,8 +1,14 @@
-import { ErrorEnvelope, Org, StaffDirectory } from "@workspace/contracts"
+import {
+  ErrorEnvelope,
+  Org,
+  StaffDirectory,
+  slugFor,
+} from "@workspace/contracts"
 import {
   asc,
   conversationMessages,
   conversations,
+  ensureStartingTeam,
   eq,
   events,
   facts,
@@ -25,9 +31,7 @@ import {
   type Directory,
   readOrg,
   readStaffDirectory,
-  slugFor,
 } from "../src/org.ts"
-import { ensureStartingTeam } from "../src/staff.ts"
 
 /**
  * Two halves, the same split `health.test.ts` uses. The routing half needs no

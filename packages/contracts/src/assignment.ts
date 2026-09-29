@@ -21,6 +21,13 @@ export const AssignmentState = z.enum([
   "cancelled",
 ])
 
+/** The states an assignment ends in. No transition leaves one. */
+export const TERMINAL_STATES: readonly AssignmentState[] = [
+  "published",
+  "failed",
+  "cancelled",
+]
+
 /**
  * `Assignment` (§19): CoS to orchestrator to runtime. The brief travels as a
  * fact-snapshot reference, not a copy of the facts, so §8.5 content
@@ -137,10 +144,10 @@ export const ApprovalRequest = z.strictObject({
 
 /**
  * `ApprovalDecision` (§19, ADR-032): the answer to an `ApprovalRequest`,
- * written once. `decided_by` says honestly who decided: an owner's session,
- * or the staff console, which only staging accepts until the owner approval
- * route exists. The target is repeated so the publisher can refuse a decision
- * whose target is not the revision the reviewer was shown.
+ * written once. `decided_by` says honestly who decided: an owner's session, or
+ * the staff console, which only staging accepts. The target is
+ * repeated so the publisher can refuse a decision whose target is not the
+ * revision the reviewer was shown.
  */
 export const ApprovalDecision = z.strictObject({
   approval_id: Uuid,

@@ -1,26 +1,32 @@
 import {
   DeploymentManifest,
-  type ErrorEnvelope,
+  type EnvelopeBody,
+  envelope,
   formatSiteRevision,
+  isPreviewHost,
+  REQUEST_FAILED,
+  SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
+  SLUG,
 } from "@workspace/contracts"
 import {
   deployments,
-  failureCode,
+  logFailure,
   orgOpen,
   resolveOrgBySlug,
   sql,
   tenancy,
 } from "@workspace/db"
-import { resolveSitePath } from "@workspace/gates"
 import {
   PREVIEW_COOKIE,
   previewHeaders,
   resolvePreviewPath,
   SCREENSHOTS,
   verifyPreview,
+  verifyProbe,
 } from "@workspace/gates/preview"
+import { resolveSitePath } from "@workspace/gates/site-path"
 import { type Context, Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 
@@ -59,27 +65,8 @@ const tooMany = (c: Context<App>) =>
   c.text("Too many requests.", 429, { ...NO_STORE, "retry-after": "60" })
 
 /** R4: a failure that is ours leaves as the §28.1 envelope. */
-const envelope = (
-  c: Context<App>,
-  status: 501 | 503,
-  body: Omit<ErrorEnvelope, "occurred_at">
-) =>
-  c.json({ ...body, occurred_at: new Date().toISOString() }, status, NO_STORE)
-
-/**
- * What is left of a host once the suffix is off has to be one DNS label. No
- * slug rule is written down anywhere else yet, so this is the loosest one a
- * hostname allows, and it is checked before any binding is read: a name with a
- * dot in it, or one a business could never hold, costs nothing to refuse.
- */
-const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
-
-/**
- * A preview host, `preview-v{n}-{slug}` by ADR-030's reserved prefix. The
- * version's digits are part of the match: a business whose name starts
- * "Preview" has a slug starting `preview-`, and its live site is a site.
- */
-const isPreviewHost = (host: string) => /^preview-v\d+-/.test(host)
+const failure = (c: Context<App>, status: 501 | 503, body: EnvelopeBody) =>
+  c.json(envelope(body), status, NO_STORE)
 
 /**
  * The hostnames in the zone that are not tenant sites, each one a Worker
@@ -347,7 +334,8 @@ app.use("*", async (c, next) => {
   const host = new URL(c.req.url).hostname
   if (serviceHosts(c.env).has(host)) return passThrough(c)
   if (!host.endsWith(c.env.SITE_HOST_SUFFIX)) return unserved(c)
-  if (!LABEL.test(host.slice(0, -c.env.SITE_HOST_SUFFIX.length))) {
+  // A name with a dot in it, or one no business could hold, costs nothing.
+  if (!SLUG.test(host.slice(0, -c.env.SITE_HOST_SUFFIX.length))) {
     return unserved(c)
   }
   return next()
@@ -355,7 +343,7 @@ app.use("*", async (c, next) => {
 
 // The site's own API surface arrives with ingest (Phase 3).
 app.all("/api/*", (c) =>
-  envelope(c, 501, {
+  failure(c, 501, {
     class: "resource",
     code: "route.not_implemented",
     message: "A site's API lands with ingest.",
@@ -474,8 +462,16 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   if (!file) return notHere(c)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
   // Which version answered a page, so the publisher's probe judges only its
-  // own. An immutable asset names its revision in its path already.
-  if (file.endsWith(".html")) {
+  // own, and told to the probe alone. An immutable asset names its revision
+  // in its path already.
+  if (
+    file.endsWith(".html") &&
+    (await verifyProbe(
+      c.req.header(SITE_PROBE_HEADER),
+      host,
+      c.env.PREVIEW_KEY
+    ))
+  ) {
     headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
   }
   return serve(c, host, `${found.base}dist/${file}`, headers)
@@ -484,18 +480,8 @@ app.on(["GET", "HEAD"], "*", async (c) => {
 app.notFound(notHere)
 
 app.onError((error, c) => {
-  console.error(
-    JSON.stringify({
-      host: new URL(c.req.url).hostname,
-      code: failureCode(error),
-    })
-  )
-  return envelope(c, 503, {
-    class: "transient",
-    code: "request.failed",
-    message: "The request could not be completed.",
-    detail: {},
-  })
+  logFailure({ host: new URL(c.req.url).hostname }, error)
+  return failure(c, 503, REQUEST_FAILED)
 })
 
 export default app

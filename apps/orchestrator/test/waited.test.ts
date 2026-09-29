@@ -1,20 +1,13 @@
-import {
-  appendEvent,
-  supersedeFact,
-  type Tenancy,
-  tenancy,
-  waitedOn,
-} from "@workspace/db"
+import { appendEvent, supersedeFact, waitedOn } from "@workspace/db"
 import { afterAll, describe, expect, it } from "vitest"
 import { advance } from "../src/state.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
+import { freshOrg, kit, newAssignment } from "./fixture.ts"
 
 // `waitedOn` against a database: which question a build waits on, as the
 // Workflow's looks, the orchestrator's `/answer` and `/workspace` read it.
 
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
-const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
 
 async function build(orgId: string, kind = "site.build") {

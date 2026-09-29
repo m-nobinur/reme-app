@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import {
   type AssignmentState,
   formatSiteRevision,
+  SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
 } from "@workspace/contracts"
 import {
@@ -11,13 +12,12 @@ import {
   siteRevisions,
   sql,
   supersedeFact,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
+import { verifyProbe } from "@workspace/gates/preview"
 import { vi } from "vitest"
 import { takeSnapshot } from "../src/brief.ts"
 import { advance } from "../src/state.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
+import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 /**
  * A site in a fake R2 and a fake KV, with an org, its facts and a build at
@@ -26,9 +26,9 @@ import { freshOrg, newAssignment } from "./fixture.ts"
  */
 
 const url = process.env.DATABASE_URL
-export const kit: Tenancy = tenancy(url ?? "postgres://unused")
 
-export const SUFFIX = "-stg.remeai.co.uk"
+export { kit, SUFFIX }
+
 export const sha = (bytes: string) =>
   createHash("sha256").update(bytes).digest("hex")
 export const HEADERS = { "x-frame-options": "DENY" }
@@ -246,6 +246,7 @@ export function workflowEnv(store: ReturnType<typeof storage>) {
       SITES: store.SITES,
       ROUTES: store.ROUTES,
       SITE_HOST_SUFFIX: SUFFIX,
+      PREVIEW_KEY: PROBE_KEY,
       CONSOLE_APPROVALS: "allow",
       ASSIGNMENTS: {
         get: async () => ({ status: async () => ({ status: "complete" }) }),
@@ -258,13 +259,22 @@ export function workflowEnv(store: ReturnType<typeof storage>) {
   }
 }
 
-/** The page the fake router serves for a host: whatever the pointer names, from the fake R2. */
+/** The preview key `workflowEnv` holds, which the fake router checks the probe's proof against. */
+const PROBE_KEY = "probe-key-for-this-suite-only"
+
+/**
+ * The page the fake router serves for a host: whatever the pointer names,
+ * from the fake R2, tagged with its revision only for a request carrying the
+ * host's probe proof, as the router does.
+ */
 export function serveFromPointer(
   store: ReturnType<typeof storage>,
   override?: () => Response | null
 ) {
-  return vi.fn(async (input: string | URL | Request) => {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const host = new URL(String(input)).hostname
+    const proof = new Headers(init?.headers).get(SITE_PROBE_HEADER) ?? undefined
+    const probed = await verifyProbe(proof, host, PROBE_KEY)
     const raw = store.pointers.get(`host:${host}`)
     if (!raw) return new Response("No site here.", { status: 404 })
     const pointer = JSON.parse(raw) as {
@@ -275,13 +285,16 @@ export function serveFromPointer(
     // A forced answer is still the pointed revision's page, tagged as the router tags it.
     const forced = override?.()
     if (forced) {
-      forced.headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
+      if (probed)
+        forced.headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
       return forced
     }
     const object = store.objects.get(
       `sites/${pointer.site_id}/${pointer.revision_id}/dist/index.html`
     )
-    const served = { [SITE_REVISION_HEADER]: formatSiteRevision(pointer) }
+    const served: Record<string, string> = probed
+      ? { [SITE_REVISION_HEADER]: formatSiteRevision(pointer) }
+      : {}
     return object
       ? new Response(new TextDecoder().decode(object), {
           status: 200,

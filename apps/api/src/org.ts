@@ -1,12 +1,19 @@
-import { FactValue, type Org, type StaffDirectory } from "@workspace/contracts"
+import {
+  FactValue,
+  type Org,
+  type StaffDirectory,
+  slugFor,
+} from "@workspace/contracts"
 import {
   asc,
   conversationMessages,
   conversations,
+  ensureStartingTeam,
   eq,
   memberships,
   orgs,
   resolveOrg,
+  rootStaffId,
   staff,
   supersedeFact,
   type Tenancy,
@@ -15,7 +22,6 @@ import {
   users,
 } from "@workspace/db"
 import { firstMessage } from "./chat.ts"
-import { ensureStartingTeam, rootStaffId } from "./staff.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -76,24 +82,6 @@ export type Directory = {
     organizationId: string
     userId: string
   }) => Promise<{ id: string }>
-}
-
-/**
- * A handle a person can be given for their org. Derived rather than accepted,
- * so a caller cannot probe which handles are taken, and suffixed with the
- * org's own id so it needs no uniqueness read to be unique. A slug the owner
- * chooses is a later story; this one only has to be stable and theirs.
- */
-export function slugFor(name: string, orgId: string): string {
-  const words = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-  // `preview-` opens a preview host (ADR-030), so a name whose slug would
-  // start that way, "Preview" alone included, gets a `site-` in front.
-  const reserved = `${words}-`.startsWith("preview-")
-  const base = (reserved ? `site-${words}` : words).slice(0, 40)
-  return [base, orgId.slice(0, 8)].filter(Boolean).join("-")
 }
 
 /**

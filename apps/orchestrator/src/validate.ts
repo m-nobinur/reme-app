@@ -4,6 +4,7 @@ import {
   FactSnapshot,
   type GateResult,
   InformationAnswer,
+  siteHost,
   ValidationReport,
 } from "@workspace/contracts"
 import {
@@ -19,7 +20,6 @@ import {
   toFactRecord,
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
-import { siteHost } from "./seed.ts"
 import { type Ids, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
@@ -286,9 +286,7 @@ export async function validateRevision(
 }
 
 /** The change summary a kept revision carries: the reasons, or the report's one line. */
-export const summaryOf = (
-  report: Pick<CompletionReport, "changes" | "summary">
-) =>
+const summaryOf = (report: Pick<CompletionReport, "changes" | "summary">) =>
   report.changes.length > 0
     ? report.changes.map((c) => c.reason).join("; ")
     : report.summary

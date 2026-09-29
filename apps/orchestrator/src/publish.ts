@@ -4,13 +4,16 @@ import {
   ApprovalTarget,
   type FactRecord,
   parseSiteRevision,
+  SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
+  siteHost,
 } from "@workspace/contracts"
 import {
   appendEvent,
   approvals,
   assignments,
+  chiefStaffId,
   deployments,
   eq,
   type OrgScopedDb,
@@ -18,11 +21,9 @@ import {
   orgs,
   siteRevisions,
   sql,
-  staff,
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
-import { siteHost } from "./seed.ts"
 import {
   enteredFrom,
   type Ids,
@@ -116,10 +117,7 @@ export function requestReview(
         "the assignment's latest revision is not a preview"
       )
     }
-    const [chief] = await db
-      .select({ id: staff.id })
-      .from(staff)
-      .where(eq(staff.staffCode, "COS-001"))
+    const chief = await chiefStaffId(db)
     const now = Date.now()
     const [inserted] = await db
       .insert(approvals)
@@ -127,7 +125,7 @@ export function requestReview(
         orgId: row.orgId,
         assignmentId: row.id,
         requestedByStaffId: row.staffId,
-        approverStaffId: chief?.id ?? row.createdByStaffId,
+        approverStaffId: chief ?? row.createdByStaffId,
         actionKind: ACTION_KIND,
         target: { kind: "revision", revision_id: revision.id },
         revisionId: revision.id,
@@ -545,7 +543,10 @@ export async function probeHost(
   host: string,
   facts: readonly FactRecord[] | null,
   fetcher: typeof fetch = fetch,
-  expected?: Pick<SitePointer, "revision_id" | "config_version">,
+  expected?: Pick<SitePointer, "revision_id" | "config_version"> & {
+    /** `probeProof` for the host, without which the router names no revision. */
+    proof: string
+  },
   pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
 ): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
   let res: Response | null = null
@@ -553,7 +554,10 @@ export async function probeHost(
     let seen: string
     try {
       res = await fetcher(`https://${host}/`, {
-        headers: { "cache-control": "no-cache" },
+        headers: {
+          "cache-control": "no-cache",
+          ...(expected && { [SITE_PROBE_HEADER]: expected.proof }),
+        },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
       const tag = res.headers.get(SITE_REVISION_HEADER)
@@ -754,9 +758,7 @@ export async function readTarget(
  * late or retried write can only repeat what is live. An org whose account
  * was deleted gets no pointer at all (ADR-035), and the refusal is final. The
  * KV write follows the read's commit rather than running inside it, so no
- * transaction is held open on KV. The binding is optional in the generated
- * types because production has no namespace yet; a publish without one is a
- * configuration error, not a retry.
+ * transaction is held open on KV.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
@@ -765,8 +767,6 @@ export async function writePointer(
   siteId: string,
   host: string
 ): Promise<{ host: string }> {
-  if (!env.ROUTES)
-    throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
   const live = await kit.withOrg({ orgId }, async (db) =>
     (await orgOpen(db)) ? activeDeployment(db, siteId) : "closed"
   )
@@ -799,8 +799,6 @@ export async function clearPointers(
   kit: Pick<Tenancy, "withOrg">,
   orgId: string
 ): Promise<void> {
-  if (!env.ROUTES)
-    throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
   const [org] = await kit.withOrg({ orgId }, (db) =>
     db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
   )

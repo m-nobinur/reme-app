@@ -7,8 +7,6 @@ import {
   facts,
   sql,
   supersedeFact,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
 import { verifySpec } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
@@ -21,7 +19,7 @@ import {
   updateFacts,
 } from "../src/brief.ts"
 import { eventSink, SeqGapError } from "../src/sink.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
+import { freshOrg, kit, newAssignment } from "./fixture.ts"
 
 // The brief names the registry host the sandbox module owns, and that module
 // loads the container SDK, which only resolves under workerd. Hoisted above
@@ -39,7 +37,6 @@ vi.mock("../src/sandbox.ts", () => ({
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
 
-const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
 
 const KEY = "runtime-spec-key-for-this-suite-only"

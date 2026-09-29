@@ -36,3 +36,34 @@ export const FailureReport = z.strictObject({
 
 export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>
 export type FailureReport = z.infer<typeof FailureReport>
+
+/** An envelope without its timestamp: what a caller writes before `envelope` stamps it. */
+export type EnvelopeBody = Omit<ErrorEnvelope, "occurred_at">
+
+/** R4: `body` as the §28.1 envelope, stamped now. */
+export const envelope = (body: EnvelopeBody): ErrorEnvelope => ({
+  ...body,
+  occurred_at: new Date().toISOString(),
+})
+
+/** What every Worker's catch-all answers with a 503, once it has logged the code. */
+export const REQUEST_FAILED = {
+  class: "transient",
+  code: "request.failed",
+  message: "The request could not be completed.",
+  detail: {},
+} as const satisfies EnvelopeBody
+
+/** The 400 body for a mutating request without a usable Idempotency-Key (R5). */
+export const KEY_MISSING = {
+  class: "validation",
+  code: "idempotency_key.missing",
+  message: "This request needs an Idempotency-Key header.",
+  detail: {},
+} as const satisfies EnvelopeBody
+
+/** The caller's `Idempotency-Key`, or null for a missing or oversized one. */
+export function idempotencyKey(request: { headers: Headers }): string | null {
+  const key = request.headers.get("idempotency-key")?.trim()
+  return key && key.length <= 255 ? key : null
+}

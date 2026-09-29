@@ -33,13 +33,6 @@ export const ErrorClass = z.enum([
   "budgetary",
 ])
 
-/**
- * Retryability is derived from the class, never carried as a field that could
- * contradict it. `provider` is retryable only through the §28.2 fallback
- * chain; `resource` needs a decision, so neither is listed here.
- */
-export const RETRYABLE_ERROR_CLASSES = ["transient", "provider"] as const
-
 /** Free-form JSON bag. Open on purpose: payloads and tool args are not fixed. */
 export const JsonObject = z.record(z.string(), z.unknown())
 

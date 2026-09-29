@@ -2,12 +2,12 @@ import { FactSnapshot, type RuntimeSpec } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
+  chiefStaffId,
+  currentFacts,
   eq,
   events,
-  facts,
   type OrgScopedDb,
   sql,
-  staff,
   supersedeFact,
   toFactRecord,
 } from "@workspace/db"
@@ -22,7 +22,7 @@ import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import type { Ids } from "./state.ts"
 
 /** The owner's decision: model spend is capped at $1 per assignment. */
-export const ASSIGNMENT_CAP_USD = 1
+const ASSIGNMENT_CAP_USD = 1
 
 /** How long a spec is good for. A run past this needs a new session and spec. */
 const SPEC_TTL_MS = 24 * 60 * 60 * 1000
@@ -52,11 +52,7 @@ export async function takeSnapshot(
   ids: Ids,
   withhold: readonly string[]
 ): Promise<FactSnapshot> {
-  const rows = await db
-    .select()
-    .from(facts)
-    .where(sql`${facts.validTo} is null`)
-    .orderBy(facts.key)
+  const rows = await currentFacts(db)
   const snapshot = FactSnapshot.parse({
     snapshot_id: crypto.randomUUID(),
     org_id: ids.orgId,
@@ -158,10 +154,7 @@ export async function updateFacts(
       facts: done.payload.facts as WrittenFact[],
     }
   }
-  const current = await db
-    .select()
-    .from(facts)
-    .where(sql`${facts.validTo} is null`)
+  const current = await currentFacts(db)
   const planned = []
   for (const change of input.changes) {
     const row = current.find((r) => r.key === change.key)
@@ -171,10 +164,7 @@ export async function updateFacts(
     }
     planned.push({ ...change, factType: row.factType })
   }
-  const [chief] = await db
-    .select({ id: staff.id })
-    .from(staff)
-    .where(eq(staff.staffCode, "COS-001"))
+  const chief = await chiefStaffId(db)
   const written: WrittenFact[] = []
   for (const change of planned) {
     const result = await supersedeFact(db, {
@@ -185,7 +175,7 @@ export async function updateFacts(
       provenance: {
         source: "owner_stated",
         confidence: 1,
-        verifiedByStaffId: chief?.id ?? null,
+        verifiedByStaffId: chief,
       },
     })
     written.push({
@@ -197,7 +187,7 @@ export async function updateFacts(
   await appendEvent(db, {
     orgId: input.orgId,
     assignmentId: null,
-    staffId: chief?.id ?? null,
+    staffId: chief,
     type: "facts.updated",
     payload: { idempotency_key: input.idempotencyKey, facts: written },
   })
@@ -227,10 +217,7 @@ export async function hideFacts(
     factKeys: readonly string[]
   }
 ): Promise<HiddenUpdate> {
-  const current = await db
-    .select()
-    .from(facts)
-    .where(sql`${facts.validTo} is null`)
+  const current = await currentFacts(db)
   const wanted = [...new Set(input.factKeys)].sort()
   for (const key of wanted) {
     if (!current.some((row) => row.key === key)) {
@@ -244,10 +231,7 @@ export async function hideFacts(
   if (held.join("\n") === wanted.join("\n")) {
     return { outcome: "written", replayed: true, hidden: held }
   }
-  const [chief] = await db
-    .select({ id: staff.id })
-    .from(staff)
-    .where(eq(staff.staffCode, "COS-001"))
+  const chief = await chiefStaffId(db)
   const written = await supersedeFact(db, {
     orgId: input.orgId,
     key: HIDDEN_FACTS_KEY,
@@ -256,13 +240,13 @@ export async function hideFacts(
     provenance: {
       source: "owner_stated",
       confidence: 1,
-      verifiedByStaffId: chief?.id ?? null,
+      verifiedByStaffId: chief,
     },
   })
   await appendEvent(db, {
     orgId: input.orgId,
     assignmentId: null,
-    staffId: chief?.id ?? null,
+    staffId: chief,
     type: "facts.updated",
     payload: {
       idempotency_key: input.idempotencyKey,

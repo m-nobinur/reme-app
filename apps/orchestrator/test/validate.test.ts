@@ -9,14 +9,12 @@ import {
   siteRevisions,
   sql,
   supersedeFact,
-  type Tenancy,
-  tenancy,
 } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { takeSnapshot } from "../src/brief.ts"
 import { advance } from "../src/state.ts"
 import { validateRevision } from "../src/validate.ts"
-import { freshOrg, newAssignment } from "./fixture.ts"
+import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 // The brief names the registry host the sandbox module owns, and that module
 // loads the container SDK, which only resolves under workerd.
@@ -26,7 +24,6 @@ vi.mock("../src/sandbox.ts", () => ({
 
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
-const kit: Tenancy = tenancy(url ?? "postgres://unused")
 afterAll(() => kit.close())
 
 const FACTS = [
@@ -41,7 +38,6 @@ const FACTS = [
   ],
 ] as const
 
-const SUFFIX = "-stg.remeai.co.uk"
 const page = (main: string) =>
   `<!doctype html><html lang="en"><head><title>BrightClean</title></head><body><main><h1>BrightClean</h1>${main}<a href="/">Home</a></main></body></html>`
 const GOOD = page(

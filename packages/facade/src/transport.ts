@@ -126,7 +126,7 @@ const fixed = (name: string, auth: () => ModelAuth) => ({
  * line split across reads is joined first; `[DONE]` and anything that is
  * not JSON are skipped.
  */
-export function tapCost(
+function tapCost(
   body: ReadableStream<Uint8Array>,
   record: (id: unknown, cost: number) => void
 ): ReadableStream<Uint8Array> {
@@ -178,7 +178,7 @@ export function tapCost(
  * which errs high. Behind the AI Gateway the body passes through unchanged,
  * so the same tap reads it.
  */
-export function billed(api: ProviderStreams): ProviderStreams {
+function billed(api: ProviderStreams): ProviderStreams {
   const wrap =
     <O extends StreamOptions>(
       call: (
