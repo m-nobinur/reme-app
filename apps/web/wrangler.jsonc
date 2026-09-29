@@ -30,7 +30,12 @@
   "preview_urls": true,
   // Staging's hostname (ADR-030), a custom domain like production's below.
   "workers_dev": false,
-  "routes": [{ "pattern": "staging.remeai.co.uk", "custom_domain": true }],
+  // The zone route keeps staging off the production site router: see
+  // apps/api/wrangler.jsonc.
+  "routes": [
+    { "pattern": "staging.remeai.co.uk", "custom_domain": true },
+    { "pattern": "staging.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
+  ],
   // Not a secret: it is a public URL, it appears in the authorize redirect the
   // browser follows, and WorkOS will only honour it because it is registered on
   // the environment (`pnpm workos:config staging`). It is here rather than in

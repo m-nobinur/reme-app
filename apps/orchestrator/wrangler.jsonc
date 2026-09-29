@@ -13,8 +13,14 @@
   "placement": { "region": "aws:eu-central-1" },
   "preview_urls": true,
   "workers_dev": false,
+  // The zone route keeps this hostname off the production site router's
+  // `*.remeai.co.uk/*`: see apps/api/wrangler.jsonc.
   "routes": [
-    { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true }
+    { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true },
+    {
+      "pattern": "staging-orchestrator.remeai.co.uk/*",
+      "zone_name": "remeai.co.uk"
+    }
   ],
   // One connection per assignment rather than one subrequest per command:
   // the SDK reads this from the Worker's bindings, never from the container.
@@ -48,7 +54,7 @@
     }
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
-  // in src/cloudflare.ts. Staging only; production's cron lands with it.
+  // in src/cloudflare.ts. Production inherits it.
   "triggers": { "crons": ["0 * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
   // by nothing else in this Worker; a test holds that.
@@ -123,8 +129,9 @@
           "class_name": "SweepWorkflow"
         }
       ],
-      // Created with the production router; the id lands here then.
-      "kv_namespaces": [],
+      "kv_namespaces": [
+        { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" }
+      ],
       "containers": [
         {
           "class_name": "RemeSandbox",
@@ -136,7 +143,7 @@
       "durable_objects": {
         "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
       },
-      // Created by infra/bootstrap.ts when production is first bootstrapped.
+      // Created with `wrangler r2 bucket create`; the router reads it.
       "r2_buckets": [
         { "binding": "SITES", "bucket_name": "reme-sites-production" },
         { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites-production" }

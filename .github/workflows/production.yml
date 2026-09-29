@@ -11,7 +11,8 @@ name: production
 #
 # Every step below was run by hand against the real environment on 2026-08-30
 # before it was written down, in this order, including the rollback. This file
-# is the transcript of that, not a plan for it.
+# is the transcript of that, not a plan for it. The orchestrator's steps were
+# added on 2026-09-29 from staging.yml's, and first ran with v0.1.0.
 #
 # Nothing rolls back automatically, for the reason staging.yml gives and one
 # more: `wrangler rollback` moves code and not schema, so an automatic rollback
@@ -38,16 +39,20 @@ env:
   NEON_PROJECT_ID: super-brook-02913792
   WEB: https://preview.remeai.co.uk
   API: https://api.remeai.co.uk
+  ORCHESTRATOR: https://orchestrator.remeai.co.uk
 
 jobs:
   production:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+      # The sandbox probe's bearer. bootstrap.ts sets the same value on
+      # both environments' orchestrators.
+      ORCHESTRATOR_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
     steps:
       # A dispatch can select any branch, and this job would then run that
       # branch's migrations against the production Neon project. Fails rather
@@ -61,7 +66,7 @@ jobs:
       - name: Credentials
         run: |
           missing=
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID NEON_API_KEY ORCHESTRATOR_TOKEN; do
             [ -n "${!name:-}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -95,6 +100,64 @@ jobs:
             *) echo "::error::neonctl did not answer with a connection string"; exit 1 ;;
           esac
           DATABASE_URL="$url" pnpm db:migrate
+
+      # Before the api, whose production service binding names this Worker.
+      # The same refusal as staging.yml's: a changed Workflow step list never
+      # deploys under a live instance, which would resume under the new code.
+      - name: Refuse to change the Workflow steps under a live instance
+        run: |
+          deployed=$(pnpm --filter orchestrator exec wrangler deployments list \
+            --name reme-orchestrator-production --json 2>/dev/null \
+            | jq -r '[.[] | select((.annotations["workers/message"] // "") | test("[0-9a-f]{40}$"))] | sort_by(.created_on) | last | .annotations["workers/message"] // empty' \
+            | grep -oE '[0-9a-f]{40}$' || true)
+          if [ -z "$deployed" ]; then
+            echo "no deployed commit to compare with, so nothing to refuse"
+            exit 0
+          fi
+          git fetch --depth=1 origin "$deployed" 2>/dev/null || {
+            echo "deployed commit $deployed is not reachable, so nothing to refuse"; exit 0; }
+          if git diff --quiet "$deployed" HEAD -- apps/orchestrator/test/workflow-steps.json; then
+            echo "workflow steps unchanged since $deployed"
+            exit 0
+          fi
+          live=0
+          for name in reme-assignment-production reme-publish-production; do
+            for status in running queued paused waiting waitingForPause; do
+              out=$(pnpm --filter orchestrator exec wrangler workflows instances list "$name" --status "$status" 2>&1 || true)
+              if ! printf '%s' "$out" | grep -qE "No instances in workflow|There are no instances"; then
+                echo "$name has $status instances:"; printf '%s\n' "$out"; live=1
+              fi
+            done
+          done
+          if [ "$live" = 1 ]; then
+            echo "::error::apps/orchestrator/test/workflow-steps.json changed since $deployed and instances are live. Wait for them to settle, then re-run this workflow."
+            exit 1
+          fi
+          echo "workflow steps changed and no instance is live"
+
+      # flue reads the environment at build time, as the web build below does,
+      # and writes a config flattened to production.
+      - run: CLOUDFLARE_ENV=production pnpm --filter orchestrator build
+
+      - name: Deploy the orchestrator
+        env:
+          RELEASE: ${{ github.ref_name }} ${{ github.sha }}
+        run: >
+          pnpm --filter orchestrator exec wrangler deploy
+          --config dist/reme_orchestrator/wrangler.json
+          --message "$RELEASE"
+
+      - name: The orchestrator answers
+        run: |
+          curl -sSf --max-time 30 "$ORCHESTRATOR/health" | jq -e '.status == "ok"' >/dev/null || {
+            echo "::error::$ORCHESTRATOR/health did not answer ok"; exit 1; }
+
+      # The container's egress and credential rules, on the class this deploy
+      # put live; staging.yml says why a PR cannot prove them.
+      - name: The sandbox holds its egress and credential rules
+        run: >
+          ORCHESTRATOR_URL="$ORCHESTRATOR"
+          pnpm --filter orchestrator test:probe
 
       # The tag name reaches the shell through the environment, never through
       # `${{ }}` interpolation into `run:`. A tag is attacker-controlled input

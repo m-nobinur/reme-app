@@ -45,7 +45,12 @@
   // own the DNS record and the certificate. `workers_dev` is off so the Worker
   // answers in one place; measured 2026-09-14 that preview aliases survive it.
   "workers_dev": false,
-  "routes": [{ "pattern": "staging-api.remeai.co.uk", "custom_domain": true }],
+  // The zone route keeps staging off the production site router, as the
+  // production block below explains.
+  "routes": [
+    { "pattern": "staging-api.remeai.co.uk", "custom_domain": true },
+    { "pattern": "staging-api.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
+  ],
   // `reme-staging-postgres`, created by `node infra/bootstrap.ts staging`. It
   // connects as `reme_app`, which has no BYPASSRLS, so the policies are
   // evaluated against the connecting role and the `SET LOCAL ROLE` inside
