@@ -108,8 +108,11 @@
       "vars": {
         "SANDBOX_TRANSPORT": "rpc",
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
-        // What the five-minute uptime check fetches (src/uptime.ts).
-        "HEALTH_URLS": "https://api.remeai.co.uk/health https://orchestrator.remeai.co.uk/health https://preview.remeai.co.uk/"
+        // What the five-minute uptime check fetches (src/uptime.ts). Not the
+        // orchestrator's own hostname: a Worker fetching itself through its
+        // custom domain gets 522 (measured 2026-09-29), and the check running
+        // at all is the orchestrator's proof of life.
+        "HEALTH_URLS": "https://api.remeai.co.uk/health https://preview.remeai.co.uk/"
       },
       // The sweep, and the uptime check every five minutes. Staging keeps
       // the sweep only.

@@ -199,7 +199,7 @@ Open item 13 lists what that defers.
 The zone is on the Free plan, so Cloudflare Health Checks are not available, and Cloudflare
 Notifications has no alert on a Worker's error rate. The production orchestrator runs its own
 check instead: a cron every five minutes fetches each URL in its `HEALTH_URLS` var, which is
-`api.remeai.co.uk/health`, `orchestrator.remeai.co.uk/health` and `preview.remeai.co.uk/`. A URL
+`api.remeai.co.uk/health` and `preview.remeai.co.uk/`. A URL
 fails on anything but a 2xx, or on no answer within 10 s. Staging does not run the check.
 
 Every run writes one line to Workers Logs for `reme-orchestrator-production`:
@@ -212,11 +212,11 @@ Query `type = uptime.checked` there for the history. A run with a failure also s
 so an outage sends one every five minutes until it ends. A failed send logs
 `uptime.alert_failed` with its code.
 
-The check fetches the public hostnames, so it tests the same path a visitor takes. Cloudflare's
-docs say a Worker can fetch a Custom Domain on its own zone but not a route, and each of these
-hostnames has both. Read the first `uptime.checked` line after the deploy before you set up email:
-if every check fails with no `status` while `curl` from outside answers 200, the same-zone fetch is
-the cause, and the check needs a service binding instead of a URL.
+The check fetches the public hostnames, so it tests the same path a visitor takes. Measured on
+the first production runs (2026-09-29): the api and the web app answer the orchestrator's fetch
+with 200, while its fetch of its own hostname answers 522, so the orchestrator is not in the list.
+The check running at all is its proof of life, which leaves one blind spot: an orchestrator that
+is down entirely sends nothing, so silence in the `uptime.checked` history is itself the sign.
 
 ### The alert email
 
