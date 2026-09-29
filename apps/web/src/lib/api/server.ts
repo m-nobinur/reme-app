@@ -237,6 +237,13 @@ export const cancelBuild = createServerFn({ method: "POST" })
     return await source.cancelBuild(org.id, data.assignmentId)
   })
 
+export const deleteAccount = createServerFn({ method: "POST" }).handler(
+  async (): Promise<WriteOutcome> => {
+    const org = await writingOrg()
+    return await source.deleteAccount(org.id)
+  }
+)
+
 export const getPreview = createServerFn({ method: "GET" })
   .validator((input: unknown) => ({
     assignmentId: id(record(input).assignmentId),

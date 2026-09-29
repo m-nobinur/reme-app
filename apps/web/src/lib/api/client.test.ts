@@ -654,6 +654,22 @@ it("stops a build once, however often Stop is pressed", async () => {
   expect(headerOf(calls[0], "idempotency-key")).toBe(`cancel:${ASSIGNMENT}`)
 })
 
+it("deletes the account with DELETE and one key, and words the refusals", async () => {
+  answers["DELETE /account"] = new Response(null, { status: 204 })
+  expect(await apiSource.deleteAccount(ORG)).toEqual({ done: true })
+  expect(calls[0]?.init?.method).toBe("DELETE")
+  expect(calls[0]?.init?.body).toBeUndefined()
+  expect(headerOf(calls[0], "idempotency-key")).toBe("account:delete")
+
+  answers["DELETE /account"] = refusal(409, "account.other_members")
+  expect(await apiSource.deleteAccount(ORG)).toEqual({
+    done: false,
+    reason: expect.stringContaining("Remove them first"),
+  })
+  answers["DELETE /account"] = new Response(null, { status: 503 })
+  await expect(apiSource.deleteAccount(ORG)).rejects.toThrow()
+})
+
 it("reads a build's preview and its three screenshots", async () => {
   const link = {
     revision_id: REVISION,

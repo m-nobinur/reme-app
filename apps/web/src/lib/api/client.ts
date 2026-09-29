@@ -490,6 +490,9 @@ const REFUSALS: Record<string, string> = {
   "reminder.due_past": "That time has already passed.",
   "reminder.due_far": "Pick a time within a year.",
   "reminder.not_found": "That reminder is no longer open.",
+  "account.other_members":
+    "Other people still belong to this business. Remove them first.",
+  "account.not_owner": "Only the owner can delete this account.",
 }
 const STALE = "That has changed since this page loaded. Look again and retry."
 
@@ -552,6 +555,14 @@ async function cancelBuild(
   return await outcome(
     await post(path, undefined, `cancel:${assignmentId}`),
     path
+  )
+}
+
+async function deleteAccount(_orgId: string): Promise<WriteOutcome> {
+  // An account is deleted once: a second press is the same request.
+  return await outcome(
+    await post("/account", undefined, "account:delete", "DELETE"),
+    "/account"
   )
 }
 
@@ -721,6 +732,7 @@ export const apiSource: OwnerDataSource = {
   pollWorkspace,
   answer,
   cancelBuild,
+  deleteAccount,
   preview,
   requestChange,
   createReminder,
