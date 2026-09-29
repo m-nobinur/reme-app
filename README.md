@@ -141,6 +141,24 @@ The free-tier daily allowances are per account, not per Worker: 100,000
 Hyperdrive queries, 100,000 KV reads and 1,000 KV writes, and 200,000 Workers Logs events at
 three days of retention. All reset at 00:00 UTC. Nothing here bills.
 
+### Switching a model
+
+Both agents run through OpenRouter and read their model from a Worker secret: the Chief of
+Staff from the api's `COS_MODEL`, the Developer from the orchestrator's `REME_MODEL_DEFAULT`,
+and its fallback from `REME_MODEL_FALLBACK`. With none set, both agents run
+`deepseek/deepseek-v4.1-flash` and the fallback is `x-ai/grok-4.6`.
+
+```sh
+pnpm model                                        # the models with a price
+pnpm model developer z-ai/glm-5.3-flash           # staging, next build on
+pnpm model cos deepseek/deepseek-v4.1-flash --production
+```
+
+The change applies from the next request, with no deploy. The script refuses a model with no
+entry in `packages/facade/src/models/openrouter.models.json`, because spend is priced from
+that table. To offer a new model, add its id to `openrouter.ids.json`, run
+`pnpm --filter @workspace/facade models`, and merge and deploy that first.
+
 ### Every merge deploys
 
 The commands above are the manual path and are no longer the normal one.
