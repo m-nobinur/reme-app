@@ -93,9 +93,9 @@ const environments = {
    * migrations from the journal, and cannot be reached by a mistyped command
    * aimed at staging. The free plan carries both.
    *
-   * The secrets are the staging WorkOS environment's, by decision: there are no
-   * customers before launch and the production environment's API key cannot be
-   * minted from any surface. Open item 13 lists what that defers.
+   * The WorkOS secrets are the Preview environment's, a sandbox of production's
+   * own, read from .env.production.local at release. This run
+   * only fills a missing secret, so it never puts staging's back.
    */
   prod: {
     neonProject: "super-brook-02913792",
