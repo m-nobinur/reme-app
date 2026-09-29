@@ -254,13 +254,16 @@ jobs:
       # environment (open item 13), so this account is created on the same user
       # pool production signs people into. Harmless with no customers, and it
       # needs a read-only path before there are any.
+      #
+      # `@probe-org` makes an org and clears it with `pnpm probe:clear`, which
+      # is staging-only (ADR-032), so production leaves it out by name.
       - name: Smoke
         run: |
           if [ -z "${WORKOS_API_KEY:-}" ]; then
             echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"
             exit 1
           fi
-          E2E_BASE_URL="$WEB" pnpm e2e
+          E2E_BASE_URL="$WEB" pnpm e2e --grep-invert "@live|@probe-org"
 
       - name: What a red run means
         if: failure()

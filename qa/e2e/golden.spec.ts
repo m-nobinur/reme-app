@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process"
 import {
   expect as baseExpect,
   type Locator,
@@ -7,15 +6,16 @@ import {
   test,
 } from "@playwright/test"
 import postgres from "postgres"
-import { ANSWERS, api, sessionCookie, signIn, startOrg } from "./owner"
-import { visit } from "./visit"
 import {
-  createProbeUser,
-  deleteProbeOrgs,
-  deleteProbeUser,
-  PROBE_ORG_PREFIX,
-  type ProbeUser,
-} from "./workos"
+  ANSWERS,
+  api,
+  clearProbe,
+  sessionCookie,
+  signIn,
+  startOrg,
+} from "./owner"
+import { visit } from "./visit"
+import { createProbeUser, PROBE_ORG_PREFIX, type ProbeUser } from "./workos"
 
 /**
  * The golden path on staging, through the UI a new owner uses: signup,
@@ -55,8 +55,6 @@ test.setTimeout(50 * 60_000)
 
 /** The answer to the pricing question, and how the live page prints it. */
 const PRICE = { pounds: "28", shown: "£28.00" }
-
-const ROOT = new URL("../../", import.meta.url)
 
 const day = new Date().toISOString().slice(0, 10)
 /**
@@ -581,39 +579,13 @@ test.afterAll(async () => {
   })
 
   if (!user) return
-  // The org whole, every layer, by its id. WorkOS alone is the fallback:
-  // when signup died before the org's id came back, or the clear refused,
-  // in which case its Postgres rows stay for `pnpm probe:clear --org`.
-  let cleared = false
-  if (run.org_id) {
+  if (run.org_id && owner) {
     try {
-      if (owner) await stopBuilds()
+      await stopBuilds()
     } catch (error) {
       failures.push(`builds not stopped: ${error}`)
     }
-    const clear = spawnSync(
-      "pnpm",
-      ["probe:clear", "--probe", run.org_id, "--yes"],
-      {
-        cwd: ROOT,
-        stdio: "inherit",
-        env: { ...process.env, FORCE_COLOR: "0" },
-      }
-    )
-    cleared = clear.status === 0
-    if (!cleared) {
-      failures.push(
-        `pnpm probe:clear --probe ${run.org_id} exited ${clear.status}; its rows stay, clear them with --org`
-      )
-    }
   }
-  if (!cleared) {
-    await deleteProbeOrgs(user.id).catch((error) =>
-      failures.push(`WorkOS orgs not deleted: ${error}`)
-    )
-  }
-  if (!(await deleteProbeUser(user.id))) {
-    failures.push(`WorkOS user ${user.id} still exists`)
-  }
+  failures.push(...(await clearProbe(run.org_id, user)))
   expect(failures, "the golden run left something behind").toEqual([])
 })

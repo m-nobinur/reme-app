@@ -244,12 +244,16 @@ jobs:
       # approvals inbox. It creates one throwaway WorkOS user per run on the
       # staging environment and asserts its own deletion, so staging goes back
       # to holding only the development owners (`qa/e2e/workos.ts`) whether
-      # this passes or fails.
+      # this passes or fails. One spec makes a probe org and clears it with
+      # `pnpm probe:clear`, which reads the job's Neon and Cloudflare secrets
+      # and the public staging client id below.
       #
       # `WORKOS_API_KEY` is checked here rather than in the credentials step
       # above, because a missing smoke credential is not a reason to refuse to
       # deploy. It fails the run either way: this gate never skips.
       - name: Smoke
+        env:
+          WORKOS_CLIENT_ID: client_01M0WWHM5TQAA6MDR2W910XA75
         run: |
           if [ -z "${WORKOS_API_KEY:-}" ]; then
             echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"

@@ -239,8 +239,10 @@ jobs:
       # asserts its own deletion, so two open pull requests running at once do
       # not collide: the addresses differ, the sign-in rate limiter is keyed on
       # the address, and the reaper only removes accounts older than an hour.
-      # Everything it asserts is a read, which is what makes it safe against the
-      # staging database two previews share.
+      # One spec also makes a probe org, unique to the run, and clears it with
+      # `pnpm probe:clear`, which needs the job's Neon and Cloudflare secrets and
+      # the public staging client id below. Everything else is a read, which is
+      # what makes it safe against the staging database two previews share.
       #
       # `WORKOS_API_KEY` is scoped to this step rather than the job, so it is not
       # in the environment of the build, the migration or the uploads. It fails
@@ -250,6 +252,7 @@ jobs:
         env:
           WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
           E2E_BASE_URL: ${{ steps.urls.outputs.web }}
+          WORKOS_CLIENT_ID: client_01M0WWHM5TQAA6MDR2W910XA75
         run: |
           if [ -z "${WORKOS_API_KEY:-}" ]; then
             echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"

@@ -1,11 +1,15 @@
+import { spawnSync } from "node:child_process"
 import { expect, type Locator, type Page } from "@playwright/test"
 import { visit } from "./visit"
-import type { ProbeUser } from "./workos"
+import { deleteProbeOrgs, deleteProbeUser, type ProbeUser } from "./workos"
 
 /**
- * An owner with an organisation, for the `@live` specs: sign in, make the
- * org the way signup does, and call `apps/api` with the browser's session.
+ * An owner with an organisation, for the specs that make one: sign in, make
+ * the org the way signup does, call `apps/api` with the browser's session,
+ * and clear the org again.
  */
+
+const ROOT = new URL("../../", import.meta.url)
 
 /** `apps/api` beside the web under test, or `E2E_API_URL`. */
 export function apiUrl(): string {
@@ -74,6 +78,48 @@ export async function startOrg(
   await page.goto("/sign-out")
   await signIn(page, user)
   return (await org.json()) as { org_id: string }
+}
+
+/**
+ * A probe org cleared whole, then its owner. The org goes by its id through
+ * `pnpm probe:clear`; WorkOS alone is the fallback when signup died before
+ * the id came back or the clear refused, and then its Postgres rows stay for
+ * `pnpm probe:clear --org`. Returns what is left, empty when nothing is.
+ */
+export async function clearProbe(
+  orgId: string | null,
+  user: ProbeUser
+): Promise<string[]> {
+  const failures: string[] = []
+  let cleared = false
+  if (orgId) {
+    const clear = spawnSync(
+      "pnpm",
+      ["probe:clear", "--probe", orgId, "--yes"],
+      {
+        cwd: ROOT,
+        stdio: "inherit",
+        env: { ...process.env, FORCE_COLOR: "0" },
+      }
+    )
+    cleared = clear.status === 0
+    // 3: no such org in staging's Postgres, as on a preview, whose Neon
+    // branch goes with the PR; only the WorkOS org is left to delete.
+    if (!cleared && clear.status !== 3) {
+      failures.push(
+        `pnpm probe:clear --probe ${orgId} exited ${clear.status}; its rows stay, clear them with --org`
+      )
+    }
+  }
+  if (!cleared) {
+    await deleteProbeOrgs(user.id).catch((error) =>
+      failures.push(`WorkOS orgs not deleted: ${error}`)
+    )
+  }
+  if (!(await deleteProbeUser(user.id))) {
+    failures.push(`WorkOS user ${user.id} still exists`)
+  }
+  return failures
 }
 
 /** How a run answers each onboarding question, by the question the owner reads. */
