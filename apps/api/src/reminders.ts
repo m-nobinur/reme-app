@@ -117,7 +117,7 @@ export async function createReminder(
  * nothing, so a retry keeps the first `done_at`. One conditional update, so
  * two racing calls cannot both write. Null for an id the org does not hold.
  */
-export async function setReminderDone(
+async function setReminderDone(
   db: OrgScopedDb,
   id: string,
   done: boolean

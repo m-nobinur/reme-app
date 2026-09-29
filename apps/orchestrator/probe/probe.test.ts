@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest"
 
 /**
  * The sandbox probes, driven against a running orchestrator: `vite dev`
- * with Docker, or staging. Skipped without `ORCHESTRATOR_URL` and
- * `ORCHESTRATOR_TOKEN`, and its floor in scripts/floors.json is what makes a
- * skipped run visible as one. What each case proves is in sandbox.ts.
+ * with Docker, or the one each staging and production deploy just made.
+ * Skipped without `ORCHESTRATOR_URL` and `ORCHESTRATOR_TOKEN`, and its floor
+ * in scripts/floors.json is what makes a skipped run visible as one. What each case proves is in sandbox.ts.
  */
 const url = process.env.ORCHESTRATOR_URL?.replace(/\/$/, "")
 const token = process.env.ORCHESTRATOR_TOKEN

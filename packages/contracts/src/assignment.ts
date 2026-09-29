@@ -144,10 +144,10 @@ export const ApprovalRequest = z.strictObject({
 
 /**
  * `ApprovalDecision` (§19, ADR-032): the answer to an `ApprovalRequest`,
- * written once. `decided_by` says honestly who decided: an owner's session,
- * or the staff console, which only staging accepts until the owner approval
- * route exists. The target is repeated so the publisher can refuse a decision
- * whose target is not the revision the reviewer was shown.
+ * written once. `decided_by` says honestly who decided: an owner's session, or
+ * the staff console, which only staging accepts. The target is
+ * repeated so the publisher can refuse a decision whose target is not the
+ * revision the reviewer was shown.
  */
 export const ApprovalDecision = z.strictObject({
   approval_id: Uuid,

@@ -102,9 +102,7 @@ import { missingFacts, readFacts } from "./workspace.ts"
  */
 
 /** The facts an owner may skip. Pricing only: the rest the site needs. */
-export const SKIPPABLE: readonly FactValueKey[] = [
-  "pricing.standard_clean_hourly",
-]
+const SKIPPABLE: readonly FactValueKey[] = ["pricing.standard_clean_hourly"]
 
 /** The first build's goal, when the owner has not typed one. */
 export const ONBOARDING_GOAL = "Build my website from the details I gave you."
@@ -159,7 +157,7 @@ export type Script = {
 }
 
 /** The key onboarding asks for next, if any. */
-export const nextKey = (s: Pick<Script, "missing" | "skipped">) =>
+const nextKey = (s: Pick<Script, "missing" | "skipped">) =>
   s.missing.find((k) => !s.skipped.includes(k))
 
 /**

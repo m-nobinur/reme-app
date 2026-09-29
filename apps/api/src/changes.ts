@@ -53,7 +53,7 @@ const BRIDGE_TIMEOUT_MS = 10_000
  * deadline wins a tie with the work's own abort, and comes off once either
  * settles, so a change's one signal does not collect a listener per call.
  */
-export function within<T>(
+function within<T>(
   signal: AbortSignal,
   work: () => Promise<T>,
   late: () => T
@@ -140,16 +140,18 @@ export async function bridge(
 /**
  * A call whose outcome nobody knows, logged by its code, the orchestrator
  * route and the build it named, and nothing else. ADR-034's triggers read
- * these, the first `orchestrator.timeout` on a replace among them.
+ * these, the first `orchestrator.timeout` on a replace among them. A path
+ * that names no build, such as `/site/takedown`, is logged as it is.
  */
 function unknownOutcome(path: string, result: Bridged) {
   const refusal = ErrorEnvelope.safeParse(result.body)
   const [, id, verb] = path.split("/")
+  const build = Uuid.safeParse(id).success
   console.error(
     JSON.stringify({
       code: refusal.success ? refusal.data.code : "orchestrator.unavailable",
-      route: verb ? `/assignments/:id/${verb}` : "/assignments/",
-      assignment_id: id || null,
+      route: build ? `/assignments/:id/${verb}` : `/assignments${path}`,
+      assignment_id: build ? id : null,
     })
   )
 }

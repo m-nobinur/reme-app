@@ -77,10 +77,10 @@ const rate = (key: string) => (r: Rates) => perMillion(r[key])
 
 /**
  * pi-ai's cost tiers for a model's long-context overrides, each at the factor
- * times the tier's rates, so a long request is logged at the most it can be
- * billed as well. pi-ai applies a tier to requests whose input is above
- * `inputTokensAbove`; an override applies from `min_prompt_tokens`, so the
- * threshold is one under it.
+ * times the tier's rates, so a long request OpenRouter reports no cost for is
+ * priced at the most it can be billed as well. pi-ai applies a tier to
+ * requests whose input is above `inputTokensAbove`; an override applies from
+ * `min_prompt_tokens`, so the threshold is one under it.
  */
 const longContextTiers = (pricing: Pricing | undefined) => {
   const overrides = (pricing?.overrides ?? []).filter(

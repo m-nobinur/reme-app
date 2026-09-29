@@ -47,7 +47,7 @@ export class SeqGapError extends Error {
 }
 
 /** The reverse of `toEventEnvelope` in @workspace/db. */
-export function toEventRow(row: EventEnvelope): typeof events.$inferInsert {
+function toEventRow(row: EventEnvelope): typeof events.$inferInsert {
   return {
     eventId: row.event_id,
     orgId: row.org_id,

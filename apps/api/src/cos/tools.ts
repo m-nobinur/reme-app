@@ -166,7 +166,7 @@ export async function getWorkspace(
  * hours stored before the rule that they close after they open, is left out
  * and named, so one old row never fails the list.
  */
-export function toCosFacts(rows: FactRecord[]): {
+function toCosFacts(rows: FactRecord[]): {
   output: CosFacts
   skipped: string[]
 } {

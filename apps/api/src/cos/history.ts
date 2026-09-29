@@ -6,7 +6,6 @@ import {
   type TaintLabel,
 } from "@workspace/contracts"
 import { eq, events, type OrgScopedDb } from "@workspace/db"
-// Types only, so `ai` stays out of the bundle until the agent brings it.
 import type { ModelMessage, UIMessage } from "ai"
 import { sha256Hex, sortedKeys } from "../http.ts"
 
