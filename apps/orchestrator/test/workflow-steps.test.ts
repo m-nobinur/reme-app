@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { UPTIME_CRON } from "../src/uptime.ts"
 import steps from "./workflow-steps.json" with { type: "json" }
 
 /**
@@ -206,9 +208,12 @@ vi.mock("../src/validate.ts", () => ({
   },
 }))
 
-const { AssignmentWorkflow, SweepWorkflow, sweepHour } = await import(
-  "../src/cloudflare.ts"
-)
+const {
+  AssignmentWorkflow,
+  SweepWorkflow,
+  sweepHour,
+  default: worker,
+} = await import("../src/cloudflare.ts")
 
 type Wake = { payload: Record<string, unknown> } | "timeout"
 /**
@@ -617,5 +622,57 @@ describe("the sweep Workflow's step names", () => {
 
   it("names the hour the way the cron does", () => {
     expect(sweepHour(Date.UTC(2026, 8, 16, 12, 0, 5))).toBe("2026091612")
+  })
+})
+
+describe("the scheduled handler", () => {
+  const config = readFileSync(
+    new URL("../wrangler.jsonc", import.meta.url),
+    "utf8"
+  )
+  async function fire(cron: string) {
+    const created = vi.fn(async () => ({}))
+    const fetched = vi.fn(async () => new Response("{}"))
+    vi.stubGlobal("fetch", fetched)
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    try {
+      await worker.scheduled(
+        {
+          cron,
+          scheduledTime: Date.UTC(2026, 8, 16, 12),
+        } as ScheduledController,
+        {
+          SWEEPS: { create: created },
+          HEALTH_URLS: "https://api.example.invalid/health",
+        } as unknown as Env
+      )
+    } finally {
+      vi.unstubAllGlobals()
+      log.mockRestore()
+    }
+    return { created, fetched }
+  }
+
+  it("creates the hour's sweep on the hourly cron and checks nothing", async () => {
+    const { created, fetched } = await fire("0 * * * *")
+    expect(created).toHaveBeenCalledWith({
+      id: "sweep-2026091612",
+      params: { hour: "2026091612" },
+    })
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it("runs the uptime check on the five-minute cron and sweeps nothing", async () => {
+    const { created, fetched } = await fire("*/5 * * * *")
+    expect(fetched).toHaveBeenCalledTimes(1)
+    expect(created).not.toHaveBeenCalled()
+  })
+
+  it("schedules the uptime check in production only", () => {
+    // The handler matches the string exactly, so the config must spell it the same.
+    const crons = [...config.matchAll(/"crons": (\[[^\]]*\])/g)].map(
+      (m) => JSON.parse(m[1] ?? "[]") as string[]
+    )
+    expect(crons).toEqual([["0 * * * *"], ["0 * * * *", UPTIME_CRON]])
   })
 })

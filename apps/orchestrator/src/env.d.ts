@@ -22,4 +22,16 @@ interface __BaseEnv_Env {
   REME_MODEL_PRIMARY: string
   REME_MODEL_DEFAULT: string
   REME_MODEL_FALLBACK: string
+  /**
+   * Where the uptime check emails, production only. Put by hand with
+   * `wrangler secret put`, not by bootstrap, so the address stays out of the
+   * repo and out of `.env.local`.
+   */
+  ALERT_TO?: string
+  /**
+   * The `send_email` binding the uptime check sends through. Not in
+   * wrangler.jsonc until Email Routing is enabled on the zone; see
+   * docs/runbook-production.md.
+   */
+  ALERTS?: SendEmail
 }

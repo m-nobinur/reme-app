@@ -3,10 +3,18 @@
 Written 2026-08-30 from the drill, not before it. Every number here was measured on
 `reme-api-production`.
 
-Production is `preview.remeai.co.uk` (`reme-web-production`) and
-`api.remeai.co.uk` (`reme-api-production`), on the `reme-prod` Neon project
-(`super-brook-02913792`). Staging is separate in every one of those: its own Workers, its own
-Hyperdrive, its own Neon project. A merge to `main` cannot reach production.
+Production is four Workers on the `reme-prod` Neon project (`super-brook-02913792`):
+
+- `reme-web-production` on `preview.remeai.co.uk`
+- `reme-api-production` on `api.remeai.co.uk`
+- `reme-orchestrator-production` on `orchestrator.remeai.co.uk`
+- `reme-router-production` on the zone route `*.remeai.co.uk/*`, which serves tenant sites and
+  hands the service hostnames above back to their own Workers
+
+Site artifacts live in the R2 bucket `reme-sites-production`, and the router reads its host
+pointers from the KV namespace `reme-prod-routes`. Staging is separate in every one of those: its
+own Workers, bucket, KV namespace, Hyperdrive and Neon project. A merge to `main` cannot reach
+production.
 
 ## Rolling back
 
@@ -44,16 +52,18 @@ A tenant site is a pointer, not a deploy: the router serves whichever revision t
 activates the previous revision through the same publisher Workflow that published it.
 
 ```sh
-ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder rollback <slug> "why"
-ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder site <slug>
+export ORCHESTRATOR_URL=https://orchestrator.remeai.co.uk
+export ORCHESTRATOR_TOKEN=<the production orchestrator's token>
+pnpm builder rollback <slug> "why"
+pnpm builder site <slug>
 ```
 
 The first prints the instance id and the revision being restored; the second shows what the host
 serves and what the next rollback would restore. The instance appends a `deployments` row of kind
 `rollback`, writes the pointer, and probes the host at 0, 2, 5 and 10 minutes. A second rollback
 rolls forward again, because "previous" is whatever the newest row points at; the request is keyed
-by its idempotency key so a retried command is one rollback. Production runs the same commands
-against `orchestrator.remeai.co.uk` once the production router exists (issue #90).
+by its idempotency key so a retried command is one rollback. Staging runs the same commands against
+`staging-orchestrator.remeai.co.uk` with the staging token.
 
 ## Cancelling a stuck assignment
 
@@ -62,7 +72,8 @@ then the Workflow instance is terminated and the container destroyed, so a cance
 already settled changes nothing.
 
 ```sh
-ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk pnpm builder cancel <slug> <assignment id>
+# With ORCHESTRATOR_URL and ORCHESTRATOR_TOKEN set as above.
+pnpm builder cancel <slug> <assignment id>
 ```
 
 A cancelled build's unpublished revisions enter the seven-day retention window in the same
@@ -78,9 +89,11 @@ revisions retired more than seven days ago through the one guarded delete, which
 revision a site serves and the one a rollback would restore.
 
 ```sh
-pnpm --filter orchestrator exec wrangler workflows trigger reme-sweep '{"hour":"manual-<why>"}'
-pnpm --filter orchestrator exec wrangler workflows instances list reme-sweep
+pnpm --filter orchestrator exec wrangler workflows trigger reme-sweep-production '{"hour":"manual-<why>"}' --env production
+pnpm --filter orchestrator exec wrangler workflows instances list reme-sweep-production --env production
 ```
+
+Staging's Workflow is `reme-sweep`, without `--env`.
 
 The instance's output carries the counts (orgs, parked, redriven, deleted, failed) and each org
 with work appends a `retention.swept` event; a `revision.files_deleted` event names every key
@@ -95,9 +108,10 @@ policy, neither of which changes the status code of anything else.
 
 ```sh
 curl -s https://api.remeai.co.uk/health
+curl -s https://orchestrator.remeai.co.uk/health
 ```
 
-All four have to hold:
+The orchestrator answers `{"status":"ok"}` and nothing more. For the api, all four have to hold:
 
 ```json
 {"status":"ok","role":"reme_app","bypasses_rls":false,
@@ -118,20 +132,36 @@ The workflow is the supported path. When it is unavailable:
 # 1. Migrations first. Expand/contract means the new schema is safe under the old code.
 DATABASE_URL=<direct, non-pooled, reme-prod> pnpm db:migrate
 
-# 2. The api, then its health check before the web build spends two minutes.
+# 2. The orchestrator first: the api calls it. It builds with vite, so CLOUDFLARE_ENV is read at
+#    build time here too. Then its health check and the sandbox probe, which calls
+#    GET /sandbox/probe with the orchestrator's bearer.
+CLOUDFLARE_ENV=production pnpm --filter orchestrator build
+pnpm --filter orchestrator exec wrangler deploy --config dist/reme_orchestrator/wrangler.json
+curl -s https://orchestrator.remeai.co.uk/health
+ORCHESTRATOR_URL=https://orchestrator.remeai.co.uk ORCHESTRATOR_TOKEN=<token> \
+  pnpm --filter orchestrator test:probe
+
+# 3. The api, then its health check before the web build spends two minutes.
 pnpm --filter api exec wrangler deploy --env production
 curl -s https://api.remeai.co.uk/health
 
-# 3. The web app. CLOUDFLARE_ENV is read at BUILD time by the vite plugin, not at deploy time.
+# 4. The web app. CLOUDFLARE_ENV is read at BUILD time by the vite plugin, not at deploy time.
 CLOUDFLARE_ENV=production pnpm --filter web build
 pnpm --filter web exec wrangler deploy --config dist/server/wrangler.json
+curl -s -o /dev/null -w '%{http_code}\n' https://preview.remeai.co.uk/
 
-# 4. Rebuild for the default environment, or a later staging deploy uploads a production bundle.
+# 5. The router last, as the workflow does, then the api and web checks again through it.
+pnpm --filter router exec wrangler deploy --env production
+
+# 6. Rebuild both vite apps for the default environment, or a later staging deploy uploads a
+#    production bundle.
+pnpm --filter orchestrator build
 pnpm --filter web build
 ```
 
-Step 4 is not tidiness. `dist/server/wrangler.json` is the config a web deploy actually uploads,
-and after a production build it names `reme-web-production` and carries the custom-domain route.
+Step 6 is not tidiness. `dist/server/wrangler.json` and `dist/reme_orchestrator/wrangler.json` are
+the configs a deploy actually uploads, and after a production build they name the production
+Worker and carry its routes.
 
 `pnpm db:migrate` refuses a `-pooler` host itself, because its advisory lock is session-scoped and
 PgBouncer in transaction mode drops it silently. Neon's API hands out the pooled endpoint by
@@ -139,9 +169,22 @@ default, so ask for the direct one.
 
 ## Secrets
 
-`infra/bootstrap.ts prod` pushes them from `.env.local`, and only onto a Worker that already
-exists: a Worker that has never been deployed has nowhere to hold a secret, so the first run
-reports `not deployed` and the run after the first deploy sets them.
+`infra/bootstrap.ts prod` pushes them from `.env.local`, the same file staging's run reads, so
+today both environments hold the same values. Per Worker:
+
+- `reme-web-production`: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`
+- `reme-api-production`: the same three, and `OPENROUTER_API_KEY`
+- `reme-orchestrator-production`: `ORCHESTRATOR_TOKEN`, `RUNTIME_SPEC_KEY`, `PREVIEW_KEY`,
+  `OPENROUTER_API_KEY`, `REME_MODEL_PRIMARY`, `REME_MODEL_DEFAULT`, `REME_MODEL_FALLBACK`
+- `reme-router-production`: `PREVIEW_KEY`, the same value as the orchestrator's
+
+`ALERT_TO` on the orchestrator is the one production secret bootstrap does not push. It is the
+owner's email address, so it goes onto the Worker by hand and stays out of `.env.local`; the
+monitoring section has the command.
+
+Bootstrap pushes only onto a Worker that already exists: a Worker that has never been deployed has
+nowhere to hold a secret, so the first run reports `not deployed` and the run after the first
+deploy sets them.
 
 `present` means the name exists on the Worker, not that its value matches `.env.local`. Wrangler
 exposes no read for a secret value, so nothing can compare one. A rotated value reads `present` and
@@ -151,8 +194,63 @@ Production currently uses the **staging** WorkOS environment, by decision, becau
 customers before launch and the production environment's API key cannot be minted from any surface.
 Open item 13 lists what that defers.
 
+## Monitoring
+
+The zone is on the Free plan, so Cloudflare Health Checks are not available, and Cloudflare
+Notifications has no alert on a Worker's error rate. The production orchestrator runs its own
+check instead: a cron every five minutes fetches each URL in its `HEALTH_URLS` var, which is
+`api.remeai.co.uk/health`, `orchestrator.remeai.co.uk/health` and `preview.remeai.co.uk/`. A URL
+fails on anything but a 2xx, or on no answer within 10 s. Staging does not run the check.
+
+Every run writes one line to Workers Logs for `reme-orchestrator-production`:
+
+```json
+{"type":"uptime.checked","ok":false,"checks":[{"url":"https://api.remeai.co.uk/health","ok":false,"ms":84,"status":503}]}
+```
+
+Query `type = uptime.checked` there for the history. A run with a failure also sends one email,
+once email is set up, so an outage sends one every five minutes until it ends. A failed send logs
+`uptime.alert_failed` with its code.
+
+The check fetches the public hostnames, so it tests the same path a visitor takes. Cloudflare's
+docs say a Worker can fetch a Custom Domain on its own zone but not a route, and each of these
+hostnames has both. Read the first `uptime.checked` line after the deploy before you set up email:
+if every check fails with no `status` while `curl` from outside answers 200, the same-zone fetch is
+the cause, and the check needs a service binding instead of a URL.
+
+### Setting up the email, once
+
+The code sends through a `send_email` binding named `ALERTS`, and that binding is not in
+`apps/orchestrator/wrangler.jsonc` yet. Cloudflare requires Email Routing on the zone and a
+verified destination address before a Worker can bind to it, so adding it first would risk every
+production deploy. Until the steps below are done, the check runs and logs and sends nothing.
+
+1. In the Cloudflare dashboard, enable Email Routing on `remeai.co.uk`.
+2. Under Email Routing, add the address the alerts go to as a destination address, and open the
+   verification email Cloudflare sends to it.
+3. Put that address on the Worker, so it never enters the repo:
+
+   ```sh
+   pnpm --filter orchestrator exec wrangler secret put ALERT_TO --env production
+   ```
+
+4. Add the binding to the `production` block of `apps/orchestrator/wrangler.jsonc`, in its own PR:
+
+   ```jsonc
+   "send_email": [{ "name": "ALERTS" }],
+   ```
+
+   With no destination restriction the binding can send to any verified destination address on
+   the account, and `ALERT_TO` picks which one. The sender is `alerts@remeai.co.uk`.
+5. Prove it once. Deploy with `https://api.remeai.co.uk/uptime-drill` added to `HEALTH_URLS`,
+   which the api answers 404, time the gap from the failing run's log line to the email, then
+   deploy again without it.
+
 ## What is not drilled yet
 
 The drill above rolled between two versions of identical code, so it measured the mechanism and the
 clock honestly and did not measure a rollback out of a genuinely broken release. Do that on the
 first release that has a real defect, and correct this file from it rather than from imagination.
+
+Restoring the production database has never been tried. Nobody has restored `reme-prod` to a
+point in time, pointed a Hyperdrive config at the result, or measured how long either takes.
