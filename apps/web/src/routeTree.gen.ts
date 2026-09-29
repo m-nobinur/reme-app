@@ -10,11 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
 import { Route as MfaRouteImport } from './routes/mfa'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
@@ -37,6 +39,11 @@ import { Route as AppConversationCIdRouteImport } from './routes/app/_conversati
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignUpRoute = SignUpRouteImport.update({
@@ -62,6 +69,11 @@ const SignInRoute = SignInRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MfaSetupRoute = MfaSetupRouteImport.update({
@@ -161,11 +173,13 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
@@ -186,11 +200,13 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
@@ -211,11 +227,13 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/chat': typeof ApiChatRoute
   '/app/_conversation': typeof AppConversationRouteWithChildren
@@ -239,11 +257,13 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/privacy'
     | '/reset-password'
     | '/sign-in'
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/terms'
     | '/verify-email'
     | '/api/chat'
     | '/app/account'
@@ -264,11 +284,13 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/privacy'
     | '/reset-password'
     | '/sign-in'
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/terms'
     | '/verify-email'
     | '/api/chat'
     | '/app/account'
@@ -288,11 +310,13 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/privacy'
     | '/reset-password'
     | '/sign-in'
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/terms'
     | '/verify-email'
     | '/api/chat'
     | '/app/_conversation'
@@ -315,11 +339,13 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MfaRoute: typeof MfaRoute
   MfaSetupRoute: typeof MfaSetupRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignInRoute: typeof SignInRoute
   SignInCodeRoute: typeof SignInCodeRoute
   SignOutRoute: typeof SignOutRoute
   SignUpRoute: typeof SignUpRoute
+  TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -333,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/verify-email'
       fullPath: '/verify-email'
       preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-up': {
@@ -368,6 +401,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mfa-setup': {
@@ -542,11 +582,13 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   MfaRoute: MfaRoute,
   MfaSetupRoute: MfaSetupRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignInRoute: SignInRoute,
   SignInCodeRoute: SignInCodeRoute,
   SignOutRoute: SignOutRoute,
   SignUpRoute: SignUpRoute,
+  TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   ApiChatRoute: ApiChatRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,

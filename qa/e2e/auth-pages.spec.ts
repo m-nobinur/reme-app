@@ -26,6 +26,8 @@ const PAGES = [
   ["sign in after a cancelled provider redirect", "/sign-in?error=cancelled"],
   ["sign in with a code", "/sign-in-code"],
   ["sign up", "/sign-up"],
+  ["the privacy policy", "/privacy"],
+  ["the terms", "/terms"],
   ["forgot password", "/forgot-password"],
   ["a dead reset link", "/reset-password"],
   // Short on purpose. A longer stand-in reads to `.githooks/secret-scan` as a
