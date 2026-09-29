@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types --env-file /dev/null",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs orchestrator-unit -- vitest run --dir test",
-    "size": "node scripts/size.mjs",
+    "size": "node ../../scripts/size.mjs orchestrator --config dist/reme_orchestrator/wrangler.json",
     "test:probe": "node ../../scripts/floor.mjs orchestrator-probe -- vitest run --dir probe"
   },
   "dependencies": {

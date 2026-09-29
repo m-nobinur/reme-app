@@ -751,9 +751,7 @@ export async function readTarget(
  * late or retried write can only repeat what is live. An org whose account
  * was deleted gets no pointer at all (ADR-035), and the refusal is final. The
  * KV write follows the read's commit rather than running inside it, so no
- * transaction is held open on KV. The binding is optional in the generated
- * types because production has no namespace yet; a publish without one is a
- * configuration error, not a retry.
+ * transaction is held open on KV.
  */
 export async function writePointer(
   env: Pick<Env, "ROUTES">,
@@ -762,8 +760,6 @@ export async function writePointer(
   siteId: string,
   host: string
 ): Promise<{ host: string }> {
-  if (!env.ROUTES)
-    throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
   const live = await kit.withOrg({ orgId }, async (db) =>
     (await orgOpen(db)) ? activeDeployment(db, siteId) : "closed"
   )
@@ -796,8 +792,6 @@ export async function clearPointers(
   kit: Pick<Tenancy, "withOrg">,
   orgId: string
 ): Promise<void> {
-  if (!env.ROUTES)
-    throw new TransitionError("routes.unbound", "resource", "no ROUTES binding")
   const [org] = await kit.withOrg({ orgId }, (db) =>
     db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
   )
