@@ -197,3 +197,9 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   with it, and the router's match is the narrower `preview-v{n}-`. Existing slugs do not move;
   staging held none starting `preview-` on 2026-09-29, and production needs the same read before
   release.
+- **Amended 2026-09-29, the production router is live.** `v0.1.1` deployed it on
+  `*.remeai.co.uk/*`. Measured straight after: a `-stg` host answers the staging router's 404,
+  so `*-stg.remeai.co.uk/*` keeps its hosts against the zone-wide pattern, as inferred on
+  2026-09-18. `staging`, `staging-api` and `staging-orchestrator` answer their own Workers, each
+  now holding an explicit zone route for its hostname, as the production services do, with the
+  three also named in `SERVICE_HOSTS`. Production held no org, so no slug started `preview-`.
