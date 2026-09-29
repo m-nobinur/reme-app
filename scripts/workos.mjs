@@ -26,6 +26,13 @@ process.env.WORKOS_MODE = "agent"
  * preview environments. Previews answer on `beapp.workers.dev`, the account's
  * subdomain, because Cloudflare issues preview aliases nowhere else; the deployed Workers answer on `remeai.co.uk` (ADR-030).
  * `signInEndpoint` is the route the sign-in story builds.
+ *
+ * `logoutUris` and `passwordResetUrl` have no CLI command, like the sign-in
+ * endpoint, so they are listed here and printed at the end rather than set.
+ *
+ * `prod` is the WorkOS Production environment (client
+ * `client_01M0WWHMK5RP961JNYJH00YWZV`), for the one hostname every business
+ * shares (ADR-030). Until the split, staging carries that hostname too.
  */
 const environments = {
   staging: {
@@ -67,8 +74,26 @@ const environments = {
       "https://staging.remeai.co.uk",
       "https://preview.remeai.co.uk",
     ],
-    homepageUrl: "http://localhost:3000",
+    logoutUris: [
+      "http://localhost:3000/",
+      "https://staging.remeai.co.uk/",
+      "https://preview.remeai.co.uk/",
+      "https://*-reme-web.beapp.workers.dev/",
+    ],
+    // One value per environment, and this one serves production until the
+    // split, so both point at production's host. Staging's has read this since
+    // 2026-09-29; a run with localhost here would put it back.
+    homepageUrl: "https://preview.remeai.co.uk",
+    passwordResetUrl: "https://preview.remeai.co.uk/reset-password",
     signInEndpoint: "http://localhost:3000/sign-in",
+  },
+  prod: {
+    redirectUris: ["https://preview.remeai.co.uk/api/auth/callback"],
+    corsOrigins: ["https://preview.remeai.co.uk"],
+    logoutUris: ["https://preview.remeai.co.uk/"],
+    homepageUrl: "https://preview.remeai.co.uk",
+    passwordResetUrl: "https://preview.remeai.co.uk/reset-password",
+    signInEndpoint: "https://preview.remeai.co.uk/sign-in",
   },
 }
 
@@ -149,14 +174,17 @@ for (const origin of config.corsOrigins) {
 workos("config", "homepage-url", "set", config.homepageUrl)
 ok(`set        homepage URL ${config.homepageUrl}`)
 
-// The sign-in endpoint has no CLI command, so this script cannot set it and
-// cannot read it back either: the MCP server exposes the write but no matching
-// query, and the dashboard is the only place the current value is visible.
+// Three values have no CLI command, so this script cannot set them. The WorkOS
+// MCP server can, by the operation named with each; the sign-in endpoint has no
+// matching query, so the dashboard is the only place its current value shows.
 console.log("")
-note(`Sign-in endpoint, set once per environment: ${config.signInEndpoint}`)
-note("Not the CLI. Either the Redirects tab of the application in the")
-note("dashboard, or updateAuthkitExternalLoginUri through the WorkOS MCP")
-note("server, which is what set it on staging.")
+note("Not the CLI. Set each through the WorkOS MCP server or the dashboard:")
+note(`Sign-in endpoint: ${config.signInEndpoint}`)
+note("  updateAuthkitExternalLoginUri, which is what set it on staging.")
 note(
-  "https://workos.com/docs/authkit/vanilla/nodejs#configure-initiate-login-url"
+  "  https://workos.com/docs/authkit/vanilla/nodejs#configure-initiate-login-url"
 )
+note(`Logout URIs: ${config.logoutUris.join(", ")}`)
+note("  setLogoutUris, which takes the full list.")
+note(`Password reset URL: ${config.passwordResetUrl}`)
+note("  updateAuthkitApplication, field passwordResetUrl.")
