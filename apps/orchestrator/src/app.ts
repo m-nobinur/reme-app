@@ -1342,5 +1342,8 @@ const onError: ErrorHandler<ConsoleEnv> = (error, c) => {
 // and version URLs all land here, and none of them can reach `ownerAuth`.
 app.route("/assignments", consoleRoutes())
 app.notFound(noRoute)
+// The probe sits outside the trees. A sandbox reset by a deploy throws there,
+// and this answers it as the trees do: a 503 the probe's caller retries.
+app.onError(onError)
 
 export default app
