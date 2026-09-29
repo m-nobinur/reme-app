@@ -1,5 +1,6 @@
 import { CreateOrgRequest } from "@workspace/contracts"
 import { failureCode, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
+import { type Accounts, deleteAccount } from "./account.ts"
 import type { Owner } from "./changes.ts"
 import { checkTenantPath } from "./health.ts"
 import {
@@ -7,12 +8,14 @@ import {
   failure,
   idempotencyKey,
   invalid,
+  keyMissing,
   readBody,
   tooLarge,
 } from "./http.ts"
 import {
   createOrg,
   type Directory,
+  EmailTaken,
   readOrg,
   readStaffDirectory,
 } from "./org.ts"
@@ -111,14 +114,71 @@ async function signup(
     createOrganizationMembership: (options) =>
       client.userManagement.createOrganizationMembership(options),
   }
-  const org = await createOrg(kit, directory, {
-    name: parsed.data.name,
-    idempotencyKey: key,
-    workosUserId: session.workosUserId,
-    email: session.email,
-    displayName: session.name,
-  })
-  return Response.json(org, { status: 201 })
+  try {
+    const org = await createOrg(kit, directory, {
+      name: parsed.data.name,
+      idempotencyKey: key,
+      workosUserId: session.workosUserId,
+      email: session.email,
+      displayName: session.name,
+    })
+    return Response.json(org, { status: 201 })
+  } catch (error) {
+    if (!(error instanceof EmailTaken)) throw error
+    return failure(409, {
+      class: "validation",
+      code: "account.email_taken",
+      message: "Another account already uses this email address.",
+      detail: {},
+    })
+  }
+}
+
+/**
+ * The owner's own account, from the session and nothing else (ADR-035). The
+ * key is required by R5 and not what makes a retry safe: `deleteAccount`
+ * finishes whatever a first call left undone.
+ */
+async function removeAccount(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  session: Session
+): Promise<Response> {
+  if (!session) return failure(401, UNAUTHENTICATED)
+  if (!idempotencyKey(request)) return keyMissing()
+  const client = workos(env)
+  const accounts: Accounts = {
+    listOrganizationMemberships: (options) =>
+      client.userManagement.listOrganizationMemberships(options),
+    deleteOrganization: (id) => client.organizations.deleteOrganization(id),
+    deleteUser: (id) => client.userManagement.deleteUser(id),
+  }
+  switch (await deleteAccount(kit, accounts, session)) {
+    case "deleted":
+      return new Response(null, { status: 204 })
+    case "not_owner":
+      return failure(403, {
+        class: "permission",
+        code: "account.not_owner",
+        message: "Only the owner can delete this account.",
+        detail: {},
+      })
+    case "other_members":
+      return failure(409, {
+        class: "validation",
+        code: "account.other_members",
+        message: "Remove the other members of this organisation first.",
+        detail: {},
+      })
+    case "unresolved":
+      return failure(403, {
+        class: "permission",
+        code: "org.unresolved",
+        message: "This session is not signed in to an organisation we hold.",
+        detail: {},
+      })
+  }
 }
 
 async function route(
@@ -154,6 +214,10 @@ async function route(
 
   if (pathname === "/org" && method === "POST") {
     return signup(request, env, kit, session)
+  }
+
+  if (pathname === "/account" && method === "DELETE") {
+    return removeAccount(request, env, kit, session)
   }
 
   if (

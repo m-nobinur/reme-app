@@ -97,6 +97,12 @@ export function slugFor(name: string, orgId: string): string {
 }
 
 /**
+ * Another person's row holds this email: a WorkOS user deleted outside
+ * `DELETE /account`, whose row was never tombstoned. `index.ts` answers 409.
+ */
+export class EmailTaken extends Error {}
+
+/**
  * Creates the org: the WorkOS organization first, then ours.
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
@@ -124,10 +130,11 @@ export function slugFor(name: string, orgId: string): string {
  * organisation per person. It is the signup writer, and a second business for
  * the same owner is a different story with a different shape.
  *
- * Our inserts, the starting team's included, run in one `withOrg` under the
- * id this function generated, so no policy is widened for them:
- * `orgs_org_isolation` passes because the row's id is the context,
- * `users_self_insert` because the context names the person signing up, and
+ * The person is written first, in a transaction of its own that
+ * `users_self_insert` passes because the context names the person signing up.
+ * The org's inserts, the starting team's included, then run in one `withOrg`
+ * under the id this function generated, so no policy is widened for them:
+ * `orgs_org_isolation` passes because the row's id is the context, and
  * `memberships_org_isolation` and `staff_org_isolation` on the same org id. None
  * of them uses RETURNING, because the SELECT policy is applied to returned rows
  * and reports the refusal as an insert failure against the wrong policy.
@@ -144,8 +151,35 @@ export async function createOrg(
   },
   newId: () => string = () => crypto.randomUUID()
 ): Promise<Org> {
-  // The replay, and it has to be the first thing that happens: everything
-  // after it either creates a vendor resource or writes a row.
+  // The person first, before any vendor call, so an email another row holds
+  // is refused before a WorkOS organization exists to be left behind. Under a
+  // fresh org id, as the write below is, so `users_self_insert` and
+  // `users_self_read` are the only policies that match. The insert does
+  // nothing when the person is already mirrored or the email is taken; the
+  // read tells the two apart, since only the first is their own row.
+  const personId = await kit.withOrg(
+    { orgId: crypto.randomUUID(), workosUserId: input.workosUserId },
+    async (db) => {
+      await db
+        .insert(users)
+        .values({
+          workosUserId: input.workosUserId,
+          email: input.email,
+          name: input.displayName,
+        })
+        .onConflictDoNothing()
+      const [person] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.workosUserId, input.workosUserId))
+        .limit(1)
+      return person?.id
+    }
+  )
+  if (!personId) throw new EmailTaken()
+
+  // The replay: everything after it either creates a vendor resource or
+  // writes a row.
   const existing = await directory.listOrganizationMemberships({
     userId: input.workosUserId,
     statuses: ["active"],
@@ -195,30 +229,10 @@ export async function createOrg(
       if ((inserted as unknown as { count: number }).count === 0) return false
 
       await db
-        .insert(users)
-        .values({
-          workosUserId: input.workosUserId,
-          email: input.email,
-          name: input.displayName,
-        })
-        .onConflictDoNothing()
-      // Read back rather than returned. The person may already have a row from
-      // an earlier org, in which case the id above was never used, and
-      // `users_self_read` is the policy that lets them find their own.
-      const [person] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.workosUserId, input.workosUserId))
-        .limit(1)
-      if (!person) {
-        throw new Error("the user row was neither inserted nor readable")
-      }
-
-      await db
         .insert(memberships)
         .values({
           orgId,
-          userId: person.id,
+          userId: personId,
           workosMembershipId: membership.id,
           role: "owner",
           status: "active",
@@ -226,7 +240,7 @@ export async function createOrg(
         .onConflictDoNothing()
       await ensureStartingTeam(db, {
         orgId,
-        userId: person.id,
+        userId: personId,
         ownerName: input.displayName ?? input.email,
       })
       const root = (await rootStaffId(db)) as string
