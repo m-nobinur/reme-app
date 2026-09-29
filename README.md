@@ -351,9 +351,17 @@ WorkOS staging environment and deletes it again in the teardown. The address is 
 each run, which is also what keeps the sign-in rate limit (five per address per minute)
 out of the way when you run the suite repeatedly.
 
-Everything it asserts is a read. A preview deploy points at the staging database, so PRs
-and staging share one set of rows and a scenario that wrote anything would collide as soon
-as two PRs were open.
+Everything it asserts is a read, with one exception. A preview deploy points at the staging
+database, so PRs and staging share one set of rows and a scenario that wrote shared rows
+would collide as soon as two PRs were open.
+
+The exception is `qa/e2e/org.spec.ts`, tagged `@probe-org`. It gives an owner a probe org
+unique to the run, states one fact, reads it back through the api and the app, and clears
+the org with `pnpm probe:clear --probe <id> --yes`, pass or fail. The clear is staging-only,
+so the spec needs `NEON_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and
+`WORKOS_CLIENT_ID` (staging's) and fails without them. It skips itself against localhost,
+whose database the clear cannot reach, and against production, whose smoke also runs with
+`--grep-invert "@live|@probe-org"`.
 
 Traces are written on failure only, into the gitignored `test-results/`, along with the
 sealed session cookie under `qa/e2e/.auth/`. Neither belongs in git.

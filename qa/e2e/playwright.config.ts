@@ -20,8 +20,10 @@ import { STORAGE_STATE } from "./workos"
  * preference. A preview deploy reads the staging database, so two open PRs and
  * staging itself share one set of rows, and a scenario that seeded or mutated
  * anything would pass alone and collide the moment a second PR was open. The
- * only thing this suite creates anywhere is one throwaway WorkOS account per
- * run, on an address unique to that run, deleted in the teardown.
+ * suite creates one throwaway WorkOS account per run, on an address unique to
+ * that run, deleted in the teardown. The one exception to "a read" is
+ * `org.spec.ts` (`@probe-org`): a probe org unique to the run, cleared whole
+ * by `pnpm probe:clear`, which is staging-only, so production leaves it out.
  *
  * Nothing here writes a screenshot baseline. Traces, videos and `test-results/`
  * are regenerable binaries and stay out of git, which is why the trace setting
