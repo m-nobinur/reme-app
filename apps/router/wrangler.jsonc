@@ -89,8 +89,13 @@
         { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" }
       ],
       // The one bucket, as on staging: every key carries its own site id.
+      // In the EU jurisdiction, so tenant files stay in the EU.
       "r2_buckets": [
-        { "binding": "SITES", "bucket_name": "reme-sites-production" }
+        {
+          "binding": "SITES",
+          "bucket_name": "reme-sites-production-eu",
+          "jurisdiction": "eu"
+        }
       ],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }

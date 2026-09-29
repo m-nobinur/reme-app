@@ -154,10 +154,19 @@
       "durable_objects": {
         "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
       },
-      // Created with `wrangler r2 bucket create`; the router reads it.
+      // Created with `wrangler r2 bucket create --jurisdiction eu`; the router
+      // reads it. The EU jurisdiction keeps tenant files in the EU.
       "r2_buckets": [
-        { "binding": "SITES", "bucket_name": "reme-sites-production" },
-        { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites-production" }
+        {
+          "binding": "SITES",
+          "bucket_name": "reme-sites-production-eu",
+          "jurisdiction": "eu"
+        },
+        {
+          "binding": "BACKUP_BUCKET",
+          "bucket_name": "reme-sites-production-eu",
+          "jurisdiction": "eu"
+        }
       ]
     }
   }

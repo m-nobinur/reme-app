@@ -48,7 +48,7 @@ These companies process data for us under contract, and only to provide Reme:
 
 | Provider | What it does | Where |
 | --- | --- | --- |
-| Cloudflare | Runs the app and published websites, stores website files, runs the build environment, keeps service logs | Worldwide network. Website files and screenshots are stored in Cloudflare's Asia-Pacific region |
+| Cloudflare | Runs the app and published websites, stores website files, runs the build environment, keeps service logs | Worldwide network. Website files and screenshots are stored in the European Union |
 | Neon | Hosts our database | Frankfurt, Germany, on Amazon Web Services |
 | WorkOS | Sign-in, and the sign-in code, verification and password reset emails | United States |
 | OpenRouter | Routes requests to AI models | United States |
