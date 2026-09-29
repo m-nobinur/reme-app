@@ -1,17 +1,12 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { open, WCAG } from "./helpers"
 
 /**
  * Renaming and archiving a conversation from its ··· menu, by keyboard. The
  * title becomes a form in place, and every way out of it hands focus back
  * to the ··· button.
  */
-
-async function open(page: Page, width = 1024, theme = "light") {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=ConversationRename&theme=${theme}`)
-  await expect(page.locator('[data-entry="ConversationRename"]')).toBeVisible()
-}
 
 const actions = (page: Page) =>
   page.getByRole("button", { name: "Conversation actions" })
@@ -29,7 +24,7 @@ async function choose(page: Page, item: string) {
 test("renames in place from the keyboard, and hands focus back", async ({
   page,
 }) => {
-  await open(page)
+  await open(page, "ConversationRename")
   await choose(page, "Rename")
   await expect(field(page)).toBeFocused()
   await expect(field(page)).toHaveValue("Weekend prices")
@@ -40,7 +35,7 @@ test("renames in place from the keyboard, and hands focus back", async ({
 })
 
 test("Escape leaves the title as it was", async ({ page }) => {
-  await open(page)
+  await open(page, "ConversationRename")
   await choose(page, "Rename")
   await field(page).fill("Something else")
   await page.keyboard.press("Escape")
@@ -51,7 +46,7 @@ test("Escape leaves the title as it was", async ({ page }) => {
 test("a title of only spaces, or one the server refuses, stays in the form with why", async ({
   page,
 }) => {
-  await open(page)
+  await open(page, "ConversationRename")
   await choose(page, "Rename")
   await field(page).fill("   ")
   await page.keyboard.press("Enter")
@@ -67,7 +62,7 @@ test("a title of only spaces, or one the server refuses, stays in the form with 
 })
 
 test("an archive that fails says so beside the title", async ({ page }) => {
-  await open(page)
+  await open(page, "ConversationRename")
   await choose(page, "Archive")
   await expect(page.getByRole("alert")).toHaveText(
     "That did not archive. Try again."
@@ -84,11 +79,11 @@ for (const theme of ["light", "dark"] as const) {
     test(`the menu and the rename form have no accessibility violations on a ${name} in ${theme}`, async ({
       page,
     }) => {
-      await open(page, width, theme)
+      await open(page, "ConversationRename", width, theme)
       const scan = async (label: string) => {
         const results = await new AxeBuilder({ page })
           .include('[data-entry="ConversationRename"]')
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .analyze()
         expect
           .soft(

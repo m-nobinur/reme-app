@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { open, WCAG } from "./helpers"
 
 /**
  * The live panel's behaviour: what each question asks with, what an
@@ -8,12 +9,6 @@ import { expect, type Page, test } from "@playwright/test"
  * suite scans the panel at 390, 768 and 1440; this file drives the parts
  * that only show once someone acts.
  */
-
-async function open(page: Page, entry: string, width = 1024) {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=${encodeURIComponent(entry)}`)
-  await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-}
 
 const item = (page: Page, title: string) =>
   page.locator('[data-slot="question-item"]').filter({
@@ -250,7 +245,7 @@ for (const theme of ["light", "dark"] as const) {
         await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
         await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
         const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
           .analyze()
         expect
@@ -375,7 +370,7 @@ for (const theme of ["light", "dark"] as const) {
           await expect(shown.locator("img")).toHaveCount(0)
         }
         const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
           .analyze()
         expect

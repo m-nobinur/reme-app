@@ -1,16 +1,11 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { open, WCAG } from "./helpers"
 
 /**
  * Onboarding's two cards: a fact asked for with its own inputs, and the
  * change the owner says yes or no to. Each entry loads alone.
  */
-
-async function open(page: Page, entry: string, width = 1024, theme = "light") {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=${entry}&theme=${theme}`)
-  await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-}
 
 const asks = (page: Page) => page.locator('[data-slot="ask-fact"]')
 
@@ -160,7 +155,7 @@ for (const theme of ["light", "dark"] as const) {
         await open(page, entry, width, theme)
         const results = await new AxeBuilder({ page })
           .include(`[data-entry="${entry}"]`)
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .analyze()
         expect(
           results.violations.map((violation) => violation.id),
