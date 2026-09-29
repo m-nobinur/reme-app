@@ -1,6 +1,5 @@
 import { cloudflare } from "@cloudflare/vite-plugin"
 import tailwindcss from "@tailwindcss/vite"
-import { devtools } from "@tanstack/devtools-vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
@@ -11,7 +10,6 @@ const config = defineConfig({
     // First: merges the Worker config into the framework's SSR build, so dev,
     // preview and production all run on workerd.
     cloudflare({ viteEnvironment: { name: "ssr" } }),
-    devtools(),
     tailwindcss(),
     tanstackStart(),
     viteReact(),

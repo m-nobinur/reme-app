@@ -18,9 +18,8 @@ import { safeReturnTo } from "./auth/redirect-target"
  * or anywhere else: `record()` in ./auth/input.ts refuses a body that names an
  * organisation at all.
  *
- * `null` until the session carries an organisation. Staging has no
- * organisations yet, so that is every session today, and the app says so rather
- * than inventing one.
+ * `null` until the session carries an organisation, which is a signup whose
+ * organisation is not written yet: the app says so rather than inventing one.
  */
 export type Owner = {
   userId: string

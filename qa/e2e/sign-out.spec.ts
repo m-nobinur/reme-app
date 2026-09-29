@@ -1,4 +1,11 @@
-import { expect, type Page, test } from "@playwright/test"
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Request,
+  test,
+} from "@playwright/test"
+import { signIn } from "./owner"
 import { hydrated } from "./visit"
 import { createProbeUser } from "./workos"
 
@@ -12,20 +19,31 @@ import { createProbeUser } from "./workos"
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-async function signIn(page: Page) {
-  const user = await createProbeUser()
-  await page.goto("/sign-in?returnTo=%2Fapp%2Faccount")
-  await hydrated(page, 'button[type="submit"]')
-  await page.getByLabel("Email").fill(user.email)
-  await page.getByLabel("Password").fill(user.password)
-  await page.getByRole("button", { name: "Sign in" }).click()
-  await expect(page).toHaveURL(/\/app\/account$/)
-  await hydrated(page, "main")
+/**
+ * What loading /sign-out asks the server for: the route's chunk, then its
+ * loader's server functions (POSTs), the second of which is the sign-out.
+ * Neither page here asks for either while the pointer rests.
+ */
+function startsSignOut(request: Request): boolean {
+  const { pathname } = new URL(request.url())
+  return (
+    pathname.includes("sign-out") ||
+    (request.method() === "POST" && pathname.startsWith("/_serverFn/"))
+  )
 }
 
-/** Longer than the router's preload delay on intent. */
-async function linger(page: Page) {
-  await page.waitForTimeout(1500)
+/**
+ * Hovers and focuses the target, then watches for longer than the router's
+ * preload delay on intent: a preload would load /sign-out and sign out.
+ */
+async function pointAt(page: Page, target: Locator) {
+  const started = page.waitForRequest(startsSignOut, { timeout: 1500 }).then(
+    (request) => `${request.method()} ${request.url()}`,
+    () => null
+  )
+  await target.hover()
+  await target.focus()
+  expect(await started, "pointing at Sign out loaded /sign-out").toBeNull()
 }
 
 async function expectSignedIn(page: Page) {
@@ -35,19 +53,17 @@ async function expectSignedIn(page: Page) {
 }
 
 test("pointing at Sign out leaves the owner signed in", async ({ page }) => {
-  await signIn(page)
+  await signIn(page, await createProbeUser(), "/app/account")
+  await expect(page).toHaveURL(/\/app\/account$/)
+  await hydrated(page, "main")
 
   const link = page.getByRole("main").getByRole("link", { name: "Sign out" })
-  await link.hover()
-  await link.focus()
-  await linger(page)
+  await pointAt(page, link)
   await expectSignedIn(page)
 
   await page.getByRole("button", { name: "Probe Runner" }).click()
   const item = page.getByRole("menuitem", { name: "Sign out" })
-  await item.hover()
-  await item.focus()
-  await linger(page)
+  await pointAt(page, item)
   await page.keyboard.press("Escape")
   await expectSignedIn(page)
 })

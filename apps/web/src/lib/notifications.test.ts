@@ -1,5 +1,6 @@
 import { expect, it } from "vitest"
 import type { AttentionItem } from "./api/types"
+import { waitingOnOwner } from "./attention"
 import { notificationsOf, seenAtOf, unreadCount } from "./notifications"
 
 const item = (kind: AttentionItem["kind"], id: string, raisedAt: string) =>
@@ -41,12 +42,9 @@ it("takes questions and approvals from /workspace and reports and alerts from /a
     item("alert", "a", "2026-10-01T05:00:00.000Z"),
     item("question", "stray", "2026-10-01T04:00:00.000Z"),
   ]
-  expect(notificationsOf(attention, activity).map((each) => each.id)).toEqual([
-    "q",
-    "p",
-    "r",
-    "a",
-  ])
+  expect(
+    notificationsOf(waitingOnOwner(attention), activity).map((each) => each.id)
+  ).toEqual(["q", "p", "r", "a"])
 })
 
 it("lists the newest first", () => {

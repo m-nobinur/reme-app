@@ -1,6 +1,3 @@
-import { getCookie } from "@tanstack/react-start/server"
-import { sessionEncryption } from "@workos/authkit-session"
-import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
 import {
   ActivityFeed,
   ApprovalDecision,
@@ -19,10 +16,11 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { answerSpecOf } from "@workspace/ui/lib/answer"
+import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
-import { WORKING } from "../build-state"
+import { refusalText } from "@workspace/ui/lib/refusal"
+import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import type {
-  ApprovalItem,
   AttentionItem,
   DecisionOutcome,
   OrgNode,
@@ -51,9 +49,6 @@ import type {
  * tenant's screen is not (exit gate 9, R8).
  */
 
-/** The cookie AuthKit writes and `apps/api` reads (ADR-024, ADR-026). */
-const COOKIE = "wos-session"
-
 /**
  * Where `apps/api` answers. A `vars` entry rather than a secret, because it is
  * a public URL. Three lines rather than an import from `lib/auth/org.ts`, which
@@ -74,8 +69,8 @@ function apiUrl(): string {
  * One read, with the session forwarded.
  *
  * Only the session cookie is forwarded, rebuilt by name rather than by passing
- * the browser's `Cookie` header through: the organisation the owner picked and
- * anything else a page has set are ours and are not `apps/api`'s business.
+ * the browser's `Cookie` header through: anything else a page has set is ours
+ * and is not `apps/api`'s business.
  *
  * 401 and 403 answer null rather than throwing. Both mean "this session has no
  * organisation to read", which every screen renders as its empty state: 403
@@ -98,42 +93,6 @@ async function get(path: string): Promise<unknown | null> {
 
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
-
-/**
- * The session to forward: the one AuthKit resolved for this request, sealed
- * again, and not the cookie the request arrived with. When the access token
- * has expired (after about five idle minutes), the middleware refreshes it
- * and sets the new cookie on the response, but the request still carries the
- * old one, which `apps/api` refuses with 401 `session.absent`. Sealed once per
- * request. With no AuthKit context (a unit test), the cookie as it came.
- */
-const sealed = new WeakMap<Request, Promise<string>>()
-
-async function forwardedSession(): Promise<string | undefined> {
-  const context = getAuthKitContextOrNull()
-  if (!context) return getCookie(COOKIE)
-  const auth = context.auth()
-  if (!auth.user) return undefined
-  let seal = sealed.get(context.request)
-  if (!seal) {
-    const password = process.env.WORKOS_COOKIE_PASSWORD
-    if (!password) {
-      throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
-    }
-    // The fields `AuthKitCore.encryptSession` seals, from the same session.
-    seal = sessionEncryption.sealData(
-      {
-        accessToken: auth.accessToken,
-        refreshToken: auth.refreshToken,
-        user: auth.user,
-        impersonator: auth.impersonator,
-      },
-      { password, ttl: 0 }
-    )
-    sealed.set(context.request, seal)
-  }
-  return await seal
-}
 
 /**
  * One request with the session forwarded, or null when there is no session.
@@ -160,7 +119,7 @@ async function call(
   }
   if (init.key) headers["idempotency-key"] = init.key
   if (init.etag) headers["if-none-match"] = init.etag
-  return await fetch(new URL(path, apiUrl()), {
+  return await apiFetch(new URL(path, apiUrl()), {
     method: init.method ?? "GET",
     headers,
     body:
@@ -322,15 +281,6 @@ async function workspaceStatus(
   }
 }
 
-/** `workspaceStatus` for a caller with no tag, which always gets a body. */
-async function currentStatus(): Promise<WorkspaceStatus> {
-  const read = await workspaceStatus()
-  if (read === "unchanged") {
-    throw new Error("apps/api answered 304 to a read with no tag")
-  }
-  return read.status
-}
-
 const namesOf = (staff: StaffMember[]) =>
   new Map(staff.map((member) => [member.id, member.displayName]))
 
@@ -425,36 +375,6 @@ async function pollWorkspace(etag: string | null): Promise<WorkspacePoll> {
 }
 
 /**
- * `GET /approvals` was dropped: the workspace's attention list carries them.
- * The directory is read only when there is an approval to name.
- */
-async function approvals(): Promise<ApprovalItem[]> {
-  const found = (await currentStatus()).attention.filter(
-    (item) => item.kind === "approval"
-  )
-  if (found.length === 0) {
-    return []
-  }
-  const names = namesOf(await staffOf())
-  return found.flatMap((item) => {
-    const card = toAttention(item, names)
-    const { target } = item.request
-    return card.kind === "approval" && target.kind === "revision"
-      ? [
-          {
-            request: card.request,
-            version: card.version,
-            revisionId: target.revision_id,
-            title: card.title,
-            requestedBy: card.raisedBy,
-            onExpiry: card.onExpiry,
-          },
-        ]
-      : []
-  })
-}
-
-/**
  * The refusals an owner can do something about, by code. Anything else is a
  * defect or a permission problem and throws.
  */
@@ -470,26 +390,9 @@ const REFUSED: Record<
 }
 
 /**
- * The refusals an owner can act on from the panel, in their words. Any other
- * 4xx is a stale screen; a 5xx is a defect and throws.
+ * A refusal the owner can act on from the panel is worded by `refusalText`;
+ * any other 4xx is a stale screen, and a 5xx is a defect and throws.
  */
-const REFUSALS: Record<string, string> = {
-  "answer.invalid":
-    "That answer does not fit the question. Check it and send it again.",
-  "answer.already_given":
-    "That question was already answered, so this answer was not recorded.",
-  "change.question_open":
-    "Answer the question waiting on you first, then ask again.",
-  "change.build_busy":
-    "A build is finishing. Ask again once it is ready for you.",
-  "change.cancelled": "That change was cancelled. Ask for it again.",
-  "reminder.due_past": "That time has already passed.",
-  "reminder.due_far": "Pick a time within a year.",
-  "reminder.not_found": "That reminder is no longer open.",
-  "account.other_members":
-    "Other people still belong to this business. Remove them first.",
-  "account.not_owner": "Only the owner can delete this account.",
-}
 const STALE = "That has changed since this page loaded. Look again and retry."
 
 /** Refusals that mean the item no longer waits on the owner. */
@@ -515,7 +418,7 @@ async function outcome(
     refusal.success &&
     code !== "org.unresolved"
   ) {
-    const reason = REFUSALS[code] ?? STALE
+    const reason = refusalText(code, STALE)
     return GONE.has(code)
       ? { done: false, reason, gone: true }
       : { done: false, reason }
@@ -694,19 +597,13 @@ async function factsOf(): Promise<TransportedFact[]> {
 }
 
 export const apiSource: OwnerDataSource = {
-  // The switcher's list. One organisation per session today, because that is
-  // what a session's `org_id` claim resolves to and what signup creates.
-  orgs: async () => {
-    const org = await currentOrg()
-    return org ? [org] : []
-  },
+  org: currentOrg,
   staff: staffOf,
   directory: async () => {
     const staff = await staffOf()
     return { staff, tree: treeOf(staff) }
   },
   workspace,
-  approvals,
   pipeline: async () => [],
   activity,
   profile: async () => {

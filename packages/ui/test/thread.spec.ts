@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { axe, open } from "./helpers"
 
 /**
  * The conversation surface: the empty state the owner opens on, the composer
@@ -9,26 +9,8 @@ import { expect, type Page, test } from "@playwright/test"
 
 const WIDTHS = { phone: 390, desktop: 1440 } as const
 
-async function open(page: Page, entry: string, width = 1024, theme = "light") {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=${entry}&theme=${theme}`)
-  await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-}
-
 const input = (page: Page) => page.getByLabel("Message input")
 const menu = (page: Page) => page.locator('[data-slot="dropdown-menu-content"]')
-
-async function axe(page: Page, label: string) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze()
-  expect
-    .soft(
-      results.violations.map((violation) => `${label}: ${violation.id}`),
-      JSON.stringify(results.violations, null, 2)
-    )
-    .toEqual([])
-}
 
 /** Opens a menu and waits for its entry transition, so a scan sees it settled. */
 async function openMenu(page: Page, name: RegExp | string) {

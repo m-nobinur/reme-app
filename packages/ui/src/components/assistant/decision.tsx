@@ -16,7 +16,7 @@ import {
   NOT_DONE,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useId } from "react"
 
 /**
@@ -27,8 +27,6 @@ import { type ReactNode, useId } from "react"
  * No yes is offered on a target the owner cannot read or check, and a call
  * the stream left unfinished never shimmers on after it ends.
  */
-
-const META = "text-[0.8125rem] text-muted-foreground"
 
 const CANNOT_APPROVE =
   "This did not come through whole, so it cannot be approved. Say not now to carry on."

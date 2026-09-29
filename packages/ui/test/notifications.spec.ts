@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, type Page, test } from "@playwright/test"
+import { expect, test } from "@playwright/test"
+import { open, WCAG } from "./helpers"
 
 /**
  * The notifications list, the rail's unread count, and every blank panel
@@ -28,12 +29,6 @@ const ENTRIES = [
   "Reminders empty",
 ]
 
-async function open(page: Page, entry: string, width = 1024, theme = "light") {
-  await page.setViewportSize({ width, height: 900 })
-  await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-  await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-}
-
 for (const theme of ["light", "dark"] as const) {
   test(`notifications and blank states have no accessibility violations in ${theme}`, async ({
     page,
@@ -43,7 +38,7 @@ for (const theme of ["light", "dark"] as const) {
       for (const entry of ENTRIES) {
         await open(page, entry, width, theme)
         const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+          .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
           .analyze()
         expect

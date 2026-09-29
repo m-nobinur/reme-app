@@ -20,8 +20,9 @@ import {
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
+import { WORKING } from "@workspace/ui/lib/build-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
   type FormEvent,
@@ -43,7 +44,6 @@ import {
  * imports no router and no client.
  */
 
-const META = "text-[0.8125rem] text-muted-foreground"
 const LINK =
   "inline-flex items-center gap-1 rounded-sm text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring [&_svg]:size-3.5"
 
@@ -101,39 +101,35 @@ const expiryLine = (expiresAt: string | null, onExpiry: string) => {
 const STEPS = ["Queued", "Building", "Checking", "Ready"] as const
 
 /**
- * Where each build state sits on the stepper, what the owner is told, and
- * whether it is doing work (the bar pulses) or waiting. Every state has a
- * row, so a state added to the contract fails the build until it is placed.
+ * Where each build state sits on the stepper and what the owner is told.
+ * Whether it is doing work (the bar pulses) is `WORKING`'s to say. Every
+ * state has a row, so a state added to the contract fails the build until it
+ * is placed.
  */
 const STAGE = {
-  queued: { step: 0, note: "Waiting to start.", running: false },
-  briefing: { step: 1, note: "Reading your brief.", running: true },
-  planning: { step: 1, note: "Planning the changes.", running: true },
-  implementing: { step: 1, note: "Making the changes.", running: true },
-  revising: { step: 1, note: "Making your changes.", running: true },
-  repairing: { step: 1, note: "Fixing what the checks found.", running: true },
+  queued: { step: 0, note: "Waiting to start." },
+  briefing: { step: 1, note: "Reading your brief." },
+  planning: { step: 1, note: "Planning the changes." },
+  implementing: { step: 1, note: "Making the changes." },
+  revising: { step: 1, note: "Making your changes." },
+  repairing: { step: 1, note: "Fixing what the checks found." },
   blocked_on_information: {
     step: 1,
     note: "Waiting on you: answer the question below.",
-    running: false,
   },
-  paused: { step: 1, note: "Paused. It spends nothing more.", running: false },
-  validating: { step: 2, note: "Checking the site.", running: true },
-  preview_ready: { step: 3, note: "Ready for you to look at.", running: false },
-  awaiting_review: { step: 3, note: "Ready for your review.", running: false },
+  paused: { step: 1, note: "Paused. It spends nothing more." },
+  validating: { step: 2, note: "Checking the site." },
+  preview_ready: { step: 3, note: "Ready for you to look at." },
+  awaiting_review: { step: 3, note: "Ready for your review." },
   blocked_on_approval: {
     step: 3,
     note: "Waiting on you: approve it below.",
-    running: false,
   },
-  release_candidate: { step: 3, note: "Publishing.", running: true },
-  published: { step: 3, note: "Live.", running: false },
-  failed: { step: 1, note: "It stopped: the build failed.", running: false },
-  cancelled: { step: 0, note: "Stopped.", running: false },
-} satisfies Record<
-  AssignmentState,
-  { step: 0 | 1 | 2 | 3; note: string; running: boolean }
->
+  release_candidate: { step: 3, note: "Publishing." },
+  published: { step: 3, note: "Live." },
+  failed: { step: 1, note: "It stopped: the build failed." },
+  cancelled: { step: 0, note: "Stopped." },
+} satisfies Record<AssignmentState, { step: 0 | 1 | 2 | 3; note: string }>
 
 /** A build state in one or two words: its step, or why it waits. */
 function stageWord(state: AssignmentState): string {
@@ -245,7 +241,7 @@ function WorkingOn({
                   index < stage.step && "bg-primary/45",
                   index === stage.step && "bg-primary",
                   index === stage.step &&
-                    stage.running &&
+                    WORKING.has(build.state) &&
                     "animate-pulse motion-reduce:animate-none",
                   index > stage.step && "bg-border"
                 )}

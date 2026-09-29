@@ -32,7 +32,6 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
   ConversationMenu,
@@ -40,13 +39,14 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
+import { useEffect } from "react"
 import {
   getWorkspaceFrame,
   pollWorkspace,
-  selectOrg,
   updateConversation,
 } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
+import { retryOrgWrite } from "@/lib/auth/actions"
 import {
   archiveConversation,
   saveTitle,
@@ -112,8 +112,8 @@ const conversationTitle = (conversation: Conversation) =>
 function AppLayout() {
   const {
     owner,
-    orgs,
     active,
+    orgPending,
     panelOpen,
     workspace,
     conversations,
@@ -130,7 +130,6 @@ function AppLayout() {
         notificationsOf(live.workspace?.attention ?? [], activity ?? []),
         seenAt
       )
-  // The conversation owns its height and scroll; every other page is padded.
   // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
     select: (matches) =>
@@ -140,6 +139,16 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   const stored = conversations?.find((each) => each.id === id)
   const router = useRouter()
+  // A signup whose organisation was not written: write it now, then read
+  // every loader again under the session that carries it. Once per page
+  // load, so a write that still fails waits for the next visit.
+  useEffect(() => {
+    if (!orgPending) return
+    retryOrgWrite().then(
+      (written) => (written ? router.invalidate() : undefined),
+      () => undefined
+    )
+  }, [orgPending, router])
   const navigate = useNavigate()
   const openPanel = useLocation({ select: (at) => at.state.panel === true })
   const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
@@ -212,22 +221,12 @@ function AppLayout() {
         }
         rail={
           <>
-            <OrgSwitcher
-              onChange={async (event) => {
-                // The server decides. This posts the slug the owner picked and
-                // then reloads every loader, so the screens read whatever
-                // organisation the server resolved rather than what the select
-                // now shows.
-                await selectOrg({
-                  data: { organisation: event.target.value },
-                })
-                await router.invalidate()
-              }}
-              // The option value is the slug, because that is what the server
-              // accepts: an organisation id never travels through the client.
-              orgs={orgs.map((org) => ({ id: org.slug, name: org.name }))}
-              value={active?.slug ?? ""}
-            />
+            <p
+              className="truncate px-2 font-medium text-sm"
+              title={active?.name}
+            >
+              {active?.name ?? "No organisation"}
+            </p>
             <Link
               activeOptions={{ exact: true }}
               className={navLinkClass}

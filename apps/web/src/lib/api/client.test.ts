@@ -335,26 +335,6 @@ it("reads the live version, and a build only while it is working", async () => {
   })
 })
 
-it("lists only the workspace's approvals, each with its version", async () => {
-  const items = await apiSource.approvals()
-  expect(items).toEqual([
-    {
-      request: approval.request,
-      version: 4,
-      revisionId: REVISION,
-      title: "Version 4 is ready to publish",
-      requestedBy: "Alex",
-      onExpiry: expect.any(String),
-    },
-  ])
-})
-
-it("reads the directory for approvals only when there is one to name", async () => {
-  answers["GET /workspace"] = { ...workspace, attention: [alert, report] }
-  expect(await apiSource.approvals()).toEqual([])
-  expect(calls.map((call) => call.path)).toEqual(["/workspace"])
-})
-
 it("leaves out an approval with no version to decide on", async () => {
   // A decision names a revision, so a domain or spend approval could only
   // offer buttons that do nothing. `/workspace` lists none today.
@@ -362,8 +342,6 @@ it("leaves out an approval with no version to decide on", async () => {
     ...workspace,
     attention: [domainApproval, approval],
   }
-  const listed = await apiSource.approvals()
-  expect(listed.map((item) => item.request.approval_id)).toEqual([APPROVAL])
   const { attention } = await apiSource.workspace(Promise.resolve([alex]))
   expect(
     attention.filter((item) => item.kind === "approval").map((item) => item.id)
@@ -426,7 +404,6 @@ it("answers empty for a session with no organisation", async () => {
   expect(await apiSource.workspace(Promise.resolve([]))).toEqual(
     EMPTY_WORKSPACE
   )
-  expect(await apiSource.approvals()).toEqual([])
   expect(await apiSource.activity()).toEqual([])
   expect(await apiSource.profile()).toBeNull()
 })
@@ -500,8 +477,6 @@ it("names an item raised by someone outside the directory as Reme", async () => 
     request: { ...approval.request, requested_by_staff_id: stranger },
   }
   answers["GET /workspace"] = { ...workspace, attention: [unknown] }
-  const [listed] = await apiSource.approvals()
-  expect(listed?.requestedBy).toBe("Reme")
   const {
     attention: [card],
   } = await apiSource.workspace(Promise.resolve([alex]))
@@ -716,18 +691,18 @@ it("sends a change in the owner's words, and says why one is refused", async () 
   answers["POST /changes"] = refusal(409, "change.question_open")
   expect(await apiSource.requestChange("Bigger logo", "k-2")).toEqual({
     done: false,
-    reason: expect.stringContaining("Answer the question"),
+    reason: expect.stringContaining("Answer it first"),
   })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Bigger logo",
   })
 })
 
-it("says a cancelled change was cancelled, not that the page is stale", async () => {
+it("says a cancelled change was stopped, not that the page is stale", async () => {
   answers["POST /changes"] = refusal(409, "change.cancelled")
   expect(await apiSource.requestChange("Bigger logo", "k-3")).toEqual({
     done: false,
-    reason: "That change was cancelled. Ask for it again.",
+    reason: "That change was stopped. Ask again to start it.",
   })
 })
 
@@ -800,12 +775,12 @@ it("says why a reminder's time was refused, in the owner's words", async () => {
   answers["POST /reminders"] = refusal(400, "reminder.due_past")
   expect(await add()).toEqual({
     done: false,
-    reason: "That time has already passed.",
+    reason: "A reminder cannot be due in the past.",
   })
   answers["POST /reminders"] = refusal(400, "reminder.due_far")
   expect(await add()).toEqual({
     done: false,
-    reason: "Pick a time within a year.",
+    reason: "A reminder can be due at most a year ahead.",
   })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     title: "Order more cloths",

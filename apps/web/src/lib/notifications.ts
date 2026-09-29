@@ -5,16 +5,15 @@ import type { AttentionItem } from "./api/types"
  * and approvals come from `/workspace` (the open ones), reports and alerts
  * from `/activity` (30 days). `/workspace` also carries the last day's
  * reports and alerts, so each kind is taken from one read only, or a report
- * would show twice.
+ * would show twice: `attention` is the frame's, which `waitingOnOwner` has
+ * already cut to questions and approvals.
  */
 export function notificationsOf(
   attention: AttentionItem[],
   activity: AttentionItem[]
 ): AttentionItem[] {
   return [
-    ...attention.filter(
-      (item) => item.kind === "question" || item.kind === "approval"
-    ),
+    ...attention,
     ...activity.filter(
       (item) => item.kind === "report" || item.kind === "alert"
     ),

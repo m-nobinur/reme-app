@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { WCAG } from "./helpers"
 
 const COMPONENTS_DIR = fileURLToPath(
   new URL("../src/components", import.meta.url)
@@ -121,10 +122,7 @@ for (const theme of ["light", "dark"] as const) {
 
     for (const name of await entryNames(page)) {
       const results = await new AxeBuilder({ page })
-        // WCAG 2.2 AA, which is the bar this design system is held to. The
-        // best-practice rules are left out on purpose: they flag the catalog
-        // harness itself, not the primitives it renders.
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .withTags(WCAG)
         .include(`[data-entry="${name}"]`)
         .analyze()
 

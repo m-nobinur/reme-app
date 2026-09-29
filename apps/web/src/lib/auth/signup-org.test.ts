@@ -20,6 +20,7 @@ const setPending = vi.fn()
 const clearPending = vi.fn()
 const readPending = vi.fn()
 const createOrgForSession = vi.fn()
+const recordOrgIntent = vi.fn()
 
 vi.mock("@workos/authkit-tanstack-react-start", () => ({
   getAuthkit: async () => ({ saveSession }),
@@ -40,6 +41,10 @@ vi.mock("./org", () => ({
   createOrgForSession: (...args: unknown[]) => createOrgForSession(...args),
 }))
 
+vi.mock("./org-intent", () => ({
+  recordOrgIntent: (...args: unknown[]) => recordOrgIntent(...args),
+}))
+
 const { authenticate } = await import("./session")
 
 const SEALED = "sealed-before-the-org"
@@ -57,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   readPending.mockResolvedValue(null)
   createOrgForSession.mockResolvedValue(REFRESHED)
+  recordOrgIntent.mockResolvedValue(undefined)
 })
 
 describe("the organisation a signup asked for", () => {
@@ -75,6 +81,7 @@ describe("the organisation a signup asked for", () => {
     // The whole point of the refresh: without it the session carries no
     // org_id claim and apps/api answers GET /org with 403 org.unresolved.
     expect(saveSession).toHaveBeenCalledWith(undefined, REFRESHED)
+    expect(recordOrgIntent).not.toHaveBeenCalled()
   })
 
   it("survives the hop to email verification in the flow cookie", async () => {
@@ -146,5 +153,31 @@ describe("the organisation a signup asked for", () => {
     })
     expect(outcome.status).toBe("signed-in")
     expect(saveSession).toHaveBeenCalledWith(undefined, SEALED)
+    // Kept for the /app frame to write on the next visit.
+    expect(recordOrgIntent).toHaveBeenCalledWith({
+      userId: "user_probe",
+      orgName: "Sparkle Clean",
+    })
+  })
+
+  it("is kept for the next visit when the org lands but the session lacks it", async () => {
+    // The refresh into the new organisation can fail without throwing; the
+    // session comes back unchanged, and the person still has no organisation.
+    createOrgForSession.mockResolvedValue(SEALED)
+    await authenticate(async () => signedIn(), {
+      email: "probe@example.net",
+      orgName: "Sparkle Clean",
+    })
+    expect(recordOrgIntent).toHaveBeenCalledOnce()
+  })
+
+  it("signs the person in even when the name cannot be kept", async () => {
+    createOrgForSession.mockRejectedValue(new Error("apps/api refused"))
+    recordOrgIntent.mockRejectedValue(new Error("no cookie"))
+    const outcome = await authenticate(async () => signedIn(), {
+      email: "probe@example.net",
+      orgName: "Sparkle Clean",
+    })
+    expect(outcome.status).toBe("signed-in")
   })
 })

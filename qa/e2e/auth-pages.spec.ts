@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
+import { AXE_TAGS } from "./axe"
 
 /**
  * The accessibility scan for the pages a person meets before they have a
@@ -45,14 +46,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
 
       const results = await new AxeBuilder({ page })
-        .withTags([
-          "wcag2a",
-          "wcag2aa",
-          "wcag21a",
-          "wcag21aa",
-          "wcag22aa",
-          "best-practice",
-        ])
+        .withTags(AXE_TAGS)
         .analyze()
 
       expect(

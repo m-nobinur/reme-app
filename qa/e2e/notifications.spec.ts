@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
+import { AXE_TAGS } from "./axe"
 import { visit } from "./visit"
 
 /**
@@ -52,16 +53,7 @@ test("the first-steps action opens a new chat", async ({ page }) => {
 test("/app/notifications has no accessibility violations", async ({ page }) => {
   await visit(page, "/app/notifications")
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
-  const results = await new AxeBuilder({ page })
-    .withTags([
-      "wcag2a",
-      "wcag2aa",
-      "wcag21a",
-      "wcag21aa",
-      "wcag22aa",
-      "best-practice",
-    ])
-    .analyze()
+  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
   expect(
     results.violations.map((violation) => violation.id),
     JSON.stringify(results.violations, null, 2)

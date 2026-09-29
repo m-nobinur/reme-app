@@ -18,7 +18,6 @@ import { Input } from "@workspace/ui/components/input"
 import { ListFilter } from "@workspace/ui/components/list-filter"
 import { LoadingState } from "@workspace/ui/components/loading-state"
 import { Logo, LogoMark } from "@workspace/ui/components/logo"
-import { OrgSwitcher } from "@workspace/ui/components/org-switcher"
 import {
   PasswordField,
   StrengthBar,
@@ -41,12 +40,6 @@ type CatalogEntry = {
 }
 
 const noop = () => undefined
-
-/** The golden orgs from the seed plan. Both are unmistakably invented. */
-const FIXTURE_ORGS = [
-  { id: "brightclean", name: "Brightclean" },
-  { id: "mopandbucket", name: "Mop and Bucket" },
-]
 
 /** Two fixed points on the meter, so the snapshot is a picture and not a race. */
 const FIXTURE_VERDICTS: Record<"weak" | "strong", PasswordVerdict> = {
@@ -309,14 +302,6 @@ const catalog: CatalogEntry[] = [
     name: "ListFilter",
     render: () => (
       <ListFilter label="Filter staff" onValueChange={noop} value="cleaner" />
-    ),
-  },
-  {
-    name: "OrgSwitcher",
-    render: () => (
-      <div className="flex max-w-xs flex-col gap-4 rounded-3xl bg-sidebar p-3 text-sidebar-foreground">
-        <OrgSwitcher orgs={FIXTURE_ORGS} />
-      </div>
     ),
   },
   {

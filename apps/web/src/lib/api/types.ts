@@ -56,12 +56,6 @@ export type OrgNode = {
   reports: OrgNode[]
 }
 
-/**
- * The owner attention contract (§7.3): exactly four types, no fifth. A fifth
- * is a product-policy change and an ADR, not a screen decision.
- */
-export type AttentionKind = "question" | "approval" | "report" | "alert"
-
 type AttentionBase = {
   id: string
   title: string
@@ -155,21 +149,6 @@ export type TransportedMessage = Omit<ConversationMessage, "content"> & {
   }
 }
 
-/** An approval as the inbox renders it: the contract, plus who to name. */
-export type ApprovalItem = {
-  request: ApprovalRequest
-  /** The version number of the revision the approval is bound to. */
-  version: number
-  /** The revision a decision names, read from `request.target`. */
-  revisionId: string
-  /** What the owner is being asked, in one line. */
-  title: string
-  /** Display name of the staff member who raised it. */
-  requestedBy: string
-  /** What happens if it expires unanswered. Never "it goes ahead anyway". */
-  onExpiry: string
-}
-
 /** Where a lead sits in the §4 lifecycle, condensed to what an inbox shows. */
 export type PipelineStage =
   | "new"
@@ -236,16 +215,18 @@ export type DecisionOutcome =
  * interchangeable and `source.ts` is the only file that knows which is in use.
  */
 export type OwnerDataSource = {
-  /** The organisations the signed-in owner belongs to. */
-  orgs: () => Promise<OrgSummary[]>
+  /**
+   * The session's organisation: at most one, because that is what a
+   * session's `org_id` claim resolves to and what signup creates.
+   */
+  org: () => Promise<OrgSummary | null>
   staff: () => Promise<StaffMember[]>
   /** The directory and its reporting lines, from one read. */
   directory: () => Promise<{ staff: StaffMember[]; tree: OrgNode[] }>
   /** `staff` is the directory the caller has already read, for names. */
   workspace: (staff: Promise<StaffMember[]>) => Promise<Workspace>
-  approvals: () => Promise<ApprovalItem[]>
   pipeline: () => Promise<PipelineItem[]>
-  /** Null where the session has no organisation, the same as `orgs()` empty. */
+  /** Null where the session has no organisation, the same as `org()`. */
   profile: () => Promise<BusinessProfile | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
