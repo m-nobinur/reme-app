@@ -232,7 +232,8 @@ ok(`${state("account")}${account ?? "unknown"}`)
  * ever missing, this run mints a new one rather than trying to recover the old.
  */
 const neon = cli("npx", [
-  "neonctl",
+  // Pinned: neonctl 7.0.0 shipped depending on a `neon@7.0.0` npm does not have.
+  "neonctl@6.4.0",
   "connection-string",
   config.neonBranch,
   "--project-id",

@@ -122,13 +122,13 @@ jobs:
       # true.
       - name: Neon branch
         run: |
-          if npx -y neonctl branches get "$NEON_BRANCH" \
+          if npx -y neonctl@6.4.0 branches get "$NEON_BRANCH" \
               --project-id "$NEON_PROJECT_ID" -o json >/dev/null 2>&1; then
             echo "reusing $NEON_BRANCH"
           else
             # --no-secrets, because the default output of a create prints the
             # branch's connection string, password included, into the run log.
-            npx -y neonctl branches create --project-id "$NEON_PROJECT_ID" \
+            npx -y neonctl@6.4.0 branches create --project-id "$NEON_PROJECT_ID" \
               --name "$NEON_BRANCH" --parent main --no-secrets
           fi
 
@@ -139,7 +139,7 @@ jobs:
       # where it is rather than being restated here.
       - name: Migrations apply to a copy of staging
         run: |
-          url=$(npx -y neonctl connection-string "$NEON_BRANCH" \
+          url=$(npx -y neonctl@6.4.0 connection-string "$NEON_BRANCH" \
             --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
           case "$url" in
             postgresql://*) ;;
@@ -292,7 +292,7 @@ jobs:
           # fails here instead of reading as "no branch, nothing to delete".
           # That distinction is the whole value of this step: teardown that
           # silently stops running fills the branch cap without saying so.
-          if ! branches=$(npx -y neonctl branches list \
+          if ! branches=$(npx -y neonctl@6.4.0 branches list \
               --project-id "$NEON_PROJECT_ID" -o json); then
             echo "::error::could not list the branches of $NEON_PROJECT_ID"
             exit 1
@@ -307,5 +307,5 @@ jobs:
             echo "Arm it with: gh variable set PREVIEW_TEARDOWN --body on"
             exit 0
           fi
-          npx -y neonctl branches delete "$NEON_BRANCH" \
+          npx -y neonctl@6.4.0 branches delete "$NEON_BRANCH" \
             --project-id "$NEON_PROJECT_ID"
