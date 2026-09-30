@@ -53,7 +53,9 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
 
   return (
     <div className="my-3 flex max-w-md flex-col gap-2" data-slot="ask-fact">
-      <p className="font-medium" id={`${id}-question`}>
+      {/* The assistant's line above the card asks the question. This one names
+          the form for assistive tech and is not shown twice. */}
+      <p className="sr-only" id={`${id}-question`}>
         {question}
       </p>
       {view.state === "pending" ? (
