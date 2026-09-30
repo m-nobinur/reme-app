@@ -129,6 +129,20 @@ export const startsNewChat = (
   next: string | undefined
 ) => next !== undefined && next !== previous
 
+/**
+ * The chat the rail's Chat icon opens: the open conversation with the latest
+ * `updated_at`. A turn bumps it, so the chat the owner last wrote in wins.
+ */
+export const lastChat = (conversations: Conversation[] | null) =>
+  (conversations ?? []).reduce<Conversation | undefined>(
+    (last, each) =>
+      !each.archived_at &&
+      (!last || Date.parse(each.updated_at) > Date.parse(last.updated_at))
+        ? each
+        : last,
+    undefined
+  )
+
 /** The "New chat" presses whose question has been sent, by their state. */
 export const asked = new Set<string>()
 

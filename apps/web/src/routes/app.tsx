@@ -1,10 +1,14 @@
 import {
+  AlarmIcon,
   ArrowUpRightIcon,
   BuildingsIcon,
   ChatCircleDotsIcon,
+  ChatCircleTextIcon,
   FileTextIcon,
   FlowArrowIcon,
   GearSixIcon,
+  GlobeIcon,
+  HouseIcon,
   MoonIcon,
   NotePencilIcon,
   QuestionIcon,
@@ -57,6 +61,7 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { useEffect, useState } from "react"
+import { lastChat } from "@/chat/history"
 import {
   getWorkspaceFrame,
   pollWorkspace,
@@ -272,6 +277,8 @@ function AppLayout() {
         link: <Link params={{ id: each.id }} to="/app/c/$id" />,
       })
     )
+  // The rail's Chat icon: current only inside this conversation.
+  const last = lastChat(conversations)
   const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
   const archive = async (target: Conversation) => {
     setFailed(null)
@@ -375,6 +382,58 @@ function AppLayout() {
                 </span>
               </Link>
             </Hint>
+            <nav aria-label="Main" className="flex flex-col gap-1">
+              <Hint label="Home" side="right">
+                {/* Home is the new-chat screen, so it starts one as "New
+                    chat" does, and is current only on the bare address. */}
+                <Link
+                  activeOptions={{ exact: true }}
+                  className={railItemClass}
+                  state={() => ({ chat: crypto.randomUUID() })}
+                  to="/app"
+                >
+                  <HouseIcon aria-hidden />
+                  <span data-slot="rail-label">Home</span>
+                </Link>
+              </Hint>
+              {last ? (
+                <Hint label="Chat" side="right">
+                  <Link
+                    className={railItemClass}
+                    params={{ id: last.id }}
+                    to="/app/c/$id"
+                  >
+                    <ChatCircleTextIcon aria-hidden />
+                    <span data-slot="rail-label">Chat</span>
+                  </Link>
+                </Hint>
+              ) : (
+                <Hint label="No chats yet" side="right">
+                  {/* Nowhere to go yet, so no link: a button that does
+                      nothing, still reachable, so a keyboard hears why. */}
+                  <button
+                    aria-disabled="true"
+                    className={`${railItemClass} cursor-default opacity-50`}
+                    type="button"
+                  >
+                    <ChatCircleTextIcon aria-hidden />
+                    <span data-slot="rail-label">Chat</span>
+                  </button>
+                </Hint>
+              )}
+              <Hint label="Website" side="right">
+                <Link className={railItemClass} to="/app/website">
+                  <GlobeIcon aria-hidden />
+                  <span data-slot="rail-label">Website</span>
+                </Link>
+              </Hint>
+              <Hint label="Reminders" side="right">
+                <Link className={railItemClass} to="/app/reminders">
+                  <AlarmIcon aria-hidden />
+                  <span data-slot="rail-label">Reminders</span>
+                </Link>
+              </Hint>
+            </nav>
             <div className="mt-auto flex flex-col gap-1">
               <DropdownMenu>
                 <Hint label="Help" side="right">

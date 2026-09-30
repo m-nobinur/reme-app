@@ -11,6 +11,7 @@ import type { TransportedMessage } from "../lib/api/types"
 import {
   type AISDKStorageFormat,
   conversationHistory,
+  lastChat,
   missingConversations,
   STORAGE_FORMAT,
   startsNewChat,
@@ -166,6 +167,37 @@ it("lists an archived conversation as archived, and an untitled one without a ti
   expect(
     toMetadata({ ...conversation, archived_at: null, title: "Prices" })
   ).toMatchObject({ status: "regular", title: "Prices" })
+})
+
+it("picks the open conversation the owner was last active in", () => {
+  const chat = (id: string, updated: string, archived = false) =>
+    ({
+      id,
+      kind: "assistant",
+      title: null,
+      archived_at: archived ? AT : null,
+      created_at: AT,
+      updated_at: updated,
+    }) satisfies Conversation
+  expect(lastChat(null)).toBeUndefined()
+  expect(lastChat([])).toBeUndefined()
+  expect(
+    lastChat([
+      chat("older", "2026-09-26T10:00:00.000Z"),
+      chat("newer", "2026-09-27T10:00:00.000Z"),
+      chat("oldest", "2026-09-25T10:00:00.000Z"),
+    ])?.id
+  ).toBe("newer")
+  // Archived is gone from the history menu, so never the last chat.
+  expect(
+    lastChat([
+      chat("open", "2026-09-26T10:00:00.000Z"),
+      chat("archived", "2026-09-28T10:00:00.000Z", true),
+    ])?.id
+  ).toBe("open")
+  expect(
+    lastChat([chat("archived", "2026-09-28T10:00:00.000Z", true)])
+  ).toBeUndefined()
 })
 
 it("starts a new chat only for a new New chat press", () => {
