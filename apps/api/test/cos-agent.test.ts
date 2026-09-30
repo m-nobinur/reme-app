@@ -1989,11 +1989,16 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     const done = await turn(me, typed(id, "Read everything.", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
-    // Three steps of 100k input fit a reservation of about $0.025; a
-    // fourth could pass it, so the six the model would take never run.
-    expect(sent).toHaveLength(3)
+    // As many 100k-input steps as fit the reservation at the table's price
+    // (two on 2026-09-30's table); the next could pass it, so the six the
+    // model would take never all run.
+    const price = PRICE as NonNullable<typeof PRICE>
+    const reserved = reservation(price)
+    const step = (100_000 * price.input + 50 * price.output) / 1_000_000
+    const fits = Math.floor(reserved / step)
+    expect(fits).toBeLessThan(6)
+    expect(sent).toHaveLength(fits)
     const [ended] = await turnsOf(id)
-    const reserved = reservation(PRICE as NonNullable<typeof PRICE>)
     expect(ended?.outcome).toBe("answered")
     expect(ended?.outcome === "answered" && ended.cost_usd).toBeLessThanOrEqual(
       reserved
