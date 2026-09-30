@@ -1,4 +1,15 @@
-import type { FactRecord } from "@workspace/contracts"
+import {
+  type Asset,
+  type FactRecord,
+  FactValue,
+  type FactValueKey,
+  FIXED_PAGES,
+  FONTS,
+  PAGES,
+  PALETTES,
+  TEMPLATES,
+  TONES,
+} from "@workspace/contracts"
 import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { SEED_FIELDS } from "./seed.ts"
 
@@ -14,7 +25,7 @@ const WORDS = [
 ].join(", ")
 const COUNTS = CLAIM_VOCABULARY.counted.join(", ")
 const COPY_RULES = [
-  '- Persuasive copy is welcome: a benefit-led slogan under eight words, a supporting line under it, value propositions about care, reliability and convenience, and a call to action that names the action ("Book a clean").',
+  '- Persuasive copy is welcome: a benefit-led slogan under eight words, a supporting line under it, value propositions about care, reliability and convenience, and a call to action that names the action ("Request a quote").',
   `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. Call ask_chief for the fact, or write the line without the claim.`,
 ]
 
@@ -43,9 +54,11 @@ export function siteRules(
           "- Touch only the files the change needs, and list only those in changes[] with what moved and why.",
         ]
       : []),
-    `- Every price, phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
-    "- If the change request asks for something checkable that no fact below supports, a price, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
+    '- The site never shows a price, a rate, a fee or a pricing tier, even when a fact below holds one. Every call to action asks the visitor for a quote request: label it "Request a quote" and link it to /quote/.',
+    `- Every phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
+    "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
     ...COPY_RULES,
+    ...ownerChoices(facts),
     ...(hidden.length > 0
       ? [
           `- The owner has asked that these facts not appear on the site: ${hidden.join(", ")}. No field may render them.`,
@@ -53,6 +66,96 @@ export function siteRules(
       : []),
     "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
     "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact field empty when its fact is missing or when the owner has asked for that fact not to appear: an empty field renders nothing, which is how the site leaves something out. A composed field is text you may write or keep. It may say why the business is worth calling. Every checkable thing in it traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A sentence about the care taken over the work is not checkable and needs no fact. Never add, remove or re-key fields, and never change a field's kind, fact_key or required flag: the platform reads its own copy of fields, so an edit here changes nothing it believes.",
+  ]
+}
+
+/** A fact's value, when the stored one still parses. */
+function factValue<K extends FactValueKey>(
+  facts: readonly FactRecord[],
+  key: K
+): Extract<FactValue, { key: K }>["value"] | undefined {
+  const held = facts.find((f) => f.key === key)
+  const parsed = held && FactValue.safeParse({ key, value: held.value })
+  return parsed?.success ? (parsed.data.value as never) : undefined
+}
+
+const labelOf = (list: readonly { id: string; label: string }[], id: string) =>
+  list.find((each) => each.id === id)?.label ?? id
+
+/** The owner's own words, quoted so they read as data. */
+const quoted = (words: string) => JSON.stringify(words)
+
+/** Where an owner photo sits in the site, under `public/`, and the path it is served at. */
+export const photoFile = (asset: Asset) =>
+  `uploads/${asset.id}.${EXTENSION[asset.content_type]}`
+
+const EXTENSION: Record<Asset["content_type"], string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+}
+
+/** The owner's photos, from the `media.uploads` fact. */
+export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
+  factValue(facts, "media.uploads")?.items ?? []
+
+/**
+ * What the owner chose in onboarding, as rules: the layout, colours, font,
+ * pages, voice and photos, and which facts the copy is written from. A
+ * preset becomes its value; the owner's own words are guidance, quoted.
+ */
+export function ownerChoices(facts: readonly FactRecord[]): string[] {
+  const template = factValue(facts, "site.template")
+  const palette = factValue(facts, "site.palette")
+  const font = factValue(facts, "site.font")
+  const pages = factValue(facts, "site.pages")
+  const tone = factValue(facts, "assistant.tone")
+  const photos = ownerPhotos(facts)
+  const preset = PALETTES.find((p) => p.id === palette?.id)
+  const family = FONTS.find((f) => f.id === font?.id)
+  const extra = pages?.ids.filter(
+    (id) => !(FIXED_PAGES as readonly string[]).includes(id)
+  )
+  return [
+    "- Write the copy from business.industry, business.offerings, business.audience, business.overview and service_area.text below: what the business does, for whom, how a job goes and where it works. Rephrase them; never add a claim they do not make.",
+    ...(template
+      ? [
+          `- Layout: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"); apply it through the fields src/site-config.ts gives for it.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
+        ]
+      : []),
+    ...(preset
+      ? [
+          `- Colour: the brand colour is ${preset.brand}, the owner's ${preset.label} palette. Derive the rest of the colours from it.`,
+        ]
+      : palette?.custom
+        ? [
+            `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
+          ]
+        : []),
+    ...(family
+      ? [
+          `- Font: ${family.label}, the system stack ${family.family}. Add no font files and no font links.`,
+        ]
+      : font?.custom
+        ? [
+            `- Font: the owner described ${quoted(font.custom)}. Use the closest of these system stacks and add no font files: ${FONTS.map((f) => f.family).join("; ")}.`,
+          ]
+        : []),
+    ...(pages
+      ? [
+          `- Pages: Home and Request a quote, plus ${extra?.length ? extra.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. Build each extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
+        ]
+      : []),
+    ...(tone
+      ? [
+          `- Voice: the site speaks in a ${labelOf(TONES, tone.id).toLowerCase()} tone. Friendly is warm and plain; professional is polished, with no exclamation marks; casual is relaxed, with contractions.`,
+        ]
+      : []),
+    ...(photos.length > 0
+      ? [
+          `- Photos: the owner's own, in public/ and served at these paths: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)})`).join(", ")}. Place each where it fits best: the hero, a gallery, the about section or a service card. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Use no other photos.`,
+        ]
+      : []),
   ]
 }
 
