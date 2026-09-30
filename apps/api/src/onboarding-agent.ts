@@ -94,12 +94,16 @@ export const PLANNER = {
 export const SAY_MAX = 900
 
 /** The planner's model through OpenRouter, reasoning kept short so a turn stays quick. */
-export function plannerModel(apiKey: string, modelId: string) {
+export function plannerModel(
+  apiKey: string,
+  modelId: string,
+  effort: "none" | "minimal" | "low" | "medium" = "low"
+) {
   return openrouterModel(apiKey, modelId, {
     // The providers under the routing cap differ in what they enforce; the
     // plan is checked here whatever they do.
     structuredOutputs: { strict: false },
-    reasoning: { effort: "low" },
+    reasoning: { effort },
   })
 }
 
