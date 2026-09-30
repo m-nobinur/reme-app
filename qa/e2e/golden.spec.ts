@@ -13,6 +13,7 @@ import {
   sessionCookie,
   signIn,
   startOrg,
+  stopBuilds,
 } from "./owner"
 import { visit } from "./visit"
 import { createProbeUser, PROBE_ORG_PREFIX, type ProbeUser } from "./workos"
@@ -21,7 +22,7 @@ import { createProbeUser, PROBE_ORG_PREFIX, type ProbeUser } from "./workos"
  * The golden path on staging, through the UI a new owner uses: signup,
  * onboarding, the first build, any question it asks answered in the panel,
  * v1 approved and live with its quote action and its thumbnail, the panel's blank-state actions, a Chief of Staff change to
- * v2, a reminder from the chat shown and completed in the panel, and
+ * v2 that keeps the quote link and form, a reminder from the chat shown and completed in the panel, and
  * the api's own reads of what the run wrote. The org is
  * cleared whole at the end, pass or fail.
  *
@@ -229,6 +230,27 @@ async function approveVersion(page: Page, n: number) {
   })
 }
 
+/**
+ * The live site's quote action: a "Request a quote" link to /quote/, and
+ * the form on that page. The site states no price, so this is the v1 content
+ * a later change has to keep.
+ */
+async function expectQuote(page: Page, host: string) {
+  const site = await page.context().newPage()
+  try {
+    await site.goto(`https://${host}/`)
+    const link = site.getByRole("link", { name: "Request a quote" }).first()
+    await expect(link).toHaveAttribute("href", /\/quote\/?$/)
+    const response = await site.goto(`https://${host}/quote/`)
+    expect(response?.status()).toBe(200)
+    const form = site.locator("form.quote-form")
+    await expect(form).toBeVisible()
+    await expect(form.locator('button[type="submit"]')).toBeVisible()
+  } finally {
+    await site.close()
+  }
+}
+
 /** The live site answers 200 and shows each of `texts`. */
 async function expectLive(page: Page, host: string, texts: string[]) {
   const site = await page.context().newPage()
@@ -281,16 +303,19 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       .getByRole("link", { name: "Continue getting started" })
       .click()
     await expect(page).toHaveURL(onboarding)
-    await expect(page.getByLabel("Phone number")).toBeVisible()
+    // Signup gave the name, so the first open card is the industry.
+    await expect(page.locator('[data-slot="ask-choice"] form')).toBeVisible()
     run.blank_state_actions["Continue getting started"] = "clicked"
   })
 
-  await step("onboarding, build accepted", async () => {
+  await step("onboarding, build started", async () => {
     await answerOnboarding(page)
+    // The yes to "build it for me" was the approval: the build starts
+    // after the photos with no card to approve.
     const card = page.locator('[data-slot="request-change"]')
     await expect(card).toContainText("Build my website")
-    await card.getByRole("button", { name: "Approve" }).click()
     await expect(card).toContainText("Started. Follow it under Working on.")
+    await expect(card.getByRole("button")).toHaveCount(0)
     await expect(
       panel(page).getByRole("heading", { name: "Working on" })
     ).toBeVisible()
@@ -396,7 +421,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       panel(page).getByRole("heading", { name: "Working on" })
     ).toBeVisible()
     await approveVersion(page, 2)
-    await expectLive(page, host, [HERO, PRICE.shown])
+    await expectLive(page, host, [HERO])
+    await expectQuote(page, host)
   })
 
   await step("a reminder from the chat, shown and completed", async () => {
@@ -454,10 +480,13 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(facts.map((fact) => fact.key)).toEqual(
       expect.arrayContaining([
         "business.email",
+        "business.industry",
         "business.name",
         "business.phone",
-        "hours.weekday",
-        "service_area.radius",
+        "service_area.text",
+        "assistant.name",
+        "site.build_mode",
+        "site.template",
       ])
     )
 
@@ -495,31 +524,13 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   run.total_seconds = Math.round((Date.now() - began) / 1000)
 })
 
-/**
- * Builds still open, stopped, so the probe cleanup (which refuses an org
- * with an unfinished assignment) can take the org.
- */
-async function stopBuilds() {
-  const read = async () =>
-    (
-      (await (
-        await api(await session(), "/workspace")
-      ).json()) as Partial<Workspace>
-    ).builds ?? []
-  for (const build of await read()) {
-    await api(await session(), `/builds/${build.assignment_id}/cancel`, {
-      method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
-    })
-  }
-  await expect.poll(read, { timeout: 120_000 }).toEqual([])
-}
-
 // Builds are stopped while the page and its live session are still open;
 // the probe cleanup refuses an org with an unfinished build.
 test.afterEach(async () => {
   if (owner)
-    await stopBuilds().catch((error) => note(`builds not stopped: ${error}`))
+    await stopBuilds(session).catch((error) =>
+      note(`builds not stopped: ${error}`)
+    )
 })
 
 test.afterAll(async () => {
@@ -547,7 +558,7 @@ test.afterAll(async () => {
   if (!user) return
   if (run.org_id && owner) {
     try {
-      await stopBuilds()
+      await stopBuilds(session)
     } catch (error) {
       failures.push(`builds not stopped: ${error}`)
     }

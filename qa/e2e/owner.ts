@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { expect, type Locator, type Page } from "@playwright/test"
+import { expect, type Page } from "@playwright/test"
 import { visit } from "./visit"
 import { deleteProbeOrgs, deleteProbeUser, type ProbeUser } from "./workos"
 
@@ -134,61 +134,109 @@ export async function clearProbe(
   return failures
 }
 
-/** How a run answers each onboarding question, by the question the owner reads. */
-export const ANSWERS: Record<string, (form: Locator) => Promise<void>> = {
-  "What number should customers ring?": async (form) => {
-    await form.getByLabel("Phone number").fill("07700 900123")
-  },
-  "Which email address should enquiries go to?": async (form) => {
-    await form.getByLabel("Email address").fill("hello@example.net")
-  },
-  "What are your hours on weekdays?": async (form) => {
-    await form.getByLabel("Opening time").fill("08:00")
-    await form.getByLabel("Closing time").fill("18:00")
-  },
-  "Where do you work from, and how far do you travel?": async (form) => {
-    await form.getByLabel("Town or postcode you work from").fill("Leeds")
-    await form.getByLabel("Distance you travel, in km").fill("15")
-  },
+/**
+ * What a run types into each onboarding fact card, by the label of its one
+ * input. The card's question is the same for every org, but the assistant's
+ * line above it is not, so a card is known by its input.
+ */
+export const ANSWERS: Record<string, string> = {
+  "Products or services, separated by commas":
+    "Regular home cleaning, deep cleans, end of tenancy cleans",
+  "Your customers": "Busy households and letting agents",
+  "How you work":
+    "Two teams of two, booked a week ahead, with our own products",
+  "Towns, regions or postcodes": "Leeds and the villages around it",
+  "Phone number": "07700 900123",
+  "Email address": "hello@example.net",
+  "Assistant's name": "Sam",
+  "Your name": "Alex",
 }
 
+/** The option a choice card is answered with, when it offers it; else its first. */
+const PICKS = ["Cleaning and home services", "Yes, build it for me"]
+
 /**
- * The onboarding conversation answered through its cards until the offer of
- * the first build shows, anything skippable skipped. Signup recorded the name,
- * so it asks four: phone, email, hours and area. One round more than that is the
- * guard against a script that never ends, and the count then fails.
+ * The onboarding conversation answered through its cards until the first
+ * build starts, anything skippable skipped. Signup recorded the name, so it
+ * asks 18: the industry, offerings, customers, how the business runs, the
+ * area, phone, email and tagline (skipped), the assistant's name, pronouns
+ * and tone, the owner's name, whether to build the site (yes), its
+ * template, colours, lettering and pages (as ticked), and photos (skipped).
+ * The build then starts on its own, with no approval card. One round more
+ * than that is the guard against a script that never ends, and the count
+ * then fails. Returns how many facts the answers wrote.
  */
-export async function answerOnboarding(page: Page): Promise<void> {
+export async function answerOnboarding(page: Page): Promise<number> {
   // Each answer is a server round trip, and both callers run against a
   // deployment reading the staging database from wherever the run is.
   const slow = expect.configure({ timeout: 30_000 })
-  const pending = page.locator('[data-slot="ask-fact"] form')
-  const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
-  const card = page.locator('[data-slot="request-change"]')
-  const asked = 4
+  const cards = page.locator(
+    '[data-slot="ask-fact"], [data-slot="ask-choice"], [data-slot="ask-upload"]'
+  )
+  // An open card holds an input; an answered one only says what was chosen.
+  const open = page.locator("form, input[type=file]")
+  const pending = cards.filter({ has: open })
+  const answered = cards.filter({ hasNot: open })
+  const build = page.locator('[data-slot="request-change"]')
+  const asked = 18
   let count = 0
+  let stated = 0
   while (count <= asked) {
-    await slow(pending.or(card).first()).toBeVisible()
-    if (await card.count()) break
-    // The next question takes the focus, so Enter answers it rather than
-    // sending the composer's text over it.
-    await slow(pending.locator("input").first()).toBeFocused()
-    const question = await page
-      .locator('[data-slot="ask-fact"]:has(form) p')
-      .first()
-      .innerText()
-    const skip = pending.getByRole("button", { name: "Skip for now" })
+    await slow(pending.or(build).first()).toBeVisible()
+    if (await build.count()) break
+    const card = pending.first()
+    // The next card takes the focus once its turn has finished streaming.
+    await slow(card.locator("input").first()).toBeFocused()
+    const skip = card.getByRole("button", { name: "Skip for now" })
+    const slot = await card.getAttribute("data-slot")
     if (await skip.count()) {
-      // A fact an owner may leave for later.
+      // The tagline and the photos, which an owner may leave for later.
       await skip.click()
+    } else if (slot === "ask-choice") {
+      // Pages come ticked; every other card takes one pick.
+      if ((await card.getByRole("checkbox").count()) === 0) {
+        const labels = card.locator("label")
+        let pick = labels.first()
+        for (const name of PICKS) {
+          const offered = labels.filter({ hasText: name })
+          if (await offered.count()) pick = offered.first()
+        }
+        await pick.click()
+      }
+      await card.getByRole("button", { name: "Continue" }).click()
+      stated += 1
     } else {
-      const answer = ANSWERS[question]
-      expect(answer, `no answer for "${question}"`).toBeDefined()
-      await answer?.(pending)
-      await pending.getByRole("button", { name: "Save" }).click()
+      const label = await card.locator("form label").first().innerText()
+      const answer = ANSWERS[label.trim()]
+      expect(answer, `no answer for the card asking "${label}"`).toBeDefined()
+      await card.getByLabel(label.trim(), { exact: true }).fill(answer ?? "")
+      await card.getByRole("button", { name: "Save" }).click()
+      stated += 1
     }
     count += 1
     await slow(answered).toHaveCount(count)
   }
-  expect(count, "questions asked before the offer of a build").toBe(asked)
+  expect(count, "cards answered before the build started").toBe(asked)
+  return stated
+}
+
+/**
+ * Builds still open, stopped, so the probe cleanup (which refuses an org
+ * with an unfinished assignment) can take the org. `cookie` reads the
+ * session fresh, because the web refreshes it as the panel polls.
+ */
+export async function stopBuilds(cookie: () => Promise<string>) {
+  const read = async () =>
+    (
+      (await (await api(await cookie(), "/workspace")).json()) as {
+        builds?: { assignment_id: string }[]
+      }
+    ).builds ?? []
+  for (const build of await read()) {
+    await api(await cookie(), `/builds/${build.assignment_id}/cancel`, {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+    })
+  }
+  await expect.poll(read, { timeout: 120_000 }).toEqual([])
 }
