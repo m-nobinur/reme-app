@@ -17,6 +17,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import {
+  ArrowBendDownRightIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
@@ -393,32 +394,37 @@ const ThreadWelcome: FC = () => {
   )
 }
 
+/** One row per suggestion under the composer; a press sends it. */
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
+    <ul
+      aria-label="Suggestions"
+      className="aui-thread-welcome-suggestions flex w-full flex-col empty:hidden"
+    >
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
-    </div>
+    </ul>
   )
 }
 
 const ThreadSuggestionItem: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestion-display">
+    <li className="aui-thread-welcome-suggestion-display">
       <SuggestionPrimitive.Trigger
         send
         render={
           <Button
-            variant="outline"
-            className="aui-thread-welcome-suggestion h-auto gap-1.5 whitespace-nowrap py-1.5 font-normal"
+            variant="ghost"
+            className="aui-thread-welcome-suggestion h-auto min-h-10 w-full justify-start gap-3 whitespace-normal rounded-lg py-2 text-start font-normal text-muted-foreground"
           />
         }
       >
+        <ArrowBendDownRightIcon aria-hidden />
         <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
         <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
       </SuggestionPrimitive.Trigger>
-    </div>
+    </li>
   )
 }
 

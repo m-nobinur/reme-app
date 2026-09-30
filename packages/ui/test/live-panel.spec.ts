@@ -270,6 +270,7 @@ const REMINDER_ENTRIES = [
   "ReminderNote",
   "ReminderNote set by Reme",
   "ReminderNote undated",
+  "ReminderNote overdue",
   "ReminderNote pending",
   "ReminderNote failed",
   "LiveLine",

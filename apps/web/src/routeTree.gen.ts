@@ -9,97 +9,39 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignOutRouteImport } from './routes/sign-out'
-import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as NameYourBusinessRouteImport } from './routes/name-your-business'
-import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
-import { Route as MfaRouteImport } from './routes/mfa'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppStaffRouteImport } from './routes/app/staff'
-import { Route as AppProfileRouteImport } from './routes/app/profile'
-import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
-import { Route as AppNotificationsRouteImport } from './routes/app/notifications'
-import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
-import { Route as AppAccountRouteImport } from './routes/app/account'
-import { Route as AppConversationRouteImport } from './routes/app/_conversation'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as MfaRouteImport } from './routes/mfa'
+import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
+import { Route as NameYourBusinessRouteImport } from './routes/name-your-business'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
+import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
-import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
-import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as AppConversationRouteImport } from './routes/app/_conversation'
+import { Route as AppAccountRouteImport } from './routes/app/account'
+import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
+import { Route as AppNotificationsRouteImport } from './routes/app/notifications'
+import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
+import { Route as AppProfileRouteImport } from './routes/app/profile'
+import { Route as AppRemindersRouteImport } from './routes/app/reminders'
+import { Route as AppStaffRouteImport } from './routes/app/staff'
+import { Route as AppWebsiteRouteImport } from './routes/app/website'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
+import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignOutRoute = SignOutRouteImport.update({
-  id: '/sign-out',
-  path: '/sign-out',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInCodeRoute = SignInCodeRouteImport.update({
-  id: '/sign-in-code',
-  path: '/sign-in-code',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NameYourBusinessRoute = NameYourBusinessRouteImport.update({
-  id: '/name-your-business',
-  path: '/name-your-business',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MfaSetupRoute = MfaSetupRouteImport.update({
-  id: '/mfa-setup',
-  path: '/mfa-setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MfaRoute = MfaRouteImport.update({
-  id: '/mfa',
-  path: '/mfa',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChooseOrganisationRoute = ChooseOrganisationRouteImport.update({
-  id: '/choose-organisation',
-  path: '/choose-organisation',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -107,34 +49,78 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ChooseOrganisationRoute = ChooseOrganisationRouteImport.update({
+  id: '/choose-organisation',
+  path: '/choose-organisation',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppStaffRoute = AppStaffRouteImport.update({
-  id: '/staff',
-  path: '/staff',
-  getParentRoute: () => AppRoute,
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AppProfileRoute = AppProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AppRoute,
+const MfaRoute = MfaRouteImport.update({
+  id: '/mfa',
+  path: '/mfa',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AppPipelineRoute = AppPipelineRouteImport.update({
-  id: '/pipeline',
-  path: '/pipeline',
-  getParentRoute: () => AppRoute,
+const MfaSetupRoute = MfaSetupRouteImport.update({
+  id: '/mfa-setup',
+  path: '/mfa-setup',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AppNotificationsRoute = AppNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppRoute,
+const NameYourBusinessRoute = NameYourBusinessRouteImport.update({
+  id: '/name-your-business',
+  path: '/name-your-business',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AppApprovalsRoute = AppApprovalsRouteImport.update({
-  id: '/approvals',
-  path: '/approvals',
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInCodeRoute = SignInCodeRouteImport.update({
+  id: '/sign-in-code',
+  path: '/sign-in-code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignOutRoute = SignOutRouteImport.update({
+  id: '/sign-out',
+  path: '/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppConversationRoute = AppConversationRouteImport.update({
+  id: '/_conversation',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAccountRoute = AppAccountRouteImport.update({
@@ -142,29 +128,55 @@ const AppAccountRoute = AppAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AppRoute,
 } as any)
-const AppConversationRoute = AppConversationRouteImport.update({
-  id: '/_conversation',
+const AppApprovalsRoute = AppApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
   getParentRoute: () => AppRoute,
 } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
 } as any)
-const AppConversationIndexRoute = AppConversationIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppConversationRoute,
+const AppPipelineRoute = AppPipelineRouteImport.update({
+  id: '/pipeline',
+  path: '/pipeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRemindersRoute = AppRemindersRouteImport.update({
+  id: '/reminders',
+  path: '/reminders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStaffRoute = AppStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWebsiteRoute = AppWebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
+  id: '/api/auth/callback',
+  path: '/api/auth/callback',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   id: '/api/auth/social',
   path: '/api/auth/social',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
-  id: '/api/auth/callback',
-  path: '/api/auth/callback',
-  getParentRoute: () => rootRouteImport,
+const AppConversationIndexRoute = AppConversationIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppConversationRoute,
 } as any)
 const AppConversationCIdRoute = AppConversationCIdRouteImport.update({
   id: '/c/$id',
@@ -194,7 +206,9 @@ export interface FileRoutesByFullPath {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/app/': typeof AppConversationIndexRoute
@@ -222,7 +236,9 @@ export interface FileRoutesByTo {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/app/c/$id': typeof AppConversationCIdRoute
@@ -251,7 +267,9 @@ export interface FileRoutesById {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
+  '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
@@ -281,7 +299,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
+    | '/app/reminders'
     | '/app/staff'
+    | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/app/'
@@ -309,7 +329,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
+    | '/app/reminders'
     | '/app/staff'
+    | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/app/c/$id'
@@ -337,7 +359,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
+    | '/app/reminders'
     | '/app/staff'
+    | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/app/_conversation/'
@@ -367,95 +391,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-out': {
-      id: '/sign-out'
-      path: '/sign-out'
-      fullPath: '/sign-out'
-      preLoaderRoute: typeof SignOutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in-code': {
-      id: '/sign-in-code'
-      path: '/sign-in-code'
-      fullPath: '/sign-in-code'
-      preLoaderRoute: typeof SignInCodeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/name-your-business': {
-      id: '/name-your-business'
-      path: '/name-your-business'
-      fullPath: '/name-your-business'
-      preLoaderRoute: typeof NameYourBusinessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mfa-setup': {
-      id: '/mfa-setup'
-      path: '/mfa-setup'
-      fullPath: '/mfa-setup'
-      preLoaderRoute: typeof MfaSetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mfa': {
-      id: '/mfa'
-      path: '/mfa'
-      fullPath: '/mfa'
-      preLoaderRoute: typeof MfaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/choose-organisation': {
-      id: '/choose-organisation'
-      path: '/choose-organisation'
-      fullPath: '/choose-organisation'
-      preLoaderRoute: typeof ChooseOrganisationRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -465,46 +405,109 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/choose-organisation': {
+      id: '/choose-organisation'
+      path: '/choose-organisation'
+      fullPath: '/choose-organisation'
+      preLoaderRoute: typeof ChooseOrganisationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/staff': {
-      id: '/app/staff'
-      path: '/staff'
-      fullPath: '/app/staff'
-      preLoaderRoute: typeof AppStaffRouteImport
-      parentRoute: typeof AppRoute
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/app/profile': {
-      id: '/app/profile'
-      path: '/profile'
-      fullPath: '/app/profile'
-      preLoaderRoute: typeof AppProfileRouteImport
-      parentRoute: typeof AppRoute
+    '/mfa': {
+      id: '/mfa'
+      path: '/mfa'
+      fullPath: '/mfa'
+      preLoaderRoute: typeof MfaRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/app/pipeline': {
-      id: '/app/pipeline'
-      path: '/pipeline'
-      fullPath: '/app/pipeline'
-      preLoaderRoute: typeof AppPipelineRouteImport
-      parentRoute: typeof AppRoute
+    '/mfa-setup': {
+      id: '/mfa-setup'
+      path: '/mfa-setup'
+      fullPath: '/mfa-setup'
+      preLoaderRoute: typeof MfaSetupRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/app/notifications': {
-      id: '/app/notifications'
-      path: '/notifications'
-      fullPath: '/app/notifications'
-      preLoaderRoute: typeof AppNotificationsRouteImport
-      parentRoute: typeof AppRoute
+    '/name-your-business': {
+      id: '/name-your-business'
+      path: '/name-your-business'
+      fullPath: '/name-your-business'
+      preLoaderRoute: typeof NameYourBusinessRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/app/approvals': {
-      id: '/app/approvals'
-      path: '/approvals'
-      fullPath: '/app/approvals'
-      preLoaderRoute: typeof AppApprovalsRouteImport
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in-code': {
+      id: '/sign-in-code'
+      path: '/sign-in-code'
+      fullPath: '/sign-in-code'
+      preLoaderRoute: typeof SignInCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-out': {
+      id: '/sign-out'
+      path: '/sign-out'
+      fullPath: '/sign-out'
+      preLoaderRoute: typeof SignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/_conversation': {
+      id: '/app/_conversation'
+      path: ''
+      fullPath: '/app'
+      preLoaderRoute: typeof AppConversationRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/account': {
@@ -514,26 +517,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/_conversation': {
-      id: '/app/_conversation'
-      path: ''
-      fullPath: '/app'
-      preLoaderRoute: typeof AppConversationRouteImport
+    '/app/approvals': {
+      id: '/app/approvals'
+      path: '/approvals'
+      fullPath: '/app/approvals'
+      preLoaderRoute: typeof AppApprovalsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
+    '/app/notifications': {
+      id: '/app/notifications'
+      path: '/notifications'
+      fullPath: '/app/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/app/_conversation/': {
-      id: '/app/_conversation/'
-      path: '/'
-      fullPath: '/app/'
-      preLoaderRoute: typeof AppConversationIndexRouteImport
-      parentRoute: typeof AppConversationRoute
+    '/app/pipeline': {
+      id: '/app/pipeline'
+      path: '/pipeline'
+      fullPath: '/app/pipeline'
+      preLoaderRoute: typeof AppPipelineRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/reminders': {
+      id: '/app/reminders'
+      path: '/reminders'
+      fullPath: '/app/reminders'
+      preLoaderRoute: typeof AppRemindersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/staff': {
+      id: '/app/staff'
+      path: '/staff'
+      fullPath: '/app/staff'
+      preLoaderRoute: typeof AppStaffRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/website': {
+      id: '/app/website'
+      path: '/website'
+      fullPath: '/app/website'
+      preLoaderRoute: typeof AppWebsiteRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/auth/callback': {
+      id: '/api/auth/callback'
+      path: '/api/auth/callback'
+      fullPath: '/api/auth/callback'
+      preLoaderRoute: typeof ApiAuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/auth/social': {
       id: '/api/auth/social'
@@ -542,12 +580,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSocialRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/callback': {
-      id: '/api/auth/callback'
-      path: '/api/auth/callback'
-      fullPath: '/api/auth/callback'
-      preLoaderRoute: typeof ApiAuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
+    '/app/_conversation/': {
+      id: '/app/_conversation/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppConversationIndexRouteImport
+      parentRoute: typeof AppConversationRoute
     }
     '/app/_conversation/c/$id': {
       id: '/app/_conversation/c/$id'
@@ -580,7 +618,9 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppPipelineRoute: typeof AppPipelineRoute
   AppProfileRoute: typeof AppProfileRoute
+  AppRemindersRoute: typeof AppRemindersRoute
   AppStaffRoute: typeof AppStaffRoute
+  AppWebsiteRoute: typeof AppWebsiteRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -590,7 +630,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppPipelineRoute: AppPipelineRoute,
   AppProfileRoute: AppProfileRoute,
+  AppRemindersRoute: AppRemindersRoute,
   AppStaffRoute: AppStaffRoute,
+  AppWebsiteRoute: AppWebsiteRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

@@ -839,14 +839,15 @@ function ComingUp({
  * A reminder someone wrote down, completed in place. The title is the
  * owner's text, rendered as text. `due` is already in the reader's own zone,
  * or null while that zone is not known, so one time is never shown two ways.
- * `soon` marks one due within the hour. Pending shows the reminder as done
- * until the list is read again; a failure puts it back, with the reason
- * under it.
+ * `soon` marks one due within the hour, `overdue` one whose time has passed.
+ * Pending shows the reminder as done until the list is read again; a failure
+ * puts it back, with the reason under it.
  */
 function ReminderNote({
   title,
   due,
   soon = false,
+  overdue = false,
   byAssistant,
   onDone,
   pending: busy = false,
@@ -855,6 +856,7 @@ function ReminderNote({
   title: string
   due: string | null
   soon?: boolean
+  overdue?: boolean
   /** Set by the assistant (Reme to the owner) rather than by the owner. */
   byAssistant: boolean
   onDone: () => void
@@ -865,6 +867,7 @@ function ReminderNote({
     <div
       className="flex items-start gap-3 py-2.5"
       data-slot="reminder-note"
+      data-overdue={overdue || undefined}
       data-soon={soon || undefined}
       data-state={busy ? "done" : "open"}
     >
@@ -882,15 +885,18 @@ function ReminderNote({
             className={cn(
               META,
               "flex items-center gap-1 tabular-nums",
-              soon && "font-medium text-primary"
+              soon && "font-medium text-primary",
+              overdue && "font-medium text-destructive"
             )}
           >
             <ClockIcon
               aria-hidden
               className="size-3.5 shrink-0"
-              weight={soon ? "fill" : "regular"}
+              weight={soon || overdue ? "fill" : "regular"}
             />
-            <span className="sr-only">Due </span>
+            <span className="sr-only">
+              {overdue ? "Overdue, was due " : "Due "}
+            </span>
             {due}
           </span>
         ) : null}
