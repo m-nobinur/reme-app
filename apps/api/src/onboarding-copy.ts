@@ -103,12 +103,6 @@ export function say(v: Pick<Voice, "tone">, text: string): string {
   )
 }
 
-const SUBJECT: Record<PronounId, string> = {
-  he_him: "He",
-  she_her: "She",
-  they_them: "They",
-}
-
 /** The owner's three openers, with the business's name in each. */
 export function opener(v: Voice): string {
   return say(
@@ -198,10 +192,7 @@ Before we get to the website, let's make this partnership official. What name sh
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
     const me = v.assistant || "me"
-    const draft = v.assistant
-      ? `${SUBJECT[v.pronouns]} can have a first draft ready while we keep chatting.`
-      : "I can have a first draft ready while we keep chatting."
-    const ask = `Would you like ${me} to build your website for you? ${draft}`
+    const ask = `Would you like ${me} to build your website for you? I can have a first draft ready while we keep chatting.`
     const call = v.assistant ? ` Call me ${v.assistant}.` : ""
     return [
       `It's an honour to officially be on the team${comma(v.owner)}!${call}

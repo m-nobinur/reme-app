@@ -718,9 +718,14 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("lets the assistant's pronoun shape a sentence, never a bracket", () => {
-    const text = question("build_for_me", voice({ pronouns: "he_him" }))
-    expect(text).toContain("He can have a first draft ready")
+  it("speaks of the draft in the first person, whatever the pronouns", () => {
+    for (const org of ORGS) {
+      for (const pronouns of ["he_him", "she_her", "they_them"] as const) {
+        const text = question("build_for_me", voice({ org, pronouns }))
+        expect(text).toContain("I can have a first draft ready")
+        expect(text).not.toMatch(/\b(He|She|They) can have\b/)
+      }
+    }
   })
 
   it("adjusts the tone: no exclamation marks when professional, contractions when casual", () => {
