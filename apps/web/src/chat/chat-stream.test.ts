@@ -325,6 +325,40 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
   )
 })
 
+it("a stored conversation's skeleton stays up until its messages arrive, with no blank between", async () => {
+  const release: { open?: () => void } = {}
+  hold = new Promise<void>((resolve) => {
+    release.open = resolve
+  })
+  stored = FIXTURE.histories.start
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  // What the owner sees after each change: the skeleton, the messages, or
+  // nothing where the conversation goes.
+  const seen: string[] = []
+  new MutationObserver(() => {
+    const now = container.querySelector(
+      '[data-slot="aui_thread-history-skeleton"]'
+    )
+      ? "skeleton"
+      : transcript(container).length
+        ? "messages"
+        : "blank"
+    if (seen.at(-1) !== now) seen.push(now)
+  }).observe(container, { childList: true, subtree: true })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() => expect(seen).toContain("skeleton"))
+  // Long enough for the runtime to swap its placeholder thread for the
+  // stored one.
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  hold = null
+  await act(async () => release.open?.())
+  await vi.waitFor(() => expect(seen.at(-1)).toBe("messages"))
+  expect(seen.slice(seen.indexOf("skeleton"))).toEqual(["skeleton", "messages"])
+})
+
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
   const chat = await open(FIXTURE.histories.typed)
   // A question overtaken by a typed message, the message, and the question

@@ -14,6 +14,10 @@ import {
   Thread,
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
+import {
+  ThreadHistorySkeleton,
+  ThreadPending,
+} from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -1111,6 +1115,23 @@ const assistantCatalog = [
         isLoading
         messages={[]}
       />
+    ),
+  },
+  {
+    name: "ThreadHistorySkeleton",
+    render: () => (
+      <div className="max-w-md">
+        <ThreadHistorySkeleton />
+      </div>
+    ),
+  },
+  {
+    // What the server sends before the chat chunk loads.
+    name: "ThreadPending",
+    render: () => (
+      <div className="h-[32rem]">
+        <ThreadPending />
+      </div>
     ),
   },
   {

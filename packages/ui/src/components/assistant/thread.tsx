@@ -35,6 +35,7 @@ import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
+import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
@@ -46,7 +47,6 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { Skeleton } from "@workspace/ui/components/skeleton"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
@@ -61,6 +61,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
@@ -175,26 +176,33 @@ const isHistoryLoadingView = (s: AssistantState) =>
   !s.thread.isDisabled &&
   !s.threads.isLoading
 
-const ThreadHistorySkeleton: FC = () => (
-  <div
-    data-slot="aui_thread-history-skeleton"
-    role="status"
-    className="fade-in flex animate-in flex-col gap-y-6 fill-mode-both [animation-delay:150ms] [animation-duration:200ms] motion-reduce:animate-none"
-  >
-    <span className="sr-only">Loading conversation</span>
-    <Skeleton className="ml-auto h-9 w-2/5 rounded-3xl motion-reduce:animate-none" />
-    <div className="flex flex-col gap-y-2">
-      <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
-    </div>
-    <Skeleton className="ml-auto h-9 w-1/3 rounded-3xl motion-reduce:animate-none" />
-    <div className="flex flex-col gap-y-2">
-      <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
-      <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
-    </div>
-  </div>
-)
+/**
+ * Holds `value` true for `ms` after it turns false. The runtime swaps the
+ * placeholder thread for the stored one in two steps, and the loading flags
+ * can read false between them for a render; without the hold the skeleton
+ * unmounts there and the transcript blinks empty.
+ */
+const useHeld = (value: boolean, ms: number) => {
+  const [held, setHeld] = useState(value)
+  useEffect(() => {
+    if (value) {
+      setHeld(true)
+      return
+    }
+    const timer = setTimeout(() => setHeld(false), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return value || held
+}
+
+const HistoryLoading: FC<{ stored: boolean }> = ({ stored }) => {
+  const empty = useAuiState((s) => s.thread.messages.length === 0)
+  const loading = useAuiState((s) =>
+    stored ? s.thread.isLoading || s.threads.isLoading : isHistoryLoadingView(s)
+  )
+  const held = useHeld(loading, 300)
+  return empty && held ? <ThreadHistorySkeleton /> : null
+}
 
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
@@ -256,16 +264,7 @@ const ThreadRoot: FC<{
             // screen reader.
             <h1 className="sr-only">Conversation</h1>
           )}
-          <AuiIf
-            condition={(s) =>
-              stored
-                ? s.thread.messages.length === 0 &&
-                  (s.thread.isLoading || s.threads.isLoading)
-                : isHistoryLoadingView(s)
-            }
-          >
-            <ThreadHistorySkeleton />
-          </AuiIf>
+          <HistoryLoading stored={stored} />
 
           <div
             data-slot="aui_message-group"
