@@ -458,7 +458,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     }
     const history = await me.history(id)
     const hash = await sha256(
-      bodies.join("") +
+      // The colour card's first four are seeded by the org's id, which each
+      // run creates afresh; everything else is the same bytes.
+      (
+        bodies.join("") +
         JSON.stringify(
           history.messages.map(
             ({ content: { metadata: _, ...content }, ...m }) => ({
@@ -472,6 +475,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             })
           )
         )
+      ).replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
     )
     const listed = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()
