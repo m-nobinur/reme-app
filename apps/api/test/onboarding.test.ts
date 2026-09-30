@@ -44,6 +44,7 @@ const start = (over: Partial<Onboarding> = {}): Onboarding => ({
   orgId: ORG,
   facts: [{ key: "business.name", value: { name: BUSINESS } }],
   passed: [],
+  closed: [],
   offered: false,
   builder: null,
   orgName: BUSINESS,
@@ -411,6 +412,70 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("states a confirmed quote form, keeps changes as words, and refuses contact questions", () => {
+    const fields = [
+      {
+        key: "pickup",
+        label: "Pick-up address",
+        type: "text",
+        required: true,
+        hint: null,
+        options: null,
+      },
+      {
+        key: "passengers",
+        label: "Passengers",
+        type: "number",
+        required: true,
+        hint: null,
+        options: null,
+      },
+    ]
+    const review = {
+      type: "tool-review_quote_form",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { fields, note: null },
+    } as ToolPart
+    expect(cardAnswer(review, { answer: "confirmed", fields }, [])).toEqual({
+      kind: "facts",
+      facts: [{ key: "quote.form", value: { fields } }],
+    })
+    expect(
+      cardAnswer(review, { answer: "changes", text: "Add the date" }, [])
+    ).toEqual({ kind: "facts", facts: [] })
+    for (const contact of [
+      { key: "email", type: "text", label: "Where to reply" },
+      { key: "details", type: "tel", label: "Best number" },
+      { key: "who", type: "text", label: "Your name" },
+    ]) {
+      expect(
+        cardAnswer(
+          review,
+          {
+            answer: "confirmed",
+            fields: [...fields, { ...fields[0], ...contact }],
+          },
+          []
+        )
+      ).toBeNull()
+    }
+    // A pet's name is not the customer's.
+    expect(
+      cardAnswer(
+        review,
+        {
+          answer: "confirmed",
+          fields: [
+            ...fields,
+            { ...fields[0], key: "pet_name", label: "Your dog's name" },
+          ],
+        },
+        []
+      )?.kind
+    ).toBe("facts")
+  })
+
   it("refuses a fact for another key than the card's", () => {
     expect(
       cardAnswer(
@@ -572,6 +637,7 @@ describe("the progress a conversation's cards hold", () => {
       ])
     ).toEqual({
       passed: ["business.tagline", "upload"],
+      closed: ["business.tagline", "upload", "manual_builder"],
       offered: false,
       builder: false,
     })
@@ -595,6 +661,32 @@ describe("the progress a conversation's cards hold", () => {
     expect(progressOf([row({ type: "tool-request_change" })]).offered).toBe(
       true
     )
+  })
+
+  it("closes a step by its latest card, and never a quote form sent back with changes", () => {
+    const upload = { type: "tool-ask_upload" }
+    const quote = { type: "tool-review_quote_form" }
+    // Talked over, then asked again: still open.
+    expect(
+      progressOf([
+        row({ ...upload, state: "output-error", reply: "soon" }),
+        row({ ...upload, state: "input-available" }),
+      ]).closed
+    ).toEqual([])
+    // Talked over and not asked again: the typed reply settled it.
+    expect(
+      progressOf([row({ ...upload, state: "output-error", reply: "no" })])
+        .closed
+    ).toEqual(["upload"])
+    expect(progressOf([row({ ...quote, answer: "changes" })]).closed).toEqual(
+      []
+    )
+    expect(
+      progressOf([
+        row({ ...quote, answer: "changes" }),
+        row({ ...quote, answer: "confirmed" }),
+      ]).closed
+    ).toEqual(["quote_form"])
   })
 
   it("does not count a typed answer that was not a skip", () => {
@@ -638,7 +730,7 @@ const lines = (v: Voice): [string, string][] => [
   ...(
     STEPS.map((s) => s.id).filter(
       (id) => id !== "upload" && id !== "build"
-    ) as Exclude<StepId, "upload" | "build">[]
+    ) as Exclude<StepId, "upload" | "quote_form" | "build">[]
   ).map((id): [string, string] => [id, question(id, v)]),
   ["upload", photos(v)],
   ["started", started(v, true)],

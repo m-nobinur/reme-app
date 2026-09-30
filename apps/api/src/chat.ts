@@ -137,6 +137,7 @@ export type ToolPart = {
     | "tool-ask_fact"
     | "tool-ask_choice"
     | "tool-ask_upload"
+    | "tool-review_quote_form"
     | "tool-request_change"
   toolCallId: string
   state:
@@ -391,6 +392,7 @@ async function onboardingOf(
     facts,
     orgName: org?.name ?? "",
     ownerName: owner.session.name ?? "",
+    ownerEmail: owner.session.email,
   }
 }
 
@@ -1372,7 +1374,14 @@ export function firstMessage(
   newId: () => string
 ) {
   const step = openingParts(
-    { ...org, facts: current, passed: [], offered: false, builder: null },
+    {
+      ...org,
+      facts: current,
+      passed: [],
+      closed: [],
+      offered: false,
+      builder: null,
+    },
     newId
   )
   return {

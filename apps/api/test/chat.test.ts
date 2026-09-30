@@ -75,6 +75,7 @@ const state = (over: Partial<Onboarding> = {}): Onboarding => ({
   orgId: ORG,
   facts: [{ key: "business.name", value: { name: "Brightclean (fixture)" } }],
   passed: [],
+  closed: [],
   offered: false,
   builder: null,
   orgName: "Brightclean (fixture)",
@@ -916,6 +917,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ])
       expect(await progress()).toEqual({
         passed: ["upload"],
+        closed: ["industry", "upload"],
         offered: true,
         builder: null,
       })
@@ -960,7 +962,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ])
       expect(
         await kit.withOrg({ orgId: fresh.orgId }, (db) => readScript(db, id))
-      ).toEqual({ passed: [], offered: false, builder: false })
+      ).toEqual({
+        passed: [],
+        closed: ["industry", "build_for_me", "manual_builder"],
+        offered: false,
+        builder: false,
+      })
     })
 
     it("refuses what a client may not send, and an unknown conversation", async () => {
