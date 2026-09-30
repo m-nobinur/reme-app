@@ -116,8 +116,11 @@ import { readFacts } from "./workspace.ts"
  * The client sends only what the owner just did (`ChatRequest`). The stored
  * rows are what assistant-ui reads, written in the same transactions as the
  * log, so a reload shows what the stream showed. A continued message is one
- * row that grows: ai 7 continues the last assistant message, so an answer or
- * an approval updates that row and never appends a second one.
+ * row that grows: ai 7 continues the last assistant message, so an approval,
+ * or an answer sent without the owner's reply, updates that row and never
+ * appends a second one. An answer sent with the owner's reply is a message of
+ * theirs, as a typed one is: it and the next step each get a row, so every
+ * onboarding step is a message of its own.
  */
 
 export { ONBOARDING_GOAL }
@@ -650,7 +653,7 @@ function scriptTurn(
   if (!result || more.length > 0) return Promise.resolve(stale())
   const one = { message_id: turn.message_id, ...result }
   if (one.kind === "answer") {
-    return answer(db, env, kit, owner, held, id, one, newId)
+    return answer(db, env, kit, owner, held, id, one, turn.reply, newId)
   }
   return approve(db, env, kit, owner, held, id, one)
 }
@@ -1115,16 +1118,46 @@ async function typed(
       : onboarding
         ? await advance(db, env, kit, owner, id, onboarding, reply, newId)
         : nextStep({ onboarding, message, newId })
+  const assistantId = await ownerThenStep(
+    db,
+    owner,
+    id,
+    tail?.id ?? null,
+    { id: messageId, text: message.text },
+    step,
+    newId
+  )
+  await nameConversation(db, held, id, message.text)
+  await db
+    .update(conversations)
+    .set({ updatedAt: sql`now()` })
+    .where(eq(conversations.id, id))
+  return stream(assistantId, step)
+}
+
+/**
+ * The owner's message as a row, then the step in an assistant row of its
+ * own after it. The new row's id.
+ */
+async function ownerThenStep(
+  db: OrgScopedDb,
+  owner: Owner,
+  id: string,
+  parentId: string | null,
+  message: { id: string; text: string },
+  step: Part[],
+  newId: () => string
+): Promise<string> {
   const assistantId = newId()
   const rows = [
     {
-      id: messageId,
-      parentId: tail?.id ?? null,
+      id: message.id,
+      parentId,
       content: { role: "user", parts: [{ type: "text", text: message.text }] },
     },
     {
       id: assistantId,
-      parentId: messageId,
+      parentId: message.id,
       content: { role: "assistant", parts: [{ type: "step-start" }, ...step] },
     },
   ]
@@ -1137,12 +1170,7 @@ async function typed(
       ...row,
     })
   }
-  await nameConversation(db, held, id, message.text)
-  await db
-    .update(conversations)
-    .set({ updatedAt: sql`now()` })
-    .where(eq(conversations.id, id))
-  return stream(assistantId, step)
+  return assistantId
 }
 
 /** The card the tail's last step waits on, if it waits on one. */
@@ -1215,10 +1243,14 @@ type Resolved<K extends ChatResult["kind"]> = Extract<
   { kind: K }
 > & { message_id: string }
 
+type Reply = Extract<ChatRequest["turn"], { kind: "results" }>["reply"]
+
 /**
  * An answer to one of the script's cards: its fact stated, a skip, or the
  * photos the owner sent, checked against the card the api made. Then the
- * next step, in the same row.
+ * next step: with the owner's reply, the reply and the step each get a row
+ * of their own after the card's, and the stream opens the step's row as a
+ * new message; without one, the step continues the card's row.
  */
 async function answer(
   db: OrgScopedDb,
@@ -1228,8 +1260,13 @@ async function answer(
   held: Read,
   id: string,
   turn: Resolved<"answer">,
+  reply: Reply,
   newId: () => string
 ): Promise<Response> {
+  // A reply is written once, as a typed message is: a retry is refused.
+  if (reply && (await messageTaken(db, id, reply.message_id))) {
+    return messageExists()
+  }
   const found = callIn(
     held.tail,
     turn.message_id,
@@ -1259,11 +1296,28 @@ async function answer(
     output: output.data,
   }
   const step = await advance(db, env, kit, owner, id, onboarding, meant, newId)
-  const parts = [
-    ...tail.content.parts.map((p) => (p === call ? done : p)),
-    { type: "step-start" } as const,
-    ...step,
-  ]
+  const answered = tail.content.parts.map((p) => (p === call ? done : p))
+  if (reply) {
+    if (
+      !(await swapTail(db, id, tail, {
+        ...tail.content,
+        parts: shown(answered),
+      }))
+    ) {
+      throw new Refusal(stale())
+    }
+    const assistantId = await ownerThenStep(
+      db,
+      owner,
+      id,
+      tail.id,
+      { id: reply.message_id, text: reply.text },
+      step,
+      newId
+    )
+    return stream(assistantId, step)
+  }
+  const parts = [...answered, { type: "step-start" } as const, ...step]
   if (
     !(await swapTail(db, id, tail, { ...tail.content, parts: shown(parts) }))
   ) {

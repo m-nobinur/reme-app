@@ -380,8 +380,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       } & Record<string, unknown>,
       stub?: Stub
     ) => {
+      // A typed message or a reply is the client's last message, so the
+      // stream opens a new one rather than continuing the tail.
       const before =
-        body.turn.kind === "message" ? undefined : await tail(conversationId)
+        body.turn.kind === "message" || body.turn.reply
+          ? undefined
+          : await tail(conversationId)
       const sent = await send(
         { conversation_id: conversationId, mode: "act", ...body },
         stub
@@ -416,8 +420,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
   const wordless = (text: string) =>
     text.replace(/"delta":"(?:[^"\\]|\\.)*"/g, '"delta":""')
 
-  /** The whole script through its cards: the build starts on the photo skip. */
-  async function onboard(ids: () => string) {
+  /**
+   * The whole script through its cards: the build starts on the photo skip.
+   * With `replies`, every answer carries the owner's reply, as the web sends it.
+   */
+  async function onboard(ids: () => string, replies = false) {
     const who = await owner(kit, url as string, "chat-script", ids)
     const me = talker(who, ids)
     const id = await me.onboarding()
@@ -440,6 +447,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
                 output: answerFor(call),
               },
             ],
+            ...(replies
+              ? { reply: { message_id: ids(), text: `Answer ${i + 1}` } }
+              : {}),
           },
         },
         stub
@@ -480,6 +490,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       id,
       hash,
       final: await Promise.resolve(history.messages.at(-1)),
+      messages: history.messages,
       facts: listed.facts,
       chief: team.staff.find((m) => m.staff_code === "COS-001")?.display_name,
       stub,
@@ -549,6 +560,59 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
         lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
     ).toBe(false)
+  }, 180_000)
+
+  it("with the owner's replies, gives every step and every reply a row of its own", async () => {
+    const legacy = await onboard(uuids())
+    const replied = await onboard(uuids(), true)
+    expect(replied.facts.map((f) => [f.key, f.value]).sort()).toEqual(
+      legacy.facts.map((f) => [f.key, f.value]).sort()
+    )
+    expect(replied.stub.calls).toHaveLength(1)
+    // The opening row, then a reply and a step for every answer.
+    const { messages } = replied
+    const roles = messages.map((m) => m.content.role)
+    const asked = legacy.messages
+      .flatMap((m) => m.content.parts)
+      .filter((p) => p.type.startsWith("tool-ask_")).length
+    expect(asked).toBeGreaterThan(10)
+    expect(roles.filter((role) => role === "user")).toHaveLength(asked)
+    expect(roles).toEqual([
+      "assistant",
+      ...Array.from({ length: (roles.length - 1) / 2 }, () => [
+        "user",
+        "assistant",
+      ]).flat(),
+    ])
+    for (const [i, m] of messages.entries()) {
+      if (m.content.role === "user") {
+        expect(m.parent_id).toBe(messages[i - 1]?.id)
+        expect(m.content.parts).toEqual([
+          { type: "text", text: `Answer ${(i + 1) / 2}` },
+        ])
+        continue
+      }
+      // Each step asks one card and ends on it, answered, bar the last.
+      const cards = m.content.parts.filter(
+        (p) =>
+          p.type.startsWith("tool-ask_") || p.type === "tool-request_change"
+      )
+      expect(cards).toHaveLength(1)
+      if (i < messages.length - 1) {
+        expect(m.content.parts.at(-1)).toMatchObject({
+          state: "output-available",
+        })
+      }
+    }
+    expect(replied.final?.content.parts.slice(-3)).toMatchObject([
+      {
+        type: "tool-request_change",
+        state: "output-available",
+        output: { outcome: "started" },
+      },
+      { type: "step-start" },
+      { type: "text", state: "done" },
+    ])
   }, 180_000)
 
   describe("an answer", () => {
@@ -732,6 +796,58 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         type: "tool-ask_fact",
         input: { key: "business.offerings" },
       })
+    })
+
+    it("with the owner's reply, stores it and the next step as rows of their own, once", async () => {
+      const at = await me.tail(id)
+      const call = pendingCall(at)
+      const turn = {
+        kind: "results",
+        message_id: at.id,
+        results: [
+          {
+            kind: "answer",
+            tool_call_id: call.toolCallId,
+            output: answerFor(call),
+          },
+        ],
+        reply: { message_id: "reply_offerings", text: "Regular cleaning" },
+      }
+      const done = await me.turn(id, { turn })
+      // The stream opens the step's row as a new message.
+      expect(done.chunks[0]).toEqual({
+        type: "start",
+        messageId: done.after.id,
+      })
+      const stored = await me.rows(id)
+      const [card, reply, step] = stored.slice(-3)
+      expect(card?.id).toBe(at.id)
+      // The card's row ends on its answer: no step opens after it.
+      const { parts } = (card as unknown as { content: { parts: Part[] } })
+        .content
+      expect(parts).toHaveLength(at.parts.length)
+      expect(parts.at(-1)).toEqual({
+        ...call,
+        state: "output-available",
+        output: answerFor(call),
+      })
+      expect(reply).toMatchObject({
+        id: "reply_offerings",
+        parentId: at.id,
+        content: {
+          role: "user",
+          parts: [{ type: "text", text: "Regular cleaning" }],
+        },
+      })
+      expect(step?.parentId).toBe("reply_offerings")
+      expect(pendingCall(done.after)).toMatchObject({ type: "tool-ask_fact" })
+
+      const again = await me.send({ conversation_id: id, mode: "act", turn })
+      expect(again.response.status, again.text).toBe(409)
+      expect(ErrorEnvelope.parse(JSON.parse(again.text)).code).toBe(
+        "chat.message_exists"
+      )
+      expect(await me.rows(id)).toEqual(stored)
     })
   })
 
