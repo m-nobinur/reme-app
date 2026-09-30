@@ -82,10 +82,12 @@ export const noteOf = (
   now = new Date()
 ) => {
   const due = zone && note.due_at ? dueLine(note.due_at, zone, now) : null
+  const left = Date.parse(note.due_at ?? "") - now.getTime()
   return {
     title: note.title,
     due,
-    soon: due !== null && Date.parse(note.due_at ?? "") - now.getTime() <= HOUR,
+    soon: due !== null && left > 0 && left <= HOUR,
+    overdue: due !== null && left <= 0,
     byAssistant: note.source === "assistant",
   }
 }
@@ -96,3 +98,126 @@ export const noteOf = (
  */
 export const upcomingNotes = (notes: Reminder[], now = Date.now()) =>
   notes.filter((note) => note.due_at === null || Date.parse(note.due_at) > now)
+
+/**
+ * A derived reminder as the reminders page words it. `focus` opens the panel
+ * on the item; `chat` starts a new chat, since facts are told to Reme there.
+ */
+export type Needed = {
+  key: string
+  title: string
+  detail: string
+  action: { label: string } & ({ focus: string } | { chat: true })
+}
+
+export type ReminderGroup = {
+  id: "overdue" | "today" | "upcoming" | "dated" | "undated"
+  title: string
+  notes: Reminder[]
+}
+
+const neededOf = (
+  reminder: DerivedReminder,
+  attention: AttentionItem[],
+  zone: string | null,
+  now: Date
+): Needed => {
+  switch (reminder.rule) {
+    case "approval_expiring": {
+      // Within a day of expiry, so the line always starts Today or Tomorrow.
+      const closes = zone
+        ? `Closes ${dueLine(reminder.expires_at, zone, now).replace(/^T/, "t")}.`
+        : "Closes within a day."
+      return {
+        key: `approval-${reminder.approval_id}`,
+        title: `Version ${reminder.version} is waiting for your review`,
+        detail: closes,
+        action: {
+          label: `Review version ${reminder.version}`,
+          focus: anchorOf.approval(reminder.approval_id),
+        },
+      }
+    }
+    case "question_waiting": {
+      const question = questionOf(attention, reminder)
+      return {
+        key: `question-${reminder.request_id}`,
+        title: question
+          ? `${question.raisedBy} asked about ${question.title.toLowerCase()}`
+          : "A question is waiting for your answer",
+        detail: "Open for more than 12 hours.",
+        action: {
+          label: "Answer in the panel",
+          focus: anchorOf.question(reminder.request_id),
+        },
+      }
+    }
+    case "preview_unpublished":
+      return {
+        key: `build-${reminder.assignment_id}`,
+        title: `Version ${reminder.version} is ready but not published`,
+        detail: "Its preview has been ready for more than 12 hours.",
+        action: {
+          label: "Open in the panel",
+          focus: anchorOf.build(reminder.assignment_id),
+        },
+      }
+    case "facts_missing":
+      return {
+        key: "facts",
+        title: `Reme still needs ${factsNeeded(reminder.keys)}`,
+        detail: "Your website is built from these. Tell Reme in a chat.",
+        action: { label: "Tell Reme", chat: true },
+      }
+  }
+}
+
+/**
+ * The reminders page, in order: what needs the owner now, then written
+ * reminders overdue, due today, due later and undated, each list in the
+ * api's order. Days are the reader's, in `zone`. While the zone is unknown
+ * (the server's render) dated reminders share one group, so the server and
+ * the first browser render agree. Empty groups are left out.
+ */
+export function groupReminders(
+  notes: Reminder[],
+  derived: DerivedReminder[],
+  attention: AttentionItem[],
+  zone: string | null,
+  now = new Date()
+): { needed: Needed[]; groups: ReminderGroup[] } {
+  const dated = notes.filter((note) => note.due_at !== null)
+  const undated = notes.filter((note) => note.due_at === null)
+  const due = (note: Reminder) => Date.parse(note.due_at ?? "")
+  const today = zone ? dayOf(now, zone) : 0
+  const groups: ReminderGroup[] = zone
+    ? [
+        {
+          id: "overdue",
+          title: "Overdue",
+          notes: dated.filter((note) => due(note) <= now.getTime()),
+        },
+        {
+          id: "today",
+          title: "Today",
+          notes: dated.filter(
+            (note) =>
+              due(note) > now.getTime() &&
+              dayOf(new Date(due(note)), zone) === today
+          ),
+        },
+        {
+          id: "upcoming",
+          title: "Upcoming",
+          notes: dated.filter(
+            (note) => dayOf(new Date(due(note)), zone) > today
+          ),
+        },
+      ]
+    : [{ id: "dated", title: "Scheduled", notes: dated }]
+  groups.push({ id: "undated", title: "No date", notes: undated })
+  return {
+    needed: derived.map((each) => neededOf(each, attention, zone, now)),
+    groups: groups.filter((group) => group.notes.length > 0),
+  }
+}

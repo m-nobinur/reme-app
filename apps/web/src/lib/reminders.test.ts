@@ -1,6 +1,7 @@
-import type { Reminder } from "@workspace/contracts"
+import type { DerivedReminder, Reminder } from "@workspace/contracts"
 import { expect, it } from "vitest"
-import { noteOf, upcomingNotes } from "./reminders"
+import type { AttentionItem } from "./api/types"
+import { groupReminders, noteOf, upcomingNotes } from "./reminders"
 
 const note = (over: Partial<Reminder> = {}): Reminder => ({
   id: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
@@ -57,4 +58,127 @@ it("lists only reminders still ahead, undated ones after, in the api's order", (
 it("names the Chief of Staff only on its own reminders", () => {
   expect(noteOf(note({ source: "assistant" }), null).byAssistant).toBe(true)
   expect(noteOf(note(), null).byAssistant).toBe(false)
+})
+
+it("marks a reminder overdue once its time has passed, never also soon", () => {
+  const past = noteOf(
+    note({ due_at: "2026-06-30T11:00:00.000Z" }),
+    "Europe/London",
+    NOW
+  )
+  expect(past).toMatchObject({ overdue: true, soon: false })
+  expect(noteOf(note(), "Europe/London", NOW).overdue).toBe(false)
+  expect(
+    noteOf(note({ due_at: "2026-06-30T11:00:00.000Z" }), null, NOW).overdue
+  ).toBe(false)
+})
+
+const ids = (value: ReturnType<typeof groupReminders>) =>
+  value.groups.map((group) => [group.id, group.notes.map((each) => each.id)])
+
+it("groups written reminders by the reader's calendar, around midnight", () => {
+  // Noon UTC is 10 pm in Sydney: 13:59 UTC is still today there, 14:00 is
+  // tomorrow, and 11:00 UTC has passed.
+  const notes = [
+    note({ id: "past", due_at: "2026-06-30T11:00:00.000Z" }),
+    note({ id: "tonight", due_at: "2026-06-30T13:59:00.000Z" }),
+    note({ id: "midnight", due_at: "2026-06-30T14:00:00.000Z" }),
+    note({ id: "undated", due_at: null }),
+  ]
+  expect(ids(groupReminders(notes, [], [], "Australia/Sydney", NOW))).toEqual([
+    ["overdue", ["past"]],
+    ["today", ["tonight"]],
+    ["upcoming", ["midnight"]],
+    ["undated", ["undated"]],
+  ])
+  // In London the same instants all fall on the same day, 30 June.
+  expect(ids(groupReminders(notes, [], [], "Europe/London", NOW))).toEqual([
+    ["overdue", ["past"]],
+    ["today", ["tonight", "midnight"]],
+    ["undated", ["undated"]],
+  ])
+})
+
+it("keeps dated reminders in one group until the zone is known", () => {
+  const notes = [
+    note({ id: "past", due_at: "2026-06-30T11:00:00.000Z" }),
+    note({ id: "later" }),
+    note({ id: "undated", due_at: null }),
+  ]
+  expect(ids(groupReminders(notes, [], [], null, NOW))).toEqual([
+    ["dated", ["past", "later"]],
+    ["undated", ["undated"]],
+  ])
+})
+
+it("has no groups at all with nothing to show", () => {
+  expect(groupReminders([], [], [], "Europe/London", NOW)).toEqual({
+    needed: [],
+    groups: [],
+  })
+})
+
+const APPROVAL = "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90"
+const REQUEST = "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001"
+const BUILD = "6f708192-a3b4-4f10-9132-6d7e8f900112"
+
+it("words each rule and points it where it is acted on", () => {
+  const derived: DerivedReminder[] = [
+    {
+      rule: "approval_expiring",
+      approval_id: APPROVAL,
+      version: 4,
+      expires_at: "2026-06-30T15:30:00.000Z",
+    },
+    { rule: "question_waiting", request_id: REQUEST },
+    { rule: "preview_unpublished", assignment_id: BUILD, version: 5 },
+    { rule: "facts_missing", keys: ["business.phone"] },
+  ]
+  const attention = [
+    {
+      kind: "question",
+      id: REQUEST,
+      raisedBy: "The Developer",
+      title: "Weekday hours",
+    },
+  ] as unknown as AttentionItem[]
+  const { needed } = groupReminders(
+    [],
+    derived,
+    attention,
+    "Europe/London",
+    NOW
+  )
+  expect(needed).toEqual([
+    {
+      key: `approval-${APPROVAL}`,
+      title: "Version 4 is waiting for your review",
+      detail: "Closes today, 4:30 pm.",
+      action: { label: "Review version 4", focus: `approval-${APPROVAL}` },
+    },
+    {
+      key: `question-${REQUEST}`,
+      title: "The Developer asked about weekday hours",
+      detail: "Open for more than 12 hours.",
+      action: { label: "Answer in the panel", focus: `question-${REQUEST}` },
+    },
+    {
+      key: `build-${BUILD}`,
+      title: "Version 5 is ready but not published",
+      detail: "Its preview has been ready for more than 12 hours.",
+      action: { label: "Open in the panel", focus: `build-${BUILD}` },
+    },
+    {
+      key: "facts",
+      title: "Reme still needs your phone number",
+      detail: "Your website is built from these. Tell Reme in a chat.",
+      action: { label: "Tell Reme", chat: true },
+    },
+  ])
+  // No time before the zone is known, and a question the panel lacks.
+  const bare = groupReminders([], derived.slice(0, 2), [], null, NOW).needed
+  expect(bare.map((each) => [each.title, each.detail])).toEqual([
+    ["Version 4 is waiting for your review", "Closes within a day."],
+    ["A question is waiting for your answer", "Open for more than 12 hours."],
+  ])
 })

@@ -132,9 +132,10 @@ type Note = {
   title: string
   due: string | null
   soon?: boolean
+  overdue?: boolean
   byAssistant: boolean
 }
-const NOTES: Record<"owner" | "assistant" | "undated", Note> = {
+const NOTES: Record<"owner" | "assistant" | "undated" | "overdue", Note> = {
   owner: {
     title: "Call the supplier about eco sprays",
     due: "Today, 2:00 pm",
@@ -149,6 +150,12 @@ const NOTES: Record<"owner" | "assistant" | "undated", Note> = {
   undated: {
     title: "Order more microfibre cloths",
     due: null,
+    byAssistant: false,
+  },
+  overdue: {
+    title: "Restock the van with mop heads",
+    due: "Mon 28 Sep, 9:00 am",
+    overdue: true,
     byAssistant: false,
   },
 }
@@ -410,6 +417,7 @@ const panelCatalog: Entry[] = [
     render: () => reminderNote(NOTES.assistant),
   },
   { name: "ReminderNote undated", render: () => reminderNote(NOTES.undated) },
+  { name: "ReminderNote overdue", render: () => reminderNote(NOTES.overdue) },
   {
     name: "ReminderNote pending",
     render: () => reminderNote(NOTES.owner, { pending: true }),

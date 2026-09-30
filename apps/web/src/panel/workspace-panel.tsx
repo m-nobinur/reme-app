@@ -203,7 +203,7 @@ function usePreview(
  * before its links expire. Loading from the first render when a site is
  * live, so the skeleton holds the space from the server's HTML on.
  */
-function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
+export function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
   const [thumbnail, setThumbnail] = useState<Thumbnail>(live ? "loading" : null)
   const [follower] = useState(() =>
     followThumbnail({
@@ -288,8 +288,23 @@ function Website({
   live: number | null
   thumbnail: Thumbnail
 }) {
+  return (
+    <YourWebsite
+      host={host}
+      live={live}
+      onRequestChanges={useRequestChanges()}
+      thumbnail={thumbnail}
+    />
+  )
+}
+
+/**
+ * Request changes, wherever it is pressed: the composer on screen takes
+ * website change mode, or a new chat opens with it from any other page.
+ */
+export function useRequestChanges() {
   const router = useRouter()
-  const requestChanges = () => {
+  return () => {
     const compose = { mode: "site_change" as const, key: crypto.randomUUID() }
     const inChat = router.state.matches.some(
       (match) => match.routeId === "/app/_conversation"
@@ -300,15 +315,11 @@ function Website({
         : { to: "/app", state: { chat: crypto.randomUUID(), compose } }
     )
   }
-  return (
-    <YourWebsite
-      host={host}
-      live={live}
-      onRequestChanges={requestChanges}
-      thumbnail={thumbnail}
-    />
-  )
 }
+
+/** The build the panel shows as being worked on, which its anchor marks. */
+export const currentBuild = (builds: BuildSummary[]) =>
+  builds.find((build) => build.state !== "queued") ?? builds.at(-1)
 
 /** The first steps an empty workspace still needs, from its own rows. */
 const firstSteps = (workspace: Workspace) => [
@@ -417,12 +428,12 @@ function FirstStep({ workspace }: { workspace: Workspace }) {
  * ones the browser would then replace.
  */
 const noSubscription = () => () => undefined
-function useBrowserZone(): string | null {
+export function useBrowserZone(): string | null {
   return useSyncExternalStore(noSubscription, browserZone, () => null)
 }
 
 /** A written reminder with its own Done, shown done while the write runs. */
-function Completable({
+export function Completable({
   note,
   zone,
   refresh,
@@ -531,8 +542,7 @@ export function WorkspacePanel() {
       ? tab
       : "activity"
 
-  const current =
-    builds.find((build) => build.state !== "queued") ?? builds.at(-1)
+  const current = currentBuild(builds)
   const queued = builds
     .filter((build) => build !== current && build.state === "queued")
     .map((build) => build.goal)
