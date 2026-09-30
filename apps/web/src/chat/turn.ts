@@ -3,9 +3,11 @@ import {
   type ChatRequest,
   type ChatResult,
   ErrorEnvelope,
+  ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { factText } from "@workspace/ui/lib/facts"
+import { quoteSummary } from "@workspace/ui/lib/quote-form"
 import { choiceText, SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
@@ -80,7 +82,8 @@ export function chatTurn(
 
 /**
  * What the owner resolved in the last step: an answer to an onboarding card
- * (`ask_fact`, `ask_choice`, `ask_upload`), and a yes or no on any call. A call the server ran itself, such as a read, is
+ * (`ask_fact`, `ask_choice`, `ask_upload`, `review_quote_form`), and a yes
+ * or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
  */
 function ownerResults(last: ChatMessage | undefined): ChatResult[] {
@@ -95,7 +98,8 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
     if (
       (part.type === "tool-ask_fact" ||
         part.type === "tool-ask_choice" ||
-        part.type === "tool-ask_upload") &&
+        part.type === "tool-ask_upload" ||
+        part.type === "tool-review_quote_form") &&
       part.state === "output-available"
     ) {
       return [
@@ -166,6 +170,42 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
 }
 
 /**
+ * A typed message while a proposed quote form waits is the owner's change to
+ * it: the call it answers, as `{ answer: "changes", text }`, so the words
+ * resolve the card rather than cancel it and the assistant reads them as
+ * what to change. Null when no form waits, when the message carries a mode
+ * of its own (a website change is not about the form), or when the words
+ * do not fit an answer; such a message goes out as itself and overtakes the
+ * card, as any typed message does.
+ */
+export function quoteChanges(
+  messages: ChatMessage[],
+  text: string,
+  intent?: ChatRequest["intent"]
+): {
+  tool: "review_quote_form"
+  toolCallId: string
+  output: ReviewQuoteFormOutput
+} | null {
+  const last = messages.at(-1)
+  if (intent || last?.role !== "assistant") return null
+  const waiting = last.parts.find(
+    (part) =>
+      part.type === "tool-review_quote_form" && part.state === "input-available"
+  )
+  const output = ReviewQuoteFormOutput.safeParse({
+    answer: "changes",
+    text: text.trim(),
+  })
+  if (!waiting || !isToolUIPart(waiting) || !output.success) return null
+  return {
+    tool: "review_quote_form",
+    toolCallId: waiting.toolCallId,
+    output: output.data,
+  }
+}
+
+/**
  * Sends once the owner has decided every call in the last step that waits
  * on them, all in one turn. A step whose calls the server finished itself,
  * such as a read at the step limit, sends nothing, and neither does an
@@ -181,7 +221,12 @@ export const sendsOn = ({ messages }: { messages: ChatMessage[] }) => {
   )
 }
 
-const CARDS = ["tool-ask_fact", "tool-ask_choice", "tool-ask_upload"]
+const CARDS = [
+  "tool-ask_fact",
+  "tool-ask_choice",
+  "tool-ask_upload",
+  "tool-review_quote_form",
+]
 
 /** Skipping a card, in the words of the card's own button. */
 export const SKIPPED = "Skip for now"
@@ -205,6 +250,11 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
     return more.length === 0 && only
       ? `Uploaded ${only.name}`
       : `Uploaded ${part.output.assets.length} photos`
+  }
+  if (part.type === "tool-review_quote_form") {
+    return part.output.answer === "confirmed"
+      ? quoteSummary(part.output.fields)
+      : part.output.text
   }
   return null
 }
@@ -248,10 +298,15 @@ export function replyTo(
     return null
   }
   const text = step.flatMap((part) => replyText(part) ?? []).join("\n")
+  // Changes to a proposed quote form are words the owner typed.
+  const typed =
+    answered.type === "tool-review_quote_form" &&
+    answered.state === "output-available" &&
+    answered.output.answer === "changes"
   return {
     role: "user",
     parts: [{ type: "text", text }],
-    metadata: { reply: true },
+    metadata: typed ? { reply: true, typed: true } : { reply: true },
   }
 }
 

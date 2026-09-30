@@ -622,6 +622,116 @@ const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
   },
 ]
 
+/** A question a chauffeur firm's quote form might ask. */
+const quoteField = (
+  key: string,
+  label: string,
+  type: string,
+  extra: { required?: boolean; hint?: string; options?: string[] } = {}
+) => ({
+  key,
+  label,
+  type,
+  required: extra.required ?? true,
+  hint: extra.hint ?? null,
+  options: extra.options ?? null,
+})
+
+const LIMOUSINE_QUESTIONS = [
+  quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
+  quoteField("dropoff", "Drop-off address", "text"),
+  quoteField("journey_date", "Date of the journey", "date"),
+  quoteField("passengers", "Passengers", "number"),
+  quoteField("occasion", "Occasion", "select", {
+    required: false,
+    options: ["Wedding", "Airport transfer", "Night out", "Business"],
+  }),
+  quoteField("notes", "Anything else", "textarea", { required: false }),
+]
+
+/** A `review_quote_form` call in one of its states. */
+const reviewQuote = (
+  label: string,
+  fields: ReturnType<typeof quoteField>[],
+  extra: { result?: unknown; isError?: boolean; note?: string | null } = {}
+) => ({
+  args: {
+    fields,
+    note:
+      extra.note === undefined
+        ? "To quote a ride you need the route, the date and how many are travelling."
+        : extra.note,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `quote_${label}`,
+  toolName: "review_quote_form",
+  type: "tool-call" as const,
+})
+
+const PROPOSED =
+  "Here is what I would ask someone who wants a quote. Change anything that does not fit."
+
+const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    PROPOSED,
+    reviewQuote("confirmed", LIMOUSINE_QUESTIONS, {
+      result: {
+        answer: "confirmed",
+        fields: LIMOUSINE_QUESTIONS.slice(0, 4),
+      },
+    }),
+    "Your quote form asks 4 questions: Pick-up address, Drop-off address, Date of the journey, Passengers."
+  ),
+  ...answeredStep(
+    PROPOSED,
+    reviewQuote("changes", LIMOUSINE_QUESTIONS, {
+      result: {
+        answer: "changes",
+        text: "Ask about luggage too, and drop the occasion.",
+      },
+    }),
+    "Ask about luggage too, and drop the occasion."
+  ),
+  {
+    content: [
+      reviewQuote("cancelled", LIMOUSINE_QUESTIONS, {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      reviewQuote("error", LIMOUSINE_QUESTIONS, {
+        isError: true,
+        result: { error: BROKEN },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [question(PROPOSED), reviewQuote("open", LIMOUSINE_QUESTIONS)],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Two questions is the least a quote form can ask."),
+      reviewQuote(
+        "minimum",
+        [
+          quoteField("rooms", "How many rooms", "number"),
+          quoteField("access", "How we get in", "textarea", {
+            required: false,
+            hint: "A key safe, a neighbour or someone at home",
+          }),
+        ],
+        { note: null }
+      ),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
 /** Stands in for the web's upload: a moment's wait, then the one photo stored. */
 const fakeUpload = async (files: File[]) => {
   await new Promise((resolve) => setTimeout(resolve, 600))
@@ -1366,7 +1476,7 @@ const assistantCatalog = [
   {
     name: "AskChoice",
     render: () => (
-      <FixtureThread height="h-[140rem]" messages={ASK_CHOICE_STATES} />
+      <FixtureThread height="h-[150rem]" messages={ASK_CHOICE_STATES} />
     ),
   },
   {
@@ -1382,6 +1492,12 @@ const assistantCatalog = [
           </section>
         ))}
       </div>
+    ),
+  },
+  {
+    name: "ReviewQuoteForm",
+    render: () => (
+      <FixtureThread height="h-[150rem]" messages={REVIEW_QUOTE_STATES} />
     ),
   },
   // The upload card and the provider that gives it the app's upload.

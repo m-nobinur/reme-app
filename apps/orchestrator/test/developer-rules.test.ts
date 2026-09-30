@@ -166,6 +166,19 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).not.toContain("Book a clean")
   })
 
+  it("keeps the Developer off the owner's quote questions and on the quote page's copy", () => {
+    for (const revising of [false, true]) {
+      const rules = text(revising)
+      expect(rules).toContain(
+        "src/quote-form.json is the quote form's questions exactly as the owner approved them"
+      )
+      expect(rules).toContain("never edit it")
+      expect(rules).toContain(
+        "Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts"
+      )
+    }
+  })
+
   it("turns presets into values: the template, the palette's brand colour, the font stack, the pages and the voice", () => {
     const rules = ownerChoices([
       fact("site.template", { id: "modern" }),

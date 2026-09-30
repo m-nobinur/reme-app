@@ -1,5 +1,6 @@
 ---
-import { quoteForm, site } from "../../site-config"
+import { type QuoteField, quoteFields } from "../../quote-form"
+import { site } from "../../site-config"
 
 // A request goes to site.quoteFormAction once the platform has an endpoint
 // for it; that is where the endpoint plugs in. Until then it goes by email:
@@ -15,35 +16,64 @@ const action =
 
 /** Longest answer per input type; date and number take no maxlength. */
 const MAX: Record<string, number> = { text: 200, email: 254, tel: 40 }
+/** The browser's autofill token, where the type alone says what it is. */
+const AUTOCOMPLETE: Record<string, string> = { email: "email", tel: "tel" }
 
-const groups = quoteForm
-  .map((group) => ({
-    legend: site[group.legend],
-    fields: group.fields
-      .filter((field) => site[field.label])
-      .map((field) => {
-        const options = (field.options ?? [])
-          .map((key) => site[key])
-          .filter(Boolean)
-        return {
-          ...field,
-          id: `quote-${field.name}`,
-          label: site[field.label],
-          hint: field.hint ? site[field.hint] : "",
-          options,
-          // A list with nothing in it is a question the visitor answers in words.
-          type:
-            field.type === "select" && options.length === 0
-              ? "text"
-              : field.type,
-        }
-      }),
-  }))
-  .filter((group) => group.fields.length > 0)
+type Control = {
+  id: string
+  name: string
+  type: QuoteField["type"]
+  label: string
+  required: boolean
+  hint: string
+  options: string[]
+  autocomplete: string | undefined
+}
+
+// The contact details every request needs, in the site's words.
+const person = (
+  name: string,
+  type: QuoteField["type"],
+  label: string,
+  required: boolean
+) => ({
+  id: `quote-${name}`,
+  name,
+  type,
+  label,
+  required,
+  hint: "",
+  options: [],
+  autocomplete: AUTOCOMPLETE[type] ?? name,
+})
+const contact: Control[] = [
+  person("name", "text", site.quoteNameLabel, true),
+  person("email", "email", site.quoteEmailLabel, true),
+  person("phone", "tel", site.quotePhoneLabel, false),
+].filter((field) => field.label)
+
+// The owner's questions from src/quote-form.json, exactly as approved. Their
+// ids carry a prefix of their own, so a question keyed `email` never shares
+// an id with the contact field above.
+const questions: Control[] = quoteFields.map((field) => ({
+  id: `quote-q-${field.key}`,
+  name: field.key,
+  type: field.type,
+  label: field.label,
+  required: field.required,
+  hint: field.hint ?? "",
+  options: field.options ?? [],
+  autocomplete: AUTOCOMPLETE[field.type],
+}))
+
+const groups = [
+  { legend: site.quoteContactLegend, fields: contact },
+  { legend: site.quoteRequestLegend, fields: questions },
+].filter((group) => group.fields.length > 0)
 ---
 
 {
-  action && groups.length > 0 && (
+  action && (
     <form
       class="quote-form"
       action={action}

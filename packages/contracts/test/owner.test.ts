@@ -80,6 +80,26 @@ const facts = {
   "site.palette": { id: "ocean" },
   "site.font": { id: "custom", custom: "Something like a newspaper headline" },
   "site.pages": { ids: ["home", "services", "quote"] },
+  "quote.form": {
+    fields: [
+      {
+        key: "pickup",
+        label: "Pick-up address",
+        type: "text",
+        required: true,
+        hint: null,
+        options: null,
+      },
+      {
+        key: "passengers",
+        label: "Number of passengers",
+        type: "number",
+        required: true,
+        hint: null,
+        options: null,
+      },
+    ],
+  },
   "media.uploads": {
     items: [
       {
@@ -369,6 +389,7 @@ describe("the bridge's building blocks", () => {
       "site.font",
       "site.pages",
       "media.uploads",
+      "quote.form",
     ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })

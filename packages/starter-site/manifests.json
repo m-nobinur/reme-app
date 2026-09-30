@@ -142,12 +142,11 @@
   {
     "component": "QuoteForm",
     "path": "src/components/QuoteForm/QuoteForm.astro",
-    "summary": "The quote request form, its fields read from quoteForm in the site config.",
+    "summary": "The quote request form, the visitor's contact details and then the owner's own questions.",
     "props": [],
     "constraints": [
-      "Reads quoteForm and the site strings it names; tailor the request by editing quoteForm, never this file. Each field is name, type (text, email, tel, date, number, select or textarea), label, required, and optionally hint, options and autocomplete. label, hint and every option are keys of site, each with a composed field.",
-      "Keep name, email and a details textarea. Ask what the business needs to price the job, e.g. pickup, drop-off, date and passengers for a chauffeur firm, or the kind of matter for a law firm.",
-      "A select's options are usually service1Name to service3Name; a select with no options set renders as a text input.",
+      "Asks for name, email and phone, labelled by quoteNameLabel, quoteEmailLabel and quotePhoneLabel, then the questions in src/quote-form.json under quoteRequestLegend.",
+      "src/quote-form.json is the list the owner approved. The platform writes it; never edit it or this file to change the questions.",
       "Sends to quoteFormAction when set, else by email to site.email; renders nothing with neither. Leave quoteFormAction empty until the platform gives an endpoint.",
       "On the quote page, after its Hero."
     ],

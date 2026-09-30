@@ -48,7 +48,12 @@ import {
 import { repoMap } from "../repo-map.ts"
 import { placePhotos, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
-import { SEED_DIGEST, STARTER_FILES } from "../seed.ts"
+import {
+  QUOTE_FORM_FILE,
+  quoteFormFile,
+  SEED_DIGEST,
+  seedFiles,
+} from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost } from "../state.ts"
 
@@ -62,14 +67,6 @@ import { assignmentCost } from "../state.ts"
 
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
 const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
-
-/**
- * The map in the stable segment, built once from the bundled starter so it
- * cannot drift from the files the sandbox is seeded with. A restored site
- * (`site.revise`) carries its own map in the brief, built from the container
- * by the Workflow before the first turn.
- */
-const STARTER_MAP = repoMap(STARTER_FILES)
 
 // The transport, once per isolate; a missing key fails here, before a model.
 registerProviders(env)
@@ -302,7 +299,10 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     facts || "- (none)",
     "",
     "Site map (every file, in path order):",
-    brief.map ?? STARTER_MAP,
+    // The seed's own map, built from the files the sandbox is seeded with so
+    // it cannot drift from them. A restored site (`site.revise`) carries its
+    // own map in the brief, built from the container by the Workflow.
+    brief.map ?? repoMap(seedFiles(brief.snapshot.facts)),
     "",
     "Components (name, file, props, never):",
     SEED_DIGEST,
@@ -409,9 +409,17 @@ export function Developer({ id }: AgentProps) {
       )
       if (restore.exitCode !== 0)
         throw new Error(`restore failed: ${restore.stderr}`)
+      // The owner's quote questions as the facts hold them now: a newer
+      // `quote.form` replaces the restored file, the same one keeps it.
+      await sandbox.writeFile(
+        `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
+        quoteFormFile(brief.snapshot.facts)
+      )
       await photos(sandbox)
     } else {
-      for (const [relative, content] of Object.entries(STARTER_FILES)) {
+      for (const [relative, content] of Object.entries(
+        seedFiles(brief.snapshot.facts)
+      )) {
         await sandbox.writeFile(`${SITE_ROOT}/${relative}`, content)
       }
       // Before the first commit, so the photos are part of the starter.
@@ -527,6 +535,12 @@ const reportComplete = (current: Session) =>
       const run = (command: string) =>
         sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
 
+      // The quote questions are the owner's, never the Developer's: the
+      // build renders the facts' list whatever happened to the file.
+      await sandbox.writeFile(
+        `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
+        quoteFormFile(current.brief.snapshot.facts)
+      )
       const check = await step.do("astro check", async () => {
         const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
         return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }

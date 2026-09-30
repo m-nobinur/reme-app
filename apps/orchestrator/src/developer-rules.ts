@@ -56,6 +56,7 @@ export function siteRules(
         ]
       : []),
     '- The site never shows a price, a rate, a fee or a pricing tier, even when a fact below holds one. Every call to action asks the visitor for a quote request: label it "Request a quote" and link it to /quote/.',
+    "- src/quote-form.json is the quote form's questions exactly as the owner approved them, the quote.form fact below when there is one. The platform writes it and writes it again before every build, so never edit it, and never add questions anywhere else. Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts: what this business quotes for and what a visitor tells it to get one, in the site's voice.",
     `- Every phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
     "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
     ...COPY_RULES,

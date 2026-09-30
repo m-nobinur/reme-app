@@ -1,4 +1,9 @@
-import { ComponentManifest, SiteFields } from "@workspace/contracts"
+import {
+  ComponentManifest,
+  type FactRecord,
+  FactValue,
+  SiteFields,
+} from "@workspace/contracts"
 import manifests from "@workspace/starter-site/manifests.json"
 import { fields } from "@workspace/starter-site/site-config"
 import { manifestDigest } from "./repo-map.ts"
@@ -33,6 +38,32 @@ export const STARTER_FILES: Record<string, string> = Object.fromEntries(
     content,
   ])
 )
+
+/** The quote form's questions in a site, which the Developer never edits. */
+export const QUOTE_FORM_FILE = "src/quote-form.json"
+
+/**
+ * `src/quote-form.json` for these facts: the questions the owner approved as
+ * `quote.form`, or the starter's own set when they approved none. Written by
+ * the platform at the seed, after a restore and before every build, so the
+ * site asks exactly what the owner confirmed with no model in between. A
+ * stored value the contract no longer takes counts as none.
+ */
+export function quoteFormFile(facts: readonly FactRecord[]): string {
+  const held = facts.find((fact) => fact.key === "quote.form")
+  const parsed =
+    held && FactValue.safeParse({ key: "quote.form", value: held.value })
+  if (!parsed?.success) return STARTER_FILES[QUOTE_FORM_FILE] as string
+  return `${JSON.stringify(parsed.data.value, null, 2)}\n`
+}
+
+/** The seed for one org: the starter, with the owner's quote questions. */
+export const seedFiles = (
+  facts: readonly FactRecord[]
+): Record<string, string> => ({
+  ...STARTER_FILES,
+  [QUOTE_FORM_FILE]: quoteFormFile(facts),
+})
 
 /** The starter's fields, which say what a build asks for. Parsed here so a config the contract refuses fails the Worker at load. */
 export const SEED_FIELDS = SiteFields.parse(fields)

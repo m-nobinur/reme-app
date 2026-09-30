@@ -255,6 +255,28 @@ export interface components {
                   }[]
                 }
               }
+            | {
+                /** @constant */
+                key: "quote.form"
+                value: {
+                  fields: {
+                    key: string
+                    label: string
+                    /** @enum {string} */
+                    type:
+                      | "text"
+                      | "textarea"
+                      | "number"
+                      | "date"
+                      | "select"
+                      | "tel"
+                      | "email"
+                    required: boolean
+                    hint: string | null
+                    options: string[] | null
+                  }[]
+                }
+              }
           )
         | string
     }
@@ -669,6 +691,29 @@ export interface components {
             }[]
           } | null
         }
+      | {
+          /** @constant */
+          key: "quote.form"
+          skippable: boolean
+          prefill: {
+            fields: {
+              key: string
+              label: string
+              /** @enum {string} */
+              type:
+                | "text"
+                | "textarea"
+                | "number"
+                | "date"
+                | "select"
+                | "tel"
+                | "email"
+              required: boolean
+              hint: string | null
+              options: string[] | null
+            }[]
+          } | null
+        }
     AskFactOutput:
       | {
           /** @constant */
@@ -885,6 +930,28 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                  }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "quote.form"
+                value: {
+                  fields: {
+                    key: string
+                    label: string
+                    /** @enum {string} */
+                    type:
+                      | "text"
+                      | "textarea"
+                      | "number"
+                      | "date"
+                      | "select"
+                      | "tel"
+                      | "email"
+                    required: boolean
+                    hint: string | null
+                    options: string[] | null
                   }[]
                 }
               }
@@ -1377,6 +1444,28 @@ export interface components {
                                     }[]
                                   }
                                 }
+                              | {
+                                  /** @constant */
+                                  key: "quote.form"
+                                  value: {
+                                    fields: {
+                                      key: string
+                                      label: string
+                                      /** @enum {string} */
+                                      type:
+                                        | "text"
+                                        | "textarea"
+                                        | "number"
+                                        | "date"
+                                        | "select"
+                                        | "tel"
+                                        | "email"
+                                      required: boolean
+                                      hint: string | null
+                                      options: string[] | null
+                                    }[]
+                                  }
+                                }
                           }
                         | {
                             /** @constant */
@@ -1415,6 +1504,33 @@ export interface components {
                         | {
                             /** @constant */
                             answer: "skipped"
+                          }
+                      )
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "confirmed"
+                            fields: {
+                              key: string
+                              label: string
+                              /** @enum {string} */
+                              type:
+                                | "text"
+                                | "textarea"
+                                | "number"
+                                | "date"
+                                | "select"
+                                | "tel"
+                                | "email"
+                              required: boolean
+                              hint: string | null
+                              options: string[] | null
+                            }[]
+                          }
+                        | {
+                            /** @constant */
+                            answer: "changes"
+                            text: string
                           }
                       )
                 }
@@ -1790,6 +1906,28 @@ export interface components {
               }[]
             }
           }
+        | {
+            /** @constant */
+            key: "quote.form"
+            value: {
+              fields: {
+                key: string
+                label: string
+                /** @enum {string} */
+                type:
+                  | "text"
+                  | "textarea"
+                  | "number"
+                  | "date"
+                  | "select"
+                  | "tel"
+                  | "email"
+                required: boolean
+                hint: string | null
+                options: string[] | null
+              }[]
+            }
+          }
       )[]
     }
     CosFeedback: {
@@ -1916,6 +2054,7 @@ export interface components {
               | "site.font"
               | "site.pages"
               | "media.uploads"
+              | "quote.form"
             )[]
           }
         }
@@ -2137,6 +2276,28 @@ export interface components {
                       content_type: "image/jpeg" | "image/png" | "image/webp"
                       bytes: number
                       alt?: string
+                    }[]
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "quote.form"
+                  value: {
+                    fields: {
+                      key: string
+                      label: string
+                      /** @enum {string} */
+                      type:
+                        | "text"
+                        | "textarea"
+                        | "number"
+                        | "date"
+                        | "select"
+                        | "tel"
+                        | "email"
+                      required: boolean
+                      hint: string | null
+                      options: string[] | null
                     }[]
                   }
                 }
@@ -2465,6 +2626,7 @@ export interface components {
         | "site.font"
         | "site.pages"
         | "media.uploads"
+        | "quote.form"
       )[]
     }
     CreateOrgRequest: {
@@ -2572,6 +2734,7 @@ export interface components {
             | "site.font"
             | "site.pages"
             | "media.uploads"
+            | "quote.form"
           )[]
         }
     ErrorEnvelope: {
@@ -2912,6 +3075,28 @@ export interface components {
             }[]
           }
         }
+      | {
+          /** @constant */
+          key: "quote.form"
+          value: {
+            fields: {
+              key: string
+              label: string
+              /** @enum {string} */
+              type:
+                | "text"
+                | "textarea"
+                | "number"
+                | "date"
+                | "select"
+                | "tel"
+                | "email"
+              required: boolean
+              hint: string | null
+              options: string[] | null
+            }[]
+          }
+        }
     FailureReport: {
       failure_id: string
       /** Format: uuid */
@@ -3070,6 +3255,15 @@ export interface components {
         [key: string]: number
       }
     }
+    QuoteField: {
+      key: string
+      label: string
+      /** @enum {string} */
+      type: "text" | "textarea" | "number" | "date" | "select" | "tel" | "email"
+      required: boolean
+      hint: string | null
+      options: string[] | null
+    }
     Reminder: {
       /** Format: uuid */
       id: string
@@ -3143,6 +3337,51 @@ export interface components {
             code: string
             message: string
           }
+        }
+    ReviewQuoteFormInput: {
+      fields: {
+        key: string
+        label: string
+        /** @enum {string} */
+        type:
+          | "text"
+          | "textarea"
+          | "number"
+          | "date"
+          | "select"
+          | "tel"
+          | "email"
+        required: boolean
+        hint: string | null
+        options: string[] | null
+      }[]
+      note: string | null
+    }
+    ReviewQuoteFormOutput:
+      | {
+          /** @constant */
+          answer: "confirmed"
+          fields: {
+            key: string
+            label: string
+            /** @enum {string} */
+            type:
+              | "text"
+              | "textarea"
+              | "number"
+              | "date"
+              | "select"
+              | "tel"
+              | "email"
+            required: boolean
+            hint: string | null
+            options: string[] | null
+          }[]
+        }
+      | {
+          /** @constant */
+          answer: "changes"
+          text: string
         }
     RuntimeSpec: {
       /** Format: uuid */
@@ -3413,6 +3652,28 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+              }[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "quote.form"
+            value: {
+              fields: {
+                key: string
+                label: string
+                /** @enum {string} */
+                type:
+                  | "text"
+                  | "textarea"
+                  | "number"
+                  | "date"
+                  | "select"
+                  | "tel"
+                  | "email"
+                required: boolean
+                hint: string | null
+                options: string[] | null
               }[]
             }
           }
@@ -3728,6 +3989,7 @@ export interface components {
         | "site.font"
         | "site.pages"
         | "media.uploads"
+        | "quote.form"
       )[]
       reminders: {
         notes: {
@@ -3792,6 +4054,7 @@ export interface components {
                 | "site.font"
                 | "site.pages"
                 | "media.uploads"
+                | "quote.form"
               )[]
             }
         )[]

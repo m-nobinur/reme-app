@@ -47,6 +47,11 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
+import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import {
+  QUOTE_CHANGES_PLACEHOLDER,
+  waitsOnQuoteForm,
+} from "@workspace/ui/lib/quote-form"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
@@ -224,16 +229,20 @@ export const Thread: FC<ThreadProps> = ({
     () => ({ placeholder, briefing, quickActions, mode }),
     [placeholder, briefing, quickActions, mode]
   )
+  // The composer's input, which a card can hand the owner to.
+  const input = useRef<HTMLTextAreaElement>(null)
 
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ThreadRoot
-          after={after}
-          autoFocus={autoFocus}
-          isEmpty={isEmpty}
-          stored={stored}
-        />
+        <ComposerInputContext.Provider value={input}>
+          <ThreadRoot
+            after={after}
+            autoFocus={autoFocus}
+            isEmpty={isEmpty}
+            stored={stored}
+          />
+        </ComposerInputContext.Provider>
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
@@ -447,10 +456,15 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { placeholder = "Send a message", mode } = useContext(
     ThreadSettingsContext
   )
-  const input = useRef<HTMLTextAreaElement>(null)
+  const input = useContext(ComposerInputContext)
+  // A proposed quote form waits on the owner: what they type next is their
+  // change to it, and the placeholder says so.
+  const reviewing = useAuiState((s) =>
+    waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
+  )
   useEffect(() => {
     if (mode) input.current?.focus()
-  }, [mode])
+  }, [mode, input])
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       {/* A one-pixel ring on top of the border: the composer holds focus
@@ -461,7 +475,10 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
       >
         <ComposerPrimitive.Input
           ref={input}
-          placeholder={mode?.placeholder ?? placeholder}
+          placeholder={
+            mode?.placeholder ??
+            (reviewing ? QUOTE_CHANGES_PLACEHOLDER : placeholder)
+          }
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}

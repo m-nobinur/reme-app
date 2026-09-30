@@ -20,7 +20,7 @@ import { type Browser, chromium, type Page } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
 import { type Built, build, clean } from "../test/build"
-import { FILLED } from "../test/fixture"
+import { FILLED, LIMOUSINE_FORM } from "../test/fixture"
 
 const PAGES = ["/", "/services/", "/contact/", "/quote/"]
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
@@ -75,7 +75,12 @@ function serve(dist: string): Server {
 
 beforeAll(async () => {
   for (const [name, site] of Object.entries(VARIANTS)) {
-    const built = await build({ site })
+    // The bold build asks a chauffeur firm's questions, so a select, a
+    // number and a date are scanned as well as the default text inputs.
+    const built = await build({
+      site,
+      ...(name === "bold" ? { quoteForm: LIMOUSINE_FORM } : {}),
+    })
     const server = serve(built.dist)
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
     const address = server.address()

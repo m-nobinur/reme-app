@@ -14,6 +14,8 @@ import {
   AskUploadOutput,
   ChatRequest,
   RequestChangeOutput,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
 } from "./chat.ts"
 import {
   Conversation,
@@ -43,7 +45,7 @@ import {
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
-import { Asset, UploadedAssets } from "./onboarding.ts"
+import { Asset, QuoteField, UploadedAssets } from "./onboarding.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
   ActivityFeed,
@@ -140,7 +142,10 @@ export const contracts = {
   ProgressEvent,
   Reminder,
   ReminderPatch,
+  QuoteField,
   RequestChangeOutput,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
   RuntimeSpec,
   SetFactsRequest,
   SiteFields,
