@@ -76,7 +76,7 @@ const facts = {
   "assistant.tone": { id: "friendly" },
   "owner.preferred_name": { name: "Jo" },
   "site.build_mode": { mode: "assistant" },
-  "site.template": { id: "classic" },
+  "site.template": { id: "classic", custom: "A bit more like a magazine" },
   "site.palette": { id: "ocean" },
   "site.font": { id: "custom", custom: "Something like a newspaper headline" },
   "site.pages": { ids: ["home", "services", "quote"] },

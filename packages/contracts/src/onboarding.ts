@@ -161,7 +161,7 @@ export const choiceFacts = {
   pronouns: { id: PronounId },
   tone: { id: ToneId },
   buildMode: { mode: z.enum(["assistant", "manual"]) },
-  template: { id: TemplateId },
+  template: { id: TemplateId, custom: Text(200).optional() },
   palette: { id: orCustom(PaletteId), custom: Text(200).optional() },
   font: { id: orCustom(FontId), custom: Text(200).optional() },
   pages: {

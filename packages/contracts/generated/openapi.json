@@ -595,6 +595,12 @@
                           "id": {
                             "type": "string",
                             "enum": ["classic", "modern", "bold"]
+                          },
+                          "custom": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": ["id"],
@@ -2021,6 +2027,12 @@
                       "id": {
                         "type": "string",
                         "enum": ["classic", "modern", "bold"]
+                      },
+                      "custom": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": ["id"],
@@ -2722,6 +2734,12 @@
                           "id": {
                             "type": "string",
                             "enum": ["classic", "modern", "bold"]
+                          },
+                          "custom": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": ["id"],
@@ -4317,6 +4335,12 @@
                                                         "modern",
                                                         "bold"
                                                       ]
+                                                    },
+                                                    "custom": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 200,
+                                                      "pattern": "\\S"
                                                     }
                                                   },
                                                   "required": ["id"],
@@ -5776,6 +5800,12 @@
                         "id": {
                           "type": "string",
                           "enum": ["classic", "modern", "bold"]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
                         }
                       },
                       "required": ["id"],
@@ -6854,6 +6884,12 @@
                                 "id": {
                                   "type": "string",
                                   "enum": ["classic", "modern", "bold"]
+                                },
+                                "custom": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "pattern": "\\S"
                                 }
                               },
                               "required": ["id"],
@@ -9417,6 +9453,12 @@
                   "id": {
                     "type": "string",
                     "enum": ["classic", "modern", "bold"]
+                  },
+                  "custom": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
                   }
                 },
                 "required": ["id"],
@@ -11036,6 +11078,12 @@
                         "id": {
                           "type": "string",
                           "enum": ["classic", "modern", "bold"]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
                         }
                       },
                       "required": ["id"],

@@ -190,6 +190,7 @@ export interface components {
                 value: {
                   /** @enum {string} */
                   id: "classic" | "modern" | "bold"
+                  custom?: string
                 }
               }
             | {
@@ -591,6 +592,7 @@ export interface components {
           prefill: {
             /** @enum {string} */
             id: "classic" | "modern" | "bold"
+            custom?: string
           } | null
         }
       | {
@@ -802,6 +804,7 @@ export interface components {
                 value: {
                   /** @enum {string} */
                   id: "classic" | "modern" | "bold"
+                  custom?: string
                 }
               }
             | {
@@ -1274,6 +1277,7 @@ export interface components {
                                   value: {
                                     /** @enum {string} */
                                     id: "classic" | "modern" | "bold"
+                                    custom?: string
                                   }
                                 }
                               | {
@@ -1688,6 +1692,7 @@ export interface components {
             value: {
               /** @enum {string} */
               id: "classic" | "modern" | "bold"
+              custom?: string
             }
           }
         | {
@@ -2027,6 +2032,7 @@ export interface components {
                   value: {
                     /** @enum {string} */
                     id: "classic" | "modern" | "bold"
+                    custom?: string
                   }
                 }
               | {
@@ -2799,6 +2805,7 @@ export interface components {
           value: {
             /** @enum {string} */
             id: "classic" | "modern" | "bold"
+            custom?: string
           }
         }
       | {
@@ -3293,6 +3300,7 @@ export interface components {
             value: {
               /** @enum {string} */
               id: "classic" | "modern" | "bold"
+              custom?: string
             }
           }
         | {
