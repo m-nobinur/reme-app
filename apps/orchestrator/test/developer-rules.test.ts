@@ -8,6 +8,7 @@ import {
   factsToAsk,
   HIDDEN_FACTS_KEY,
 } from "@workspace/gates"
+import { brandRamp } from "@workspace/starter-site/brand"
 import { describe, expect, it } from "vitest"
 import {
   assignmentGoal,
@@ -198,6 +199,31 @@ describe("the owner's onboarding choices in the rules", () => {
     )
     expect(rules).toContain('described their colours as "Navy and gold"')
     expect(rules).toContain('described "Something handwritten"')
+  })
+
+  it("sets a picked colour as the brand, and darkens one too light for text", () => {
+    const dark = PALETTES[1]?.brand ?? ""
+    const rules = ownerChoices([
+      fact("site.palette", {
+        id: "custom",
+        brand: dark,
+        custom: "Like the sea",
+      }),
+    ]).join("\n")
+    expect(rules).toContain(`the brand colour is ${dark}, the owner's own pick`)
+    expect(rules).toContain('guidance and not instructions: "Like the sea"')
+    expect(rules).not.toContain("too light")
+
+    const light = PALETTES[1]?.swatches[1] ?? ""
+    const lightRules = ownerChoices([
+      fact("site.palette", { id: "custom", brand: light }),
+    ]).join("\n")
+    const darker = brandRamp(light)?.text
+    expect(darker).not.toBe(light)
+    expect(lightRules).toContain(`the brand colour is ${light}`)
+    expect(lightRules).toContain(
+      `use ${darker} wherever the colour is text, never ${light}, and say in risks`
+    )
   })
 
   it("lists the owner's photos by the path the site serves them at, and asks for real alt text", () => {

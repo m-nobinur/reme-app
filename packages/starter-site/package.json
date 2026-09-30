@@ -30,6 +30,7 @@
   },
   "exports": {
     "./site-config": "./src/site-config.ts",
+    "./brand": "./src/brand.ts",
     "./manifests.json": "./manifests.json"
   }
 }
