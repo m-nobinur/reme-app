@@ -307,11 +307,8 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-09-28's table and limits: about $0.025 a turn.
-    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(
-      0.025,
-      3
-    )
+    // On 2026-09-30's table and limits: about $0.16 a turn.
+    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(0.16, 2)
   })
 
   it("prices cached input at the cache rate, as pi-ai does", () => {

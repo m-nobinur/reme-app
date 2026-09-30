@@ -8,19 +8,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.0735,
-      "output": 0.609,
-      "cacheRead": 0.045,
+      "input": 0.63,
+      "output": 2.52,
+      "cacheRead": 0.14,
       "cacheWrite": 0
     },
-    "contextWindow": 1040000,
-    "maxTokens": 384000,
+    "contextWindow": 1000000,
+    "maxTokens": 32768,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.0735,
-          "completion": 0.609
+          "prompt": 0.63,
+          "completion": 2.52
         },
         "ignore": [
           "alibaba",
@@ -101,19 +101,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.0945,
-      "output": 0.294,
-      "cacheRead": 0.015,
+      "input": 0.315,
+      "output": 1.05,
+      "cacheRead": 0.06,
       "cacheWrite": 0
     },
-    "contextWindow": 1048576,
-    "maxTokens": 128000,
+    "contextWindow": 262144,
+    "maxTokens": 65536,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.0945,
-          "completion": 0.294
+          "prompt": 0.315,
+          "completion": 1.05
         },
         "ignore": [
           "alibaba",
