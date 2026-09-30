@@ -1,5 +1,4 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import { CheckCircleIcon } from "@phosphor-icons/react"
 import type { AskableFactKey, AskFactOutput } from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
@@ -8,7 +7,6 @@ import {
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
-import { factText } from "@workspace/ui/lib/facts"
 import { askFactView } from "@workspace/ui/lib/tool-state"
 import { type FormEvent, useId, useRef, useState } from "react"
 
@@ -16,8 +14,8 @@ import { type FormEvent, useId, useRef, useState } from "react"
  * One fact onboarding asks for, answered in the transcript with the key's
  * own native inputs. The question is the web's copy for the key; the call
  * carries only the key, whether it may be skipped, and a starting value.
- * Once answered it stays as the question and what the owner said, so the
- * transcript reads the same after a reload.
+ * Once answered or skipped it shows nothing: the owner's reply after it
+ * says what they said, and the next step is a message of its own.
  */
 const AskFact: ToolCallMessagePartComponent = (props) => {
   const view = askFactView(props)
@@ -27,6 +25,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
   const formRef = useRef<HTMLFormElement>(null)
   useFocusWhenIdle(waiting, running, formRef)
   const [invalid, setInvalid] = useState<string | null>(null)
+  if (view.state === "answered" || view.state === "skipped") return null
   const question =
     view.key && askable(view.key) ? FACT_INPUTS[view.key].ask : "A question"
 
@@ -94,16 +93,6 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
             ) : null}
           </div>
         </form>
-      ) : view.state === "answered" ? (
-        <p className="flex items-center gap-2 text-sm">
-          <CheckCircleIcon
-            aria-hidden
-            className="size-4 shrink-0 text-primary"
-          />
-          <span className="min-w-0 break-words">
-            {factText(view.fact.key, view.fact.value)}
-          </span>
-        </p>
       ) : (
         <p
           className={
@@ -112,11 +101,9 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
               : "text-muted-foreground text-sm"
           }
         >
-          {view.state === "skipped"
-            ? "Skipped. You can add it later under Business."
-            : view.state === "cancelled"
-              ? "Not answered. You sent a message instead."
-              : view.message}
+          {view.state === "cancelled"
+            ? "Not answered. You sent a message instead."
+            : view.message}
         </p>
       )}
     </div>

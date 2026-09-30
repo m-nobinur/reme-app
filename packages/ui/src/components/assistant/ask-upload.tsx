@@ -1,6 +1,5 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
-  CheckCircleIcon,
   ImagesIcon,
   SpinnerGapIcon,
   UploadSimpleIcon,
@@ -29,7 +28,9 @@ import {
  * The photo step of onboarding: drop photos or choose them, see them, take
  * any back out, then upload. Nothing leaves the browser until the owner
  * presses Upload photos; the card then sends them, and answers the call with
- * what the server stored. Skip for now answers it with nothing.
+ * what the server stored. Skip for now answers it with nothing. Once
+ * answered or skipped it shows nothing: the owner's reply after it says
+ * what they sent.
  */
 
 /** Stores the photos and answers what was stored, or throws a sentence for the owner. */
@@ -76,37 +77,22 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
     }
   }, [])
 
+  if (view.state === "answered" || view.state === "skipped") return null
   if (view.state !== "pending") {
     return (
       <div className="my-3 max-w-md" data-slot="ask-upload">
-        {view.state === "answered" ? (
-          <p className="flex items-center gap-2 text-sm">
-            <CheckCircleIcon
-              aria-hidden
-              className="size-4 shrink-0 text-primary"
-            />
-            <span className="min-w-0 break-words">
-              {view.output.assets.length === 1
-                ? `Uploaded ${view.output.assets[0]?.name}`
-                : `Uploaded ${view.output.assets.length} photos`}
-            </span>
-          </p>
-        ) : (
-          <p
-            className={cn(
-              "text-sm",
-              view.state === "error"
-                ? "text-destructive"
-                : "text-muted-foreground"
-            )}
-          >
-            {view.state === "skipped"
-              ? "Skipped. You can send photos later in the chat."
-              : view.state === "cancelled"
-                ? "You replied in the chat instead."
-                : view.message}
-          </p>
-        )}
+        <p
+          className={cn(
+            "text-sm",
+            view.state === "error"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          )}
+        >
+          {view.state === "cancelled"
+            ? "You replied in the chat instead."
+            : view.message}
+        </p>
       </div>
     )
   }

@@ -296,21 +296,55 @@ const stated = (key: string, value: object) => ({
   result: { answer: "stated", fact: { key, value } },
 })
 
+const question = (text: string) => ({ text, type: "text" as const })
+
+/** The owner's reply to a card, as the app sends it once they answer. */
+const reply = (text: string): ThreadMessageLike => ({
+  content: [{ text, type: "text" }],
+  role: "user",
+})
+
+/**
+ * One step a card asked and the owner answered: the question, the card,
+ * which shows nothing once answered, and the owner's reply.
+ */
+const answeredStep = (
+  asked: string,
+  card: Exclude<ThreadMessageLike["content"], string>[number],
+  said: string
+): ThreadMessageLike[] => [
+  {
+    content: [question(asked), card],
+    role: "assistant",
+    status: DONE,
+  },
+  reply(said),
+]
+
 const ASK_FACT_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "What is your business called?",
+    askFact("business.name", stated("business.name", { name: "Brightclean" })),
+    "Brightclean"
+  ),
+  ...answeredStep(
+    "What number should customers ring?",
+    askFact(
+      "business.phone",
+      stated("business.phone", { e164: "+447700900123" })
+    ),
+    "+447700900123"
+  ),
+  ...answeredStep(
+    "How would you sum up Brightclean in one line?",
+    askFact("business.tagline", {
+      result: { answer: "skipped" },
+      skippable: true,
+    }),
+    "Skip for now"
+  ),
   {
     content: [
-      askFact(
-        "business.name",
-        stated("business.name", { name: "Brightclean" })
-      ),
-      askFact(
-        "business.phone",
-        stated("business.phone", { e164: "+447700900123" })
-      ),
-      askFact("business.tagline", {
-        result: { answer: "skipped" },
-        skippable: true,
-      }),
       askFact("hours.weekday", {
         isError: true,
         result: { error: TOOL_CALL_CANCELLED },
@@ -385,8 +419,6 @@ const chosen = (ids: string[], other: string | null = null) => ({
   result: { answer: "chosen", ids, other },
 })
 
-const question = (text: string) => ({ text, type: "text" as const })
-
 const PALETTE_OPTIONS = PALETTES.map((each) => ({
   ...each,
   visual: { kind: "swatches", colors: [...each.swatches] },
@@ -444,14 +476,26 @@ const COLOUR_STATES: [string, Parameters<typeof ChoiceForm>[0]["start"]][] = [
 ]
 
 const ASK_CHOICE_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Which pronouns should Sam use?",
+    askChoice("pronouns", PRONOUNS, chosen(["they_them"])),
+    "they/them"
+  ),
+  ...answeredStep(
+    "Which colours feel like Brightclean?",
+    askChoice("palette", PALETTE_OPTIONS, chosen([], "Navy and gold")),
+    "Navy and gold"
+  ),
+  ...answeredStep(
+    "And the type?",
+    askChoice("font", FONT_OPTIONS, {
+      result: { answer: "skipped" },
+      skippable: true,
+    }),
+    "Skip for now"
+  ),
   {
     content: [
-      askChoice("pronouns", PRONOUNS, chosen(["they_them"])),
-      askChoice("palette", PALETTE_OPTIONS, chosen([], "Navy and gold")),
-      askChoice("font", FONT_OPTIONS, {
-        result: { answer: "skipped" },
-        skippable: true,
-      }),
       askChoice("tone", TONES, {
         isError: true,
         result: { error: TOOL_CALL_CANCELLED },
@@ -531,21 +575,33 @@ const PHOTO = {
 }
 
 const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Do you have a photo of your van?",
+    askUpload("one", {
+      result: { answer: "uploaded", assets: [PHOTO] },
+    }),
+    "Uploaded kitchen.jpg"
+  ),
+  ...answeredStep(
+    "Any photos of a room after a clean?",
+    askUpload("two", {
+      result: {
+        answer: "uploaded",
+        assets: [
+          PHOTO,
+          { ...PHOTO, id: "1b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+        ],
+      },
+    }),
+    "Uploaded 2 photos"
+  ),
+  ...answeredStep(
+    "And one of your team at work?",
+    askUpload("skipped", { result: { answer: "skipped" } }),
+    "Skip for now"
+  ),
   {
     content: [
-      askUpload("one", {
-        result: { answer: "uploaded", assets: [PHOTO] },
-      }),
-      askUpload("two", {
-        result: {
-          answer: "uploaded",
-          assets: [
-            PHOTO,
-            { ...PHOTO, id: "1b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
-          ],
-        },
-      }),
-      askUpload("skipped", { result: { answer: "skipped" } }),
       askUpload("cancelled", {
         isError: true,
         result: { error: TOOL_CALL_CANCELLED },
@@ -961,17 +1017,38 @@ const RATED: ThreadMessageLike[] = [
 ]
 
 /** A new owner's onboarding, two answers in and waiting on the third. */
+/**
+ * Onboarding as the app stores it: every step a message of its own, with
+ * its own time and thumbs, and every answer the owner's reply.
+ */
 const ONBOARDING: ThreadMessageLike[] = [
   on("27T09:00:00.000", {
     content: [
+      question("Hi Sam, I'm Reme. What is your business called?"),
       askFact(
         "business.name",
         stated("business.name", { name: "Brightclean" })
       ),
+    ],
+    role: "assistant",
+    status: DONE,
+  }),
+  on("27T09:00:40.000", reply("Brightclean")),
+  on("27T09:00:41.000", {
+    content: [
+      question("Brightclean, got it. What number should customers ring?"),
       askFact(
         "business.phone",
         stated("business.phone", { e164: "+447700900123" })
       ),
+    ],
+    role: "assistant",
+    status: DONE,
+  }),
+  on("27T09:02:10.000", reply("+447700900123")),
+  on("27T09:02:11.000", {
+    content: [
+      question("Thanks. What are your hours on weekdays?"),
       askFact("hours.weekday", {}),
     ],
     role: "assistant",
