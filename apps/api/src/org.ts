@@ -263,7 +263,11 @@ export async function createOrg(
       await db.insert(conversationMessages).values({
         conversationId,
         orgId,
-        ...firstMessage(input.name, await readFacts(db), newId),
+        ...firstMessage(
+          { orgId, orgName: input.name, ownerName: input.displayName ?? "" },
+          await readFacts(db),
+          newId
+        ),
       })
       return true
     }

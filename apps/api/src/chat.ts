@@ -1,14 +1,10 @@
 import {
-  AskFactInput,
-  AskFactOutput,
   BuildSummary,
   ChatRequest,
   type ChatResult,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
-  FactValue,
-  type FactValueKey,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -80,15 +76,37 @@ import {
   titleFrom,
   withoutProviderData,
 } from "./http.ts"
+import {
+  type Answer,
+  again,
+  buildCall,
+  built,
+  cardAnswer,
+  factValue,
+  isCard,
+  ONBOARDING_GOAL,
+  type Onboarding,
+  OUTPUTS,
+  onboardingStep,
+  opening as openingParts,
+  type Progress,
+  progressOf,
+  type ScriptRow,
+  ended as scriptEnded,
+  typedAnswer,
+  applied as withAnswer,
+} from "./onboarding.ts"
 import { ownerStaffId } from "./staff.ts"
-import { missingFacts, readFacts } from "./workspace.ts"
+import { readFacts } from "./workspace.ts"
 
 /**
  * `POST /chat`: a turn, answered by the Chief of Staff (ADR-034) or by the
- * script. The script owns the onboarding conversation until its build offer
- * is approved or refused, and every results turn on a call it made: it asks
- * for each missing fact with `ask_fact`, then offers the first build with a
- * `request_change` the owner approves. Every other turn goes to the CoS,
+ * script. The script owns the onboarding conversation until it has started
+ * the first build or the owner chose to build the site themselves, and
+ * every results turn on a call it made: it asks each step of
+ * `onboarding.ts` with a question and a card (`ask_fact`, `ask_choice` or
+ * `ask_upload`), and a typed reply answers the card it overtook. Every
+ * other turn goes to the CoS,
  * whose history is the event log; when the CoS has no model, no budget, a
  * frozen conversation or a provider that fails before any content, the
  * script's step stands in for it: a change card in Act mode and one fixed
@@ -101,11 +119,7 @@ import { missingFacts, readFacts } from "./workspace.ts"
  * an approval updates that row and never appends a second one.
  */
 
-/** The facts an owner may skip. Pricing only: the rest the site needs. */
-const SKIPPABLE: readonly FactValueKey[] = ["pricing.standard_clean_hourly"]
-
-/** The first build's goal, when the owner has not typed one. */
-export const ONBOARDING_GOAL = "Build my website from the details I gave you."
+export { ONBOARDING_GOAL }
 
 /** Ask mode's one line when the Chief of Staff cannot answer: the script's, or the fallback's. */
 export const ASK_REPLY =
@@ -118,7 +132,11 @@ export const CANCELLED = TOOL_CALL_CANCELLED
 const FORMAT = "ai-sdk/v6"
 
 export type ToolPart = {
-  type: "tool-ask_fact" | "tool-request_change"
+  type:
+    | "tool-ask_fact"
+    | "tool-ask_choice"
+    | "tool-ask_upload"
+    | "tool-request_change"
   toolCallId: string
   state:
     | "input-available"
@@ -142,55 +160,20 @@ const pending = (part: ToolPart) =>
   part.state === "input-available" || part.state === "approval-requested"
 
 export type Script = {
-  kind: "onboarding" | "assistant"
-  /** The required facts the org does not hold, in asking order (`missingFacts`). */
-  missing: readonly FactValueKey[]
-  /** `orgs.name`, the business name's prefill. Read only when that is the ask. */
-  orgName: string
-  /** Keys the owner skipped in this conversation. */
-  skipped: readonly FactValueKey[]
-  /** Whether the owner approved or refused an offer in this conversation. */
-  offered: boolean
+  /** The onboarding script's state while it runs, or null once it has ended or elsewhere. */
+  onboarding: Onboarding | null
   /** A typed message, or null when a resolved call asks what comes next. */
   message: { mode: "ask" | "act"; text: string } | null
   newId: () => string
 }
 
-/** The key onboarding asks for next, if any. */
-const nextKey = (s: Pick<Script, "missing" | "skipped">) =>
-  s.missing.find((k) => !s.skipped.includes(k))
-
 /**
  * The next step's parts. Pure: the same input and ids give the same parts.
- * An Ask message never becomes a change, onboarding included.
+ * While onboarding runs, its next step; after it, an Ask message is one
+ * fixed line and an Act message a change card.
  */
 export function nextStep(s: Script): Part[] {
-  if (s.kind === "onboarding" && !s.offered) {
-    const key = nextKey(s)
-    if (key) {
-      const name = FactValue.safeParse({
-        key: "business.name",
-        value: { name: s.orgName },
-      })
-      const input = AskFactInput.parse({
-        key,
-        skippable: SKIPPABLE.includes(key),
-        prefill:
-          key === "business.name" && name.success ? name.data.value : null,
-      })
-      return [
-        {
-          type: "tool-ask_fact",
-          toolCallId: s.newId(),
-          state: "input-available",
-          input,
-        },
-      ]
-    }
-    if (s.message?.mode !== "ask") {
-      return [changeCall(s.message?.text ?? ONBOARDING_GOAL, s.newId)]
-    }
-  }
+  if (s.onboarding) return onboardingStep(s.onboarding, s.newId)
   if (!s.message) return []
   if (s.message.mode === "ask") {
     return [{ type: "text", text: ASK_REPLY, state: "done" }]
@@ -232,7 +215,8 @@ function made(part: Part): UIMessageChunk[] {
       toolCallId,
     })
   }
-  return call
+  // A call the script made already answered, such as the build it started.
+  return pending(part) ? call : [...call, ...resolved(part)]
 }
 
 /** The chunks that move a pending call to how it was resolved. */
@@ -357,56 +341,56 @@ async function readTail(db: OrgScopedDb, id: string): Promise<Tail | null> {
 }
 
 /**
- * What the script reads from an onboarding conversation: the keys the owner
- * skipped, and whether they approved or refused an offer. An offer talked
- * over by a typed message was cancelled, not made, so it does not count.
+ * What the script reads from an onboarding conversation: every card it
+ * made, how each was resolved, and the owner's typed message for a card one
+ * overtook (`progressOf` reads them). A build offer talked over by a typed
+ * message was cancelled, not made, so it does not count.
  */
 export async function readScript(
   db: OrgScopedDb,
   id: string
-): Promise<{ skipped: FactValueKey[]; offered: boolean }> {
-  const [found] = await db.execute<{
-    skipped: FactValueKey[]
-    offered: boolean
-  }>(
+): Promise<Progress> {
+  const rows = await db.execute<ScriptRow>(
     sql`select
-      coalesce(jsonb_agg(distinct p->'input'->>'key') filter (where p->>'type' = 'tool-ask_fact' and p->>'state' = 'output-available' and p->'output'->>'answer' = 'skipped'), '[]'::jsonb) as skipped,
-      coalesce(bool_or(p->>'type' = 'tool-request_change' and p->>'state' in ('output-available', 'output-denied')), false) as offered
+      p->>'type' as type,
+      p->>'state' as state,
+      coalesce(p->'input'->>'key', p->'input'->>'step') as step,
+      p->'output'->>'answer' as answer,
+      p->'output'->'ids'->>0 as choice,
+      case when p->>'state' = 'output-error' then (
+        select u.content->'parts'->0->>'text' from ${conversationMessages} u
+        where u.conversation_id = m.conversation_id and u.parent_id = m.id and u.content->>'role' = 'user'
+        limit 1
+      ) end as reply
     from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
-    where m.conversation_id = ${id} and m.content->>'role' = 'assistant'`
+    where m.conversation_id = ${id} and m.content->>'role' = 'assistant' and p->>'type' like 'tool-%'
+    order by m.seq`
   )
-  return { skipped: found?.skipped ?? [], offered: found?.offered ?? false }
+  return progressOf([...rows])
 }
 
 /**
- * The next step for this conversation, reading only what it needs: the
- * script's state for onboarding, and the org's name only when the step asks
- * for the business name.
+ * The onboarding script's state for this turn, or null when the
+ * conversation is not onboarding or the script has ended there.
  */
-async function next(
+async function onboardingOf(
   db: OrgScopedDb,
   held: Read,
   id: string,
-  input: Pick<Script, "missing" | "message" | "newId">
-): Promise<Part[]> {
-  const { skipped, offered } =
-    held.kind === "onboarding"
-      ? await readScript(db, id)
-      : { skipped: [], offered: true }
-  const asking =
-    !offered && nextKey({ missing: input.missing, skipped }) === "business.name"
-  return nextStep({
-    ...input,
-    kind: held.kind,
-    skipped,
-    offered,
-    orgName: asking ? await readOrgName(db) : "",
-  })
-}
-
-async function readOrgName(db: OrgScopedDb): Promise<string> {
+  owner: Owner
+): Promise<Onboarding | null> {
+  if (held.kind !== "onboarding") return null
+  const progress = await readScript(db, id)
+  if (scriptEnded(progress)) return null
+  const facts = await readFacts(db)
   const [org] = await db.select({ name: orgs.name }).from(orgs).limit(1)
-  return org?.name ?? ""
+  return {
+    ...progress,
+    orgId: owner.orgId,
+    facts,
+    orgName: org?.name ?? "",
+    ownerName: owner.session.name ?? "",
+  }
 }
 
 /**
@@ -522,7 +506,8 @@ export async function chat(
       const scripted =
         !session ||
         !log ||
-        (held.kind === "onboarding" && !(await readScript(db, id)).offered) ||
+        (held.kind === "onboarding" &&
+          !scriptEnded(await readScript(db, id))) ||
         (turn.kind === "results" && !log.named)
       if (scripted)
         return scriptTurn(db, env, kit, owner, held, id, parsed.data, newId)
@@ -646,6 +631,8 @@ function scriptTurn(
   if (turn.kind === "message") {
     return typed(
       db,
+      env,
+      kit,
       owner,
       held,
       id,
@@ -661,7 +648,7 @@ function scriptTurn(
   if (!result || more.length > 0) return Promise.resolve(stale())
   const one = { message_id: turn.message_id, ...result }
   if (one.kind === "answer") {
-    return answer(db, owner, held, id, one, newId)
+    return answer(db, env, kit, owner, held, id, one, newId)
   }
   return approve(db, env, kit, owner, held, id, one)
 }
@@ -987,11 +974,7 @@ async function fallbackTurn(
 ): Promise<Response> {
   if (a.turn.kind === "message") {
     const step = nextStep({
-      kind: "assistant",
-      missing: [],
-      orgName: "",
-      skipped: [],
-      offered: true,
+      onboarding: null,
       message: { mode: a.mode, text: a.turn.text },
       newId: a.newId,
     })
@@ -1103,10 +1086,14 @@ async function cancelPending(
 /**
  * A typed message: the owner's row, then a new assistant row with the next
  * step. A call the tail left pending is cancelled first, the way
- * assistant-ui's `cancelPendingToolCallsOnSend` cancels it on screen.
+ * assistant-ui's `cancelPendingToolCallsOnSend` cancels it on screen. While
+ * onboarding runs, the message answers the card it cancelled: its fact is
+ * stated, or the same card comes back after a line saying what was missing.
  */
 async function typed(
   db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
   owner: Owner,
   held: Read,
   id: string,
@@ -1116,12 +1103,16 @@ async function typed(
 ): Promise<Response> {
   if (await messageTaken(db, id, messageId)) return messageExists()
   const { tail } = held
+  const onboarding = await onboardingOf(db, held, id, owner)
+  const card = onboarding ? waitingCard(tail) : undefined
   await cancelPending(db, id, tail)
-  const step = await next(db, held, id, {
-    missing: missingFacts(await readFacts(db)),
-    message,
-    newId,
-  })
+  const reply = card && typedAnswer(card, message.text)
+  const step =
+    onboarding && card && reply?.kind === "retry"
+      ? again(card, reply.reason, onboarding, newId)
+      : onboarding
+        ? await advance(db, env, kit, owner, id, onboarding, reply, newId)
+        : nextStep({ onboarding, message, newId })
   const assistantId = newId()
   const rows = [
     {
@@ -1152,6 +1143,49 @@ async function typed(
   return stream(assistantId, step)
 }
 
+/** The card the tail's last step waits on, if it waits on one. */
+function waitingCard(tail: Tail | null): ToolPart | undefined {
+  if (tail?.content.role !== "assistant") return undefined
+  const { parts } = tail.content
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  return last.find((p): p is ToolPart => isTool(p) && isCard(p) && pending(p))
+}
+
+/**
+ * Onboarding after an answer, or after none: its fact stated, then the next
+ * step. When that step is the build, the change starts here, as the
+ * approval path starts it, keyed by the conversation so a retry finishes
+ * what the first attempt began. An outcome nobody knows rolls the turn back,
+ * so the owner's retry runs it again.
+ */
+async function advance(
+  db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  id: string,
+  onboarding: Onboarding,
+  reply: Answer | undefined,
+  newId: () => string
+): Promise<Part[]> {
+  if (reply?.kind === "facts") {
+    await stateFacts(db, owner, reply.facts, onboarding.facts as FactRecord[])
+  }
+  const next = reply ? withAnswer(onboarding, reply) : onboarding
+  const step = nextStep({ onboarding: next, message: null, newId })
+  const build = buildCall(step)
+  if (!build) return step
+  const output = await changed(
+    env,
+    kit,
+    owner,
+    ONBOARDING_GOAL,
+    `onboarding:${id}`
+  )
+  if (output instanceof Response) throw new Refusal(output)
+  return built(next, build, output)
+}
+
 /** The tail's call this turn names, or a response saying why not. */
 function callIn(
   tail: Tail | null,
@@ -1179,9 +1213,15 @@ type Resolved<K extends ChatResult["kind"]> = Extract<
   { kind: K }
 > & { message_id: string }
 
-/** An answer to `ask_fact`: the fact is stated, or the key skipped. */
+/**
+ * An answer to one of the script's cards: its fact stated, a skip, or the
+ * photos the owner sent, checked against the card the api made. Then the
+ * next step, in the same row.
+ */
 async function answer(
   db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
   owner: Owner,
   held: Read,
   id: string,
@@ -1191,41 +1231,32 @@ async function answer(
   const found = callIn(
     held.tail,
     turn.message_id,
-    (p) => p.type === "tool-ask_fact" && p.toolCallId === turn.tool_call_id
+    (p) => isCard(p) && p.toolCallId === turn.tool_call_id
   )
   if (found instanceof Response) return found
   const { tail, call } = found
-  const output = JSON.stringify(turn.output)
+  const schema = OUTPUTS[call.type as keyof typeof OUTPUTS]
+  const output = schema.safeParse(turn.output)
   if (!pending(call)) {
-    const given = AskFactOutput.safeParse(call.output)
+    const given = schema.safeParse(call.output)
     // The same answer again is a retry, and gets the first one's stream.
-    return given.success && JSON.stringify(given.data) === output
+    return given.success &&
+      output.success &&
+      JSON.stringify(given.data) === JSON.stringify(output.data)
       ? stream(tail.id, stepAfter(tail.content.parts, call), resolved(call))
       : stale()
   }
-  const { key } = call.input as AskFactInput
-  if (
-    turn.output.answer === "stated"
-      ? turn.output.fact.key !== key
-      : !SKIPPABLE.includes(key)
-  ) {
-    return answerInvalid()
-  }
-  const current = await readFacts(db)
-  if (turn.output.answer === "stated") {
-    await stateFacts(db, owner, [turn.output.fact], current)
-  }
+  const onboarding = await onboardingOf(db, held, id, owner)
+  if (!onboarding) return stale()
+  const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
+  const meant = output.success ? cardAnswer(call, output.data, uploads) : null
+  if (!meant || meant.kind === "retry") return answerInvalid()
   const done: ToolPart = {
     ...call,
     state: "output-available",
-    output: turn.output,
+    output: output.data,
   }
-  const step = await next(db, held, id, {
-    // The key just answered is held now, or skipped.
-    missing: missingFacts(current).filter((k) => k !== key),
-    message: null,
-    newId,
-  })
+  const step = await advance(db, env, kit, owner, id, onboarding, meant, newId)
   const parts = [
     ...tail.content.parts.map((p) => (p === call ? done : p)),
     { type: "step-start" } as const,
@@ -1331,23 +1362,17 @@ async function changed(
 
 /**
  * The onboarding conversation's first row, for `createOrg` to insert: the
- * script's first step for the facts the org holds, which ask for the first
- * one missing.
+ * opener, then the script's first step for the facts the org holds.
  */
 export function firstMessage(
-  orgName: string,
+  org: { orgId: string; orgName: string; ownerName: string },
   current: FactRecord[],
   newId: () => string
 ) {
-  const step = nextStep({
-    kind: "onboarding",
-    missing: missingFacts(current),
-    orgName,
-    skipped: [],
-    offered: false,
-    message: null,
-    newId,
-  })
+  const step = openingParts(
+    { ...org, facts: current, passed: [], offered: false, builder: null },
+    newId
+  )
   return {
     id: newId(),
     parentId: null,
