@@ -294,8 +294,8 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
 
   const { input } = view
   const multiple = input.multiple
-  const pictured = input.options.some((option) => option.visual)
-  const hinted = input.options.some((option) => option.hint)
+  const pictured = input.options.some((o) => o.visual)
+  const hinted = input.options.some((o) => o.hint)
   const layout =
     pictured || hinted
       ? cn(
