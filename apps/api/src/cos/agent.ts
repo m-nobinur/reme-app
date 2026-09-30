@@ -206,13 +206,15 @@ export function priceOf(modelId: string): Price | null {
  */
 export function openrouterModel(
   apiKey: string,
-  modelId: string
+  modelId: string,
+  settings: Parameters<ReturnType<typeof createOpenRouter>["chat"]>[1] = {}
 ): LanguageModel | null {
   const routing = models.find((m) => m.id === modelId)?.compat.openRouterRouting
   if (!routing?.max_price) return null
   return createOpenRouter({ apiKey }).chat(modelId, {
+    ...settings,
     usage: { include: true },
-    provider: routing,
+    provider: { ...settings.provider, ...routing },
   })
 }
 
@@ -225,7 +227,7 @@ const worstStep = (price: Price, inputTokens: number) =>
  * Tokens a prompt of `chars` characters may hold, over-counted at two
  * characters a token so a step is never priced under what it bills.
  */
-const tokensIn = (chars: number) => Math.ceil(chars / 2)
+export const tokensIn = (chars: number) => Math.ceil(chars / 2)
 
 /** A turn's reservation: every step at its input guess and its output cap. */
 export const reservation = (price: Price) =>
