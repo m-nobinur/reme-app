@@ -550,6 +550,8 @@ export interface components {
       /** @enum {string} */
       mode: "ask" | "act"
       time_zone?: string
+      /** @enum {string} */
+      intent?: "site_change"
       turn:
         | {
             /** @constant */

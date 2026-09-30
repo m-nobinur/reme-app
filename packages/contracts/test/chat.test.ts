@@ -210,6 +210,10 @@ describe("ChatRequest", () => {
     ["a nested zone", zone("America/Argentina/Buenos_Aires")],
     ["an offset zone", zone("Etc/GMT-14")],
     ["a zone at 64 characters", zone(`A${"b".repeat(63)}`)],
+    [
+      "a website change",
+      { ...text("Add Saturday hours"), intent: "site_change" },
+    ],
   ])("accepts %s", (_name, request) => {
     expect(verdict("ChatRequest", ChatRequest, request)).toEqual(ACCEPTED)
   })
@@ -223,6 +227,7 @@ describe("ChatRequest", () => {
     ["blank text", text("   ")],
     ["text over the goal cap", text("a".repeat(GOAL_MAX + 1))],
     ["a mode it does not know", { ...turn, mode: "agent" }],
+    ["an intent it does not know", { ...turn, intent: "site_rebuild" }],
     ["an empty time zone", { ...turn, time_zone: "" }],
     [
       "a time zone over 64 characters",
