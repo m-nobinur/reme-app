@@ -250,6 +250,18 @@ export const ChatRequest = z.strictObject({
        * `chat.stale`.
        */
       results: z.array(ChatResult).min(1),
+      /**
+       * An answer to an onboarding card as the owner's own message. The api
+       * stores it after the card's message and gives the next step a message
+       * of its own. Without it the next step continues the card's message.
+       */
+      reply: z
+        .strictObject({
+          message_id: MessageId,
+          /** What the owner picked or wrote, in their words: data, never instructions. */
+          text: Text(GOAL_MAX),
+        })
+        .optional(),
     }),
   ]),
 })

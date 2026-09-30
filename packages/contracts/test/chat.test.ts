@@ -193,6 +193,11 @@ describe("ChatRequest", () => {
     ...extra,
   })
 
+  const replied = (reply: unknown) => {
+    const request = results(answer("call_abc123"))
+    return { ...request, turn: { ...request.turn, reply } }
+  }
+
   const zone = (time_zone: string) => ({
     ...text("Add Saturday hours"),
     time_zone,
@@ -203,6 +208,10 @@ describe("ChatRequest", () => {
     ["every result of a step", samples.ChatRequest],
     ["one answer", results(answer("call_abc123"))],
     ["one approval", results(approval())],
+    [
+      "an answer with the owner's reply",
+      replied({ message_id: "u_9Xc4Vb2N", text: "Skip for now" }),
+    ],
     ["a provider's call id", results(answer("functions.ask_fact:0"))],
     ["a call id at 128 characters", results(answer("c".repeat(128)))],
     [
@@ -245,6 +254,12 @@ describe("ChatRequest", () => {
       { ...turn, conversation_id: "c1" },
     ],
     ["no results", results()],
+    ["a reply with no id", replied({ text: "Skip for now" })],
+    ["a blank reply", replied({ message_id: "u_9Xc4Vb2N", text: "  " })],
+    [
+      "a reply over the goal cap",
+      replied({ message_id: "u_9Xc4Vb2N", text: "a".repeat(GOAL_MAX + 1) }),
+    ],
     ["a call id with a space", results(answer("call abc"))],
     ["a call id over 128 characters", results(answer("c".repeat(129)))],
     ["a blank reason", results(approval({ reason: "   " }))],

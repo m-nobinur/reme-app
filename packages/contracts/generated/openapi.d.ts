@@ -1358,6 +1358,10 @@ export interface components {
                   reason?: string
                 }
             )[]
+            reply?: {
+              message_id: string
+              text: string
+            }
           }
     }
     CompletionReport: {
