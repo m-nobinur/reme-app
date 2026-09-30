@@ -7,6 +7,8 @@ import {
   AskUploadOutput,
   type FactValue,
   type FactValueKey,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
@@ -233,6 +235,18 @@ export type AskUploadView = AskView<
 >
 export const askUploadView = (part: ToolPartView): AskUploadView =>
   askView(part, AskUploadInput, AskUploadOutput)
+
+/**
+ * A `review_quote_form` card: the proposed questions waiting, the list the
+ * owner confirmed, the change they asked for in their own words, overtaken,
+ * or broken. It has no skip: a form the owner does not want is a change.
+ */
+export type ReviewQuoteFormView = AskView<
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput
+>
+export const reviewQuoteFormView = (part: ToolPartView): ReviewQuoteFormView =>
+  askView(part, ReviewQuoteFormInput, ReviewQuoteFormOutput)
 
 /**
  * A choice as the owner reads it back: the labels they picked, in the card's
