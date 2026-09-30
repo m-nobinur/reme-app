@@ -23,6 +23,7 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import type { Part, ToolPart } from "./chat.ts"
+import { industryOf } from "./industry.ts"
 import {
   manualEnd,
   notStarted,
@@ -497,7 +498,7 @@ export function chosen(
     case "industry":
       return fact("business.industry", {
         name: words ?? label(INDUSTRIES, id),
-        category: id ?? null,
+        category: id ?? industryOf(words ?? ""),
       })
     case "pronouns":
       return fact("assistant.pronouns", { id })

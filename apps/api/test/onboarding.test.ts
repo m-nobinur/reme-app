@@ -7,6 +7,7 @@ import {
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
+import { INDUSTRY_WORDS, industryOf } from "../src/industry.ts"
 import {
   applied,
   built,
@@ -26,10 +27,12 @@ import {
 import {
   manualEnd,
   opener,
+  photoQuestion,
   photos,
   question,
   started,
   type Voice,
+  yourWork,
 } from "../src/onboarding-copy.ts"
 
 const counter = () => {
@@ -411,6 +414,23 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("places an industry typed as Something else in a category when a word fits", () => {
+    const words = (other: string) =>
+      cardAnswer(cardFor("industry"), { answer: "chosen", ids: [], other }, [])
+    expect(words("Emergency plumber")).toEqual({
+      kind: "facts",
+      facts: [
+        {
+          key: "business.industry",
+          value: { name: "Emergency plumber", category: "trades" },
+        },
+      ],
+    })
+    expect(typedAnswer(cardFor("industry"), "Airport taxis")).toMatchObject({
+      facts: [{ value: { name: "Airport taxis", category: "chauffeur" } }],
+    })
+  })
+
   it("refuses a fact for another key than the card's", () => {
     expect(
       cardAnswer(
@@ -706,7 +726,7 @@ describe("the onboarding copy", () => {
         })
       )
     ).join("\n")
-    expect(other).toContain("dog grooming work")
+    expect(other).toContain("your work in dog grooming")
     expect(other).toContain("full grooms")
   })
 
@@ -749,5 +769,123 @@ describe("the onboarding copy", () => {
       question("industry", voiceOf(start()))
     )
     expect(stepOf(card as ToolPart)).toBe("industry")
+  })
+})
+
+describe("an industry in the owner's own words", () => {
+  it("matches whole words, any case, singular or plural, and leaves the rest alone", () => {
+    const cases: [string, string | null][] = [
+      ["Plumbers", "trades"],
+      ["family SOLICITOR", "legal"],
+      ["Chauffeur-driven cars", "chauffeur"],
+      ["Domestic cleaners", "cleaning"],
+      ["Nails and lashes", "beauty"],
+      ["Sports physio", "health"],
+      ["Café", "food"],
+      ["Artisan bakeries", "food"],
+      ["Mobile car valeting", "automotive"],
+      ["MOT and servicing", "automotive"],
+      ["Letting agents", "property"],
+      ["Life coaches", "education"],
+      ["Driving lessons", "education"],
+      ["Wedding DJ", "events"],
+      ["Vintage boutique", "retail"],
+      ["Coffee shop", "food"],
+      ["Barbershop", null],
+      ["Embroidery", null],
+      ["Drone photography", null],
+      ["Funeral director", null],
+      ["Tattoo studio", null],
+      ["Cabinet maker", null],
+    ]
+    for (const [words, category] of cases) {
+      expect(industryOf(words), words).toBe(category)
+    }
+  })
+
+  it("has three photo wordings for every industry on the list and every keyword category", () => {
+    const categories = new Set([
+      ...INDUSTRIES.map((i) => i.id),
+      ...INDUSTRY_WORDS.map(([id]) => id),
+    ])
+    for (const category of categories) {
+      const asked = new Set(
+        ORGS.map((org) =>
+          photoQuestion(voice({ org, industry: { name: "x", category } }))
+        )
+      )
+      expect(asked.size, category).toBe(3)
+    }
+  })
+
+  const TYPED = [
+    "Drone photography",
+    "mobile dog grooming",
+    "Funeral Director",
+    "tattoo studio",
+    "Wedding DJs",
+    "Emergency plumber",
+    "MOT centre",
+    "IT support",
+    "SEO consultant",
+    "Pest control",
+    "Locksmith",
+    "Interior designer",
+    "Upholsterer",
+    "Solar power",
+    "Wedding flowers",
+    "Art classes",
+    "Dog walking business",
+    "Chimney sweep",
+    "Café",
+    "Personal trainer",
+    "Online shop",
+    "Private tutor",
+    "Estate agents",
+    "Airport taxis",
+    "Bespoke furniture company",
+  ]
+
+  it("asks about photos in the owner's words without broken grammar", () => {
+    for (const name of TYPED) {
+      const industry = { name, category: industryOf(name) }
+      for (const org of ORGS) {
+        const text = photos(voice({ org, industry, offering: "Full grooms" }))
+        expect(text, name).not.toMatch(/ {2}|[{}]|\bundefined\b|\bnull\b/)
+        expect(text, name).not.toMatch(/\b(\w+) \1\b/i)
+        expect(text, name).not.toMatch(/\ba [aeio]|\ban [bcdfgjklmnpqrstvwz]/)
+        expect(text, name).not.toMatch(
+          /\b(?:business|company) work\b|[ ,],|\?\./
+        )
+        expect(text, name).toContain(BUSINESS)
+      }
+      if (industry.category) continue
+      // Unplaced: some wording names the industry, acronyms as typed.
+      const own = yourWork({ industry })
+      for (const acronym of name.match(/\b[A-Z]{2,}/g) ?? []) {
+        expect(own, name).toContain(acronym)
+      }
+      expect(
+        ORGS.some((org) => photos(voice({ org, industry })).includes(own)),
+        name
+      ).toBe(true)
+    }
+  })
+
+  it("names an industry it cannot place as a phrase that follows photos of", () => {
+    const phrase = (name: string) =>
+      yourWork({ industry: { name, category: null } })
+    expect(phrase("Drone photography business")).toBe(
+      "your work in drone photography"
+    )
+    expect(phrase("Funeral Directors")).toBe("your work as a funeral director")
+    expect(phrase("Wedding DJs")).toBe("your work as a wedding DJ")
+    expect(phrase("SEO consultant")).toBe("your work as an SEO consultant")
+    expect(phrase("Upholsterer")).toBe("your work as an upholsterer")
+    expect(phrase("Tattoo studio")).toBe("your tattoo studio")
+    expect(phrase("Wedding flowers")).toBe("your wedding flowers")
+    expect(phrase("Solar power")).toBe("your work in solar power")
+    expect(phrase("IT support")).toBe("your work in IT support")
+    expect(phrase("Business")).toBe("your work")
   })
 })
