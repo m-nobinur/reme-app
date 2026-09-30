@@ -127,6 +127,89 @@ it("an answer sends the call it resolves, from the last step only", () => {
   })
 })
 
+const choice = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-ask_choice",
+    toolCallId: "call_tone",
+    state,
+    input: {
+      step: "tone",
+      options: [
+        { id: "friendly", label: "Friendly", hint: null, visual: null },
+        { id: "casual", label: "Casual", hint: null, visual: null },
+      ],
+      multiple: false,
+      preselected: [],
+      other: null,
+      skippable: false,
+    },
+    ...extra,
+  }) as unknown as Part
+
+const photos = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-ask_upload",
+    toolCallId: "call_photos",
+    state,
+    input: {
+      accept: ["image/jpeg"],
+      max_files: 12,
+      max_bytes: 5_242_880,
+      skippable: true,
+    },
+    ...extra,
+  }) as unknown as Part
+
+const ASSET = {
+  id: "0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+  name: "van.jpg",
+  content_type: "image/jpeg",
+  bytes: 120_000,
+}
+
+it("a choice or an upload sends the call it resolves, as the contract reads it", () => {
+  for (const [part, output] of [
+    [
+      choice("output-available", {
+        output: { answer: "chosen", ids: ["casual"], other: null },
+      }),
+      { answer: "chosen", ids: ["casual"], other: null },
+    ],
+    [
+      photos("output-available", {
+        output: { answer: "uploaded", assets: [ASSET] },
+      }),
+      { answer: "uploaded", assets: [ASSET] },
+    ],
+  ] as const) {
+    const messages = [assistant(part)]
+    expect(sendsOn({ messages })).toBe(true)
+    expect(
+      ChatRequest.parse(chatTurn(CONVERSATION, "act", messages)).turn
+    ).toEqual({
+      kind: "results",
+      message_id: "msg_assistant",
+      results: [
+        {
+          kind: "answer",
+          tool_call_id: (part as { toolCallId: string }).toolCallId,
+          output,
+        },
+      ],
+    })
+  }
+})
+
+it("a typed reply overtakes an open choice or upload card, as the api stores it", () => {
+  const cancelled = cancelOvertaken([
+    assistant(choice("input-available"), photos("input-available")),
+  ])
+  expect(cancelled.at(-1)?.parts.slice(1)).toEqual([
+    choice("output-error", { errorText: CANCELLED }),
+    photos("output-error", { errorText: CANCELLED }),
+  ])
+})
+
 it("a yes or a no sends the approval it answers, with the owner's reason", () => {
   for (const approval of [
     { id: "appr_1", approved: true },

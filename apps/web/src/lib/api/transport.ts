@@ -61,9 +61,13 @@ export const API_TIMEOUT_MS = 10_000
  * caller's handling of a 5xx applies unchanged. The body is not bounded: a
  * chat reply streams for as long as it takes.
  */
-export async function apiFetch(url: URL, init: RequestInit): Promise<Response> {
+export async function apiFetch(
+  url: URL,
+  init: RequestInit,
+  timeoutMs = API_TIMEOUT_MS
+): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(url, { ...init, signal: controller.signal })
   } catch (error) {
@@ -73,7 +77,7 @@ export async function apiFetch(url: URL, init: RequestInit): Promise<Response> {
       code: "api.timeout",
       message: "The service did not answer in time. Try again.",
       occurred_at: new Date().toISOString(),
-      detail: { path: url.pathname, timeout_ms: API_TIMEOUT_MS },
+      detail: { path: url.pathname, timeout_ms: timeoutMs },
     }
     return Response.json(envelope, { status: 504 })
   } finally {

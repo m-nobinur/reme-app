@@ -23,7 +23,7 @@ export const textOf = (message: ChatMessage) =>
 /**
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
- * message, or every answer to `ask_fact` and every yes or no on a tool in
+ * message, or every answer to an onboarding card and every yes or no on a tool in
  * the last step, as the SDK sends them together. `intent` goes with a typed
  * message only.
  */
@@ -59,8 +59,8 @@ export function chatTurn(
 }
 
 /**
- * What the owner resolved in the last step: an answer to `ask_fact`, and a
- * yes or no on any call. A call the server ran itself, such as a read, is
+ * What the owner resolved in the last step: an answer to an onboarding card
+ * (`ask_fact`, `ask_choice`, `ask_upload`), and a yes or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
  */
 function ownerResults(last: ChatMessage | undefined): ChatResult[] {
@@ -72,7 +72,12 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
   )
   return step.flatMap((part): ChatResult[] => {
     if (!isToolUIPart(part)) return []
-    if (part.type === "tool-ask_fact" && part.state === "output-available") {
+    if (
+      (part.type === "tool-ask_fact" ||
+        part.type === "tool-ask_choice" ||
+        part.type === "tool-ask_upload") &&
+      part.state === "output-available"
+    ) {
       return [
         {
           kind: "answer",

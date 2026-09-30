@@ -1,6 +1,10 @@
 import type {
+  AskChoiceInput,
+  AskChoiceOutput,
   AskFactInput,
   AskFactOutput,
+  AskUploadInput,
+  AskUploadOutput,
   COS_TOOLS,
 } from "@workspace/contracts"
 import type { UIDataTypes, UIMessage } from "ai"
@@ -13,11 +17,15 @@ type Typed<T extends { input: z.ZodType; output: z.ZodType }> = {
 
 /**
  * Every tool a conversation can hold, typed from its contract: the Chief of
- * Staff's `COS_TOOLS`, and the onboarding script's `ask_fact`.
+ * Staff's `COS_TOOLS`, and the onboarding script's three cards.
  */
 export type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
-} & { ask_fact: { input: AskFactInput; output: AskFactOutput } }
+} & {
+  ask_fact: { input: AskFactInput; output: AskFactOutput }
+  ask_choice: { input: AskChoiceInput; output: AskChoiceOutput }
+  ask_upload: { input: AskUploadInput; output: AskUploadOutput }
+}
 
 /**
  * What a message's metadata carries: its stored date, and the owner's thumb
