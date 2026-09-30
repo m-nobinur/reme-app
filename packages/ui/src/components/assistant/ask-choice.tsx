@@ -7,7 +7,7 @@ import {
   useFocusWhenIdle,
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
-import { askChoiceView, choiceText } from "@workspace/ui/lib/tool-state"
+import { askChoiceView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { type FormEvent, useId, useRef, useState } from "react"
 
@@ -18,7 +18,8 @@ import { type FormEvent, useId, useRef, useState } from "react"
  * the card is the options, as native radios or checkboxes so the arrow keys
  * and the screen reader know the group. Colour, type and template options
  * show what they are, drawn from the option's own data. Nothing is sent
- * until the owner presses Continue.
+ * until the owner presses Continue. Once answered or skipped it shows
+ * nothing: the owner's reply after it says what they picked.
  */
 
 type Option = AskChoiceInput["options"][number]
@@ -259,35 +260,22 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
   const [other, setOther] = useState("")
   const [invalid, setInvalid] = useState<string | null>(null)
 
+  if (view.state === "answered" || view.state === "skipped") return null
   if (view.state !== "pending") {
     return (
       <div className="my-3 max-w-md" data-slot="ask-choice">
-        {view.state === "answered" ? (
-          <p className="flex items-center gap-2 text-sm">
-            <CheckCircleIcon
-              aria-hidden
-              className="size-4 shrink-0 text-primary"
-            />
-            <span className="min-w-0 break-words">
-              {choiceText(view.input, view.output)}
-            </span>
-          </p>
-        ) : (
-          <p
-            className={cn(
-              "text-sm",
-              view.state === "error"
-                ? "text-destructive"
-                : "text-muted-foreground"
-            )}
-          >
-            {view.state === "skipped"
-              ? "Skipped. You can choose later."
-              : view.state === "cancelled"
-                ? "You replied in the chat instead."
-                : view.message}
-          </p>
-        )}
+        <p
+          className={cn(
+            "text-sm",
+            view.state === "error"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          )}
+        >
+          {view.state === "cancelled"
+            ? "You replied in the chat instead."
+            : view.message}
+        </p>
       </div>
     )
   }

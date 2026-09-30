@@ -43,18 +43,20 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
   )
 })
 
-test("an answered question keeps the question and what the owner said", async ({
+test("an answered question gives way to the owner's reply, each step its own message", async ({
   page,
 }) => {
   await open(page, "AskFact")
+  await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
+    /Brightclean/,
+    /\+447700900123/,
+    /Skip for now/,
+  ])
+  // An answered or skipped card shows nothing; one not answered says why.
   const done = asks(page).filter({ hasNot: page.locator("form") })
-  await expect(done.nth(0)).toHaveText(
-    /What is your business called\?\s*Brightclean/
-  )
-  await expect(done.nth(1)).toContainText("+447700900123")
-  await expect(done.nth(2)).toContainText("Skipped")
-  await expect(done.nth(3)).toContainText("Not answered")
-  await expect(done.nth(4)).toContainText("did not come through")
+  await expect(done).toHaveCount(2)
+  await expect(done.nth(0)).toContainText("Not answered")
+  await expect(done.nth(1)).toContainText("did not come through")
 })
 
 test("the change card is one tap either way, and waits for the server", async ({
@@ -167,8 +169,22 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 test("a message of cards alone has no action bar", async ({ page }) => {
-  await open(page, "Onboarding")
+  await open(page, "RequestChange")
   await expect(page.locator(".aui-assistant-action-bar-root")).toHaveCount(0)
+})
+
+test("each onboarding step is a message of its own, with its own time", async ({
+  page,
+}) => {
+  await open(page, "Onboarding")
+  const steps = page.locator('[data-slot="aui_assistant-message-root"]')
+  await expect(steps).toHaveCount(3)
+  await expect(steps.locator(".aui-assistant-action-bar-root")).toHaveCount(3)
+  await expect(steps.locator("time")).toHaveCount(3)
+  await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
+    /Brightclean/,
+    /\+447700900123/,
+  ])
 })
 
 for (const width of [390, 1440]) {

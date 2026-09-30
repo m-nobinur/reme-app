@@ -50,16 +50,19 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   )
 })
 
-test("an answered choice reads back in the owner's words", async ({ page }) => {
+test("an answered choice reads back as the owner's reply", async ({ page }) => {
   await open(page, "AskChoice")
+  await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
+    /they\/them/,
+    /Navy and gold/,
+    /Skip for now/,
+  ])
   const done = page
     .locator('[data-slot="ask-choice"]')
     .filter({ hasNot: page.locator("form") })
-  await expect(done.nth(0)).toHaveText("they/them")
-  await expect(done.nth(1)).toHaveText("Navy and gold")
-  await expect(done.nth(2)).toContainText("Skipped")
-  await expect(done.nth(3)).toContainText("You replied in the chat instead.")
-  await expect(done.nth(4)).toContainText("did not come through")
+  await expect(done).toHaveCount(2)
+  await expect(done.nth(0)).toContainText("You replied in the chat instead.")
+  await expect(done.nth(1)).toContainText("did not come through")
 })
 
 const PNG = {
