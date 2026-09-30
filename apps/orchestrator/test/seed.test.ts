@@ -1,10 +1,17 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { siteHost } from "@workspace/contracts"
+import { type FactRecord, siteHost } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import { repoMap } from "../src/repo-map.ts"
-import { SEED_DIGEST, SEED_FIELDS, STARTER_FILES } from "../src/seed.ts"
+import {
+  QUOTE_FORM_FILE,
+  quoteFormFile,
+  SEED_DIGEST,
+  SEED_FIELDS,
+  STARTER_FILES,
+  seedFiles,
+} from "../src/seed.ts"
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url))
 const tracked = (dir: string) =>
@@ -52,6 +59,7 @@ describe("the seed", () => {
 
   it("maps the whole seed, so the Developer sees every page and the site config", () => {
     expect(repoMap(STARTER_FILES)).not.toContain("[Map cut")
+    expect(repoMap(seedFiles([quoteForm(LIMOUSINE)]))).not.toContain("[Map cut")
   })
 
   it("digests every component manifest the package commits", () => {
@@ -63,6 +71,65 @@ describe("the seed", () => {
     for (const { component } of manifests) {
       expect(lines.some((line) => line.startsWith(`${component} (`))).toBe(true)
     }
+  })
+})
+
+const LIMOUSINE = [
+  {
+    key: "pickup",
+    label: "Pick-up address",
+    type: "text",
+    required: true,
+    hint: null,
+    options: null,
+  },
+  {
+    key: "occasion",
+    label: "Occasion",
+    type: "select",
+    required: false,
+    hint: null,
+    options: ["Wedding", "Airport transfer"],
+  },
+]
+
+const quoteForm = (fields: unknown): FactRecord => ({
+  fact_id: "10000001-0000-4000-8000-000000000001",
+  org_id: "10000001-0000-4000-8000-000000000000",
+  key: "quote.form",
+  fact_type: "quote",
+  value: { fields },
+  version: 1,
+  provenance: {
+    source: "owner_stated",
+    confidence: 1,
+    verified_by_staff_id: null,
+    verified_at: null,
+  },
+  valid_from: "2026-10-01T12:00:00.000Z",
+  valid_to: null,
+  superseded_by_fact_id: null,
+})
+
+describe("the quote form a site asks", () => {
+  it("is the owner's approved list, in the file the starter reads", () => {
+    const file = quoteFormFile([quoteForm(LIMOUSINE)])
+    expect(JSON.parse(file)).toEqual({ fields: LIMOUSINE })
+    expect(seedFiles([quoteForm(LIMOUSINE)])[QUOTE_FORM_FILE]).toBe(file)
+  })
+
+  it("is the same bytes for the same fact, so a revise keeps it as it was", () => {
+    expect(quoteFormFile([quoteForm(LIMOUSINE)])).toBe(
+      quoteFormFile([quoteForm(structuredClone(LIMOUSINE))])
+    )
+  })
+
+  it("is the starter's own set with no fact, or one the contract refuses", () => {
+    const starter = STARTER_FILES[QUOTE_FORM_FILE]
+    expect(starter).toBeDefined()
+    expect(quoteFormFile([])).toBe(starter)
+    expect(quoteFormFile([quoteForm([LIMOUSINE[0]])])).toBe(starter)
+    expect(seedFiles([])).toEqual(STARTER_FILES)
   })
 })
 
