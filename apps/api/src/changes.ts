@@ -14,6 +14,8 @@ import {
   assignments,
   eq,
   type OrgScopedDb,
+  STAFF_CODE,
+  staff,
   steerByKey,
   supersedeFact,
   type Tenancy,
@@ -375,6 +377,13 @@ export async function stateFacts(
         verifiedByStaffId: root,
       },
     })
+    // The staff directory shows the Chief of Staff by the name the owner gave it.
+    if (fact.key === "assistant.name") {
+      await db
+        .update(staff)
+        .set({ displayName: fact.value.name })
+        .where(eq(staff.staffCode, STAFF_CODE.chief))
+    }
   }
 }
 

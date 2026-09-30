@@ -38,6 +38,7 @@ import {
   messageTaint,
   newRunState,
   openrouterModel,
+  personaOf,
   priceOf,
   reservation,
 } from "./cos/agent.ts"
@@ -526,7 +527,8 @@ export async function chat(
         workspace,
         zone ?? null,
         new Date(),
-        turn.kind === "message" ? parsed.data.intent : undefined
+        turn.kind === "message" ? parsed.data.intent : undefined,
+        personaOf(await readFacts(db))
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
