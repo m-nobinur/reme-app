@@ -28,16 +28,18 @@ test("the notifications page says what will land there", async ({ page }) => {
   await expect(page.locator("li[data-kind]")).toHaveCount(0)
 })
 
-test("the bell links to notifications with nothing unread", async ({
+test("the bell opens a menu that links to every notification", async ({
   page,
 }) => {
-  await visit(page, "/app/approvals")
-  const link = page
+  await visit(page, "/app/staff")
+  const bell = page
     .getByRole("banner")
-    .getByRole("link", { name: "Notifications", exact: true })
-  await expect(link).toBeVisible()
+    .getByRole("button", { name: "Notifications", exact: true })
+  await expect(bell).toBeVisible()
   await expect(page.locator('[data-slot="unread-count"]')).toHaveCount(0)
-  await link.click()
+  await bell.click()
+  await expect(page.getByText("You are all caught up.")).toBeVisible()
+  await page.getByRole("menuitem", { name: "View all notifications" }).click()
   await expect(page).toHaveURL(/\/app\/notifications$/)
 })
 

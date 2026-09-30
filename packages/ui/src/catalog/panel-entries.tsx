@@ -9,6 +9,7 @@ import {
   ComingUp,
   LiveLine,
   PanelBlank,
+  PanelDigest,
   QuestionItem,
   ReminderList,
   ReminderNote,
@@ -363,7 +364,6 @@ const panelCatalog: Entry[] = [
       </WaitingOnYou>
     ),
   },
-  { name: "WaitingOnYou empty", render: () => <WaitingOnYou /> },
   {
     name: "WaitingOnYou error",
     render: () => (
@@ -429,32 +429,60 @@ const panelCatalog: Entry[] = [
   {
     name: "LiveLine waiting",
     render: () => (
-      <LiveLine detail="waiting on you" lead="2 things" tone="live" />
+      <LiveLine
+        detail="for your review"
+        lead="Version 4 is ready"
+        tone="live"
+      />
     ),
   },
   {
     name: "LiveLine live",
     render: () => (
-      <LiveLine detail="site live on v3" lead="Brightclean," tone="live" />
+      <LiveLine detail="on version 3" lead="Your website is live" tone="live" />
     ),
   },
   {
     name: "LiveLine idle",
     render: () => (
-      <LiveLine detail="no site yet" lead="Brightclean," tone="idle" />
+      <LiveLine lead="Let's get your website started" tone="idle" />
     ),
   },
   {
-    // A long business name truncates; the line never wraps.
+    // A long name truncates; the line never wraps.
     name: "LiveLine truncated",
     render: () => (
       <div className="w-64">
         <LiveLine
-          detail="site live on v12"
-          lead="Brightclean End of Tenancy and Carpet Specialists,"
+          detail="has a question for you"
+          lead="Brightclean End of Tenancy and Carpet Specialists"
           tone="live"
         />
       </div>
+    ),
+  },
+  {
+    name: "PanelDigest",
+    render: () => (
+      <PanelDigest
+        sentences={[
+          "You have a reminder today at 15:00: Call the supplier about eco sprays.",
+          "Version 4 of your website is ready for you to review below.",
+          "Your website is live on version 3.",
+        ]}
+      />
+    ),
+  },
+  {
+    name: "PanelDigest caught up",
+    render: () => (
+      <PanelDigest
+        sentences={[
+          "You're all caught up. Nothing needs you right now.",
+          "Your website is live on version 3.",
+          "Ask Reme in the chat to change something on your website, or to set a reminder.",
+        ]}
+      />
     ),
   },
   {
@@ -497,7 +525,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <PanelBlank
         action={nextStep("#getting-started", "Continue getting started")}
-        description="Tell Reme about your business in the chat, then ask it to build your website."
+        description="Reme builds your website from what you tell it about your business. Share the details below in the chat to get started."
         steps={[
           { label: "Business name", done: true },
           { label: "Phone number", done: false },
@@ -512,7 +540,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <PanelBlank
         action={nextStep("#new-chat", "Start your website")}
-        description="Ask Reme in the chat to build your website."
+        description="Reme builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
         steps={[{ label: "Build your first version", done: false }]}
       />
     ),

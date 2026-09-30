@@ -7,8 +7,10 @@ import {
 } from "@workspace/ui/components/app-shell"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
+  type NotificationEntry,
   type NotificationItem,
   NotificationList,
+  NotificationMenu,
 } from "@workspace/ui/components/notification-list"
 import type { ReactNode } from "react"
 
@@ -120,6 +122,41 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
   alert: alertRows()[0] as NotificationItem,
 }
 
+/** The bell's menu rows: one of each kind, the newest two unread. */
+const MENU_ENTRIES: NotificationEntry[] = AttentionItem.options.map(
+  (option, index) => {
+    const row = ONE_OF_EACH[option.shape.kind.value]
+    return {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      at: row.at,
+      unread: index < 2,
+      // biome-ignore lint/a11y/useAnchorContent: the menu fills the link with the row.
+      link: <a href={`#${row.id}`} />,
+    }
+  }
+)
+
+/** The bell at the top right, with `unread` on it and its menu. */
+function BellSample({
+  unread = 2,
+  items = MENU_ENTRIES,
+}: {
+  unread?: number
+  items?: NotificationEntry[]
+}) {
+  return (
+    <div className="flex justify-end">
+      <NotificationMenu
+        items={items}
+        unread={unread}
+        viewAll={<a href="#notifications" />}
+      />
+    </div>
+  )
+}
+
 /** The rail's notifications link with `count` unread. */
 const rail = (count: number) => (
   <div className="max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
@@ -174,9 +211,14 @@ const notificationCatalog: Entry[] = [
       />
     ),
   },
+  { name: "NotificationMenu", render: () => <BellSample /> },
+  {
+    name: "NotificationMenu empty",
+    render: () => <BellSample items={[]} unread={0} />,
+  },
   { name: "NavCount", render: () => rail(3) },
   { name: "NavCount none", render: () => rail(0) },
   { name: "NavCount capped", render: () => rail(120) },
 ]
 
-export { notificationCatalog }
+export { BellSample, notificationCatalog }

@@ -28,6 +28,16 @@ export function notificationsOf(
 export const seenCookie = (orgId: string) => `reme-notifications-seen-${orgId}`
 export const SEEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
+/** Records `at` as the newest time the owner has seen, for the next frame read. */
+export function markSeen(orgId: string, at: string) {
+  // biome-ignore lint/suspicious/noDocumentCookie: the frame loader reads it on the next request, which the Cookie Store API cannot promise in every browser this app supports.
+  document.cookie = `${seenCookie(orgId)}=${at}; path=/; max-age=${SEEN_COOKIE_MAX_AGE}; samesite=lax`
+}
+
+/** The later of two seen times; either can be missing. */
+export const laterSeen = (a: string | null, b: string | null) =>
+  a === null || (b !== null && Date.parse(b) > Date.parse(a)) ? b : a
+
 /** The cookie's time, or null when it is missing or not a time. */
 export const seenAtOf = (value: string | undefined): string | null =>
   value && !Number.isNaN(Date.parse(value)) ? value : null

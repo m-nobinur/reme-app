@@ -6,6 +6,7 @@ import { getGlobalStartContext } from "@tanstack/react-start"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import type { PanelPress } from "@workspace/ui/lib/panel"
 import { config } from "zod"
 import { routeTree } from "./routeTree.gen"
 
@@ -106,8 +107,13 @@ declare module "@tanstack/react-router" {
      * starts a new thread.
      */
     chat?: string
-    /** Set by a link that sends the owner to the panel: it opens on arrival. */
-    panel?: boolean
+    /**
+     * Set fresh by a link that sends the owner to the panel: it opens on
+     * arrival, with focus on `focus` when that is set.
+     */
+    panel?: PanelPress
+    /** Sent as the first message of the new chat `chat` starts. */
+    ask?: string
   }
   interface StaticDataRouteOption {
     /**

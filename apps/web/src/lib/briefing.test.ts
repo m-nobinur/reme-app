@@ -1,7 +1,7 @@
 import { expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
-import { briefingOf } from "./briefing"
+import { briefingOf, digestOf } from "./briefing"
 
 const ORG = { id: "org_a", slug: "fixture-clean", name: "Fixture Clean" }
 
@@ -276,4 +276,112 @@ it("lists the facts Reme still needs, after anything waiting on the owner", () =
       NOW
     ).line
   ).toBe("v2 is live. Version 3 is ready for you to approve.")
+})
+
+const names = { "staff-sam": "Sam" }
+const reminder = (title: string, due: string | null) =>
+  ({
+    id: title,
+    title,
+    due_at: due,
+  }) as unknown as Workspace["reminderNotes"][number]
+
+it("tells an owner with nothing waiting that they are caught up", () => {
+  expect(digestOf(workspace({ live: 4 }), names, NOW)).toEqual([
+    "You're all caught up. Nothing needs you right now.",
+    "Your website is live on version 4.",
+    "Ask Reme in the chat to change something on your website, or to set a reminder.",
+  ])
+  expect(
+    digestOf(workspace({ building: true, open: true }), names, NOW)
+  ).toEqual([
+    "You're all caught up. Nothing needs you right now.",
+    "Reme is building your first website now.",
+  ])
+})
+
+it("leads with today's reminders, then reviews and questions, three at most", () => {
+  const asked = {
+    ...question("Reme"),
+    raisedById: "staff-sam",
+    title: "Weekday hours",
+  } as AttentionItem
+  expect(
+    digestOf(
+      workspace({
+        live: 4,
+        attention: [approval(5), asked],
+        reminderNotes: [
+          reminder("Call the supplier", at(1, 15)),
+          reminder("Order more cloths", at(2, 9)),
+        ],
+      }),
+      names,
+      NOW
+    )
+  ).toEqual([
+    "You have a reminder today at 15:00: Call the supplier.",
+    "Version 5 of your website is ready for you to review below.",
+    "Sam asked about weekday hours. Answer it below.",
+  ])
+  expect(
+    digestOf(
+      workspace({
+        live: 4,
+        attention: [approval(5), approval(6), question("A"), question("B")],
+        reminderNotes: [
+          reminder("Call the supplier", at(1, 15)),
+          reminder("Order more cloths?", at(1, 17)),
+        ],
+      }),
+      names,
+      NOW
+    )
+  ).toEqual([
+    "You have 2 reminders today. The next is at 15:00: Call the supplier.",
+    "2 versions of your website are ready for you to review below.",
+    "Your team has 2 questions for you below.",
+  ])
+})
+
+it("names missing facts only when no question asks for them", () => {
+  const facts = [
+    { rule: "facts_missing" as const, keys: ["business.phone" as const] },
+  ]
+  expect(
+    digestOf(workspace({ open: true, derivedReminders: facts }), names, NOW)
+  ).toEqual([
+    "Reme still needs your phone number.",
+    "Your first website is under way.",
+  ])
+  expect(
+    digestOf(
+      workspace({
+        live: 2,
+        attention: [
+          { ...question("Sam"), title: "Phone number" } as AttentionItem,
+        ],
+        derivedReminders: facts,
+      }),
+      names,
+      NOW
+    )[1]
+  ).toBe("Your website is live on version 2.")
+})
+
+it("says nothing about today before the browser's clock is known", () => {
+  const later = workspace({
+    live: 4,
+    reminderNotes: [reminder("Call the supplier", "2099-10-01T15:00:00.000Z")],
+  })
+  // The reminder could be today, so the server claims neither way.
+  expect(digestOf(later, names, null)).toEqual([
+    "Your website is live on version 4.",
+  ])
+  expect(
+    digestOf(workspace({ attention: [approval(2)], open: true }), names, null)
+  ).toEqual([
+    "Version 2 of your website is ready for you to review below.",
+    "Your first website is under way.",
+  ])
 })
