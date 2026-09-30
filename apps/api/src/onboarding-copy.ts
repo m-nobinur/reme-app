@@ -133,22 +133,22 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     `First things first. Which of these comes closest to what ${v.business} does?`,
   ],
   "business.offerings": (v) => [
-    `Lovely. What are the main services or products ${v.business} offers? The ones customers ask for most are a good place to start.`,
-    `Thanks. What do people come to ${v.business} for? A short list is plenty.`,
+    `Lovely. What are the main services ${v.business} offers? The ones customers ask for most are a good place to start.`,
+    `Thanks. Which services do people come to ${v.business} for? A short list is plenty.`,
   ],
   "business.audience": (v) => [
     v.offering
-      ? `Got it. Who are your ideal customers, the people you'd most like to see asking about ${lower(v.offering)}?`
+      ? `Got it. Who are your ideal customers, the people you'd most like to see booking ${lower(v.offering)}?`
       : "Got it. Who are your ideal customers, the people you'd most like to hear from?",
     "Thanks, that's useful. Who do you most enjoy working for? The site will speak to them first.",
   ],
   "business.overview": () => [
-    "That helps a lot. How do you usually work with a customer, from their first message onwards? A few sentences in your own words is plenty.",
-    "Good to know. What happens after someone gets in touch with you?",
+    "That helps a lot. How do you usually work with a customer, from the first message to the job being done? A few sentences in your own words is plenty.",
+    "Good to know. What happens after someone gets in touch with you, up to the job being done?",
   ],
   "service_area.text": (v) => [
-    `Which areas does ${v.business} serve? A few towns, some neighbourhoods or a rough distance all work.`,
-    "And where do your customers come from? A few towns or areas, or a rough distance from you, is plenty.",
+    `Which areas does ${v.business} cover? A few towns, some neighbourhoods or a rough distance all work.`,
+    "And which towns or areas are you happy to travel to?",
   ],
   "business.phone": () => [
     "Perfect. What's the best phone number for customers to reach you on?",
@@ -207,7 +207,7 @@ Let's talk about your website. It's often the first thing a new customer sees of
 ${ask}`,
       `Thanks${comma(v.owner)}.${v.assistant ? ` ${v.assistant}, reporting for duty!` : ""}
 
-Next is the part most owners put off, the website. A good one turns visitors into real enquiries, and yours will have a Request a quote page so customers can say what they need and you can reply with the right quote.
+Next is the part most owners put off, the website. A good one turns visitors into real enquiries, and yours will have a Request a quote page so customers can describe the job and you can reply with the right quote.
 
 ${ask}`,
     ]
@@ -243,67 +243,27 @@ export function question(step: Asked, v: Voice): string {
 
 /**
  * The photo question, three ways per industry. Chauffeur and legal are the
- * owner's own lines, made to fit any firm in the category; the rest follow
- * their voice: a specific question, then why it matters.
+ * owner's own lines; the rest follow their voice: a specific question, then
+ * why it matters.
  */
 type Photos = ((v: Voice) => string)[]
 
-/** Words that name a place: "your tattoo studio" reads, "your work in" does not. */
-const PLACE =
-  /^(?:studio|shop|salon|clinic|garage|gym|caf[eé]|bakery|school|centre|center|practice|agency|store|bar|restaurant|parlou?r|surgery|kitchen|workshop|boutique|hotel|nursery|kennels?|cattery|farm|brewery|gallery|venue|lab|truck)$/i
-/** Words that name a person, so "your work as a funeral director". */
-const PERSON =
-  /(?:er|or|ist|ian|ant|agent|smith|dj|sweep|chef|cook|guide|vet|nurse|doula|midwife|coach)(?:e?s)?$/i
-/** Words that end like a person and are not one. */
-const THING =
-  /^(?:flower|power|water|paper|timber|leather|rubber|computer|trailer|container|poster|shower|tower|boiler|mirror|door|floor|interior|exterior|decor)s?$/i
+/** The owner's industry as a noun phrase, for the lines that name it. */
+const work = (v: Voice) =>
+  v.industry ? `your ${lower(v.industry.name)} work` : "your work"
 
-/**
- * The owner's own words for their industry, as a phrase that follows
- * "photos of": "your work in drone photography", "your work as a funeral
- * director", "your tattoo studio", "your wedding flowers". Title-cased words
- * are lower-cased, acronyms kept, and a trailing "business" or "company"
- * dropped.
- * ponytail: a suffix heuristic over the last word; an odd noun can still
- * read stiffly, never ungrammatically enough to name the wrong thing.
- */
-export function yourWork(v: Pick<Voice, "industry">): string {
-  const words = (v.industry?.name ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => (/^\p{Lu}[\p{Ll}'-]*$/u.test(w) ? w.toLowerCase() : w))
-  while (
-    words.length > 1 &&
-    /^(?:business|company|firm|ltd|limited)\.?$/i.test(words.at(-1) ?? "")
-  ) {
-    words.pop()
-  }
-  const last = words.at(-1)
-  if (!last || /^(?:business|company|work)$/i.test(last)) return "your work"
-  const phrase = words.join(" ")
-  if (PLACE.test(last)) return `your ${phrase}`
-  if (PERSON.test(last) && !THING.test(last)) {
-    const one = phrase.replace(/(?:(?<=ch|sh)es|(?<=[a-z]|[A-Z]{2})s)$/, "")
-    const an = /^(?:[aeio]|u(?!ni|s[eu])|[AEFHILMNORSX][A-Z])/.test(one)
-    return `your work as ${an ? "an" : "a"} ${one}`
-  }
-  if (/[^su]s$/i.test(last)) return `your ${phrase}`
-  return `your work in ${phrase}`
-}
-
-const PHOTOS: Record<IndustryId, Photos> = {
+const PHOTOS: Partial<Record<IndustryId, Photos>> = {
   chauffeur: [
     () =>
       "Do you have any photos of your fleet, like exterior shots of the vehicles, interior luxury features, or your chauffeurs in uniform? Showing off your cars is the best way to help clients picture their ride.",
     () =>
-      "Do you have photos of your cars in action, for example, at weddings, corporate events, or airport pickups? Real shots of your vehicles make a huge impression on visitors.",
+      "Do you have photos of your limos in action, for example, at weddings, corporate events, or airport pickups? Real shots of your vehicles make a huge impression on visitors.",
     () =>
       "Do you have a few photos of your vehicles, both inside and outside? We can feature your best fleet photos right on the homepage to highlight the luxury experience.",
   ],
   legal: [
     () =>
-      "People bring you things that matter deeply to them, so clients really connect with familiar, approachable faces. Do you have a professional headshot, a photo of your team, or your office space that we could feature?",
+      "Family law is deeply personal, so clients really connect with familiar, approachable faces. Do you have a professional headshot, a photo of your team, or your office space that we could feature?",
     () =>
       "Do you have high-resolution photos of yourself or your practice, or any association badges and certifications? Adding these helps build immediate confidence and trust with prospective clients.",
     () =>
@@ -357,53 +317,21 @@ const PHOTOS: Record<IndustryId, Photos> = {
     () =>
       "Do you have a few of your best property shots? We can feature them on the homepage to show the kind of homes you handle.",
   ],
-  automotive: [
-    () =>
-      "Do you have photos of cars you've worked on, like a repair, a service or a before and after of a valet? Real results show visitors the standard of your work better than anything we could write.",
-    () =>
-      "Do you have photos of your workshop, your team or your equipment? Drivers are trusting you with their car, so seeing a tidy workshop and the people in it helps them book with confidence.",
-    () =>
-      "Do you have a few shots of your best work? We can put them on the homepage so visitors see the finish before they get in touch.",
-  ],
-  education: [
-    () =>
-      "Do you have a photo of yourself, or of a lesson or session in progress? People want to know who they'll be learning from, and a friendly face makes the first step easier.",
-    () =>
-      "Do you have photos of where you teach, or any qualifications and memberships you'd like to show? They help people feel confident before their first session.",
-    () =>
-      "Do you have a welcoming portrait of yourself? It makes the site feel personal from the very first visit.",
-  ],
-  events: [
-    () =>
-      "Do you have photos from events you've worked, like weddings, parties or corporate nights? Real shots from the day help people picture you at theirs.",
-    () =>
-      "Do you have photos of you or your team at work, or of your setup before the guests arrive? People planning a big day want to see who will be there and how it will look.",
-    () =>
-      "Do you have a few favourite shots from past events? We can build the homepage around them.",
-  ],
-  retail: [
-    (v) =>
-      `Do you have photos of your products${v.offering ? `, like ${lower(v.offering)}` : ""}, ideally on a plain background or in use? Clear product shots are what make visitors want to buy.`,
-    (v) =>
-      `Do you have photos of your shop or workspace, or of the people behind ${v.business}? Seeing who they are buying from helps new customers trust you.`,
-    () =>
-      "Do you have a few photos of your best sellers? We can feature them right on the homepage.",
-  ],
 }
 
-/** For an industry the keyword table could not place. */
+/** For every other industry, the owner's own "Something else" included. */
 const GENERIC: Photos = [
   (v) =>
-    `Do you have any photos of ${yourWork(v)}? ${v.offering ? `Shots of ${lower(v.offering)} or of ${v.business} in action` : `Real shots of ${v.business} in action`} help people picture working with you, and they build trust before anyone gets in touch.`,
+    `Do you have any photos of ${work(v)}${v.offering ? `, like ${lower(v.offering)},` : ""} or of ${v.business} in action? Real photos help people picture working with you, and they build trust before anyone gets in touch.`,
   (v) =>
-    `Do you have photos of yourself, your team or where you work, or any qualifications you'd like to show? People choosing ${v.business} like to know who they'll be dealing with.`,
+    `Do you have photos of yourself, your team or your workplace, or any qualifications you'd like to show? People choosing ${v.business} like to know who they'll be dealing with.`,
   (v) =>
-    `Do you have a few photos of ${yourWork(v)}? We can feature the best ones on the homepage, so visitors see what ${v.business} does before they read a word.`,
+    `Do you have a few photos of ${work(v)}? We can feature the best ones on the homepage.`,
 ]
 
 /** The photo question alone. */
 export function photoQuestion(v: Voice): string {
-  const set = v.industry?.category ? PHOTOS[v.industry.category] : GENERIC
+  const set = (v.industry?.category && PHOTOS[v.industry.category]) || GENERIC
   return say(v, pick(v, "photos", set)(v))
 }
 
