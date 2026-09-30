@@ -31,6 +31,8 @@ export const FILLED: Record<string, string> = {
   photo2Alt: "A hallway floor after a clean",
   photo3Src: "/photos/three.jpg",
   photo3Alt: "A bathroom mirror after a clean",
+  heroImage: "/uploads/hero.jpg",
+  heroImageAlt: "A living room after a weekly clean",
   heroHeading: "A home you come back to",
   tagline: "Weekly cleaning for homes in Fairhaven",
   homeIntro: "We clean homes on a schedule the household picks.",

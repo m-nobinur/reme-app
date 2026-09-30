@@ -34,6 +34,7 @@ const HERO = { classic: "split", modern: "centered", bold: "compact" } as const
     eyebrow={site.industry}
     heading={site.heroHeading || site.businessName}
     lede={site.tagline}
+    image={{ src: site.heroImage, alt: site.heroImageAlt }}
   >
     {
       primaryAction && (

@@ -14,13 +14,24 @@ const items = [
   items.length > 0 && (
     <section class="gallery">
       {site.galleryHeading && <h2>{site.galleryHeading}</h2>}
-      <ul class="gallery-grid">
-        {items.map((item) => (
-          <li>
-            <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
-          </li>
-        ))}
-      </ul>
+      {items.length === 1 ? (
+        <figure class="gallery-single">
+          <img
+            src={items[0]?.src}
+            alt={items[0]?.alt}
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+      ) : (
+        <ul class="gallery-grid">
+          {items.map((item) => (
+            <li>
+              <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }

@@ -8,9 +8,18 @@ interface Props {
   eyebrow?: string
   /** split for the home page, compact for a page header, centered otherwise. */
   variant?: "split" | "centered" | "compact"
+  /** The owner's photo, shown only with a path and alt text: in place of the split panel, a cropped banner otherwise. */
+  image?: { src: string; alt: string }
 }
 
-const { heading, lede = "", eyebrow = "", variant = "centered" } = Astro.props
+const {
+  heading,
+  lede = "",
+  eyebrow = "",
+  variant = "centered",
+  image,
+} = Astro.props
+const photo = image?.src && image.alt ? image : null
 // Rendered rather than slotted, so a hero whose actions all resolve to
 // nothing is a hero with no actions and not an empty row.
 const actions = Astro.slots.has("default")
@@ -28,7 +37,17 @@ const actions = Astro.slots.has("default")
           {lede && <p class="lede">{lede}</p>}
           {actions && <div class="actions" set:html={actions} />}
         </div>
-        {variant === "split" && <div class="hero-panel" aria-hidden="true" />}
+        {photo ? (
+          <img
+            class="hero-image"
+            src={photo.src}
+            alt={photo.alt}
+            fetchpriority="high"
+            decoding="async"
+          />
+        ) : (
+          variant === "split" && <div class="hero-panel" aria-hidden="true" />
+        )}
       </div>
     </section>
   )

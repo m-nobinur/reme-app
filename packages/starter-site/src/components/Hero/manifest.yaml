@@ -18,12 +18,19 @@ props:
     type: '"split" | "centered" | "compact"'
     required: false
     description: split for the home page, compact for a page header, centered otherwise.
+  - name: image
+    type: "{ src: string; alt: string }"
+    required: false
+    description: "The owner's photo, shown only with a path and alt text: in place
+      of the split panel, a cropped banner otherwise."
 constraints:
   - One per page, first inside the layout.
   - Children are ActionLink elements only.
   - split for the home page, compact for a page under it, centered otherwise.
   - Renders nothing when the heading, the lede and the actions are all empty.
   - eyebrow is for the home page, with site.industry.
+  - image is the home page's, from site.heroImage and site.heroImageAlt; it
+    renders only with both, and the same photo is not used again on the page.
 examples:
   - "<Hero heading={site.servicesHeading} lede={site.servicesIntro}
     variant=\"compact\" />"

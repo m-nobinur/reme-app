@@ -43,16 +43,20 @@ describe("the presets", () => {
 })
 
 const built: Partial<Record<string, Built>> = {}
+const ONE_PHOTO = { photo2Src: "", photo2Alt: "", photo3Src: "", photo3Alt: "" }
 
 beforeAll(async () => {
-  const [classic, modern, bold] = await Promise.all([
+  const [classic, modern, bold, panel] = await Promise.all([
     build({ site: FILLED }),
     build({ site: { ...FILLED, template: "modern", font: "classic_serif" } }),
+    // Bold carries one photo and classic none in its hero, so the single
+    // figure and the drawn panel are each built once.
     build({
-      site: { ...FILLED, template: "bold", brandColor: MIDNIGHT },
+      site: { ...FILLED, template: "bold", brandColor: MIDNIGHT, ...ONE_PHOTO },
     }),
+    build({ site: { ...FILLED, heroImage: "" } }),
   ])
-  Object.assign(built, { classic, modern, bold })
+  Object.assign(built, { classic, modern, bold, panel })
 }, 120_000)
 
 afterAll(() => {
@@ -94,6 +98,43 @@ describe("a template", () => {
     expect(at(home("modern"), "gallery")).toBeLessThan(
       at(home("modern"), "stats")
     )
+  })
+
+  test("puts the owner's photo in the hero, in place of the split panel", () => {
+    for (const name of ["classic", "modern", "bold"]) {
+      const img = home(name).elements.find((el) =>
+        (el.attrs.class ?? "").split(" ").includes("hero-image")
+      )
+      expect(img?.attrs.src, name).toBe(FILLED.heroImage)
+      expect(img?.attrs.alt, name).toBe(FILLED.heroImageAlt)
+      expect(classes(home(name)), name).not.toContain("hero-panel")
+    }
+    expect(classes(home("panel"))).toContain("hero-panel")
+    expect(classes(home("panel"))).not.toContain("hero-image")
+  })
+
+  test("shows one photo as a single figure and more as a grid of tiles", () => {
+    expect(classes(home("bold"))).toContain("gallery-single")
+    expect(classes(home("bold"))).not.toContain("gallery-grid")
+    expect(classes(home("classic"))).toContain("gallery-grid")
+    expect(classes(home("classic"))).not.toContain("gallery-single")
+  })
+
+  test("crops every photo to a fixed shape", () => {
+    const css = readFileSync(join(ROOT, "src/styles/site.css"), "utf8")
+    for (const selector of [
+      ".hero-image",
+      ".gallery-grid img",
+      ".gallery-single img",
+    ]) {
+      const rule =
+        css.match(
+          new RegExp(`\\n${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`)
+        )?.[1] ?? ""
+      expect(rule, selector).toContain("object-fit: cover")
+      expect(rule, selector).toMatch(/aspect-ratio: \d+ \/ \d+/)
+    }
+    expect(css).not.toMatch(/gallery-grid \{[^}]*auto-fit/)
   })
 
   test("shows the industry above the heading", () => {
