@@ -108,7 +108,9 @@ export const PendingCard = z.enum(["answered", "declined", "unanswered"])
 export const OnboardingPlan = z.strictObject({
   facts: PlanFacts,
   /** Keys in `facts` the assistant chose because the owner left it to them. */
-  defaults: z.array(z.enum(DEFAULTABLE_KEYS)).max(DEFAULTABLE_KEYS.length),
+  chosen_for_owner: z
+    .array(z.enum(DEFAULTABLE_KEYS))
+    .max(DEFAULTABLE_KEYS.length),
   pending_card: PendingCard.nullable(),
   /** The message to the owner. The api checks its length and content. */
   say: z.string().min(1),
