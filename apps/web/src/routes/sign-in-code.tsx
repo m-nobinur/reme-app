@@ -1,3 +1,4 @@
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -43,7 +44,7 @@ function SignInCode() {
 
   const signInLink = (
     <Link
-      className="font-medium text-foreground underline underline-offset-4"
+      className="font-medium text-primary hover:underline"
       search={{ returnTo }}
       to="/sign-in"
     >
@@ -59,7 +60,7 @@ function SignInCode() {
             <Logo />
           </Link>
         }
-        description={`We will email you a ${CODE_LENGTH}-digit code. It works once and expires in ten minutes.`}
+        description={`We will email you a ${CODE_LENGTH}-digit code to sign in with.`}
         footer={signInLink}
         title="Sign in with a code"
       >
@@ -78,11 +79,12 @@ function SignInCode() {
           <Field
             autoComplete="email"
             autoFocus
+            icon={EnvelopeSimpleIcon}
             id="email"
             inputMode="email"
             label="Email"
             name="email"
-            placeholder="name@yourbusiness.com"
+            placeholder="Enter your email"
             required
             type="email"
           />
@@ -133,12 +135,7 @@ function SignInCode() {
           <Alert variant="error">{failure.message}</Alert>
         ) : null}
 
-        <Field
-          error={codeError}
-          hint="It is in the email we just sent. Codes are digits only."
-          id="code"
-          label={`${CODE_LENGTH}-digit code`}
-        >
+        <Field error={codeError} id="code" label={`${CODE_LENGTH}-digit code`}>
           {(wiring) => (
             <CodeInput
               {...wiring}

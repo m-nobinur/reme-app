@@ -1,3 +1,8 @@
+import {
+  EnvelopeSimpleIcon,
+  StorefrontIcon,
+  UserIcon,
+} from "@phosphor-icons/react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -26,12 +31,12 @@ function SignUp() {
           <Logo />
         </Link>
       }
-      description="Set up your workspace in a minute. Nothing is published, and no customer is contacted, until you approve it."
+      description="Your assistant is ready in minutes. Nothing goes live until you say so."
       footer={
         <>
           Already have an account?{" "}
           <Link
-            className="font-medium text-foreground underline underline-offset-4"
+            className="font-medium text-primary hover:underline"
             to="/sign-in"
           >
             Sign in
@@ -60,11 +65,12 @@ function SignUp() {
           <Alert variant="error">{failure.message}</Alert>
         ) : null}
 
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           <Field
             autoComplete="given-name"
             autoFocus
             className="flex-1"
+            icon={UserIcon}
             id="first-name"
             label="First name"
             name="firstName"
@@ -73,6 +79,7 @@ function SignUp() {
           <Field
             autoComplete="family-name"
             className="flex-1"
+            icon={UserIcon}
             id="last-name"
             label="Last name"
             name="lastName"
@@ -82,24 +89,24 @@ function SignUp() {
 
         <Field
           autoComplete="organization"
-          hint="Names your workspace and is what the assistant calls your business. You can change it later."
+          icon={StorefrontIcon}
           id="business-name"
           label="Business name"
           maxLength={120}
           name="businessName"
-          placeholder="Your cleaning business"
+          placeholder="Sparkle Cleaning Co."
           required
         />
 
         <Field
           autoComplete="email"
           error={failure?.field === "email" ? failure.message : undefined}
-          hint="Where approvals and reports go. Use one you check."
+          icon={EnvelopeSimpleIcon}
           id="email"
           inputMode="email"
-          label="Work email"
+          label="Email"
           name="email"
-          placeholder="name@yourbusiness.com"
+          placeholder="Enter your email"
           required
           type="email"
         />
@@ -107,15 +114,11 @@ function SignUp() {
         <PasswordField
           autoComplete="new-password"
           error={failure?.field === "password" ? failure.message : undefined}
-          // Both halves of the policy this environment enforces, measured
-          // rather than assumed: see packages/ui/src/lib/password-policy.ts.
-          // There are no character-class rules, so none are claimed here.
-          hint={`At least ${PASSWORD_POLICY.minLength} characters. A few unrelated words beat symbols.`}
           id="password"
           label="Password"
           minLength={PASSWORD_POLICY.minLength}
           name="password"
-          placeholder="Create a password"
+          placeholder={`At least ${PASSWORD_POLICY.minLength} characters`}
           required
           strength
         />
@@ -124,14 +127,14 @@ function SignUp() {
           Create account
         </SubmitButton>
 
-        <p className="text-balance text-center text-muted-foreground text-xs leading-relaxed">
-          By creating an account you agree to the{" "}
+        <p className="text-center text-muted-foreground text-xs">
+          By continuing you agree to our{" "}
           <Link className="underline underline-offset-4" to="/terms">
-            terms
+            Terms
           </Link>{" "}
-          and the{" "}
+          and{" "}
           <Link className="underline underline-offset-4" to="/privacy">
-            privacy policy
+            Privacy Policy
           </Link>
           .
         </p>

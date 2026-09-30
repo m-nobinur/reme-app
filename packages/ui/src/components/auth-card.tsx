@@ -71,19 +71,19 @@ function AuthCard({
         </header>
 
         <main className="flex flex-1 flex-col justify-center py-10">
-          <div className="mx-auto w-full max-w-sm">
-            <h1 className="font-semibold text-2xl tracking-tight sm:text-3xl">
-              {title}
-            </h1>
+          <div className="mx-auto w-full max-w-md">
+            <h1 className="font-semibold text-3xl tracking-tight">{title}</h1>
             {description ? (
-              <p className="mt-3 text-muted-foreground text-sm leading-relaxed">
+              <p className="mt-3 text-base text-muted-foreground leading-relaxed">
                 {description}
               </p>
             ) : null}
-            {/* Auth inputs are one step taller than the app's: this is the form
-                a first-time visitor has to finish. Set here, by slot, so the
-                shared input keeps its size everywhere else. */}
-            <div className="mt-8 [&_[data-slot=input]]:h-10">{children}</div>
+            {/* Auth inputs are taller, squarer and outlined rather than filled:
+                this is the form a first-time visitor has to finish. Set here,
+                by slot, so the shared input keeps its shape everywhere else. */}
+            <div className="mt-8 [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-input [&_[data-slot=input]]:bg-transparent">
+              {children}
+            </div>
             {footer ? (
               <footer className="mt-8 text-center text-muted-foreground text-sm">
                 {footer}
@@ -148,7 +148,7 @@ function AuthForm({
 
   return (
     <form
-      className={cn("flex flex-col gap-4", className)}
+      className={cn("flex flex-col gap-5", className)}
       data-auth-form="true"
       method="post"
       onSubmit={(event) => {

@@ -49,7 +49,9 @@ function ResetPassword() {
           were signed in stay signed in.
         </Alert>
         <Link
-          className={buttonVariants({ className: "mt-6 w-full" })}
+          className={buttonVariants({
+            className: "mt-6 h-11 w-full rounded-xl",
+          })}
           to="/sign-in"
         >
           Sign in
@@ -78,7 +80,9 @@ function ResetPassword() {
             box with a 10% border, which reads as a caption rather than as the
             way forward. */}
         <Link
-          className={buttonVariants({ className: "mt-6 w-full" })}
+          className={buttonVariants({
+            className: "mt-6 h-11 w-full rounded-xl",
+          })}
           to="/forgot-password"
         >
           Send me a new link
@@ -97,7 +101,7 @@ function ResetPassword() {
       description="Pick something you have not used here before."
       footer={
         <Link
-          className="font-medium text-foreground underline underline-offset-4"
+          className="font-medium text-primary hover:underline"
           to="/sign-in"
         >
           Back to sign in
@@ -123,12 +127,11 @@ function ResetPassword() {
           autoComplete="new-password"
           autoFocus
           error={failure?.field === "newPassword" ? failure.message : undefined}
-          hint={`At least ${PASSWORD_POLICY.minLength} characters. A few unrelated words beat symbols.`}
           id="password"
           label="New password"
           minLength={PASSWORD_POLICY.minLength}
           name="password"
-          placeholder="Create a password"
+          placeholder={`At least ${PASSWORD_POLICY.minLength} characters`}
           required
           strength
         />

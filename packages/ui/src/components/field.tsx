@@ -1,3 +1,4 @@
+import type { Icon } from "@phosphor-icons/react"
 import { Input } from "@workspace/ui/components/input"
 import { cn } from "@workspace/ui/lib/utils"
 import type { ComponentProps, ReactNode } from "react"
@@ -23,6 +24,7 @@ function Field({
   hint,
   error,
   id,
+  icon: FieldIcon,
   className,
   children,
   ...props
@@ -34,6 +36,8 @@ function Field({
   hint?: ReactNode
   error?: string
   id: string
+  /** A glyph inside the start of the input, saying what goes in it. */
+  icon?: Icon
   /**
    * Rendered in place of the default input, for a control this file does not
    * own. Given a function, it is handed the wiring to spread on whatever it
@@ -54,12 +58,22 @@ function Field({
   }
 
   return (
-    <div className={cn("flex flex-col gap-1.5", className)} data-slot="field">
-      <label className="font-medium text-sm" htmlFor={id}>
+    <div className={cn("flex flex-col gap-2", className)} data-slot="field">
+      <label className="text-sm" htmlFor={id}>
         {label}
       </label>
-      {typeof children === "function" ? children(wiring) : children}
-      {children ? null : <Input {...wiring} {...props} />}
+      <div
+        className={cn("relative", FieldIcon && "[&_[data-slot=input]]:pl-10")}
+      >
+        {FieldIcon ? (
+          <FieldIcon
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-3.5 z-10 size-4.5 -translate-y-1/2 text-muted-foreground"
+          />
+        ) : null}
+        {typeof children === "function" ? children(wiring) : children}
+        {children ? null : <Input {...wiring} {...props} />}
+      </div>
       {hint ? (
         <p className="text-muted-foreground text-xs" id={hintId}>
           {hint}

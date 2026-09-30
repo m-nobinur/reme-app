@@ -1,4 +1,4 @@
-import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
+import { EyeIcon, EyeSlashIcon, LockIcon } from "@phosphor-icons/react"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -177,6 +177,7 @@ function PasswordField({
           hint
         )
       }
+      icon={LockIcon}
       id={id}
       label={label}
     >
@@ -200,15 +201,15 @@ function PasswordField({
             // the name is what a person navigating by control list hears; a bare
             // icon with a fixed label leaves one of the two wrong at all times.
             aria-pressed={visible}
-            className="absolute top-1/2 right-1 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
             onClick={() => setVisible((shown) => !shown)}
             // Never a submit. Inside a form, a button with no type is one.
             type="button"
           >
             {visible ? (
-              <EyeSlashIcon aria-hidden className="size-4" />
+              <EyeSlashIcon aria-hidden className="size-4.5" />
             ) : (
-              <EyeIcon aria-hidden className="size-4" />
+              <EyeIcon aria-hidden className="size-4.5" />
             )}
             <span className="sr-only">{TOGGLE_LABEL[visible ? 1 : 0]}</span>
           </button>

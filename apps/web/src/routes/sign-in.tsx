@@ -1,4 +1,8 @@
-import { GoogleLogoIcon } from "@phosphor-icons/react"
+import {
+  EnvelopeSimpleIcon,
+  GoogleLogoIcon,
+  PaperPlaneTiltIcon,
+} from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -68,12 +72,12 @@ function SignIn() {
           <Logo />
         </Link>
       }
-      description="Sign in to see what needs you today."
+      description="Sign in to see what your assistant has handled and what needs you."
       footer={
         <>
           New to Reme?{" "}
           <Link
-            className="font-medium text-foreground underline underline-offset-4"
+            className="font-medium text-primary hover:underline"
             to="/sign-up"
           >
             Create an account
@@ -112,11 +116,12 @@ function SignIn() {
           autoComplete="email"
           autoFocus
           error={failure?.field === "email" ? failure.message : undefined}
+          icon={EnvelopeSimpleIcon}
           id="email"
           inputMode="email"
           label="Email"
           name="email"
-          placeholder="name@yourbusiness.com"
+          placeholder="Enter your email"
           required
           type="email"
         />
@@ -124,19 +129,17 @@ function SignIn() {
         <PasswordField
           autoComplete="current-password"
           error={failure?.field === "password" ? failure.message : undefined}
-          hint={
-            <Link
-              className="underline underline-offset-4"
-              to="/forgot-password"
-            >
-              Forgotten your password?
-            </Link>
-          }
           id="password"
           label="Password"
           name="password"
-          placeholder="Your password"
+          placeholder="Enter your password"
         />
+        <Link
+          className="-mt-2 self-end font-medium text-primary text-sm hover:underline"
+          to="/forgot-password"
+        >
+          Forgot password?
+        </Link>
 
         <SubmitButton pending={pending} pendingLabel="Signing in…">
           Sign in
@@ -145,7 +148,7 @@ function SignIn() {
 
       <div className="my-6 flex items-center gap-3">
         <span aria-hidden className="h-px flex-1 bg-border" />
-        <span className="text-muted-foreground text-xs">or</span>
+        <span className="text-muted-foreground text-sm">or</span>
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
 
@@ -155,7 +158,7 @@ function SignIn() {
             className={buttonVariants({
               variant: "outline",
               size: "lg",
-              className: "w-full",
+              className: "h-11 w-full rounded-xl",
             })}
             // A plain link, not a fetch: the provider redirect has to be a
             // top-level navigation, and the state cookie is set on this
@@ -171,11 +174,12 @@ function SignIn() {
           className={buttonVariants({
             variant: "outline",
             size: "lg",
-            className: "w-full",
+            className: "h-11 w-full rounded-xl",
           })}
           search={{ returnTo }}
           to="/sign-in-code"
         >
+          <PaperPlaneTiltIcon aria-hidden />
           Email me a sign-in code
         </Link>
       </div>
