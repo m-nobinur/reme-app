@@ -166,11 +166,11 @@ export const turnBody =
 
 /**
  * A session with no business behind it (`org.unresolved`), in the owner's
- * words. It is a signup whose business did not reach the session yet, which
- * the frame retries on the next page load.
+ * words: a first Google sign-in that skipped naming it, or a signup whose
+ * business did not reach the session. The panel's first step names it.
  */
 export const NO_BUSINESS =
-  "Your account is not linked to a business yet. Reload the page to finish setting it up. If this keeps happening, sign out and sign in again."
+  "Your account is not linked to a business yet. Name your business in the panel to get started."
 
 /**
  * A refusal as the owner reads it: the api's envelope message, which it

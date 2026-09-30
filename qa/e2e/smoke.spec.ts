@@ -172,7 +172,7 @@ test("a chat turn sends only what the owner did", async ({ page }) => {
   // reads as the api's own sentence, not as the JSON it came in, and it
   // writes nothing anywhere.
   const refusal = page.locator(".aui-message-error-message")
-  await expect(refusal).toHaveText(/organisation/)
+  await expect(refusal).toHaveText(/not linked to a business/)
   await expect(refusal).not.toContainText("{")
   await expect
     .poll(() => reads.length, {
