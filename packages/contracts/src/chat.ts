@@ -131,6 +131,12 @@ export const ChatRequest = z.strictObject({
    * Optional while older clients send none.
    */
   time_zone: TimeZone.optional(),
+  /**
+   * Set when the owner pressed Request changes on the website panel before
+   * typing: the message describes a change to their website. Read on a
+   * message turn only.
+   */
+  intent: z.enum(["site_change"]).optional(),
   turn: z.discriminatedUnion("kind", [
     z.strictObject({
       kind: z.literal("message"),

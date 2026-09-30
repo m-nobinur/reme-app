@@ -1853,6 +1853,10 @@
             "type": "string",
             "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
           },
+          "intent": {
+            "type": "string",
+            "enum": ["site_change"]
+          },
           "turn": {
             "oneOf": [
               {
