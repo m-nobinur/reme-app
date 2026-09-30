@@ -6,8 +6,12 @@ import {
   InformationRequest,
 } from "./assignment.ts"
 import {
+  AskChoiceInput,
+  AskChoiceOutput,
   AskFactInput,
   AskFactOutput,
+  AskUploadInput,
+  AskUploadOutput,
   ChatRequest,
   RequestChangeOutput,
 } from "./chat.ts"
@@ -39,6 +43,7 @@ import {
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
+import { Asset, UploadedAssets } from "./onboarding.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
   ActivityFeed,
@@ -81,8 +86,13 @@ export const contracts = {
   AnswerRequest,
   ApprovalDecision,
   ApprovalRequest,
+  AskChoiceInput,
+  AskChoiceOutput,
   AskFactInput,
   AskFactOutput,
+  AskUploadInput,
+  AskUploadOutput,
+  Asset,
   Assignment,
   AttentionItem,
   BuildSummary,
@@ -139,6 +149,7 @@ export const contracts = {
   StaffDirectory,
   StaffMember,
   TextAnswerSchema,
+  UploadedAssets,
   ValidationReport,
   WorkspaceStatus,
 } as const

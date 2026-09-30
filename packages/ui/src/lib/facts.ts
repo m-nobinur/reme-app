@@ -10,6 +10,21 @@ const LABEL: Record<FactValueKey, string> = {
   "service_area.radius": "Service area",
   "pricing.standard_clean_hourly": "Hourly price for a standard clean",
   "business.tagline": "Tagline",
+  "business.industry": "Industry",
+  "business.offerings": "Products and services",
+  "business.audience": "Who you serve",
+  "business.overview": "How you work",
+  "service_area.text": "Area you cover",
+  "assistant.name": "Assistant's name",
+  "assistant.pronouns": "Assistant's pronouns",
+  "assistant.tone": "Assistant's tone",
+  "owner.preferred_name": "What the assistant calls you",
+  "site.build_mode": "Who builds the site",
+  "site.template": "Website template",
+  "site.palette": "Website colours",
+  "site.font": "Website font",
+  "site.pages": "Website pages",
+  "media.uploads": "Your photos",
 }
 
 /** `service_area` to `Service area`. */
@@ -34,11 +49,29 @@ export function factText(key: string, raw: unknown): string {
     return String(raw)
   }
   const value = raw as Record<string, unknown>
-  for (const field of ["name", "tagline", "e164", "address"]) {
+  for (const field of [
+    "name",
+    "tagline",
+    "e164",
+    "address",
+    "text",
+    "id",
+    "mode",
+  ]) {
     const text = value[field]
     if (typeof text === "string") {
       return text
     }
+  }
+  const list = value.items ?? value.ids
+  if (Array.isArray(list)) {
+    return list
+      .map((each) =>
+        typeof each === "string"
+          ? each
+          : ((each as { name?: string }).name ?? "")
+      )
+      .join(", ")
   }
   if (typeof value.open === "string" && typeof value.close === "string") {
     return `${value.open} to ${value.close}`

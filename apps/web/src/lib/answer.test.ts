@@ -1,8 +1,13 @@
-import { FactValue, FactValueKey } from "@workspace/contracts"
+import {
+  type AskableFactKey,
+  FactValue,
+  FactValueKey,
+} from "@workspace/contracts"
 import {
   type AnswerSpec,
   answerSpecOf,
   answerValue,
+  askable,
   FACT_INPUTS,
 } from "@workspace/ui/lib/answer"
 import { expect, it } from "vitest"
@@ -19,7 +24,7 @@ const form =
     values[name] ?? ""
 
 it("asks a fact key with that key's inputs, whatever the schema says", () => {
-  for (const key of FactValueKey.options) {
+  for (const key of FactValueKey.options.filter(askable)) {
     expect(
       answerSpecOf({
         field: key,
@@ -61,7 +66,7 @@ it("falls back to plain text at the owner's cap for a schema it cannot read", ()
 })
 
 /** A value each fact's inputs accept, as an owner would type it. */
-const TYPED: Record<FactValueKey, Record<string, string>> = {
+const TYPED: Record<AskableFactKey, Record<string, string>> = {
   "business.name": { name: "Brightclean" },
   "business.phone": { e164: "07700 900123" },
   "business.email": { address: "hello@example.com" },
@@ -69,10 +74,16 @@ const TYPED: Record<FactValueKey, Record<string, string>> = {
   "service_area.radius": { centre: "Anytown", radius_km: "15" },
   "pricing.standard_clean_hourly": { amount_minor: "18.50" },
   "business.tagline": { tagline: "Homes left spotless" },
+  "business.offerings": { items: "Deep cleans, end of tenancy" },
+  "business.audience": { text: "Busy families" },
+  "business.overview": { text: "Two crews, booked a week ahead" },
+  "service_area.text": { text: "Anytown and the villages around it" },
+  "assistant.name": { name: "Sam" },
+  "owner.preferred_name": { name: "Jo" },
 }
 
 it("builds a FactValue from every fact's inputs", () => {
-  for (const key of FactValueKey.options) {
+  for (const key of FactValueKey.options.filter(askable)) {
     const parsed = answerValue({ kind: "fact", key }, form(TYPED[key]))
     expect(parsed, key).toHaveProperty("value")
     if ("value" in parsed) {
@@ -133,9 +144,9 @@ it("refuses blank, overlong and non-email text", () => {
   )
 })
 
-it("has native inputs for every fact key", () => {
+it("has native inputs for every fact an owner types", () => {
   expect(Object.keys(FACT_INPUTS).sort()).toEqual(
-    [...FactValueKey.options].sort()
+    [...FactValueKey.options.filter(askable)].sort((a, b) => a.localeCompare(b))
   )
 })
 

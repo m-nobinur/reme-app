@@ -1,5 +1,6 @@
 import {
   ANSWER_TEXT_MAX,
+  type AskableFactKey,
   FactValue,
   FactValueKey,
   TextAnswerSchema,
@@ -12,7 +13,7 @@ import {
  * the question's `TextAnswerSchema`. JSON, so it can cross a server function.
  */
 export type AnswerSpec =
-  | { kind: "fact"; key: FactValueKey }
+  | { kind: "fact"; key: AskableFactKey }
   | { kind: "choice"; options: string[] }
   | { kind: "text"; maxLength: number; email: boolean }
 
@@ -51,9 +52,19 @@ const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw))
 /** Pounds as typed to pence. `Math.round`, so 12.5 is 1250 and not 1249.99. */
 const pence = (raw: string) => Math.round(number(raw) * 100)
 
+/** Items typed one to a line or separated by commas, as a list. */
+const items = (raw: string) =>
+  raw
+    .split(/[\n,;]+/)
+    .map((each) => each.trim())
+    .filter(Boolean)
+
+const line = (name: string, label: string, maxLength: number) =>
+  [{ name, label, type: "text", maxLength }] as const
+
 /**
- * The question and the inputs for each fact an owner can state. Every
- * `FactValueKey` has a row, so a key added to the contract without its
+ * The question and the inputs for each fact an owner types. Every
+ * `AskableFactKey` has a row, so a key added to the contract without its
  * question and inputs here fails the build. Prices are pounds: the owner is a
  * UK sole trader.
  */
@@ -141,8 +152,39 @@ export const FACT_INPUTS = {
       { name: "tagline", label: "Tagline", type: "text", maxLength: 120 },
     ],
   },
+  "business.offerings": {
+    ask: "What do you sell or offer?",
+    fields: [
+      {
+        name: "items",
+        label: "Products or services, separated by commas",
+        type: "text",
+        parse: items,
+      },
+    ],
+  },
+  "business.audience": {
+    ask: "Who are your customers?",
+    fields: line("text", "Your customers", 500),
+  },
+  "business.overview": {
+    ask: "How does the business run day to day?",
+    fields: line("text", "How you work", 800),
+  },
+  "service_area.text": {
+    ask: "Where do you work?",
+    fields: line("text", "Towns, regions or postcodes", 200),
+  },
+  "assistant.name": {
+    ask: "What would you like to call your assistant?",
+    fields: line("name", "Assistant's name", 40),
+  },
+  "owner.preferred_name": {
+    ask: "What should your assistant call you?",
+    fields: line("name", "Your name", 60),
+  },
 } satisfies Record<
-  FactValueKey,
+  AskableFactKey,
   {
     /** How onboarding asks for it. */
     ask: string
@@ -151,6 +193,10 @@ export const FACT_INPUTS = {
   }
 >
 
+/** Whether an owner types this fact, as opposed to picking or uploading it. */
+export const askable = (key: FactValueKey): key is AskableFactKey =>
+  key in FACT_INPUTS
+
 /** The spec for one `InformationRequest`, from its own fields. */
 export function answerSpecOf(request: {
   field: string
@@ -158,7 +204,7 @@ export function answerSpecOf(request: {
   options: string[] | null
 }): AnswerSpec {
   const key = FactValueKey.safeParse(request.field)
-  if (key.success) return { kind: "fact", key: key.data }
+  if (key.success && askable(key.data)) return { kind: "fact", key: key.data }
   if (request.options?.length) {
     return { kind: "choice", options: request.options }
   }

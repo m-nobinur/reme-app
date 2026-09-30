@@ -59,6 +59,37 @@ const facts = {
   "service_area.radius": { centre: "Fairhaven", radius_km: 25 },
   "pricing.standard_clean_hourly": { amount_minor: 3500, currency: "GBP" },
   "business.tagline": { tagline: "Cleaning you can plan your week around" },
+  "business.industry": {
+    name: "Limousine and chauffeur hire",
+    category: "chauffeur",
+  },
+  "business.offerings": { items: ["Airport transfers", "Wedding hire"] },
+  "business.audience": {
+    text: "Couples, corporate travellers and event planners",
+  },
+  "business.overview": {
+    text: "Six cars, eight chauffeurs, bookings by phone or email",
+  },
+  "service_area.text": { text: "Greater Fairhaven and the airports" },
+  "assistant.name": { name: "Sam" },
+  "assistant.pronouns": { id: "she_her" },
+  "assistant.tone": { id: "friendly" },
+  "owner.preferred_name": { name: "Jo" },
+  "site.build_mode": { mode: "assistant" },
+  "site.template": { id: "classic" },
+  "site.palette": { id: "ocean" },
+  "site.font": { id: "custom", custom: "Something like a newspaper headline" },
+  "site.pages": { ids: ["home", "services", "quote"] },
+  "media.uploads": {
+    items: [
+      {
+        id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+        name: "fleet-front.jpg",
+        content_type: "image/jpeg",
+        bytes: 482113,
+      },
+    ],
+  },
 }
 
 describe("AttentionItem", () => {
@@ -308,6 +339,21 @@ describe("the bridge's building blocks", () => {
       "service_area.radius",
       "pricing.standard_clean_hourly",
       "business.tagline",
+      "business.industry",
+      "business.offerings",
+      "business.audience",
+      "business.overview",
+      "service_area.text",
+      "assistant.name",
+      "assistant.pronouns",
+      "assistant.tone",
+      "owner.preferred_name",
+      "site.build_mode",
+      "site.template",
+      "site.palette",
+      "site.font",
+      "site.pages",
+      "media.uploads",
     ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })
@@ -479,5 +525,15 @@ describe("WorkspaceStatus reminders", () => {
         reminders: { notes: [], derived: [] },
       })
     ).toEqual(ACCEPTED)
+  })
+})
+
+describe("the onboarding presets", () => {
+  it("has a palette entry for every palette id and nothing else", async () => {
+    const { PALETTES, PaletteId } = await import("../src/onboarding.ts")
+    expect(PALETTES.map((p) => p.id)).toEqual(PaletteId.options)
+    for (const palette of PALETTES) {
+      expect(palette.swatches[0]).toBe(palette.brand)
+    }
   })
 })

@@ -1,10 +1,10 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import { CheckCircleIcon } from "@phosphor-icons/react"
-import type { AskFactOutput } from "@workspace/contracts"
+import type { AskableFactKey, AskFactOutput } from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
-import { answerValue, FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { factText } from "@workspace/ui/lib/facts"
 import { askFactView } from "@workspace/ui/lib/tool-state"
 import { type FormEvent, useEffect, useId, useRef, useState } from "react"
@@ -42,12 +42,14 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
     return () => clearTimeout(timer)
   }, [running, waiting])
   const [invalid, setInvalid] = useState<string | null>(null)
-  const question = view.key ? FACT_INPUTS[view.key].ask : "A question"
+  const question =
+    view.key && askable(view.key) ? FACT_INPUTS[view.key].ask : "A question"
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (view.state !== "pending") return
     const { key } = view.input
+    if (!askable(key)) return
     const form = new FormData(event.currentTarget)
     const parsed = answerValue({ kind: "fact", key }, (name) =>
       String(form.get(name) ?? "")
@@ -81,7 +83,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
             id={id}
             invalid={invalid !== null}
             prefill={view.input.prefill}
-            spec={{ kind: "fact", key: view.input.key }}
+            spec={{ kind: "fact", key: view.input.key as AskableFactKey }}
             title={question}
           />
           {invalid ? (

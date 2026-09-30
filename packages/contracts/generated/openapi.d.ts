@@ -95,6 +95,156 @@ export interface components {
                   tagline: string
                 }
               }
+            | {
+                /** @constant */
+                key: "business.industry"
+                value: {
+                  name: string
+                  category:
+                    | (
+                        | "cleaning"
+                        | "chauffeur"
+                        | "legal"
+                        | "health"
+                        | "beauty"
+                        | "food"
+                        | "trades"
+                        | "automotive"
+                        | "property"
+                        | "education"
+                        | "events"
+                        | "retail"
+                      )
+                    | null
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.offerings"
+                value: {
+                  items: string[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.audience"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.overview"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.text"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.pronouns"
+                value: {
+                  /** @enum {string} */
+                  id: "he_him" | "she_her" | "they_them"
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.tone"
+                value: {
+                  /** @enum {string} */
+                  id: "friendly" | "professional" | "casual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.preferred_name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.build_mode"
+                value: {
+                  /** @enum {string} */
+                  mode: "assistant" | "manual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.template"
+                value: {
+                  /** @enum {string} */
+                  id: "classic" | "modern" | "bold"
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.palette"
+                value: {
+                  id:
+                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | "custom"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.font"
+                value: {
+                  id:
+                    | ("clean_sans" | "classic_serif" | "soft_rounded")
+                    | "custom"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.pages"
+                value: {
+                  ids: (
+                    | "home"
+                    | "services"
+                    | "about"
+                    | "gallery"
+                    | "testimonials"
+                    | "faq"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  )[]
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "media.uploads"
+                value: {
+                  items: {
+                    /** Format: uuid */
+                    id: string
+                    name: string
+                    /** @enum {string} */
+                    content_type: "image/jpeg" | "image/png" | "image/webp"
+                    bytes: number
+                    alt?: string
+                  }[]
+                }
+              }
           )
         | string
     }
@@ -218,6 +368,61 @@ export interface components {
       /** Format: date-time */
       expires_at: string
     }
+    AskChoiceInput: {
+      /** @enum {string} */
+      step:
+        | "industry"
+        | "pronouns"
+        | "tone"
+        | "build_for_me"
+        | "manual_builder"
+        | "template"
+        | "palette"
+        | "font"
+        | "pages"
+      options: {
+        id: string
+        label: string
+        hint: string | null
+        visual:
+          | (
+              | {
+                  /** @constant */
+                  kind: "swatches"
+                  colors: string[]
+                }
+              | {
+                  /** @constant */
+                  kind: "font"
+                  family: string
+                }
+              | {
+                  /** @constant */
+                  kind: "template"
+                  id: string
+                }
+            )
+          | null
+      }[]
+      multiple: boolean
+      preselected: string[]
+      other: {
+        label: string
+        placeholder: string
+      } | null
+      skippable: boolean
+    }
+    AskChoiceOutput:
+      | {
+          /** @constant */
+          answer: "chosen"
+          ids: string[]
+          other: string | null
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
     AskFactInput:
       | {
           /** @constant */
@@ -280,6 +485,169 @@ export interface components {
             tagline: string
           } | null
         }
+      | {
+          /** @constant */
+          key: "business.industry"
+          skippable: boolean
+          prefill: {
+            name: string
+            category:
+              | (
+                  | "cleaning"
+                  | "chauffeur"
+                  | "legal"
+                  | "health"
+                  | "beauty"
+                  | "food"
+                  | "trades"
+                  | "automotive"
+                  | "property"
+                  | "education"
+                  | "events"
+                  | "retail"
+                )
+              | null
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.offerings"
+          skippable: boolean
+          prefill: {
+            items: string[]
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.audience"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.overview"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "service_area.text"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "assistant.name"
+          skippable: boolean
+          prefill: {
+            name: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "assistant.pronouns"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            id: "he_him" | "she_her" | "they_them"
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "assistant.tone"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            id: "friendly" | "professional" | "casual"
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "owner.preferred_name"
+          skippable: boolean
+          prefill: {
+            name: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.build_mode"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            mode: "assistant" | "manual"
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.template"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            id: "classic" | "modern" | "bold"
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.palette"
+          skippable: boolean
+          prefill: {
+            id:
+              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | "custom"
+            custom?: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.font"
+          skippable: boolean
+          prefill: {
+            id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+            custom?: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.pages"
+          skippable: boolean
+          prefill: {
+            ids: (
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+            )[]
+            custom?: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "media.uploads"
+          skippable: boolean
+          prefill: {
+            items: {
+              /** Format: uuid */
+              id: string
+              name: string
+              /** @enum {string} */
+              content_type: "image/jpeg" | "image/png" | "image/webp"
+              bytes: number
+              alt?: string
+            }[]
+          } | null
+        }
     AskFactOutput:
       | {
           /** @constant */
@@ -339,11 +707,194 @@ export interface components {
                   tagline: string
                 }
               }
+            | {
+                /** @constant */
+                key: "business.industry"
+                value: {
+                  name: string
+                  category:
+                    | (
+                        | "cleaning"
+                        | "chauffeur"
+                        | "legal"
+                        | "health"
+                        | "beauty"
+                        | "food"
+                        | "trades"
+                        | "automotive"
+                        | "property"
+                        | "education"
+                        | "events"
+                        | "retail"
+                      )
+                    | null
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.offerings"
+                value: {
+                  items: string[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.audience"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.overview"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.text"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.pronouns"
+                value: {
+                  /** @enum {string} */
+                  id: "he_him" | "she_her" | "they_them"
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.tone"
+                value: {
+                  /** @enum {string} */
+                  id: "friendly" | "professional" | "casual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.preferred_name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.build_mode"
+                value: {
+                  /** @enum {string} */
+                  mode: "assistant" | "manual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.template"
+                value: {
+                  /** @enum {string} */
+                  id: "classic" | "modern" | "bold"
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.palette"
+                value: {
+                  id:
+                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | "custom"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.font"
+                value: {
+                  id:
+                    | ("clean_sans" | "classic_serif" | "soft_rounded")
+                    | "custom"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.pages"
+                value: {
+                  ids: (
+                    | "home"
+                    | "services"
+                    | "about"
+                    | "gallery"
+                    | "testimonials"
+                    | "faq"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  )[]
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "media.uploads"
+                value: {
+                  items: {
+                    /** Format: uuid */
+                    id: string
+                    name: string
+                    /** @enum {string} */
+                    content_type: "image/jpeg" | "image/png" | "image/webp"
+                    bytes: number
+                    alt?: string
+                  }[]
+                }
+              }
         }
       | {
           /** @constant */
           answer: "skipped"
         }
+    AskUploadInput: {
+      accept: ("image/jpeg" | "image/png" | "image/webp")[]
+      max_files: number
+      max_bytes: number
+      skippable: boolean
+    }
+    AskUploadOutput:
+      | {
+          /** @constant */
+          answer: "uploaded"
+          assets: {
+            /** Format: uuid */
+            id: string
+            name: string
+            /** @enum {string} */
+            content_type: "image/jpeg" | "image/png" | "image/webp"
+            bytes: number
+            alt?: string
+          }[]
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
+    Asset: {
+      /** Format: uuid */
+      id: string
+      name: string
+      /** @enum {string} */
+      content_type: "image/jpeg" | "image/png" | "image/webp"
+      bytes: number
+      alt?: string
+    }
     Assignment: {
       /** Format: uuid */
       assignment_id: string
@@ -569,69 +1120,268 @@ export interface components {
                   kind: "answer"
                   tool_call_id: string
                   output:
-                    | {
-                        /** @constant */
-                        answer: "stated"
-                        fact:
-                          | {
-                              /** @constant */
-                              key: "business.name"
-                              value: {
-                                name: string
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "business.phone"
-                              value: {
-                                e164: string
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "business.email"
-                              value: {
-                                /** Format: email */
-                                address: string
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "hours.weekday"
-                              value: {
-                                open: string
-                                close: string
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "service_area.radius"
-                              value: {
-                                centre: string
-                                radius_km: number
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "pricing.standard_clean_hourly"
-                              value: {
-                                amount_minor: number
-                                /** @enum {string} */
-                                currency: "GBP" | "USD" | "EUR"
-                              }
-                            }
-                          | {
-                              /** @constant */
-                              key: "business.tagline"
-                              value: {
-                                tagline: string
-                              }
-                            }
-                      }
-                    | {
-                        /** @constant */
-                        answer: "skipped"
-                      }
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "stated"
+                            fact:
+                              | {
+                                  /** @constant */
+                                  key: "business.name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.phone"
+                                  value: {
+                                    e164: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.email"
+                                  value: {
+                                    /** Format: email */
+                                    address: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "hours.weekday"
+                                  value: {
+                                    open: string
+                                    close: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "service_area.radius"
+                                  value: {
+                                    centre: string
+                                    radius_km: number
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "pricing.standard_clean_hourly"
+                                  value: {
+                                    amount_minor: number
+                                    /** @enum {string} */
+                                    currency: "GBP" | "USD" | "EUR"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.tagline"
+                                  value: {
+                                    tagline: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.industry"
+                                  value: {
+                                    name: string
+                                    category:
+                                      | (
+                                          | "cleaning"
+                                          | "chauffeur"
+                                          | "legal"
+                                          | "health"
+                                          | "beauty"
+                                          | "food"
+                                          | "trades"
+                                          | "automotive"
+                                          | "property"
+                                          | "education"
+                                          | "events"
+                                          | "retail"
+                                        )
+                                      | null
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.offerings"
+                                  value: {
+                                    items: string[]
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.audience"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.overview"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "service_area.text"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.pronouns"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "he_him" | "she_her" | "they_them"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.tone"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "friendly" | "professional" | "casual"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "owner.preferred_name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.build_mode"
+                                  value: {
+                                    /** @enum {string} */
+                                    mode: "assistant" | "manual"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.template"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "classic" | "modern" | "bold"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.palette"
+                                  value: {
+                                    id:
+                                      | (
+                                          | "ocean"
+                                          | "forest"
+                                          | "sunset"
+                                          | "midnight"
+                                          | "graphite"
+                                        )
+                                      | "custom"
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.font"
+                                  value: {
+                                    id:
+                                      | (
+                                          | "clean_sans"
+                                          | "classic_serif"
+                                          | "soft_rounded"
+                                        )
+                                      | "custom"
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.pages"
+                                  value: {
+                                    ids: (
+                                      | "home"
+                                      | "services"
+                                      | "about"
+                                      | "gallery"
+                                      | "testimonials"
+                                      | "faq"
+                                      | "service_area"
+                                      | "contact"
+                                      | "quote"
+                                    )[]
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "media.uploads"
+                                  value: {
+                                    items: {
+                                      /** Format: uuid */
+                                      id: string
+                                      name: string
+                                      /** @enum {string} */
+                                      content_type:
+                                        | "image/jpeg"
+                                        | "image/png"
+                                        | "image/webp"
+                                      bytes: number
+                                      alt?: string
+                                    }[]
+                                  }
+                                }
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "chosen"
+                            ids: string[]
+                            other: string | null
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "uploaded"
+                            assets: {
+                              /** Format: uuid */
+                              id: string
+                              name: string
+                              /** @enum {string} */
+                              content_type:
+                                | "image/jpeg"
+                                | "image/png"
+                                | "image/webp"
+                              bytes: number
+                              alt?: string
+                            }[]
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
                 }
               | {
                   /** @constant */
@@ -843,6 +1593,154 @@ export interface components {
               tagline: string
             }
           }
+        | {
+            /** @constant */
+            key: "business.industry"
+            value: {
+              name: string
+              category:
+                | (
+                    | "cleaning"
+                    | "chauffeur"
+                    | "legal"
+                    | "health"
+                    | "beauty"
+                    | "food"
+                    | "trades"
+                    | "automotive"
+                    | "property"
+                    | "education"
+                    | "events"
+                    | "retail"
+                  )
+                | null
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.offerings"
+            value: {
+              items: string[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.audience"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.overview"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.text"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.pronouns"
+            value: {
+              /** @enum {string} */
+              id: "he_him" | "she_her" | "they_them"
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.tone"
+            value: {
+              /** @enum {string} */
+              id: "friendly" | "professional" | "casual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.preferred_name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.build_mode"
+            value: {
+              /** @enum {string} */
+              mode: "assistant" | "manual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.template"
+            value: {
+              /** @enum {string} */
+              id: "classic" | "modern" | "bold"
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.palette"
+            value: {
+              id:
+                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | "custom"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.font"
+            value: {
+              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.pages"
+            value: {
+              ids: (
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+              )[]
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "media.uploads"
+            value: {
+              items: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+              }[]
+            }
+          }
       )[]
     }
     CosFeedback: {
@@ -955,6 +1853,21 @@ export interface components {
               | "service_area.radius"
               | "pricing.standard_clean_hourly"
               | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "service_area.text"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.pages"
+              | "media.uploads"
             )[]
           }
         }
@@ -1017,6 +1930,162 @@ export interface components {
                   key: "business.tagline"
                   value: {
                     tagline: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.industry"
+                  value: {
+                    name: string
+                    category:
+                      | (
+                          | "cleaning"
+                          | "chauffeur"
+                          | "legal"
+                          | "health"
+                          | "beauty"
+                          | "food"
+                          | "trades"
+                          | "automotive"
+                          | "property"
+                          | "education"
+                          | "events"
+                          | "retail"
+                        )
+                      | null
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.offerings"
+                  value: {
+                    items: string[]
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.audience"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.overview"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "service_area.text"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "assistant.name"
+                  value: {
+                    name: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "assistant.pronouns"
+                  value: {
+                    /** @enum {string} */
+                    id: "he_him" | "she_her" | "they_them"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "assistant.tone"
+                  value: {
+                    /** @enum {string} */
+                    id: "friendly" | "professional" | "casual"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "owner.preferred_name"
+                  value: {
+                    name: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.build_mode"
+                  value: {
+                    /** @enum {string} */
+                    mode: "assistant" | "manual"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.template"
+                  value: {
+                    /** @enum {string} */
+                    id: "classic" | "modern" | "bold"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.palette"
+                  value: {
+                    id:
+                      | (
+                          | "ocean"
+                          | "forest"
+                          | "sunset"
+                          | "midnight"
+                          | "graphite"
+                        )
+                      | "custom"
+                    custom?: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.font"
+                  value: {
+                    id:
+                      | ("clean_sans" | "classic_serif" | "soft_rounded")
+                      | "custom"
+                    custom?: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.pages"
+                  value: {
+                    ids: (
+                      | "home"
+                      | "services"
+                      | "about"
+                      | "gallery"
+                      | "testimonials"
+                      | "faq"
+                      | "service_area"
+                      | "contact"
+                      | "quote"
+                    )[]
+                    custom?: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "media.uploads"
+                  value: {
+                    items: {
+                      /** Format: uuid */
+                      id: string
+                      name: string
+                      /** @enum {string} */
+                      content_type: "image/jpeg" | "image/png" | "image/webp"
+                      bytes: number
+                      alt?: string
+                    }[]
                   }
                 }
             )[]
@@ -1330,6 +2399,21 @@ export interface components {
         | "service_area.radius"
         | "pricing.standard_clean_hourly"
         | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.pages"
+        | "media.uploads"
       )[]
     }
     CreateOrgRequest: {
@@ -1423,6 +2507,21 @@ export interface components {
             | "service_area.radius"
             | "pricing.standard_clean_hourly"
             | "business.tagline"
+            | "business.industry"
+            | "business.offerings"
+            | "business.audience"
+            | "business.overview"
+            | "service_area.text"
+            | "assistant.name"
+            | "assistant.pronouns"
+            | "assistant.tone"
+            | "owner.preferred_name"
+            | "site.build_mode"
+            | "site.template"
+            | "site.palette"
+            | "site.font"
+            | "site.pages"
+            | "media.uploads"
           )[]
         }
     ErrorEnvelope: {
@@ -1603,6 +2702,154 @@ export interface components {
           key: "business.tagline"
           value: {
             tagline: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.industry"
+          value: {
+            name: string
+            category:
+              | (
+                  | "cleaning"
+                  | "chauffeur"
+                  | "legal"
+                  | "health"
+                  | "beauty"
+                  | "food"
+                  | "trades"
+                  | "automotive"
+                  | "property"
+                  | "education"
+                  | "events"
+                  | "retail"
+                )
+              | null
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.offerings"
+          value: {
+            items: string[]
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.audience"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.overview"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "service_area.text"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "assistant.name"
+          value: {
+            name: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "assistant.pronouns"
+          value: {
+            /** @enum {string} */
+            id: "he_him" | "she_her" | "they_them"
+          }
+        }
+      | {
+          /** @constant */
+          key: "assistant.tone"
+          value: {
+            /** @enum {string} */
+            id: "friendly" | "professional" | "casual"
+          }
+        }
+      | {
+          /** @constant */
+          key: "owner.preferred_name"
+          value: {
+            name: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.build_mode"
+          value: {
+            /** @enum {string} */
+            mode: "assistant" | "manual"
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.template"
+          value: {
+            /** @enum {string} */
+            id: "classic" | "modern" | "bold"
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.palette"
+          value: {
+            id:
+              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | "custom"
+            custom?: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.font"
+          value: {
+            id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+            custom?: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.pages"
+          value: {
+            ids: (
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+            )[]
+            custom?: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "media.uploads"
+          value: {
+            items: {
+              /** Format: uuid */
+              id: string
+              name: string
+              /** @enum {string} */
+              content_type: "image/jpeg" | "image/png" | "image/webp"
+              bytes: number
+              alt?: string
+            }[]
           }
         }
     FailureReport: {
@@ -1951,6 +3198,154 @@ export interface components {
               tagline: string
             }
           }
+        | {
+            /** @constant */
+            key: "business.industry"
+            value: {
+              name: string
+              category:
+                | (
+                    | "cleaning"
+                    | "chauffeur"
+                    | "legal"
+                    | "health"
+                    | "beauty"
+                    | "food"
+                    | "trades"
+                    | "automotive"
+                    | "property"
+                    | "education"
+                    | "events"
+                    | "retail"
+                  )
+                | null
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.offerings"
+            value: {
+              items: string[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.audience"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.overview"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.text"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.pronouns"
+            value: {
+              /** @enum {string} */
+              id: "he_him" | "she_her" | "they_them"
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.tone"
+            value: {
+              /** @enum {string} */
+              id: "friendly" | "professional" | "casual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.preferred_name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.build_mode"
+            value: {
+              /** @enum {string} */
+              mode: "assistant" | "manual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.template"
+            value: {
+              /** @enum {string} */
+              id: "classic" | "modern" | "bold"
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.palette"
+            value: {
+              id:
+                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | "custom"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.font"
+            value: {
+              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.pages"
+            value: {
+              ids: (
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+              )[]
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "media.uploads"
+            value: {
+              items: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+              }[]
+            }
+          }
       )[]
     }
     SiteFields: {
@@ -2059,6 +3454,17 @@ export interface components {
       maxLength?: number
       /** @constant */
       format?: "email"
+    }
+    UploadedAssets: {
+      assets: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** @enum {string} */
+        content_type: "image/jpeg" | "image/png" | "image/webp"
+        bytes: number
+        alt?: string
+      }[]
     }
     ValidationReport: {
       /** Format: uuid */
@@ -2238,6 +3644,21 @@ export interface components {
         | "service_area.radius"
         | "pricing.standard_clean_hourly"
         | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.pages"
+        | "media.uploads"
       )[]
       reminders: {
         notes: {
@@ -2288,6 +3709,21 @@ export interface components {
                 | "service_area.radius"
                 | "pricing.standard_clean_hourly"
                 | "business.tagline"
+                | "business.industry"
+                | "business.offerings"
+                | "business.audience"
+                | "business.overview"
+                | "service_area.text"
+                | "assistant.name"
+                | "assistant.pronouns"
+                | "assistant.tone"
+                | "owner.preferred_name"
+                | "site.build_mode"
+                | "site.template"
+                | "site.palette"
+                | "site.font"
+                | "site.pages"
+                | "media.uploads"
               )[]
             }
         )[]

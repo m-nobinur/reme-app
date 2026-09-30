@@ -1,0 +1,32 @@
+{
+  "ocean": {
+    "label": "Ocean",
+    "hint": "Calm blue",
+    "brand": "#0b5fa5",
+    "swatches": ["#0b5fa5", "#d6e8f7", "#f4f8fc"]
+  },
+  "forest": {
+    "label": "Forest",
+    "hint": "Deep green",
+    "brand": "#1f6b4a",
+    "swatches": ["#1f6b4a", "#d5ece0", "#f3f9f5"]
+  },
+  "sunset": {
+    "label": "Sunset",
+    "hint": "Warm orange",
+    "brand": "#b7410e",
+    "swatches": ["#b7410e", "#f8dccb", "#fcf6f2"]
+  },
+  "midnight": {
+    "label": "Midnight",
+    "hint": "Rich indigo",
+    "brand": "#3730a3",
+    "swatches": ["#3730a3", "#dcdaf5", "#f6f5fc"]
+  },
+  "graphite": {
+    "label": "Graphite",
+    "hint": "Quiet grey",
+    "brand": "#374151",
+    "swatches": ["#374151", "#dde1e7", "#f5f6f8"]
+  }
+}
