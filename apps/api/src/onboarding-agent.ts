@@ -20,7 +20,6 @@ import {
   type FlexibleSchema,
   generateText,
   type JSONSchema7,
-  jsonSchema,
   type LanguageModel,
   type LanguageModelUsage,
   NoObjectGeneratedError,
@@ -166,11 +165,14 @@ Answer with the JSON object only, in exactly this shape:
 `
 
 /**
- * The plan's JSON Schema without `pattern` and `format`. The providers'
- * constrained decoders read a pattern as a whole-string match, so `Text`'s
- * `\S` (unanchored: "something that is not a space") came back as one
- * character in every string, measured on 2026-10-01. The plan is still
- * checked against the whole zod schema when it arrives.
+ * The plan's JSON Schema, for the instructions only, without `pattern` and
+ * `format`, which a model reads as noise. The provider is sent no schema:
+ * JSON mode only (`Output.json`). Measured on 2026-10-01, the hosts under
+ * the routing cap decode a schema badly and differently: one read `Text`'s
+ * unanchored `\S` as a whole-string match (every string one character long),
+ * another took a union's bare branch whatever the message said (every plan
+ * asked for photos), and a flattened union came back with another kind's
+ * fields. The plan is checked against the whole zod schema here instead.
  */
 function loosened(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(loosened)
@@ -182,24 +184,13 @@ function loosened(schema: unknown): unknown {
   )
 }
 
-let providerSchema: Promise<JSONSchema7> | null = null
+let promptSchema: Promise<JSONSchema7> | null = null
 const planJsonSchema = () => {
-  providerSchema ??= Promise.resolve(
+  promptSchema ??= Promise.resolve(
     asSchema(OnboardingPlan as FlexibleSchema<unknown>).jsonSchema
   ).then((schema) => loosened(schema) as JSONSchema7)
-  return providerSchema
+  return promptSchema
 }
-
-/** What the model is asked for: the loosened schema, checked as `OnboardingPlan`. */
-const planSchema = async () =>
-  jsonSchema<OnboardingPlan>(await planJsonSchema(), {
-    validate: (value) => {
-      const parsed = OnboardingPlan.safeParse(value)
-      return parsed.success
-        ? { success: true, value: parsed.data }
-        : { success: false, error: parsed.error }
-    },
-  })
 
 /** The instructions as sent, the plan's schema included. */
 export async function plannerInstructions(): Promise<string> {
@@ -942,7 +933,7 @@ export async function planTurn(
         model,
         system,
         messages: sent,
-        output: Output.object({ schema: await planSchema() }),
+        output: Output.json(),
         maxOutputTokens: PLANNER.maxOutputTokens,
         maxRetries: 0,
         abortSignal: AbortSignal.timeout(Math.min(limits.callMs, left)),
@@ -950,7 +941,9 @@ export async function planTurn(
       raw = result.text
       usage = usageOf(result.usage)
       cost = stepCost(price, result)
-      plan = result.output
+      const parsed = OnboardingPlan.safeParse(result.output)
+      if (parsed.success) plan = parsed.data
+      else errors = schemaErrors(raw)
     } catch (error) {
       if (!NoObjectGeneratedError.isInstance(error)) {
         const timedOut =
