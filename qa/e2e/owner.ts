@@ -154,8 +154,8 @@ export const ANSWERS: Record<string, (form: Locator) => Promise<void>> = {
 
 /**
  * The onboarding conversation answered through its cards until the offer of
- * the first build shows, pricing skipped. Signup recorded the name, so it asks
- * five: phone, email, hours, area and price. One round more than that is the
+ * the first build shows, anything skippable skipped. Signup recorded the name,
+ * so it asks four: phone, email, hours and area. One round more than that is the
  * guard against a script that never ends, and the count then fails.
  */
 export async function answerOnboarding(page: Page): Promise<void> {
@@ -165,7 +165,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
   const pending = page.locator('[data-slot="ask-fact"] form')
   const answered = page.locator('[data-slot="ask-fact"]:not(:has(form))')
   const card = page.locator('[data-slot="request-change"]')
-  const asked = 5
+  const asked = 4
   let count = 0
   while (count <= asked) {
     await slow(pending.or(card).first()).toBeVisible()
@@ -179,7 +179,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
       .innerText()
     const skip = pending.getByRole("button", { name: "Skip for now" })
     if (await skip.count()) {
-      // Pricing, the one fact an owner may leave for later.
+      // A fact an owner may leave for later.
       await skip.click()
     } else {
       const answer = ANSWERS[question]
