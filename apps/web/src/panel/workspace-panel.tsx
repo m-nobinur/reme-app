@@ -1,4 +1,11 @@
-import { getRouteApi, Link, useRouter } from "@tanstack/react-router"
+import { ArrowSquareOutIcon } from "@phosphor-icons/react"
+import {
+  getRouteApi,
+  Link,
+  useMatches,
+  useParams,
+  useRouter,
+} from "@tanstack/react-router"
 import type {
   BuildSummary,
   DecisionRequest,
@@ -7,9 +14,9 @@ import type {
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
   ApprovalItem,
-  BUILD_STAGES,
   ComingUp,
   LiveLine,
+  NextSteps,
   PanelBlank,
   PanelDigest,
   type Preview,
@@ -27,17 +34,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
-import { WORKING } from "@workspace/ui/lib/build-state"
-import { factLabel } from "@workspace/ui/lib/facts"
-import { cn } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
-import {
-  type ComponentProps,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import {
   answerQuestion,
   askForChanges,
@@ -48,9 +46,9 @@ import {
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
-import { askerOf, digestOf } from "@/lib/briefing"
+import { askerOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
-import { onboardingFor } from "@/lib/onboarding"
+import { type Panel, panelFor, type Suggestion } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -317,39 +315,6 @@ export function useRequestChanges() {
   }
 }
 
-/** The build the panel shows as being worked on, which its anchor marks. */
-export const currentBuild = (builds: BuildSummary[]) =>
-  builds.find((build) => build.state !== "queued") ?? builds.at(-1)
-
-/** The first steps an empty workspace still needs, from its own rows. */
-const firstSteps = (workspace: Workspace) => [
-  ...workspace.missingFacts.map((key) => ({
-    label: factLabel(key),
-    done: false,
-  })),
-  { label: "Build your first version", done: false },
-]
-
-/** What closes next: reviews and questions with an expiry, soonest first. */
-function comingUp(attention: AttentionItem[]) {
-  return attention
-    .flatMap((item) =>
-      item.expiresAt
-        ? [
-            {
-              id: item.id,
-              at: item.expiresAt,
-              text:
-                item.kind === "approval"
-                  ? `Your review of version ${item.version} closes`
-                  : `The question about ${item.title.toLowerCase()} closes`,
-            },
-          ]
-        : []
-    )
-    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-}
-
 /**
  * The build being worked on, with its own Stop state: keyed on the build, so
  * a Stop error never outlives the build it was about.
@@ -385,41 +350,80 @@ function Stoppable({
   )
 }
 
-/** A blank section's next step, quieter than the primary action. */
-const NEXT_STEP = cn(
-  buttonVariants({ variant: "outline", size: "sm" }),
-  "self-start"
-)
+/** A next step, quieter than the primary action. */
+const NEXT_STEP = buttonVariants({ variant: "outline", size: "sm" })
 
-/**
- * Where a new owner takes the first step: naming the business when the
- * account has none, the getting-started conversation while it is open, or a
- * new chat, whose empty thread offers "Build my website".
- */
-function FirstStep({ workspace }: { workspace: Workspace }) {
-  const { conversations, active } = frame.useLoaderData()
-  const onboarding = onboardingFor(workspace, conversations)
-  // No business yet, as after a first Google sign-in: that comes first.
-  if (!active) {
-    return (
-      <Link className={NEXT_STEP} to="/name-your-business">
-        Name your business
-      </Link>
-    )
+/** What "Set a reminder" asks in a new chat: reminders are set there. */
+const REMINDER_PROMPT = "Set a reminder for me"
+
+/** One of the model's next steps, as the link or button that takes it. */
+function Suggested({ suggestion }: { suggestion: Suggestion }) {
+  const requestChanges = useRequestChanges()
+  switch (suggestion.kind) {
+    case "name-business":
+      return (
+        <Link className={NEXT_STEP} to="/name-your-business">
+          Name your business
+        </Link>
+      )
+    case "onboarding":
+      return (
+        <Link
+          className={NEXT_STEP}
+          params={{ id: suggestion.id }}
+          to="/app/c/$id"
+        >
+          Continue getting started
+        </Link>
+      )
+    case "start-website":
+      // A new chat, whose empty thread offers "Build my website".
+      return (
+        <Link
+          className={NEXT_STEP}
+          state={() => ({ chat: crypto.randomUUID() })}
+          to="/app"
+        >
+          Start your website
+        </Link>
+      )
+    case "request-change":
+      return (
+        <button
+          className={NEXT_STEP}
+          // It moves the owner to the composer, so the phone sheet goes.
+          data-leaves-panel
+          onClick={requestChanges}
+          type="button"
+        >
+          Request a change
+        </button>
+      )
+    case "visit-site":
+      return (
+        <a
+          className={NEXT_STEP}
+          href={`https://${suggestion.host}`}
+          rel="noreferrer"
+          target="_blank"
+          title={suggestion.host}
+        >
+          Visit your website
+          <span className="sr-only"> (opens in a new tab)</span>
+          <ArrowSquareOutIcon aria-hidden className="text-muted-foreground" />
+        </a>
+      )
+    case "set-reminder":
+      return (
+        <Link
+          className={NEXT_STEP}
+          state={() => ({ chat: crypto.randomUUID(), ask: REMINDER_PROMPT })}
+          to="/app"
+        >
+          Set a reminder
+        </Link>
+      )
   }
-  return onboarding ? (
-    <Link className={NEXT_STEP} params={{ id: onboarding }} to="/app/c/$id">
-      Continue getting started
-    </Link>
-  ) : (
-    <Link
-      className={NEXT_STEP}
-      state={() => ({ chat: crypto.randomUUID() })}
-      to="/app"
-    >
-      Start your website
-    </Link>
-  )
 }
 
 /**
@@ -512,9 +516,32 @@ function useFocusAfterDone(notes: Reminder[]) {
 
 type Tab = "activity" | "reminders" | "website"
 
-export function WorkspacePanel() {
+/**
+ * What the panel says on the page the owner is on, from reads the frame
+ * already holds. Null when there is nothing worth a panel there, or when the
+ * workspace could not be read, which the panel says on its own.
+ */
+export function usePanel(workspace: Workspace | null): Panel | null {
+  const { active, conversations, activity, names } = frame.useLoaderData()
+  const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })
+  const { id } = useParams({ strict: false })
+  const zone = useBrowserZone()
+  if (!workspace) return null
+  return panelFor({
+    route,
+    conversation: id,
+    workspace,
+    business: active?.name ?? null,
+    conversations,
+    activity,
+    names,
+    now: new Date(),
+    zone,
+  })
+}
+
+export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
-  const { names } = frame.useLoaderData()
   const zone = useBrowserZone()
   const [status, setStatus] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>("activity")
@@ -525,7 +552,7 @@ export function WorkspacePanel() {
     ? "This panel did not refresh. It tries again in a minute."
     : null
 
-  if (!workspace) {
+  if (!workspace || !panel) {
     return (
       <WaitingOnYou
         error={stale ?? "This panel did not load."}
@@ -533,8 +560,7 @@ export function WorkspacePanel() {
       />
     )
   }
-  const { attention, builds, live, host } = workspace
-  const blank = !live && builds.length === 0 && attention.length === 0
+  const { live, host } = workspace
   const website = live !== null || host !== null
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
@@ -542,42 +568,27 @@ export function WorkspacePanel() {
       ? tab
       : "activity"
 
-  const current = currentBuild(builds)
-  const queued = builds
-    .filter((build) => build !== current && build.state === "queued")
-    .map((build) => build.goal)
-
-  const activity = blank ? (
-    <PanelBlank
-      action={<FirstStep workspace={workspace} />}
-      description={
-        workspace.missingFacts.length
-          ? "Reme builds your website from what you tell it about your business. Share the details below in the chat to get started."
-          : "Reme builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
-      }
-      steps={firstSteps(workspace)}
-    />
-  ) : (
+  const { build } = panel
+  const activity = (
     <>
-      <PanelDigest
-        sentences={digestOf(workspace, names, zone ? new Date() : null)}
-      />
-      {current ? (
+      <PanelDigest sentences={panel.headline} />
+      {panel.steps ? <PanelBlank steps={panel.steps} /> : null}
+      {build ? (
         <div
           className={TARGET}
-          id={anchorOf.build(current.assignment_id)}
+          id={anchorOf.build(build.assignment_id)}
           tabIndex={-1}
         >
           <Stoppable
-            build={current}
-            key={current.assignment_id}
-            queued={queued}
+            build={build}
+            key={build.assignment_id}
+            queued={panel.queued}
             refresh={refresh}
           />
         </div>
       ) : null}
       <WaitingOnYou error={stale} onRetry={refresh} status={status}>
-        {attention.map((item) =>
+        {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
               className={TARGET}
@@ -599,7 +610,13 @@ export function WorkspacePanel() {
           ) : null
         )}
       </WaitingOnYou>
-      <ComingUp items={comingUp(attention)} />
+      <ComingUp items={panel.upcoming} zone={zone} />
+      <ComingUp items={panel.latest} title="Latest" zone={zone} />
+      <NextSteps>
+        {panel.suggestions.map((suggestion) => (
+          <Suggested key={suggestion.kind} suggestion={suggestion} />
+        ))}
+      </NextSteps>
     </>
   )
 
@@ -636,73 +653,37 @@ export function WorkspacePanel() {
   )
 }
 
-/**
- * What the panel's one line says, most pressing first: the build being
- * worked on, then a review, then a question, then where the site stands.
- * The dot follows the site: pulsing while a build works, the accent while a
- * version is live.
- */
-export function lineOf(
-  workspace: Workspace | null,
-  names: Record<string, string>
-): ComponentProps<typeof LiveLine> {
-  if (!workspace) return { tone: "idle", lead: "This panel did not load" }
-  const tone = workspace.live ? "live" : "idle"
-  const build = workspace.builds.find((each) => WORKING.has(each.state))
-  if (build) {
-    const version = build.revision?.version
-    return {
-      tone: "working",
-      lead: version
-        ? `Building version ${version},`
-        : workspace.live
-          ? "Building a new version,"
-          : "Building your first version,",
-      detail: BUILD_STAGES[build.state].note.toLowerCase().slice(0, -1),
-    }
-  }
-  const approvals = workspace.attention.flatMap((item) =>
-    item.kind === "approval" ? [item] : []
+/** The panel in one line, for its header and its minimised state. */
+export function WorkspacePanelLine({ panel }: { panel: Panel | null }) {
+  return (
+    <LiveLine
+      {...(panel?.line ?? { tone: "idle", lead: "This panel did not load" })}
+    />
   )
-  const [approval] = approvals
-  if (approval) {
-    return {
-      tone,
-      lead:
-        approvals.length === 1
-          ? `Version ${approval.version} is ready`
-          : `${approvals.length} versions are ready`,
-      detail: "for your review",
-    }
-  }
-  const questions = workspace.attention.flatMap((item) =>
-    item.kind === "question" ? [item] : []
-  )
-  const [question] = questions
-  if (question) {
-    return questions.length === 1
-      ? {
-          tone,
-          lead: askerOf(question, names),
-          detail: "has a question for you",
-        }
-      : { tone, lead: `${questions.length} questions`, detail: "for you" }
-  }
-  if (workspace.live) {
-    return {
-      tone,
-      lead: "Your website is live",
-      detail: `on version ${workspace.live}`,
-    }
-  }
-  return workspace.open
-    ? { tone, lead: "Your first website", detail: "is under way" }
-    : { tone, lead: "Let's get your website started" }
 }
 
-/** The panel in one line, for the shell's header and its minimised state. */
-export function WorkspacePanelLine() {
-  const { workspace } = useLiveWorkspace()
-  const { names } = frame.useLoaderData()
-  return <LiveLine {...lineOf(workspace, names)} />
+/**
+ * Says the panel's line to a screen reader when what it says changes on the
+ * same page: a build starting, a version ready, a question. Not on a
+ * navigation, where the line changes because the page did, and not on a
+ * build's next stage, which the stepper says while the panel is open.
+ */
+export function PanelAnnouncer({ panel }: { panel: Panel | null }) {
+  const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })
+  const line = panel?.line ?? null
+  const lead = line?.lead ?? null
+  const [said, setSaid] = useState("")
+  const last = useRef({ route, lead })
+  useEffect(() => {
+    const before = last.current
+    last.current = { route, lead }
+    if (line && route === before.route && lead !== before.lead) {
+      setSaid(line.detail ? `${line.lead} ${line.detail}` : line.lead)
+    }
+  }, [route, lead, line])
+  return (
+    <p className="sr-only" role="status">
+      {said}
+    </p>
+  )
 }
