@@ -103,6 +103,7 @@ describe("transport selection", () => {
     )
     const auth = await openrouter?.auth.apiKey?.resolve({
       ctx: { env: async () => undefined, fileExists: async () => false },
+      signal: new AbortController().signal,
     })
     expect(auth?.auth.apiKey).toBe("or-key")
     expect(auth?.source).toBe("worker secret")

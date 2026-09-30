@@ -130,7 +130,6 @@ function AuthForm({
   // listener, which is where the replayed submit has to land.
   useEffect(() => {
     const form = ref.current
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: biome reads `useRef<T>(null)` as non-nullable and tsc does not, and tsc is right — without this branch `pnpm typecheck` fails with TS18047 on every line below
     if (!form) {
       return
     }

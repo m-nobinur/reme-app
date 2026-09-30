@@ -16,13 +16,21 @@ export const OPENROUTER_IDS: readonly string[] = ids
  * assignment uses today's prices rather than the catalog's. Every id in the
  * list must have a generated entry, and the throw names the ones that do
  * not, which is the fail-fast `scripts/openrouter-models.mjs` exists for.
+ * Pi routes OpenRouter's Claude models over Anthropic Messages; those are
+ * left out, because the facade's OpenRouter provider speaks only Chat
+ * Completions, the API its cost tap reads.
  */
 export function openrouterModels(
   entries: readonly OpenRouterModel[] = generated as OpenRouterModel[],
   required: readonly string[] = OPENROUTER_IDS
 ): OpenRouterModel[] {
   const byId = new Map<string, OpenRouterModel>()
-  for (const model of openrouterProvider().getModels()) {
+  const catalog = openrouterProvider()
+    .getModels()
+    .filter(
+      (model): model is OpenRouterModel => model.api === "openai-completions"
+    )
+  for (const model of catalog) {
     const routing = { ...model.compat?.openRouterRouting, ...HOST_ROUTING }
     byId.set(model.id, {
       ...model,

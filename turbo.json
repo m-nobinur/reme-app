@@ -1,6 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  // Guidance lives in CLAUDE.md; without this turbo 2.11 writes AGENTS.md
+  // whenever it detects an agent.
+  "agentGuidance": false,
   "globalEnv": ["NEON_OFFLINE"],
   // The eval runner's Langfuse switch. Pass-through rather than `globalEnv`
   // because `pnpm eval` is not a turbo task, so hashing it would invalidate

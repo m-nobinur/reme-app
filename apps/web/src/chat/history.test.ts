@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -22,9 +21,9 @@ import {
 import type { ChatMessage } from "./message"
 
 /**
- * `@assistant-ui/ai-sdk` 0.0.2 exports neither its format adapter nor its
- * storage type, so they are read from the installed package's own files:
- * the literal it writes, and the decode the runtime runs on our rows.
+ * `@assistant-ui/ai-sdk` exports neither its format adapter nor its storage
+ * type, so the adapter is loaded from the installed package's own file: the
+ * format it names, and the decode the runtime runs on our rows.
  */
 const require = createRequire(import.meta.url)
 const aiSdk = dirname(
@@ -67,9 +66,6 @@ const ROWS: TransportedMessage[] = [
 ]
 
 it("pins the format the installed AI SDK adapter writes", async () => {
-  expect(readFileSync(ADAPTER_FILE, "utf8")).toContain(
-    `format: "${STORAGE_FORMAT}"`
-  )
   expect((await installed()).format).toBe(STORAGE_FORMAT)
 })
 

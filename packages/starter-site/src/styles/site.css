@@ -570,7 +570,7 @@ p {
   grid-row: span 2;
 }
 
-.contact-details a {
+.contact-details dd a {
   color: var(--foreground);
   text-decoration-color: var(--brand-line);
 }

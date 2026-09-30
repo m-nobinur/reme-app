@@ -19,7 +19,7 @@ import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
  * assembled here rather than through `useChatRuntime`, which in
- * @assistant-ui/react-ai-sdk 1.4.7 does not pass `cancelPendingToolCallsOnSend`
+ * @assistant-ui/react-ai-sdk 1.4.13 does not pass `cancelPendingToolCallsOnSend`
  * through. That option, left on, turns a "not now" into "cancelled" on the
  * owner's next message while the stored row keeps "not now", so a reload
  * disagreed with what the owner had just seen. `cancelOvertaken` cancels what

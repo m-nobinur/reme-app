@@ -19,14 +19,14 @@
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22",
     "@workspace/contracts": "workspace:*",
     "parse5": "8.0.1",
     "schema-dts": "2.0.0",
     "typescript": "5.9.3",
     "vitest": "^4.1.11",
-    "yaml": "2.9.0"
+    "yaml": "2.9.1"
   },
   "exports": {
     "./site-config": "./src/site-config.ts",
