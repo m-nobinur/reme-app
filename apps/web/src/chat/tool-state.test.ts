@@ -321,3 +321,25 @@ it("reads every ask_upload state", () => {
     askUploadView({ args: input, isError: true, result: { error: "boom" } })
   ).toEqual({ state: "error", message: "boom" })
 })
+
+it("reads a card for the retired hourly price as skipped, answered or not", () => {
+  const args = {
+    key: "pricing.standard_clean_hourly",
+    skippable: true,
+    prefill: null,
+  }
+  const skipped = { key: null, state: "skipped" }
+  expect(askFactView({ args })).toEqual(skipped)
+  expect(
+    askFactView({
+      args,
+      result: {
+        answer: "stated",
+        fact: {
+          key: "pricing.standard_clean_hourly",
+          value: { amount_minor: 3500, currency: "GBP" },
+        },
+      },
+    })
+  ).toEqual(skipped)
+})

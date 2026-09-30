@@ -162,7 +162,18 @@ export type AskFactView = { key: FactValueKey | null } & (
   | { state: "error"; message: string }
 )
 
+/**
+ * Fact keys an older onboarding asked for and the contract has since dropped.
+ * Their cards, answered or not, stay in stored conversations; they read as
+ * skipped, so they show nothing rather than a broken card.
+ */
+const RETIRED_KEYS: readonly string[] = ["pricing.standard_clean_hourly"]
+
 export function askFactView(part: ToolPartView): AskFactView {
+  const asked = (part.args as { key?: unknown } | null)?.key
+  if (typeof asked === "string" && RETIRED_KEYS.includes(asked)) {
+    return { key: null, state: "skipped" }
+  }
   const input = AskFactInput.safeParse(part.args)
   const key = input.success ? input.data.key : null
   if (part.isError) {
