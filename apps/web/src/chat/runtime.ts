@@ -6,6 +6,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
+import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useRef, useState } from "react"
@@ -27,9 +28,18 @@ import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
 export function useConversationRuntime({
   onFinish,
   suggestions,
+  intent,
+  onIntentSent,
 }: {
   onFinish: () => void
   suggestions: ThreadSuggestion[]
+  /**
+   * The composer's mode, read when the owner sends: that send carries it
+   * and `onIntentSent` ends it. A ref, since this hook renders apart from
+   * the page that holds the mode.
+   */
+  intent?: { current: ChatRequest["intent"] }
+  onIntentSent?: () => void
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -113,7 +123,13 @@ export function useConversationRuntime({
       ...chat,
       sendMessage: (message, options) => {
         chat.setMessages(cancelOvertaken)
-        return chat.sendMessage(message, options)
+        const carried = intent?.current
+        if (!carried) return chat.sendMessage(message, options)
+        onIntentSent?.()
+        return chat.sendMessage(message, {
+          ...options,
+          body: { ...options?.body, intent: carried },
+        })
       },
     },
     {

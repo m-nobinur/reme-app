@@ -1,4 +1,4 @@
-import { getRouteApi, Link } from "@tanstack/react-router"
+import { getRouteApi, Link, useRouter } from "@tanstack/react-router"
 import type {
   BuildSummary,
   DecisionRequest,
@@ -275,44 +275,36 @@ export function Decidable({
 }
 
 /**
- * The Website tab: the live site, and a change asked of it outside any
- * review. Its key follows the note the way a review's does.
+ * The Website tab: the live site, and Request changes, which puts the chat's
+ * composer into website change mode: the conversation on screen, or a new
+ * one from any other page.
  */
 function Website({
   host,
   live,
   thumbnail,
-  refresh,
 }: {
   host: string | null
   live: number | null
   thumbnail: Thumbnail
-  refresh: Refresh
 }) {
-  const { pending, error, run } = useWrite<"change">(refresh)
-  const [keys] = useState(attemptKeys)
-  const [status, setStatus] = useState<string | null>(null)
-  const change = (text: string) => {
-    setStatus(null)
-    return run("change", async () => {
-      const outcome = await askForChanges({
-        data: { text, key: keys.key(text) },
-      })
-      if (outcome.done) {
-        keys.done()
-        setStatus("Sent. Reme is on it; a new version comes to you for review.")
-      }
-      return outcome
-    })
+  const router = useRouter()
+  const requestChanges = () => {
+    const compose = { mode: "site_change" as const, key: crypto.randomUUID() }
+    const inChat = router.state.matches.some(
+      (match) => match.routeId === "/app/_conversation"
+    )
+    void router.navigate(
+      inChat
+        ? { to: ".", state: { compose } }
+        : { to: "/app", state: { chat: crypto.randomUUID(), compose } }
+    )
   }
   return (
     <YourWebsite
-      error={error}
       host={host}
       live={live}
-      onRequestChanges={change}
-      pending={pending !== null}
-      status={status}
+      onRequestChanges={requestChanges}
       thumbnail={thumbnail}
     />
   )
@@ -627,12 +619,7 @@ export function WorkspacePanel() {
       ) : null}
       {website ? (
         <TabsContent value="website">
-          <Website
-            host={host}
-            live={live}
-            refresh={refresh}
-            thumbnail={thumbnail}
-          />
+          <Website host={host} live={live} thumbnail={thumbnail} />
         </TabsContent>
       ) : null}
     </Tabs>

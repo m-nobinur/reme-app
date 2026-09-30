@@ -10,6 +10,7 @@ import { Approval } from "@workspace/ui/components/assistant/approval"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
+  SITE_CHANGE_MODE,
   Thread,
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
@@ -144,9 +145,26 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
     <FixtureThread
       {...props}
       settings={{
-        placeholder: "Ask, or tell me what to change",
+        placeholder: "Ask Reme anything…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...props.settings,
+      }}
+    />
+  )
+}
+
+/** The composer in website change mode, as Request changes leaves it; × leaves it. */
+function SiteChangeThread() {
+  const [on, setOn] = useState(true)
+  return (
+    <OwnerThread
+      height="h-[32rem]"
+      isDisabled={false}
+      messages={[]}
+      settings={{
+        mode: on
+          ? { ...SITE_CHANGE_MODE, onClear: () => setOn(false) }
+          : undefined,
       }}
     />
   )
@@ -1083,6 +1101,7 @@ const assistantCatalog = [
       <OwnerThread height="h-[32rem]" isDisabled={false} messages={[]} />
     ),
   },
+  { name: "ThreadSiteChange", render: () => <SiteChangeThread /> },
   {
     name: "ThreadLoading",
     render: () => (

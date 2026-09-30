@@ -5,11 +5,13 @@ import {
   FileTextIcon,
   FlowArrowIcon,
   GearSixIcon,
+  MoonIcon,
   NotePencilIcon,
   QuestionIcon,
   ShieldCheckIcon,
   SignOutIcon,
   SparkleIcon,
+  SunIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import {
@@ -30,6 +32,7 @@ import { buttonVariants } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLinkItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -42,7 +45,10 @@ import {
   type NotificationEntry,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
-import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import {
+  toggleTheme,
+  useDarkTheme,
+} from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
   ConversationMenu,
@@ -50,7 +56,6 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
-import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useState } from "react"
 import {
   getWorkspaceFrame,
@@ -131,6 +136,20 @@ const HELP_PROMPT =
 
 /** How many notifications the bell's menu lists before "View all". */
 const MENU_ITEMS = 6
+
+/**
+ * The theme switch in the profile menu, named for what it switches to. The
+ * menu stays open, so the owner sees the change and can switch back.
+ */
+function ThemeItem() {
+  const dark = useDarkTheme()
+  return (
+    <DropdownMenuItem closeOnClick={false} onClick={toggleTheme}>
+      {dark ? <SunIcon aria-hidden /> : <MoonIcon aria-hidden />}
+      {dark ? "Light theme" : "Dark theme"}
+    </DropdownMenuItem>
+  )
+}
 
 /** The organisation's initials on a rounded square, where its name goes. */
 function OrgMark({ name }: { name: string }) {
@@ -424,12 +443,6 @@ function AppLayout() {
                   </DropdownMenuLinkItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Hint label="Switch theme" side="right">
-                <ThemeToggle
-                  className={cn(railItemClass, "justify-start")}
-                  size={null}
-                />
-              </Hint>
               <DropdownMenu>
                 <Hint label={ownerName} side="right">
                   <DropdownMenuTrigger
@@ -483,6 +496,7 @@ function AppLayout() {
                     <GearSixIcon aria-hidden />
                     Account
                   </DropdownMenuLinkItem>
+                  <ThemeItem />
                   <DropdownMenuSeparator />
                   {/* A plain link, not a router one: the router preloads a
                     route on hover and focus, and /sign-out signs out in its

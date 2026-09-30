@@ -3,6 +3,7 @@ import {
   CheckCircleIcon,
   FlowArrowIcon,
   GearSixIcon,
+  MoonIcon,
   NotePencilIcon,
   QuestionIcon,
   SignOutIcon,
@@ -29,14 +30,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import { toggleTheme } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
   ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
-import { cn } from "@workspace/ui/lib/utils"
 import { type ReactNode, useState } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
@@ -89,6 +89,10 @@ function AccountMenu() {
             {item.label}
           </DropdownMenuLinkItem>
         ))}
+        <DropdownMenuItem closeOnClick={false} onClick={toggleTheme}>
+          <MoonIcon aria-hidden />
+          Switch theme
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLinkItem href="#sign-out">
           <SignOutIcon aria-hidden />
@@ -123,12 +127,6 @@ function Rail() {
             <QuestionIcon aria-hidden />
             <span data-slot="rail-label">Help</span>
           </button>
-        </Hint>
-        <Hint label="Switch theme" side="right">
-          <ThemeToggle
-            className={cn(railItemClass, "justify-start")}
-            size={null}
-          />
         </Hint>
         <AccountMenu />
       </div>

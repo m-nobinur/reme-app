@@ -53,8 +53,9 @@ function remember(cookie: string, open: boolean) {
 }
 
 /**
- * Closes a sheet when a plain click inside it followed a link. A modified or
- * middle click opens the link elsewhere, so the sheet stays.
+ * Closes a sheet when a plain click inside it followed a link, or pressed a
+ * control marked `data-leaves-panel` because it takes the owner elsewhere. A
+ * modified or middle click opens the link elsewhere, so the sheet stays.
  */
 function closeOnLink(close: () => void) {
   return (event: MouseEvent) => {
@@ -64,7 +65,10 @@ function closeOnLink(close: () => void) {
       event.ctrlKey ||
       event.shiftKey ||
       event.altKey
-    if (!modified && (event.target as Element).closest("a[href]")) {
+    if (
+      !modified &&
+      (event.target as Element).closest("a[href], [data-leaves-panel]")
+    ) {
       close()
     }
   }
@@ -112,9 +116,9 @@ const useWide = () =>
  * is a `data-slot="rail-label"` span. The panel is a rounded
  * card whose header is always one line of live activity (`panelLine`); open,
  * it grows with its content to half the viewport's height and scrolls past
- * that. From `lg` the conversation keeps a column clear for it, so the two
- * never overlap, and whether it is open is remembered; below `lg` it starts
- * minimised, since there it covers the conversation. The rail, the panel and
+ * that. It floats over the page rather than taking a column, so the
+ * conversation stays centred. From `lg` whether it is open is remembered;
+ * below `lg` it starts minimised, since there it covers the conversation. The rail, the panel and
  * the bell are slots, so this package still imports no router. `title` and
  * `menu` name the page in the top bar; `actions` and `notifications` sit at
  * its right.
@@ -314,10 +318,10 @@ function WorkspaceShell({
         </header>
 
         <main
-          // From lg the panel has its own column, so it never covers the end
-          // of a message and the conversation centres in what is left. Below
-          // lg its line sits under the bar, so the page starts below it.
-          className="min-h-0 flex-1 overflow-y-auto max-lg:pt-13 lg:pe-[23.5rem]"
+          // The panel floats over the page's top right, so the conversation
+          // centres in the full width. Below lg its line sits under the bar,
+          // so the page starts below it.
+          className="min-h-0 flex-1 overflow-y-auto max-lg:pt-13"
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
           data-scroll-restoration-id="main"

@@ -142,15 +142,12 @@ export function briefingOf(
 export const askerOf = (item: AttentionItem, names: Record<string, string>) =>
   (item.raisedById && names[item.raisedById]) || item.raisedBy
 
-/** A title as the end of a sentence: its own stop, or a full stop. */
-const ended = (text: string) => (/[.?!]$/.test(text) ? text : `${text}.`)
-
 /**
- * The panel's opening sentences, as Reme would say them to the owner: what
- * today holds, what waits on them, then where the site stands. With nothing
- * waiting it says so and offers what to ask for next. `now` is null while
- * the reader's clock is unknown (the server's render): nothing is said about
- * today then, so the server's HTML and the first browser render agree.
+ * The panel's opening lines, two at most: what Reme is doing, then what the
+ * owner should do next. With nothing to do it says so in one line. `now` is
+ * null while the reader's clock is unknown (the server's render): nothing is
+ * said about today then, so the server's HTML and the first browser render
+ * agree.
  */
 export function digestOf(
   workspace: Workspace,
@@ -177,53 +174,71 @@ export function digestOf(
     (reminder) => reminder.rule === "facts_missing"
   )
 
-  const waiting: string[] = []
-  const [next] = today
-  if (now && next?.due_at) {
-    waiting.push(
-      today.length === 1
-        ? `You have a reminder ${due(next.due_at, now)}: ${ended(next.title)}`
-        : `You have ${today.length} reminders today. The next is at ${clock(new Date(next.due_at))}: ${ended(next.title)}`
-    )
+  // What waits on the owner, most pressing first, with how many items each covers.
+  const needs: { text: string; count: number }[] = []
+  const [soonest] = today
+  if (soonest?.due_at) {
+    const at = clock(new Date(soonest.due_at))
+    needs.push({
+      text:
+        today.length === 1
+          ? `${soonest.title.replace(/[.?!]+$/, "")} at ${at}.`
+          : `${today.length} reminders today, the next at ${at}.`,
+      count: today.length,
+    })
   }
   const [approval] = approvals
   if (approval) {
-    waiting.push(
-      approvals.length === 1
-        ? `Version ${approval.version} of your website is ready for you to review below.`
-        : `${approvals.length} versions of your website are ready for you to review below.`
-    )
+    needs.push({
+      text:
+        approvals.length === 1
+          ? `Version ${approval.version} is ready to review.`
+          : `${approvals.length} versions are ready to review.`,
+      count: approvals.length,
+    })
   }
   const [question] = questions
   if (question) {
-    waiting.push(
-      questions.length === 1
-        ? `${askerOf(question, names)} asked about ${question.title.toLowerCase()}. Answer it below.`
-        : `Your team has ${questions.length} questions for you below.`
-    )
+    needs.push({
+      text:
+        questions.length === 1
+          ? `${askerOf(question, names)} asked about ${question.title.toLowerCase()}.`
+          : `${questions.length} questions are waiting for you.`,
+      count: questions.length,
+    })
   } else if (facts) {
     // A question is usually the build asking for the same fact.
-    waiting.push(`Reme still needs ${factsNeeded(facts.keys)}.`)
+    needs.push({ text: `Reme needs ${factsNeeded(facts.keys)}.`, count: 1 })
   }
 
-  const site = live
-    ? `Your website is live on version ${live}.`
-    : building
-      ? "Reme is building your first website now."
-      : open
-        ? "Your first website is under way."
-        : "Ask Reme in the chat to build your website."
+  const doing = building
+    ? live
+      ? "Reme is updating your website."
+      : "Reme is building your website."
+    : null
+  const total = needs.reduce((sum, need) => sum + need.count, 0)
+  const count = (n: number, more = "") =>
+    `${n} ${more}${n === 1 ? "thing needs" : "things need"} you.`
 
-  if (waiting.length) return [...waiting, site].slice(0, 3)
+  if (doing) {
+    const [only] = needs
+    if (!only) return [doing]
+    return [doing, needs.length === 1 ? only.text : count(total)]
+  }
+  const [first, second] = needs
+  if (first && second) {
+    return needs.length === 2
+      ? [first.text, second.text]
+      : [first.text, count(total - first.count, "more ")]
+  }
+  if (first) return [first.text]
+
+  const site = live
+    ? `Your site is live on version ${live}.`
+    : open
+      ? "Your website is under way."
+      : "Tell Reme about your business to start your website."
+  if (!live && !open) return [site]
   // A dated reminder may fall today, which only the browser can say.
-  if (!now && dated.length) return [site]
-  return [
-    "You're all caught up. Nothing needs you right now.",
-    site,
-    ...(live
-      ? [
-          "Ask Reme in the chat to change something on your website, or to set a reminder.",
-        ]
-      : []),
-  ]
+  return !now && dated.length ? [site] : [`All caught up. ${site}`]
 }

@@ -59,6 +59,7 @@ import {
   openrouterModel,
   priceOf,
   reservation,
+  SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
 } from "../src/cos/agent.ts"
@@ -395,6 +396,15 @@ describe("the CoS's model and price", () => {
     expect(
       contextOf("ask", { ...EMPTY, builds: [build] }).taint.sort()
     ).toEqual(["inferred", "untrusted_input"])
+  })
+
+  it("tells the model a website change mode message is a change to propose, in Act only", () => {
+    const lines = (mode: "ask" | "act", intent?: "site_change") =>
+      contextOf(mode, EMPTY, null, new Date(), intent).text.split("\n")
+    expect(lines("act", "site_change")[1]).toBe(SITE_CHANGE_LINE)
+    expect(lines("act", "site_change")[2]).toMatch(/^Now: /)
+    expect(lines("act")).not.toContain(SITE_CHANGE_LINE)
+    expect(lines("ask", "site_change")).not.toContain(SITE_CHANGE_LINE)
   })
 
   it("tells the model the owner's time at their offset, or UTC and that the zone is not known", () => {

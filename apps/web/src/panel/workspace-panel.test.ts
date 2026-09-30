@@ -30,9 +30,15 @@ vi.mock("@tanstack/react-router", () => ({
       { "data-to": to, "data-params": JSON.stringify(params ?? null) },
       children
     ),
+  useRouter: () => router,
 }))
 vi.mock("@/lib/workspace", () => ({ useLiveWorkspace: () => live }))
 vi.mock("@/lib/api/server", () => server)
+
+const router = vi.hoisted(() => ({
+  state: { matches: [] as { routeId: string }[] },
+  navigate: vi.fn(),
+}))
 
 const server = vi.hoisted(() => ({
   completeReminder: vi.fn(),
@@ -65,6 +71,8 @@ beforeEach(() => {
   }
   server.completeReminder.mockReset()
   server.askForChanges.mockReset()
+  router.state.matches = []
+  router.navigate.mockReset()
   live = { workspace: EMPTY_WORKSPACE, failed: false, refresh: vi.fn() }
   container = document.createElement("div")
   document.body.appendChild(container)
@@ -129,8 +137,9 @@ it("opens with where things stand, and no waiting list when nothing waits", asyn
   }
   await render()
   const digest = container.querySelector('[data-slot="panel-digest"]')
-  expect(digest?.textContent).toContain("You're all caught up.")
-  expect(digest?.textContent).toContain("Your website is live on version 2.")
+  expect(digest?.textContent).toBe(
+    "All caught up. Your site is live on version 2."
+  )
   expect(container.textContent).not.toContain("Waiting on you")
 })
 
@@ -229,29 +238,32 @@ it("links the live site by name, with the host as its title", async () => {
   expect(container.textContent).toContain("Version 3 is live")
 })
 
-it("sends a change for the live site and says it went", async () => {
+it("Request changes puts the chat's composer into website change mode", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 3,
     host: "brightclean-demo.example.invalid",
   }
-  server.askForChanges.mockResolvedValueOnce({ done: true })
   await render()
   await act(async () => tab("Website")?.click())
-  await act(async () => buttonNamed("Request changes")?.click())
-  const field = container.querySelector("textarea")
-  if (!field) throw new Error("no change note")
-  field.value = "Add Saturday hours"
-  await act(async () => buttonNamed("Send")?.click())
+  const compose = { mode: "site_change", key: expect.any(String) }
 
-  expect(server.askForChanges).toHaveBeenCalledWith({
-    data: { text: "Add Saturday hours", key: expect.any(String) },
+  // From any other page, a new chat.
+  await act(async () => buttonNamed("Request changes")?.click())
+  expect(router.navigate).toHaveBeenLastCalledWith({
+    to: "/app",
+    state: { chat: expect.any(String), compose },
   })
-  expect(live.refresh).toHaveBeenCalledOnce()
+
+  // In a conversation, that one.
+  router.state.matches = [{ routeId: "/app/_conversation" }]
+  await act(async () => buttonNamed("Request changes")?.click())
+  expect(router.navigate).toHaveBeenLastCalledWith({
+    to: ".",
+    state: { compose },
+  })
   expect(container.querySelector("textarea")).toBeNull()
-  expect(container.querySelector('[role="status"]')?.textContent).toBe(
-    "Sent. Reme is on it; a new version comes to you for review."
-  )
+  expect(server.askForChanges).not.toHaveBeenCalled()
 })
 
 it("shows a reminder done at once, and puts it back when that fails", async () => {

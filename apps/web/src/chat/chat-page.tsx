@@ -15,12 +15,19 @@ import { Approval } from "@workspace/ui/components/assistant/approval"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
+  SITE_CHANGE_MODE,
   Thread,
 } from "@workspace/ui/components/assistant/thread"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { browserZone } from "@workspace/ui/lib/zone"
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { briefingOf } from "@/lib/briefing"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
@@ -28,6 +35,9 @@ import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
 
 const frame = getRouteApi("/app")
+
+/** The Request changes presses the composer has taken, by their key. */
+const composed = new Set<string>()
 
 /**
  * The conversation at `/app` (a new one) and `/app/c/$id` (a stored one).
@@ -47,6 +57,26 @@ export function ChatPage() {
     () => briefingOf(active, live.workspace),
     [active, live.workspace]
   )
+  // Request changes on the panel puts the composer in website change mode,
+  // once per press, so going back to it does not turn the mode on again. The
+  // owner's next send carries it and ends it, and so does the chip's ×.
+  const compose = useLocation({ select: (location) => location.state.compose })
+  const [siteChange, setSiteChange] = useState<string | null>(null)
+  useEffect(() => {
+    if (!compose || composed.has(compose.key)) return
+    composed.add(compose.key)
+    setSiteChange(compose.key)
+  }, [compose])
+  // A new object per press, so the composer takes focus on each one.
+  const mode = useMemo(
+    () =>
+      siteChange
+        ? { ...SITE_CHANGE_MODE, onClear: () => setSiteChange(null) }
+        : undefined,
+    [siteChange]
+  )
+  const intent = useRef<"site_change" | undefined>(undefined)
+  intent.current = siteChange ? "site_change" : undefined
   const useThreadRuntime = () =>
     useConversationRuntime({
       // A turn can change what waits on the owner and the conversation's
@@ -61,6 +91,8 @@ export function ChatPage() {
       // A stored conversation never offers them: one pressed while its
       // history loaded started a second conversation.
       suggestions: id ? [] : briefing.suggestions,
+      intent,
+      onIntentSent: () => setSiteChange(null),
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -141,7 +173,8 @@ export function ChatPage() {
             <Thread
               briefing={briefing.line}
               components={{ ToolFallback: Approval }}
-              placeholder="Ask, or tell me what to change"
+              mode={mode}
+              placeholder="Ask Reme anything…"
               quickActions={OWNER_QUICK_ACTIONS}
               stored={Boolean(id)}
             />
