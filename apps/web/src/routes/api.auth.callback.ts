@@ -50,7 +50,7 @@ export const Route = createFileRoute("/api/auth/callback")({
               code,
               ...sessionOptions(),
             }),
-          { email: "", returnTo: flow.returnTo }
+          { email: "", returnTo: flow.returnTo, nameBusiness: true }
         )
 
         if (outcome.status === "failed") {

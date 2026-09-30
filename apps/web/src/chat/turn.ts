@@ -165,6 +165,14 @@ export const turnBody =
   }
 
 /**
+ * A session with no business behind it (`org.unresolved`), in the owner's
+ * words: a first Google sign-in that skipped naming it, or a signup whose
+ * business did not reach the session. The panel's first step names it.
+ */
+export const NO_BUSINESS =
+  "Your account is not linked to a business yet. Name your business in the panel to get started."
+
+/**
  * A refusal as the owner reads it: the api's envelope message, which it
  * writes for them, or the web route's own sentence, rather than the JSON the
  * AI SDK would otherwise show. The route's 401 is a session that ended, and
@@ -179,7 +187,13 @@ export async function chatFetch(
   const body: unknown = await response.json().catch(() => null)
   if (response.status === 401) throw new Error(SESSION_ENDED)
   const envelope = ErrorEnvelope.safeParse(body)
-  if (envelope.success) throw new Error(envelope.data.message)
+  if (envelope.success) {
+    throw new Error(
+      envelope.data.code === "org.unresolved"
+        ? NO_BUSINESS
+        : envelope.data.message
+    )
+  }
   const own =
     typeof body === "object" && body !== null && "error" in body
       ? body.error

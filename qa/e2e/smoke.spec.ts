@@ -172,7 +172,7 @@ test("a chat turn sends only what the owner did", async ({ page }) => {
   // reads as the api's own sentence, not as the JSON it came in, and it
   // writes nothing anywhere.
   const refusal = page.locator(".aui-message-error-message")
-  await expect(refusal).toHaveText(/organisation/)
+  await expect(refusal).toHaveText(/not linked to a business/)
   await expect(refusal).not.toContainText("{")
   await expect
     .poll(() => reads.length, {
@@ -206,6 +206,15 @@ test("every chat request is sent to act, with no mode to pick", async ({
   await page.getByLabel("Send message").click()
   expect(await mode).toBe("act")
   await expect(page.getByRole("button", { name: /^Mode/ })).toHaveCount(0)
+  // This account has no business, and the chat says so in plain words.
+  await expect(
+    page.getByText("Your account is not linked to a business yet.", {
+      exact: false,
+    })
+  ).toBeVisible()
+  await expect(
+    page.locator('[data-slot="aui_user-message-delivery"]')
+  ).toHaveAttribute("data-state", "sent")
 })
 
 test("the top bar holds new chat, the history and the bell", async ({

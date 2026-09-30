@@ -11,6 +11,9 @@ import { workos } from "./workos"
  * Everything a sign-in attempt can end as. There is no throw: a route renders
  * one of these three and never sees an exception.
  */
+/** Where a signed-in account with no business names one. */
+export const NAME_BUSINESS = "/name-your-business"
+
 export type AuthOutcome =
   | { status: "signed-in"; redirectTo: string }
   | { status: "next"; redirectTo: string }
@@ -123,10 +126,20 @@ async function provisionOrg(
 /**
  * Runs one `authenticateWith*` call and turns whatever comes back into an
  * outcome: a session, the next page in the flow, or a message.
+ *
+ * `nameBusiness` is for a flow that never asks for the business, which is
+ * Google: WorkOS makes the account on the first sign-in, so a session that
+ * lands with no organisation and no name to create one from goes to
+ * /name-your-business before anything else.
  */
 export async function authenticate(
   attempt: () => Promise<AuthenticationResponse>,
-  options: { email: string; returnTo?: unknown; orgName?: string }
+  options: {
+    email: string
+    returnTo?: unknown
+    orgName?: string
+    nameBusiness?: boolean
+  }
 ): Promise<AuthOutcome> {
   const returnTo = safeReturnTo(options.returnTo)
   // Read before the attempt, because the attempt clears it on success and the
@@ -139,10 +152,15 @@ export async function authenticate(
       // programming error rather than a state a person can be in.
       throw new Error("WorkOS returned no sealed session.")
     }
-    await writeSession(
-      await provisionOrg(response, options.orgName ?? pending?.orgName)
-    )
+    const orgName = options.orgName ?? pending?.orgName
+    await writeSession(await provisionOrg(response, orgName))
     await clearPending()
+    if (options.nameBusiness && !response.organizationId && !orgName) {
+      return {
+        status: "signed-in",
+        redirectTo: `${NAME_BUSINESS}?returnTo=${encodeURIComponent(returnTo)}`,
+      }
+    }
     return { status: "signed-in", redirectTo: returnTo }
   } catch (error) {
     const raw = asRecord(error)

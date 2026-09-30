@@ -6,9 +6,9 @@ import { visit } from "./visit"
 /**
  * The notifications page and the panel's blank-state action, signed in as
  * the session `auth.setup.ts` sealed. That owner has no organisation, so
- * the only blank section it can reach is "First steps", whose action is a
- * new chat, and its notifications are empty. The other blank-state actions
- * ("See notifications" beside an empty "Waiting on you", "Continue getting
+ * the only blank section it can reach is "First steps", whose action is
+ * naming the business, and its notifications are empty. The other
+ * blank-state actions ("Start your website", "Continue getting
  * started" with an onboarding chat, "Try again" on a panel that did not
  * load) need an organisation or a failed read. They are clicked in
  * `packages/ui/test/notifications.spec.ts` against the catalog, and
@@ -43,13 +43,21 @@ test("the bell opens a menu that links to every notification", async ({
   await expect(page).toHaveURL(/\/app\/notifications$/)
 })
 
-test("the first-steps action opens a new chat", async ({ page }) => {
+test("an account with no business is sent to name one", async ({ page }) => {
   await visit(page, "/app/notifications")
-  await panel(page).getByRole("link", { name: "Start your website" }).click()
-  await expect(page).toHaveURL(/\/app\/?$/)
+  await panel(page).getByRole("link", { name: "Name your business" }).click()
+  await expect(page).toHaveURL(/\/name-your-business$/)
   await expect(
-    page.getByPlaceholder("Ask, or tell me what to change")
+    page.getByRole("heading", { name: "What's your business called?" })
   ).toBeVisible()
+  // Not submitted: that would give this account a business, on every
+  // environment the smoke runs against, production included.
+  await expect(page.getByLabel("Business name")).toBeVisible()
+  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
+  expect(
+    results.violations.map((violation) => violation.id),
+    JSON.stringify(results.violations, null, 2)
+  ).toEqual([])
 })
 
 test("/app/notifications has no accessibility violations", async ({ page }) => {

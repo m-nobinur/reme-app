@@ -181,3 +181,35 @@ describe("the organisation a signup asked for", () => {
     expect(outcome.status).toBe("signed-in")
   })
 })
+
+describe("a sign-in that never asked for the business", () => {
+  it("sends a new account with no business to name one", async () => {
+    const outcome = await authenticate(async () => signedIn(), {
+      email: "",
+      returnTo: "/app/staff",
+      nameBusiness: true,
+    })
+    expect(outcome).toEqual({
+      status: "signed-in",
+      redirectTo: "/name-your-business?returnTo=%2Fapp%2Fstaff",
+    })
+    expect(createOrgForSession).not.toHaveBeenCalled()
+  })
+
+  it("goes where it was going when the account has a business", async () => {
+    const outcome = await authenticate(async () => signedIn("org_probe"), {
+      email: "",
+      returnTo: "/app/staff",
+      nameBusiness: true,
+    })
+    expect(outcome).toEqual({ status: "signed-in", redirectTo: "/app/staff" })
+  })
+
+  it("leaves a password sign-in without one where it asked to go", async () => {
+    const outcome = await authenticate(async () => signedIn(), {
+      email: "probe@example.net",
+      returnTo: "/app/staff",
+    })
+    expect(outcome).toEqual({ status: "signed-in", redirectTo: "/app/staff" })
+  })
+})

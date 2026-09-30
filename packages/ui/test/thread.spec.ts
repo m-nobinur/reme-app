@@ -197,13 +197,12 @@ test.describe("in London in summer time", () => {
   })
 })
 
-test("a message with an empty reply after it is delivered, not seen", async ({
-  page,
-}) => {
+test("a message whose reply failed keeps one tick", async ({ page }) => {
+  // A failed turn never reached Reme, so it is sent, not delivered.
   await open(page, "ThreadError")
   await expect(
-    page.locator('[data-slot="aui_user-message-delivery"]')
-  ).toHaveAttribute("data-state", "delivered")
+    page.locator('[data-slot="aui_user-message-delivery"]').last()
+  ).toHaveAttribute("data-state", "sent")
 })
 
 test("the owner's messages sit right and the replies left", async ({

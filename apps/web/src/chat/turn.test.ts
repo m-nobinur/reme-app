@@ -6,7 +6,14 @@ import {
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { afterEach, expect, it, vi } from "vitest"
 import type { ChatMessage } from "./message"
-import { cancelOvertaken, chatFetch, chatTurn, sendsOn, turnBody } from "./turn"
+import {
+  cancelOvertaken,
+  chatFetch,
+  chatTurn,
+  NO_BUSINESS,
+  sendsOn,
+  turnBody,
+} from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
 const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -390,6 +397,25 @@ it("a refusal reads as the api's own words", async () => {
     vi.fn(async () => new Response("<html>", { status: 502 }))
   )
   await expect(chatFetch("/api/chat")).rejects.toThrow("(502)")
+})
+
+it("a session with no business reads as that, not as the api's words", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        {
+          class: "permission",
+          code: "org.unresolved",
+          message: "This session is not signed in to an organisation we hold.",
+          occurred_at: "2026-09-30T20:00:00.000Z",
+          detail: {},
+        },
+        { status: 403 }
+      )
+    )
+  )
+  await expect(chatFetch("/api/chat")).rejects.toThrow(NO_BUSINESS)
 })
 
 it("the route's own 401 says the session ended, and its 413 says why", async () => {
