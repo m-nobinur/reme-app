@@ -46,7 +46,7 @@ import {
   refuseQuestion,
 } from "../question.ts"
 import { repoMap } from "../repo-map.ts"
-import { SITE_ROOT } from "../revise.ts"
+import { placePhotos, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
 import { SEED_DIGEST, STARTER_FILES } from "../seed.ts"
 import { eventSink } from "../sink.ts"
@@ -384,6 +384,18 @@ export function Developer({ id }: AgentProps) {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return
     const sandbox = harness.sandbox
+    // The owner's photos, which the instructions list, copied in from the bucket.
+    const photos = async (into: typeof sandbox) => {
+      const missing = await placePhotos(
+        into,
+        env.SITES,
+        runtime.spec.org_id,
+        brief.snapshot.facts
+      )
+      if (missing.length > 0) {
+        current.tee.emit("sandbox.photos_missing", { asset_ids: missing })
+      }
+    }
     await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
     if (brief.restore_key) {
       const object = await env.SITES.get(brief.restore_key)
@@ -397,10 +409,13 @@ export function Developer({ id }: AgentProps) {
       )
       if (restore.exitCode !== 0)
         throw new Error(`restore failed: ${restore.stderr}`)
+      await photos(sandbox)
     } else {
       for (const [relative, content] of Object.entries(STARTER_FILES)) {
         await sandbox.writeFile(`${SITE_ROOT}/${relative}`, content)
       }
+      // Before the first commit, so the photos are part of the starter.
+      await photos(sandbox)
       const seeded = await sandbox.exec(
         `cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules && ${GIT} init -q && ${GIT} add -A && ${GIT} commit -qm "starter"`
       )
