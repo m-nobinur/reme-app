@@ -40,12 +40,13 @@ describe("the seed", () => {
   })
 
   it("parses the starter's fields, the required facts first", () => {
-    expect(Object.keys(SEED_FIELDS).slice(0, 5)).toEqual([
+    expect(Object.keys(SEED_FIELDS).slice(0, 6)).toEqual([
       "businessName",
       "phone",
       "email",
-      "weekdayHours",
-      "serviceArea",
+      "industry",
+      "offerings",
+      "serviceAreaText",
     ])
   })
 

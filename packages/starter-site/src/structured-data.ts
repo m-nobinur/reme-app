@@ -34,7 +34,7 @@ export function localBusiness(origin: URL | undefined): Thing[] {
       telephone: site.phone,
       email: site.email,
       openingHours: site.openingHours,
-      areaServed: site.areaServed,
+      areaServed: site.areaServed || site.serviceAreaText,
     }),
   ]
 }

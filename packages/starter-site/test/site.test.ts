@@ -20,8 +20,9 @@ const REQUIRED_FACTS = [
   "business.name",
   "business.phone",
   "business.email",
-  "hours.weekday",
-  "service_area.radius",
+  "business.industry",
+  "business.offerings",
+  "service_area.text",
 ]
 
 // The planted page carries an empty Hero, which the starter's own pages cannot
@@ -147,6 +148,11 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
     shows: "+15550142",
   },
   { name: "QuoteForm", selector: "quote-form", shows: "Send quote request" },
+  {
+    name: "Section",
+    selector: "section",
+    shows: "One cleaner keeps each home, on the same day every week.",
+  },
 ]
 
 const hasClass = (pages: Page[], name: string) =>

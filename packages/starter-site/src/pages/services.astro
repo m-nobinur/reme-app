@@ -15,11 +15,26 @@ import { site } from "../site-config"
     lede={site.servicesIntro}
   />
   <ServiceCards />
+  {
+    site.offerings && (
+      <Section heading={site.offeringsHeading}>
+        <ul class="offerings">
+          {site.offerings
+            .split("\n")
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => (
+              <li>{item}</li>
+            ))}
+        </ul>
+      </Section>
+    )
+  }
   <Steps />
   {
-    site.serviceArea && (
+    (site.serviceAreaText || site.serviceArea) && (
       <Section heading={site.serviceAreaHeading}>
-        <p>{site.serviceArea}</p>
+        <p>{site.serviceAreaText || site.serviceArea}</p>
       </Section>
     )
   }

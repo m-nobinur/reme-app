@@ -33,10 +33,22 @@ const values = {
   phone: "",
   /** business.email, the address as given. */
   email: "",
-  /** hours.weekday, as "08:00 to 17:00". */
+  /** business.industry, its name, as "Limousine and chauffeur hire". */
+  industry: "",
+  /** business.offerings, one item to a line, as given. */
+  offerings: "",
+  /** service_area.text, as given, as "Fairhaven and the villages around it". */
+  serviceAreaText: "",
+  /** hours.weekday, as "08:00 to 17:00". Optional: no hours, no hours row. */
   weekdayHours: "",
   /** service_area.radius, as "Within 25 km of Fairhaven". */
   serviceArea: "",
+  /** business.tagline, the owner's one line, as given. */
+  tagline: "",
+  /** business.audience, who the business serves, as given. */
+  audience: "",
+  /** business.overview, how the business works, as given. */
+  overview: "",
   /** hours.weekday for structured data, as "Mo-Fr 08:00-17:00". */
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
@@ -68,13 +80,23 @@ const values = {
   /** media.photo_3_alt, what that photo shows, in one sentence. */
   photo3Alt: "",
   /**
-   * The colour the owner asked for, as #rrggbb. Empty is the default theme,
-   * and so is anything that is not a hex colour. Do not pick one for them.
+   * The colour the owner chose, as #rrggbb: their palette's brand colour
+   * (site.palette) or one they named. Empty is the default theme, and so is
+   * anything that is not a hex colour. Do not pick one for them.
    */
   brandColor: "",
+  /**
+   * The layout the owner chose (site.template): classic, modern or bold.
+   * Anything else reads as classic.
+   */
+  template: "classic",
+  /**
+   * The type the owner chose (site.font): clean_sans, classic_serif or
+   * soft_rounded. Empty or anything else keeps the default pairing.
+   */
+  font: "",
   /** The home page's h1: a short slogan. Falls back to the business name. */
   heroHeading: "",
-  tagline: "",
   homeIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
@@ -88,6 +110,9 @@ const values = {
   /** The subject line of a request sent by email. */
   quoteEmailSubject: "Quote request",
   bookingIntro: "",
+  aboutHeading: "About us",
+  audienceHeading: "Who we work with",
+  offeringsHeading: "Everything we offer",
   valuePropsHeading: "Why choose us",
   valueProp1Title: "",
   valueProp1Body: "",
@@ -133,12 +158,12 @@ const values = {
   navServiceArea: "Service area",
   navContact: "Contact",
   navQuote: "Request a quote",
-  navBooking: "Book a clean",
+  navBooking: "Book",
   servicesHeading: "Services",
   serviceAreaHeading: "Service area",
   contactHeading: "Contact",
   quoteHeading: "Request a quote",
-  bookingHeading: "Book a clean",
+  bookingHeading: "Make a booking",
   quoteContactLegend: "Your details",
   quoteRequestLegend: "Your request",
   quoteNameLabel: "Your name",
@@ -172,12 +197,22 @@ export const fields: Record<keyof typeof site, Field> = {
   businessName: { kind: "fact", fact_key: "business.name", required: true },
   phone: { kind: "fact", fact_key: "business.phone", required: true },
   email: { kind: "fact", fact_key: "business.email", required: true },
-  weekdayHours: { kind: "fact", fact_key: "hours.weekday", required: true },
+  industry: { kind: "fact", fact_key: "business.industry", required: true },
+  offerings: { kind: "fact", fact_key: "business.offerings", required: true },
+  serviceAreaText: {
+    kind: "fact",
+    fact_key: "service_area.text",
+    required: true,
+  },
+  weekdayHours: { kind: "fact", fact_key: "hours.weekday", required: false },
   serviceArea: {
     kind: "fact",
     fact_key: "service_area.radius",
-    required: true,
+    required: false,
   },
+  tagline: { kind: "fact", fact_key: "business.tagline", required: false },
+  audience: { kind: "fact", fact_key: "business.audience", required: false },
+  overview: { kind: "fact", fact_key: "business.overview", required: false },
   openingHours: { kind: "fact", fact_key: "hours.weekday", required: false },
   areaServed: {
     kind: "fact",
@@ -226,8 +261,9 @@ export const fields: Record<keyof typeof site, Field> = {
   photo3Src: { kind: "fact", fact_key: "media.photo_3", required: false },
   photo3Alt: { kind: "fact", fact_key: "media.photo_3_alt", required: false },
   brandColor: composed,
+  template: composed,
+  font: composed,
   heroHeading: composed,
-  tagline: composed,
   homeIntro: composed,
   servicesIntro: composed,
   serviceAreaIntro: composed,
@@ -236,6 +272,9 @@ export const fields: Record<keyof typeof site, Field> = {
   quoteFormAction: composed,
   quoteEmailSubject: composed,
   bookingIntro: composed,
+  aboutHeading: composed,
+  audienceHeading: composed,
+  offeringsHeading: composed,
   valuePropsHeading: composed,
   valueProp1Title: composed,
   valueProp1Body: composed,

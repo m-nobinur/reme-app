@@ -208,6 +208,14 @@ p {
   max-width: 20ch;
 }
 
+.eyebrow {
+  margin: 0 0 var(--space-xs);
+  color: var(--brand-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 /* The panel is ornament and says nothing: a tinted field, a soft wash of the
    brand and a dot grid. Not a placeholder for a photograph the site does not
    have. */
@@ -289,6 +297,7 @@ p {
 
 .hero-centered .hero-text {
   max-width: 46rem;
+  margin-inline: auto;
 }
 
 .hero-centered h1,
@@ -356,6 +365,18 @@ p {
 
 .service-cards p {
   color: var(--muted-foreground);
+}
+
+.offerings {
+  display: grid;
+  gap: var(--space-2xs) var(--space-md);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin: 0;
+  padding-inline-start: 1.1em;
+}
+
+.offerings li::marker {
+  color: var(--brand-text);
 }
 
 /* Steps */
@@ -778,4 +799,120 @@ main > .cta-band:last-child {
 
 .skip-link:focus {
   top: var(--space-2xs);
+}
+
+/* Templates. Classic is everything above: a light header, a split hero with
+   its panel, bordered cards. The two below restyle the same markup by
+   data-template, so a site switches layout without a new component. */
+
+/* Modern: centred and airy. The header stacks in the middle, the hero drops
+   its tint, sections sit further apart and cards lose their borders. */
+[data-template="modern"] {
+  --section-gap: clamp(4rem, 2.8rem + 5vw, 7rem);
+}
+
+[data-template="modern"] .site-header {
+  border-bottom: 0;
+}
+
+[data-template="modern"] .site-header .wrap {
+  flex-direction: column;
+  justify-content: center;
+  padding-block: var(--space-md) var(--space-xs);
+}
+
+[data-template="modern"] .site-header nav {
+  margin-inline: 0;
+}
+
+[data-template="modern"] .hero {
+  padding-block: var(--space-2xl);
+  background: var(--background);
+  border-block-end: 0;
+}
+
+[data-template="modern"] .hero h1 {
+  max-width: 18ch;
+  font-weight: 400;
+}
+
+[data-template="modern"] .gallery-grid img,
+[data-template="modern"] .card-bordered {
+  border-radius: var(--radius-lg);
+}
+
+[data-template="modern"] .card-bordered {
+  border-color: transparent;
+  background: var(--brand-soft);
+}
+
+/* Bold: dark and dense. The header and hero share one dark block, the
+   figures sit on a brand band across the page, and cards carry a heavy rule.
+   Text on the dark block is the page's own pair turned over, so it keeps the
+   contrast the tokens already hold. */
+[data-template="bold"] {
+  --section-gap: clamp(2.5rem, 1.8rem + 3vw, 4rem);
+}
+
+[data-template="bold"] :is(h1, h2, h3) {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+[data-template="bold"] :is(.site-header, .hero) {
+  border: 0;
+  background: var(--foreground);
+  color: var(--background);
+}
+
+[data-template="bold"]
+  :is(.site-header .site-name, .site-header nav a, .hero .lede) {
+  color: var(--background);
+}
+
+[data-template="bold"] .hero .eyebrow {
+  color: var(--background);
+}
+
+[data-template="bold"] .site-header nav a:hover,
+[data-template="bold"] .site-header nav a[aria-current="page"] {
+  color: var(--background);
+  box-shadow: inset 0 -2px 0 var(--background);
+}
+
+[data-template="bold"] :is(.site-header, .hero) a:focus-visible {
+  outline-color: var(--background);
+}
+
+[data-template="bold"] .hero .action-secondary {
+  border-color: var(--background);
+}
+
+[data-template="bold"] .hero h1 {
+  max-width: 16ch;
+  text-transform: uppercase;
+}
+
+[data-template="bold"] main > .stats {
+  grid-column: 1 / -1;
+  /* Flush under the hero, which keeps --space-xl below it. */
+  margin-block-start: calc(var(--space-xl) * -1);
+  padding: var(--space-lg) max(var(--space-sm), (100% - var(--container)) / 2);
+  border: 0;
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .stats dt {
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .stats dd {
+  font-size: var(--text-display);
+}
+
+[data-template="bold"] .card-bordered {
+  border: 2px solid var(--foreground);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }

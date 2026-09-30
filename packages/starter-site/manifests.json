@@ -43,7 +43,7 @@
     "summary": "Phone, email, weekday hours and service area as a labelled list.",
     "props": [],
     "constraints": [
-      "Reads site.phone, site.email, site.weekdayHours and site.serviceArea itself; each row renders only when its field is set."
+      "Reads site.phone, site.email, site.weekdayHours and site.serviceAreaText (else site.serviceArea) itself; each row renders only when its field is set."
     ],
     "examples": ["<ContactDetails />"],
     "forbidden": ["passing contact details as props or children"],
@@ -106,6 +106,12 @@
         "description": "One sentence under the heading, read from a site field."
       },
       {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "A short line above the heading, such as the industry, from a site field."
+      },
+      {
         "name": "variant",
         "type": "\"split\" | \"centered\" | \"compact\"",
         "required": false,
@@ -116,7 +122,8 @@
       "One per page, first inside the layout.",
       "Children are ActionLink elements only.",
       "split for the home page, compact for a page under it, centered otherwise.",
-      "Renders nothing when the heading, the lede and the actions are all empty."
+      "Renders nothing when the heading, the lede and the actions are all empty.",
+      "eyebrow is for the home page, with site.industry."
     ],
     "examples": [
       "<Hero heading={site.servicesHeading} lede={site.servicesIntro} variant=\"compact\" />"

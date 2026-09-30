@@ -1,29 +1,33 @@
 {
-  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside home-services and its own pages; nothing here is a template engine.",
+  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside service-business and its own pages; nothing here is a template engine.",
   "packs": {
-    "home-services": {
-      "label": "Home services, cleaning first",
+    "service-business": {
+      "label": "Service businesses, any industry",
       "recipes": [
         {
           "name": "home",
           "page": "src/pages/index.astro",
-          "purpose": "The one page a visitor lands on: what the business does, why to call it, and how to.",
+          "purpose": "The one page a visitor lands on: what the business does, who it serves and how to ask for a quote. The layout follows site.template.",
           "components": [
             "Hero",
             "ActionLink",
+            "Gallery",
             "Stats",
-            "ValueProps",
             "ServiceCards",
+            "ValueProps",
+            "Section",
             "Steps",
             "Testimonials",
-            "Gallery",
             "Faq",
             "CtaBand"
           ],
           "fields": [
+            "industry",
             "heroHeading",
             "tagline",
             "homeIntro",
+            "overview",
+            "audience",
             "statYearsValue",
             "statClientsValue",
             "statRatingValue",
@@ -65,6 +69,7 @@
           "fields": [
             "servicesHeading",
             "servicesIntro",
+            "offerings",
             "service1Name",
             "service1Body",
             "service2Name",
@@ -83,6 +88,7 @@
           "fields": [
             "serviceAreaHeading",
             "serviceAreaIntro",
+            "serviceAreaText",
             "serviceArea",
             "ctaHeading",
             "ctaBody"

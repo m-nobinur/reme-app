@@ -3,8 +3,8 @@ path: src/components/ContactDetails/ContactDetails.astro
 summary: Phone, email, weekday hours and service area as a labelled list.
 props: []
 constraints:
-  - Reads site.phone, site.email, site.weekdayHours and site.serviceArea itself;
-    each row renders only when its field is set.
+  - Reads site.phone, site.email, site.weekdayHours and site.serviceAreaText
+    (else site.serviceArea) itself; each row renders only when its field is set.
 examples:
   - "<ContactDetails />"
 forbidden:

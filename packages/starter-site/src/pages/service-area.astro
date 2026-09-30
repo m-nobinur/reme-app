@@ -16,6 +16,7 @@ import { localBusiness } from "../structured-data"
     heading={site.serviceAreaHeading}
     lede={site.serviceAreaIntro}
   />
+  {site.serviceAreaText && <p class="lede">{site.serviceAreaText}</p>}
   {site.serviceArea && <p class="lede">{site.serviceArea}</p>}
   <CtaBand />
 </Base>

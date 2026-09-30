@@ -10,6 +10,10 @@ props:
     type: string
     required: false
     description: One sentence under the heading, read from a site field.
+  - name: eyebrow
+    type: string
+    required: false
+    description: A short line above the heading, such as the industry, from a site field.
   - name: variant
     type: '"split" | "centered" | "compact"'
     required: false
@@ -19,6 +23,7 @@ constraints:
   - Children are ActionLink elements only.
   - split for the home page, compact for a page under it, centered otherwise.
   - Renders nothing when the heading, the lede and the actions are all empty.
+  - eyebrow is for the home page, with site.industry.
 examples:
   - "<Hero heading={site.servicesHeading} lede={site.servicesIntro}
     variant=\"compact\" />"
