@@ -1,5 +1,4 @@
 import {
-  ActionBarMorePrimitive,
   ActionBarPrimitive,
   type AssistantState,
   AuiIf,
@@ -8,6 +7,7 @@ import {
   type GroupByContext,
   groupPartByType,
   type ThreadMessage as MessageData,
+  MessagePartPrimitive,
   MessagePrimitive,
   type PartState,
   SuggestionPrimitive,
@@ -19,12 +19,8 @@ import {
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  CaretDownIcon,
   CheckIcon,
-  CopyIcon,
-  DotsThreeIcon,
-  DownloadSimpleIcon,
-  MicrophoneIcon,
+  ChecksIcon,
   PlusIcon,
   SquareIcon,
   ThumbsDownIcon,
@@ -44,8 +40,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
@@ -85,9 +79,6 @@ export type ThreadComponents = {
     | undefined
 }
 
-/** Ask answers and changes nothing; Act may start work once the owner says yes. */
-export type ThreadMode = "ask" | "act"
-
 /** A "+" entry: picking it puts `prompt` in the composer for the owner to finish. */
 export type ThreadQuickAction = { title: string; prompt: string }
 
@@ -101,9 +92,6 @@ export const OWNER_QUICK_ACTIONS: readonly ThreadQuickAction[] = [
   { title: "Remind me", prompt: "Remind me to " },
 ]
 
-/** What the conversation is about: the business, and where its site stands. */
-export type ThreadContext = { name: string; status: string; live: boolean }
-
 export type ThreadProps = {
   components?: ThreadComponents | undefined
   /**
@@ -115,10 +103,6 @@ export type ThreadProps = {
   placeholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
-  context?: ThreadContext | null | undefined
-  /** The mode chip renders only when both are given. */
-  mode?: ThreadMode | undefined
-  onModeChange?: ((mode: ThreadMode) => void) | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
 }
 
@@ -193,22 +177,12 @@ export const Thread: FC<ThreadProps> = ({
   stored = false,
   placeholder,
   briefing,
-  context,
-  mode,
-  onModeChange,
   quickActions,
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
-    () => ({
-      placeholder,
-      briefing,
-      context,
-      mode,
-      onModeChange,
-      quickActions,
-    }),
-    [placeholder, briefing, context, mode, onModeChange, quickActions]
+    () => ({ placeholder, briefing, quickActions }),
+    [placeholder, briefing, quickActions]
   )
 
   return (
@@ -424,9 +398,7 @@ const ThreadSuggestionItem: FC = () => {
 }
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { placeholder = "Send a message", context } = useContext(
-    ThreadSettingsContext
-  )
+  const { placeholder = "Send a message" } = useContext(ThreadSettingsContext)
   const input = useRef<HTMLTextAreaElement>(null)
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
@@ -436,7 +408,6 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         data-slot="aui_composer-shell"
         className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
       >
-        {context ? <ContextChip {...context} /> : null}
         <ComposerPrimitive.Input
           ref={input}
           placeholder={placeholder}
@@ -451,25 +422,6 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
     </ComposerPrimitive.Root>
   )
 }
-
-// A long business name gives way before the site's state does: the state is
-// the part that changes, so it is the part that must stay readable.
-const ContextChip: FC<ThreadContext> = ({ name, status, live }) => (
-  <p
-    data-slot="aui_composer-context"
-    className="flex min-w-0 max-w-full items-center self-start whitespace-nowrap rounded-full bg-muted px-2.5 py-0.5 text-[0.8125rem] text-muted-foreground"
-  >
-    <span
-      aria-hidden
-      className={cn(
-        "me-1.5 size-1.5 shrink-0 rounded-full",
-        live ? "bg-primary" : "bg-muted-foreground"
-      )}
-    />
-    <span className="min-w-0 truncate font-medium text-foreground">{name}</span>
-    <span className="shrink-0">, {status}</span>
-  </p>
-)
 
 const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   input,
@@ -520,53 +472,6 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
-const MODES: Record<ThreadMode, { label: string; detail: string }> = {
-  // Intent, not a guarantee: the chat sends the mode, and the backend that
-  // enforces it comes later. The copy promises no more than that.
-  ask: { label: "Ask", detail: "Questions only" },
-  act: { label: "Act", detail: "Questions and changes" },
-}
-
-const ModeChip: FC = () => {
-  const { mode, onModeChange } = useContext(ThreadSettingsContext)
-  if (!mode || !onModeChange) return null
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label={`Mode, ${MODES[mode].label}`}
-            className="aui-composer-mode rounded-full px-2.5 text-muted-foreground hover:text-foreground"
-            size="sm"
-            type="button"
-            variant="ghost"
-          />
-        }
-      >
-        {MODES[mode].label}
-        <CaretDownIcon aria-hidden className="size-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-64" side="top">
-        <DropdownMenuRadioGroup
-          onValueChange={(value) => onModeChange(value as ThreadMode)}
-          value={mode}
-        >
-          {(Object.keys(MODES) as ThreadMode[]).map((value) => (
-            <DropdownMenuRadioItem closeOnClick key={value} value={value}>
-              <span className="flex flex-col py-1.5">
-                <span className="font-medium">{MODES[value].label}</span>
-                <span className="text-[0.8125rem] text-muted-foreground">
-                  {MODES[value].detail}
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   input,
 }) => {
@@ -574,48 +479,8 @@ const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
       <div className="flex items-center gap-1">
         <QuickActions input={input} />
-        <ModeChip />
       </div>
       <div className="flex items-center gap-1.5">
-        <AuiIf condition={(s) => s.thread.capabilities.dictation}>
-          <AuiIf condition={(s) => s.composer.dictation == null}>
-            <ComposerPrimitive.Dictate
-              render={
-                <TooltipIconButton
-                  tooltip="Voice input"
-                  side="bottom"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="aui-composer-dictate size-8 rounded-full text-muted-foreground hover:text-foreground"
-                  aria-label="Start voice input"
-                />
-              }
-            >
-              <MicrophoneIcon className="aui-composer-dictate-icon size-4" />
-            </ComposerPrimitive.Dictate>
-          </AuiIf>
-          <AuiIf condition={(s) => s.composer.dictation != null}>
-            <ComposerPrimitive.StopDictation
-              render={
-                <TooltipIconButton
-                  tooltip="Stop dictation"
-                  side="bottom"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="aui-composer-stop-dictation size-8 rounded-full text-destructive"
-                  aria-label="Stop voice input"
-                />
-              }
-            >
-              <SquareIcon
-                className="aui-composer-stop-dictation-icon size-3.5 animate-pulse motion-reduce:animate-none"
-                weight="fill"
-              />
-            </ComposerPrimitive.StopDictation>
-          </AuiIf>
-        </AuiIf>
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send
             render={
@@ -694,7 +559,7 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="relative -mb-7.5 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="group/message relative -mb-7.5 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -742,9 +607,10 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
+        className={cn("ms-2 flex items-center gap-2", ACTION_BAR_HEIGHT)}
       >
-        {/* Copy has nothing to copy under a message of cards alone. */}
+        <MessageTime />
+        {/* A message of cards alone has no words to rate. */}
         <AuiIf
           condition={(s) =>
             s.message.parts.some((part) => part.type === "text")
@@ -757,11 +623,6 @@ const AssistantMessage: FC = () => {
   )
 }
 
-/**
- * Copy and More only. No Reload and no Edit: the server writes every turn and
- * owns the history, so a regenerated or rewritten turn would only ever exist
- * on this screen.
- */
 /**
  * The owner's thumb on a reply with words in it, when the runtime records
  * one. Each is a toggle a screen reader hears as pressed, and the thumb
@@ -795,52 +656,89 @@ const Feedback: FC = () => {
   )
 }
 
+/**
+ * The thumbs only. No Reload and no Edit: the server writes every turn and
+ * owns the history, so a regenerated or rewritten turn would only ever exist
+ * on this screen. They show on hover or focus rather than through `autohide`,
+ * which unmounts them until the pointer arrives, so a keyboard could never
+ * reach them and a touch screen never see them.
+ */
 const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
-      className="aui-assistant-action-bar-root col-start-3 row-start-2 -ms-1 flex gap-1 text-muted-foreground"
+      className="aui-assistant-action-bar-root flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100"
     >
-      <ActionBarPrimitive.Copy render={<TooltipIconButton tooltip="Copy" />}>
-        <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="zoom-in-50 fade-in animate-in duration-200 ease-out motion-reduce:animate-none" />
-        </AuiIf>
-        <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
       <Feedback />
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger
-          render={
-            <TooltipIconButton
-              tooltip="More"
-              className="data-[state=open]:bg-accent"
-            />
-          }
-        >
-          <DotsThreeIcon />
-        </ActionBarMorePrimitive.Trigger>
-        <ActionBarMorePrimitive.Content
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          className="aui-action-bar-more-content data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none"
-        >
-          <ActionBarPrimitive.ExportMarkdown
-            render={
-              <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer select-none items-center gap-2 rounded-2xl px-2.5 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground" />
-            }
-          >
-            <DownloadSimpleIcon className="size-4" />
-            Export as Markdown
-          </ActionBarPrimitive.ExportMarkdown>
-        </ActionBarMorePrimitive.Content>
-      </ActionBarMorePrimitive.Root>
     </ActionBarPrimitive.Root>
   )
 }
+
+/** When a message was written: the stored date, else the runtime's own for one sent here. */
+const sentAt = (message: MessageData): string =>
+  createdAt(message) ?? message.createdAt.toISOString()
+
+const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+})
+
+const MessageTime: FC = () => {
+  const at = useAuiState((s) => sentAt(s.message))
+  return (
+    <time
+      className="text-[0.6875rem] text-muted-foreground tabular-nums"
+      dateTime={at}
+    >
+      {LOCAL_TIME.format(new Date(at))}
+    </time>
+  )
+}
+
+type Delivery = "sent" | "delivered" | "seen"
+
+/**
+ * How far the owner's message has got, read from the message after it: none
+ * yet is sent, an empty reply is the assistant thinking, a reply with anything
+ * in it is seen.
+ */
+const deliveryOf = (s: AssistantState): Delivery => {
+  const next = s.thread.messages[s.message.index + 1]
+  if (next?.role !== "assistant") return "sent"
+  return next.content.length > 0 ? "seen" : "delivered"
+}
+
+const DELIVERY = {
+  sent: { label: "Sent", Icon: CheckIcon },
+  delivered: { label: "Delivered", Icon: ChecksIcon },
+  seen: { label: "Seen", Icon: ChecksIcon },
+} as const
+
+const DeliveryTick: FC = () => {
+  const delivery = useAuiState(deliveryOf)
+  const { label, Icon } = DELIVERY[delivery]
+  return (
+    <span data-slot="aui_user-message-delivery" data-state={delivery}>
+      <Icon
+        aria-hidden
+        className={cn("size-3.5", delivery === "seen" && "text-primary")}
+      />
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+// The spacer holds room for the time and tick on the text's last line, and
+// wraps to a line of its own when the line is full, as a messaging app does.
+const UserText: FC = () => (
+  <p className="whitespace-pre-line">
+    <MessagePartPrimitive.Text />
+    <span aria-hidden className="inline-block w-18" />
+  </p>
+)
+
+const USER_PARTS = { Text: UserText }
 
 const UserMessage: FC = () => {
   return (
@@ -850,8 +748,15 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content wrap-break-word rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
-          <MessagePrimitive.Parts />
+        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
+          <MessagePrimitive.Parts components={USER_PARTS} />
+          <span
+            data-slot="aui_user-message-meta"
+            className="absolute end-3.5 bottom-1.5 flex items-center gap-1 text-muted-foreground"
+          >
+            <MessageTime />
+            <DeliveryTick />
+          </span>
         </div>
       </div>
     </MessagePrimitive.Root>

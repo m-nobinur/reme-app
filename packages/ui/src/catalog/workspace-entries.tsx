@@ -1,24 +1,21 @@
 import {
-  BellIcon,
+  BuildingsIcon,
   CheckCircleIcon,
   FlowArrowIcon,
+  GearSixIcon,
   NotePencilIcon,
-  UserCircleIcon,
+  QuestionIcon,
+  SignOutIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
-import {
-  AppNav,
-  NavCount,
-  navLinkClass,
-} from "@workspace/ui/components/app-shell"
+import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLinkItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
@@ -35,7 +32,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { type ReactNode, useState } from "react"
-import { SamplePanel } from "./panel-entries"
+import { SamplePanel, SamplePanelLine } from "./panel-entries"
 
 /**
  * Catalog entries for the owner workspace frame. The shell renders at a fixed
@@ -46,11 +43,11 @@ import { SamplePanel } from "./panel-entries"
 
 type Entry = { name: string; render: () => ReactNode }
 
-const NAV = [
-  { href: "#notifications", label: "Notifications", icon: BellIcon },
-  { href: "#approvals", label: "Approvals", icon: CheckCircleIcon },
-  { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
+const PROFILE_NAV = [
+  { href: "#business", label: "Business", icon: BuildingsIcon },
   { href: "#staff", label: "Staff", icon: UsersThreeIcon },
+  { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
+  { href: "#account", label: "Account", icon: GearSixIcon },
 ]
 
 function AccountMenu() {
@@ -59,18 +56,32 @@ function AccountMenu() {
       <DropdownMenuTrigger
         render={
           <Button
-            className="min-w-0 flex-1 justify-start"
+            className="min-w-0 flex-1 justify-start gap-2 px-1.5"
             size="sm"
             variant="ghost"
           />
         }
       >
-        <UserCircleIcon aria-hidden />
+        <span
+          aria-hidden
+          className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+        >
+          SF
+        </span>
         <span className="truncate">Sam Fixture</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top">
-        <DropdownMenuLinkItem href="#account">Account</DropdownMenuLinkItem>
-        <DropdownMenuLinkItem href="#sign-out">Sign out</DropdownMenuLinkItem>
+      <DropdownMenuContent className="w-56" side="top">
+        {PROFILE_NAV.map((item) => (
+          <DropdownMenuLinkItem href={item.href} key={item.href}>
+            <item.icon aria-hidden />
+            {item.label}
+          </DropdownMenuLinkItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLinkItem href="#sign-out">
+          <SignOutIcon aria-hidden />
+          Sign out
+        </DropdownMenuLinkItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -85,18 +96,18 @@ function Rail() {
         New chat
       </a>
       <AppNav aria-label="Main">
-        {NAV.map((item) => (
-          <li key={item.href}>
-            <a className={navLinkClass} href={item.href}>
-              <item.icon aria-hidden />
-              {item.label}
-              {item.href === "#notifications" ? <NavCount count={3} /> : null}
-            </a>
-          </li>
-        ))}
+        <li>
+          <a className={navLinkClass} href="#approvals">
+            <CheckCircleIcon aria-hidden />
+            Approvals
+          </a>
+        </li>
       </AppNav>
       <div className="mt-auto flex items-center gap-1">
         <AccountMenu />
+        <Button aria-label="Help" size="icon-sm" variant="ghost">
+          <QuestionIcon aria-hidden />
+        </Button>
         <ThemeToggle />
       </div>
     </>
@@ -107,10 +118,11 @@ function ShellSample() {
   return (
     <WorkspaceShell
       className="h-[40rem] border border-border"
+      notifications={<a href="#notifications" />}
       panel={<SamplePanel />}
-      panelCount={2}
+      panelLine={<SamplePanelLine />}
       rail={<Rail />}
-      railCount={3}
+      unread={3}
     >
       <WorkspacePage>
         <h1 className="mb-6 font-semibold text-2xl">Approvals</h1>
@@ -147,6 +159,7 @@ function ConversationSample() {
         />
       }
       panel={<SamplePanel />}
+      panelLine={<SamplePanelLine />}
       rail={<Rail />}
       renaming={
         renaming
@@ -196,23 +209,17 @@ function MenuSample() {
   )
 }
 
-/**
- * A menu of actions and a choice of one. Closed here, like the account menu;
- * `thread.spec.ts` opens the same rows in the composer and scans them.
- */
-function ChoiceMenuSample() {
-  const [mode, setMode] = useState("act")
+/** A menu of actions, with a hairline between its groups. Closed here. */
+function ActionMenuSample() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
-        Mode
+        Actions
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64">
         <DropdownMenuItem>Change my website</DropdownMenuItem>
-        <DropdownMenuRadioGroup onValueChange={setMode} value={mode}>
-          <DropdownMenuRadioItem value="ask">Ask</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="act">Act</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem>Remind me</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -239,9 +246,8 @@ const workspaceCatalog: Entry[] = [
   { name: "DropdownMenuTrigger", render: () => <MenuSample /> },
   { name: "DropdownMenuContent", render: () => <MenuSample /> },
   { name: "DropdownMenuLinkItem", render: () => <MenuSample /> },
-  { name: "DropdownMenuItem", render: () => <ChoiceMenuSample /> },
-  { name: "DropdownMenuRadioGroup", render: () => <ChoiceMenuSample /> },
-  { name: "DropdownMenuRadioItem", render: () => <ChoiceMenuSample /> },
+  { name: "DropdownMenuItem", render: () => <ActionMenuSample /> },
+  { name: "DropdownMenuSeparator", render: () => <ActionMenuSample /> },
 ]
 
 export { workspaceCatalog }

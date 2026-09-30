@@ -3,15 +3,13 @@ import type {
   FactValueKey,
   Reminder,
 } from "@workspace/contracts"
-import type { ReminderRow } from "@workspace/ui/components/live-panel"
 import { factLabel } from "@workspace/ui/lib/facts"
-import { formatDateTime } from "@workspace/ui/lib/format"
-import type { AttentionItem, Workspace } from "./api/types"
+import type { AttentionItem } from "./api/types"
 
 /**
- * Derived reminders in the owner's words, for the panel and the briefing.
- * The api sends facts about rows that wait on the owner; the words are
- * written here, from those facts and the rows the workspace already holds.
+ * Reminders in the owner's words: the derived ones for the briefing, from
+ * the facts the api sends and the rows the workspace already holds, and the
+ * written ones as the panel lists them.
  */
 
 type Rule<Name extends DerivedReminder["rule"]> = Extract<
@@ -42,83 +40,59 @@ export const questionOf = (
       item.kind === "question" && item.id === reminder.request_id
   )
 
+/** The calendar day `at` falls on in `zone`, as a day count to compare. */
+const dayOf = (at: Date, zone: string) =>
+  Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
+
+/** `Today, 4:30 pm`, `Tomorrow, 9:00 am`, else `Fri 3 Oct, 9:00 am`, in `zone`. */
+export function dueLine(at: string, zone: string, now = new Date()): string {
+  const date = new Date(at)
+  const days = dayOf(date, zone) - dayOf(now, zone)
+  const day =
+    days === 0
+      ? "Today"
+      : days === 1
+        ? "Tomorrow"
+        : date.toLocaleDateString("en-GB", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            timeZone: zone,
+          })
+  const time = date.toLocaleTimeString("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: zone,
+  })
+  return `${day}, ${time}`
+}
+
+const HOUR = 3_600_000
+
 /**
  * A written reminder as the panel shows it. Its due time is in `zone`, the
  * reader's own, and absent while that is unknown (the server's render), so
- * the same time never shows first in UTC and then in local time.
+ * the same time never shows first in UTC and then in local time. `soon` is
+ * due within the hour, and waits for the zone the same way.
  */
-export const noteOf = (note: Reminder, zone: string | null) => ({
-  title: note.title,
-  due: zone ? formatDateTime(note.due_at, zone) : null,
-  byAssistant: note.source === "assistant",
-})
-
-/**
- * The picker's local `2026-10-03T14:00` as an instant, read in the browser's
- * own zone, or null for no time. A native picker gives a valid value or none.
- */
-export const dueAtOf = (local: string): string | null =>
-  local ? new Date(local).toISOString() : null
-
-/**
- * The panel's derived rows. A row links to its item only when the panel
- * shows that item: the approval or question in "Waiting on you", or the build
- * in "Working on" (`shownBuild`). Times are in `zone`, as `noteOf` has them.
- */
-export function reminderRows(
-  workspace: Workspace,
-  shownBuild: string | null,
-  zone: string | null
-): ReminderRow[] {
-  const { attention, derivedReminders } = workspace
-  const shown = (id: string) => attention.some((item) => item.id === id)
-  return derivedReminders.map((reminder): ReminderRow => {
-    switch (reminder.rule) {
-      case "approval_expiring":
-        return {
-          id: `review-${reminder.approval_id}`,
-          text: `Review version ${reminder.version} before it closes`,
-          href: shown(reminder.approval_id)
-            ? `#${anchorOf.approval(reminder.approval_id)}`
-            : null,
-        }
-      case "question_waiting": {
-        const question = questionOf(attention, reminder)
-        return question
-          ? {
-              id: `question-${reminder.request_id}`,
-              text: `Answer the question about ${question.title.toLowerCase()}`,
-              detail: zone
-                ? `Waiting on you since ${formatDateTime(question.raisedAt, zone)}`
-                : null,
-              href: `#${anchorOf.question(question.id)}`,
-            }
-          : {
-              id: `question-${reminder.request_id}`,
-              text: "A question is still waiting on you",
-            }
-      }
-      case "preview_unpublished": {
-        const approval = attention.find(
-          (item) =>
-            item.kind === "approval" &&
-            item.request.assignment_id === reminder.assignment_id
-        )
-        return {
-          id: `preview-${reminder.assignment_id}-${reminder.version}`,
-          text: `Version ${reminder.version} is ready but not published`,
-          href: approval
-            ? `#${anchorOf.approval(approval.id)}`
-            : shownBuild === reminder.assignment_id
-              ? `#${anchorOf.build(reminder.assignment_id)}`
-              : null,
-        }
-      }
-      default:
-        return {
-          id: "facts",
-          text: `Tell Reme ${factsNeeded(reminder.keys)}`,
-        }
-    }
-  })
+export const noteOf = (
+  note: Reminder,
+  zone: string | null,
+  now = new Date()
+) => {
+  const due = zone && note.due_at ? dueLine(note.due_at, zone, now) : null
+  return {
+    title: note.title,
+    due,
+    soon: due !== null && Date.parse(note.due_at ?? "") - now.getTime() <= HOUR,
+    byAssistant: note.source === "assistant",
+  }
 }
+
+/**
+ * The written reminders still ahead: dated ones not yet due, then undated
+ * ones, in the api's order, which is already soonest first.
+ */
+export const upcomingNotes = (notes: Reminder[], now = Date.now()) =>
+  notes.filter((note) => note.due_at === null || Date.parse(note.due_at) > now)

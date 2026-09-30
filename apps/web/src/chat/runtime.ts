@@ -1,13 +1,11 @@
 import { useChat } from "@ai-sdk/react"
 import {
-  type DictationAdapter,
   type FeedbackAdapter,
   type ThreadSuggestion,
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
-import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useRef, useState } from "react"
@@ -27,15 +25,11 @@ import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
  */
 
 export function useConversationRuntime({
-  mode,
   onFinish,
   suggestions,
-  dictation,
 }: {
-  mode: () => ChatRequest["mode"]
   onFinish: () => void
   suggestions: ThreadSuggestion[]
-  dictation: DictationAdapter | undefined
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -48,10 +42,11 @@ export function useConversationRuntime({
         api: "/api/chat",
         fetch: chatFetch,
         // The whole body is the turn: no history, system prompt or tools
-        // ever leave the browser.
+        // ever leave the browser. Always Act, which includes the reads: the
+        // assistant works out whether a message asks or changes something.
         prepareSendMessagesRequest: turnBody(
           () => aui.threadListItem.initialize(),
-          mode,
+          () => "act",
           sending
         ),
       })
@@ -124,7 +119,7 @@ export function useConversationRuntime({
     {
       cancelPendingToolCallsOnSend: false,
       suggestions,
-      adapters: dictation ? { dictation, feedback } : { feedback },
+      adapters: { feedback },
     }
   )
   return runtime

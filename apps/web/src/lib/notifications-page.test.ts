@@ -165,20 +165,16 @@ for (const [width, wide] of [
           defaultPanelOpen: false,
           openPanel: true,
           panel: "Waiting on you",
+          panelLine: "2 waiting on you",
           rail: null,
           // biome-ignore lint/correctness/noChildrenProp: the shell's props type requires children, so createElement needs them here to type-check.
           children: null,
         })
       )
     )
-    const inline = document.getElementById("workspace-panel")
-    const sheet = document.querySelector('[data-slot="sheet-content"]')
-    if (wide) {
-      expect(inline?.className).toContain("lg:flex")
-      expect(sheet).toBeNull()
-    } else {
-      expect(sheet?.textContent).toContain("Waiting on you")
-    }
+    const panel = document.getElementById("workspace-panel")
+    expect(panel?.dataset.state).toBe("open")
+    expect(panel?.textContent).toContain("Waiting on you")
     vi.unstubAllGlobals()
   })
 }

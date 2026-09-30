@@ -6,37 +6,56 @@ import type {
 } from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
-  AddReminder,
   ApprovalItem,
+  BUILD_STAGES,
   ComingUp,
+  LiveLine,
   PanelBlank,
   type Preview,
   QuestionItem,
+  ReminderList,
   ReminderNote,
-  Reminders,
   type Thumbnail,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@workspace/ui/components/tabs"
+import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { cn } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
-import { useEffect, useState, useSyncExternalStore } from "react"
+import {
+  type ComponentProps,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import {
   answerQuestion,
   askForChanges,
   cancelBuild,
   completeReminder,
-  createReminder,
   decideApproval,
   getPreview,
 } from "@/lib/api/server"
-import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
+import type {
+  AttentionItem,
+  OrgSummary,
+  Workspace,
+  WriteOutcome,
+} from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
+import { briefingOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { onboardingFor } from "@/lib/onboarding"
-import { anchorOf, dueAtOf, noteOf, reminderRows } from "@/lib/reminders"
+import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
 
@@ -392,56 +411,19 @@ function Completable({
   )
 }
 
-/** The add form: one key per reminder until it lands, as `Answerable` has. */
-function Addable({
-  refresh,
-  announce,
-}: {
-  refresh: Refresh
-  announce: Announce
-}) {
-  const { pending, error, run } = useWrite<"add">(refresh)
-  const [keys] = useState(attemptKeys)
-  return (
-    <AddReminder
-      error={error}
-      onAdd={(title, due) =>
-        run("add", async () => {
-          const dueAt = dueAtOf(due)
-          const outcome = await createReminder({
-            data: { title, dueAt, key: keys.key({ title, dueAt }) },
-          })
-          if (outcome.done) {
-            keys.done()
-            announce("Added to your reminders.")
-          }
-          return outcome
-        })
-      }
-      pending={pending !== null}
-    />
-  )
-}
-
-/** Written reminders first, in the api's order, then the derived ones. */
+/** The reminders still ahead, each with its own Done. */
 function ReminderSection({
-  workspace,
-  shownBuild,
+  notes,
   refresh,
 }: {
-  workspace: Workspace
-  shownBuild: string | null
+  notes: Reminder[]
   refresh: Refresh
 }) {
   const zone = useBrowserZone()
   const [status, setStatus] = useState<string | null>(null)
   return (
-    <Reminders
-      action={<Addable announce={setStatus} refresh={refresh} />}
-      items={reminderRows(workspace, shownBuild, zone)}
-      status={status}
-    >
-      {workspace.reminderNotes.map((note) => (
+    <ReminderList status={status}>
+      {notes.map((note) => (
         <Completable
           announce={setStatus}
           key={note.id}
@@ -450,15 +432,43 @@ function ReminderSection({
           zone={zone}
         />
       ))}
-    </Reminders>
+    </ReminderList>
   )
 }
 
+/**
+ * A reminder marked done takes its Done button with it, and its tab too when
+ * it was the last. When focus went with it, it moves to the selected tab
+ * rather than the page.
+ */
+function useFocusAfterDone(notes: Reminder[]) {
+  const list = useRef<HTMLDivElement>(null)
+  const ids = notes.map((note) => note.id).join(" ")
+  const before = useRef(ids)
+  useEffect(() => {
+    const still = ids.split(" ")
+    const gone = before.current
+      .split(" ")
+      .some((id) => id && !still.includes(id))
+    before.current = ids
+    if (gone && document.activeElement === document.body) {
+      list.current
+        ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+        ?.focus()
+    }
+  }, [ids])
+  return list
+}
+
+type Tab = "activity" | "reminders" | "website"
+
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
-  const { active } = frame.useLoaderData()
   const [status, setStatus] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>("activity")
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
+  const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])
+  const tabList = useFocusAfterDone(upcoming)
   const stale = failed
     ? "This panel did not refresh. It tries again in a minute."
     : null
@@ -472,29 +482,13 @@ export function WorkspacePanel() {
     )
   }
   const { attention, builds, live, host } = workspace
-  if (!live && builds.length === 0 && attention.length === 0) {
-    return (
-      <>
-        <PanelBlank
-          action={<FirstStep workspace={workspace} />}
-          description={
-            workspace.missingFacts.length
-              ? "Tell Reme about your business in the chat, then ask it to build your website."
-              : "Ask Reme in the chat to build your website."
-          }
-          steps={firstSteps(workspace)}
-        />
-        {/* With no organisation there is nowhere to add one to. */}
-        {active ? (
-          <ReminderSection
-            refresh={refresh}
-            shownBuild={null}
-            workspace={workspace}
-          />
-        ) : null}
-      </>
-    )
-  }
+  const blank = !live && builds.length === 0 && attention.length === 0
+  const website = live !== null || host !== null
+  // A tab that has emptied (its last reminder done) hands back to Activity.
+  const shown =
+    (tab === "reminders" && upcoming.length) || (tab === "website" && website)
+      ? tab
+      : "activity"
 
   const current =
     builds.find((build) => build.state !== "queued") ?? builds.at(-1)
@@ -502,7 +496,17 @@ export function WorkspacePanel() {
     .filter((build) => build !== current && build.state === "queued")
     .map((build) => build.goal)
 
-  return (
+  const activity = blank ? (
+    <PanelBlank
+      action={<FirstStep workspace={workspace} />}
+      description={
+        workspace.missingFacts.length
+          ? "Tell Reme about your business in the chat, then ask it to build your website."
+          : "Ask Reme in the chat to build your website."
+      }
+      steps={firstSteps(workspace)}
+    />
+  ) : (
     <>
       {current ? (
         <div
@@ -518,16 +522,7 @@ export function WorkspacePanel() {
           />
         </div>
       ) : null}
-      <WaitingOnYou
-        action={
-          <Link className={NEXT_STEP} to="/app/notifications">
-            See notifications
-          </Link>
-        }
-        error={stale}
-        onRetry={refresh}
-        status={status}
-      >
+      <WaitingOnYou error={stale} onRetry={refresh} status={status}>
         {attention.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -551,14 +546,84 @@ export function WorkspacePanel() {
         )}
       </WaitingOnYou>
       <ComingUp items={comingUp(attention)} />
-      <ReminderSection
-        refresh={refresh}
-        shownBuild={current?.assignment_id ?? null}
-        workspace={workspace}
-      />
-      {live || host ? (
-        <YourWebsite host={host} live={live} thumbnail={thumbnail} />
-      ) : null}
     </>
   )
+
+  return (
+    <Tabs onValueChange={(value: Tab) => setTab(value)} value={shown}>
+      <TabsList className="sticky top-0 z-10 bg-popover" ref={tabList}>
+        <TabsTrigger value="activity">Activity</TabsTrigger>
+        {upcoming.length ? (
+          <TabsTrigger value="reminders">
+            Reminders
+            <span className="text-muted-foreground tabular-nums">
+              {upcoming.length}
+            </span>
+          </TabsTrigger>
+        ) : null}
+        {website ? <TabsTrigger value="website">Website</TabsTrigger> : null}
+      </TabsList>
+      {/* Kept mounted, so a half-written answer or an open Stop question
+          survives a look at another tab. */}
+      <TabsContent keepMounted value="activity">
+        {activity}
+      </TabsContent>
+      {upcoming.length ? (
+        <TabsContent value="reminders">
+          <ReminderSection notes={upcoming} refresh={refresh} />
+        </TabsContent>
+      ) : null}
+      {website ? (
+        <TabsContent value="website">
+          <YourWebsite host={host} live={live} thumbnail={thumbnail} />
+        </TabsContent>
+      ) : null}
+    </Tabs>
+  )
+}
+
+/**
+ * What the panel's one line says, most pressing first: the build being
+ * worked on, then what waits on the owner, then where the site stands. The
+ * dot follows the site: pulsing while a build works, the accent while a
+ * version is live.
+ */
+export function lineOf(
+  workspace: Workspace | null,
+  org: OrgSummary | null
+): ComponentProps<typeof LiveLine> {
+  if (!workspace) return { tone: "idle", lead: "This panel did not load" }
+  const tone = workspace.live ? "live" : "idle"
+  const build = workspace.builds.find((each) => WORKING.has(each.state))
+  if (build) {
+    const version = build.revision?.version
+    return {
+      tone: "working",
+      lead: version
+        ? `Building version ${version},`
+        : workspace.live
+          ? "Building a new version,"
+          : "Building your first version,",
+      detail: BUILD_STAGES[build.state].note.toLowerCase().slice(0, -1),
+    }
+  }
+  const waiting = workspace.attention.length
+  if (waiting) {
+    return {
+      tone,
+      lead: `${waiting} ${waiting === 1 ? "thing" : "things"}`,
+      detail: "waiting on you",
+    }
+  }
+  const context = briefingOf(org, workspace).context
+  return context
+    ? { tone, lead: `${context.name},`, detail: context.status }
+    : { tone, lead: "Nothing published yet" }
+}
+
+/** The panel in one line, for the shell's header and its minimised state. */
+export function WorkspacePanelLine() {
+  const { workspace } = useLiveWorkspace()
+  const { active } = frame.useLoaderData()
+  return <LiveLine {...lineOf(workspace, active)} />
 }

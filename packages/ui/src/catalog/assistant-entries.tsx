@@ -11,7 +11,6 @@ import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
   Thread,
-  type ThreadMode,
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
@@ -70,6 +69,8 @@ const COS_TOOLS_FIXTURE = {
       : null,
 }
 
+const FIXTURE_TIME = new Date("2026-09-24T09:00:00Z")
+
 function FixtureThread({
   height = "h-[48rem]",
   messages,
@@ -94,7 +95,12 @@ function FixtureThread({
   isLoading?: boolean
 }) {
   const runtime = useExternalStoreRuntime({
-    convertMessage: (message: ThreadMessageLike) => message,
+    // A fixed time, so a message without a stored date shows the same time
+    // on every run rather than the moment it rendered.
+    convertMessage: (message: ThreadMessageLike) => ({
+      createdAt: FIXTURE_TIME,
+      ...message,
+    }),
     isDisabled,
     isLoading,
     isRunning,
@@ -125,27 +131,19 @@ function FixtureThread({
   )
 }
 
-/**
- * The composer's surroundings as the owner app sets them: the business on the
- * chip, the mode, and the "+" starters. Brightclean is a fixture business.
- */
-const CONTEXT = { name: "Brightclean", status: "site live on v3", live: true }
+/** The composer's surroundings as the owner app sets them: the "+" starters. */
 const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What changed in version 4?" },
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
 
-/** A thread whose mode chip works, the way the app holds it. */
+/** A thread with the owner app's composer settings. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
-  const [mode, setMode] = useState<ThreadMode>("act")
   return (
     <FixtureThread
       {...props}
       settings={{
-        context: CONTEXT,
-        mode,
-        onModeChange: setMode,
         placeholder: "Ask, or tell me what to change",
         quickActions: OWNER_QUICK_ACTIONS,
         ...props.settings,
@@ -894,6 +892,9 @@ function ConversationSample() {
           Nothing right now. Questions and approvals from your team land here.
         </p>
       }
+      panelLine={
+        <span className="text-muted-foreground text-sm">Nothing right now</span>
+      }
       rail={<p className="text-sm">Brightclean</p>}
       title="New chat"
     >
@@ -1076,15 +1077,10 @@ const assistantCatalog = [
     ),
   },
   {
-    // A new owner, or a workspace that could not be read: no line, no chip.
+    // A new owner, or a workspace that could not be read: no line.
     name: "ThreadEmptyUnread",
     render: () => (
-      <OwnerThread
-        height="h-[32rem]"
-        isDisabled={false}
-        messages={[]}
-        settings={{ context: null }}
-      />
+      <OwnerThread height="h-[32rem]" isDisabled={false} messages={[]} />
     ),
   },
   {

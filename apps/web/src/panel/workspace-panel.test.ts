@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace } from "@/lib/api/types"
 import { EMPTY_WORKSPACE } from "@/lib/attention"
-import { WorkspacePanel } from "./workspace-panel"
+import { lineOf, WorkspacePanel } from "./workspace-panel"
 
 /**
  * Where each blank section's next step goes, as the app wires it. The
@@ -36,7 +36,6 @@ vi.mock("@/lib/api/server", () => server)
 
 const server = vi.hoisted(() => ({
   completeReminder: vi.fn(),
-  createReminder: vi.fn(),
 }))
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
@@ -64,7 +63,6 @@ beforeEach(() => {
     active: { id: "00000000-0000-4000-8000-000000000001" },
   }
   server.completeReminder.mockReset()
-  server.createReminder.mockReset()
   live = { workspace: EMPTY_WORKSPACE, failed: false, refresh: vi.fn() }
   container = document.createElement("div")
   document.body.appendChild(container)
@@ -84,12 +82,6 @@ const link = (name: string) =>
   [...container.querySelectorAll("a")].find(
     (anchor) => anchor.textContent === name
   )
-
-it('sends "See notifications" to the notifications page', async () => {
-  live.workspace = { ...EMPTY_WORKSPACE, live: 2 }
-  await render()
-  expect(link("See notifications")?.dataset.to).toBe("/app/notifications")
-})
 
 it('sends "Continue getting started" to the onboarding conversation', async () => {
   loader.conversations = [
@@ -132,6 +124,7 @@ const note = (id: string, title: string, due_at: string | null): Reminder => ({
 })
 const CLOTHS = "00000000-0000-4000-8000-00000000000b"
 const VAN = "00000000-0000-4000-8000-00000000000c"
+const PAST = "00000000-0000-4000-8000-00000000000e"
 
 const buttonNamed = (name: string) =>
   [...container.querySelectorAll("button")].find(
@@ -148,26 +141,70 @@ function deferred<T>() {
   return { promise, ...settle }
 }
 
-it("lists written reminders first, in the api's order, then derived ones", async () => {
+const tab = (name: string) =>
+  [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find((element) =>
+    element.textContent?.startsWith(name)
+  )
+
+it("lists only reminders still ahead, under a tab that counts them", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
     reminderNotes: [
-      note(CLOTHS, "Order more cloths", "2026-10-02T09:00:00.000Z"),
+      note(PAST, "Ring the landlord", "2020-10-01T09:00:00.000Z"),
+      note(CLOTHS, "Order more cloths", "2099-10-02T09:00:00.000Z"),
       note(VAN, "Book the van's MOT", null),
     ],
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
   }
   await render()
-  const section = container.querySelector('section:has(> h2[tabindex="-1"])')
-  const rows = [...(section?.querySelectorAll("li") ?? [])].map(
-    (row) => row.querySelector("span")?.textContent
+  expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
+  expect(tab("Reminders")?.textContent).toBe("Reminders2")
+  await act(async () => tab("Reminders")?.click())
+  const rows = [
+    ...container.querySelectorAll('[data-slot="reminder-note"]'),
+  ].map((row) => row.querySelector("span")?.textContent)
+  expect(rows).toEqual(["Order more cloths", "Book the van's MOT"])
+  // Derived reminders repeat "Waiting on you", so the panel does not list them.
+  expect(container.textContent).not.toContain("Tell Reme")
+})
+
+it("has no Reminders tab, and no add form, with nothing ahead", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "brightclean-demo.example.invalid",
+    reminderNotes: [
+      note(PAST, "Ring the landlord", "2020-10-01T09:00:00.000Z"),
+    ],
+  }
+  await render()
+  expect(
+    [...container.querySelectorAll('[role="tab"]')].map(
+      (element) => element.textContent
+    )
+  ).toEqual(["Activity", "Website"])
+  expect(container.querySelector('[name="title"]')).toBeNull()
+})
+
+it("links the live site by name, with the host as its title", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 3,
+    host: "brightclean-demo.example.invalid",
+  }
+  await render()
+  await act(async () => tab("Website")?.click())
+  const visit = [...container.querySelectorAll("a")].find((anchor) =>
+    anchor.textContent?.startsWith("Visit your website")
   )
-  expect(rows).toEqual([
-    "Order more cloths",
-    "Book the van's MOT",
-    "Tell Reme your phone number",
-  ])
+  expect(visit?.getAttribute("href")).toBe(
+    "https://brightclean-demo.example.invalid"
+  )
+  expect(visit?.title).toBe("brightclean-demo.example.invalid")
+  expect(visit?.target).toBe("_blank")
+  expect(visit?.rel).toBe("noreferrer")
+  expect(container.textContent).toContain("Version 3 is live")
 })
 
 it("shows a reminder done at once, and puts it back when that fails", async () => {
@@ -179,6 +216,7 @@ it("shows a reminder done at once, and puts it back when that fails", async () =
   const write = deferred<unknown>()
   server.completeReminder.mockReturnValueOnce(write.promise)
   await render()
+  await act(async () => tab("Reminders")?.click())
   const row = () => container.querySelector('[data-slot="reminder-note"]')
 
   await act(async () => buttonNamed("Done: Order more cloths")?.click())
@@ -197,63 +235,7 @@ it("shows a reminder done at once, and puts it back when that fails", async () =
   expect(live.refresh).toHaveBeenCalledOnce()
 })
 
-it("sends one key per reminder: the same on a retry, a new one once added", async () => {
-  await render()
-  const add = async (title: string) => {
-    const input = container.querySelector<HTMLInputElement>('[name="title"]')
-    if (input) input.value = title
-    await act(async () =>
-      container
-        .querySelector<HTMLFormElement>('[data-slot="add-reminder"]')
-        ?.requestSubmit()
-    )
-  }
-  const keys = () =>
-    server.createReminder.mock.calls.map(
-      ([call]) => (call as { data: { key: string } }).data.key
-    )
-
-  server.createReminder.mockRejectedValueOnce(new Error("timed out"))
-  await add("Order more cloths")
-  server.createReminder.mockResolvedValueOnce({ done: true })
-  await add("Order more cloths")
-  server.createReminder.mockResolvedValueOnce({ done: true })
-  await add("Order more cloths")
-  server.createReminder.mockResolvedValueOnce({
-    done: false,
-    reason: "Pick a time within a year.",
-  })
-  await add("Book the van's MOT")
-
-  const [first, retry, again, other] = keys()
-  expect(retry).toBe(first)
-  expect(again).not.toBe(first)
-  expect(other).not.toBe(again)
-  expect(server.createReminder.mock.calls[0]?.[0]).toMatchObject({
-    data: { title: "Order more cloths", dueAt: null },
-  })
-  // A refusal is shown in place, and what was typed stays.
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-    "Pick a time within a year."
-  )
-  expect(
-    container.querySelector<HTMLInputElement>('[name="title"]')?.value
-  ).toBe("Book the van's MOT")
-})
-
-it("offers no add form to an owner with no organisation", async () => {
-  loader.active = null
-  await render()
-  expect(container.querySelector('[data-slot="add-reminder"]')).toBeNull()
-  expect(container.textContent).not.toContain("Nothing to remember yet")
-
-  await act(async () => root.unmount())
-  loader.active = { id: "00000000-0000-4000-8000-000000000001" }
-  await render()
-  expect(container.querySelector('[data-slot="add-reminder"]')).not.toBeNull()
-})
-
-it("moves focus to the section heading when a completed reminder leaves", async () => {
+it("moves focus to the Activity tab when the last reminder is done", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
@@ -261,13 +243,74 @@ it("moves focus to the section heading when a completed reminder leaves", async 
   }
   server.completeReminder.mockResolvedValueOnce({ done: true })
   await render()
+  await act(async () => tab("Reminders")?.click())
   const done = buttonNamed("Done: Order more cloths")
   done?.focus()
   await act(async () => done?.click())
 
-  // The read after the write no longer lists it.
+  // The read after the write no longer lists it, so its tab goes too.
   live.workspace = { ...live.workspace, reminderNotes: [] }
   await act(async () => root.render(createElement(WorkspacePanel)))
-  expect(document.activeElement?.tagName).toBe("H2")
-  expect(document.activeElement?.textContent).toBe("Reminders")
+  expect(tab("Reminders")).toBeUndefined()
+  expect(document.activeElement).toBe(tab("Activity"))
+  expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
+})
+
+const ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Brightclean" }
+const build = (state: string, version: number | null) =>
+  ({
+    assignment_id: "00000000-0000-4000-8000-00000000000d",
+    goal: "Add Saturday hours",
+    state,
+    revision: version ? { version } : null,
+    created_at: "2026-09-30T09:00:00.000Z",
+  }) as unknown as Workspace["builds"][number]
+
+it("says in one line what is most pressing", () => {
+  const org = ORG as unknown as Parameters<typeof lineOf>[1]
+  expect(
+    lineOf(
+      {
+        ...EMPTY_WORKSPACE,
+        live: 2,
+        builds: [build("validating", 3)],
+        attention: [{ kind: "question" } as never],
+      },
+      org
+    )
+  ).toEqual({
+    tone: "working",
+    lead: "Building version 3,",
+    detail: "checking the site",
+  })
+  // A build waiting on the owner is not being worked on.
+  expect(
+    lineOf(
+      {
+        ...EMPTY_WORKSPACE,
+        live: 2,
+        builds: [build("blocked_on_approval", 3)],
+        attention: [
+          { kind: "approval" } as never,
+          { kind: "question" } as never,
+        ],
+      },
+      org
+    )
+  ).toEqual({ tone: "live", lead: "2 things", detail: "waiting on you" })
+  expect(lineOf({ ...EMPTY_WORKSPACE, live: 1 }, org)).toEqual({
+    tone: "live",
+    lead: "Brightclean,",
+    detail: "site live on v1",
+  })
+  expect(lineOf(EMPTY_WORKSPACE, org)).toEqual({
+    tone: "idle",
+    lead: "Brightclean,",
+    detail: "no site yet",
+  })
+  expect(lineOf(EMPTY_WORKSPACE, null)).toEqual({
+    tone: "idle",
+    lead: "Nothing published yet",
+  })
+  expect(lineOf(null, org).tone).toBe("idle")
 })

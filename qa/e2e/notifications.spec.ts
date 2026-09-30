@@ -28,15 +28,15 @@ test("the notifications page says what will land there", async ({ page }) => {
   await expect(page.locator("li[data-kind]")).toHaveCount(0)
 })
 
-test("the rail links to notifications with nothing unread", async ({
+test("the bell links to notifications with nothing unread", async ({
   page,
 }) => {
   await visit(page, "/app/approvals")
   const link = page
-    .getByRole("navigation", { name: "Main" })
+    .getByRole("banner")
     .getByRole("link", { name: "Notifications", exact: true })
   await expect(link).toBeVisible()
-  await expect(page.locator('[data-slot="nav-count"]')).toHaveCount(0)
+  await expect(page.locator('[data-slot="unread-count"]')).toHaveCount(0)
   await link.click()
   await expect(page).toHaveURL(/\/app\/notifications$/)
 })

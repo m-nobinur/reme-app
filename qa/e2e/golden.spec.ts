@@ -22,7 +22,7 @@ import { createProbeUser, PROBE_ORG_PREFIX, type ProbeUser } from "./workos"
  * onboarding with pricing skipped, the first build, its pricing question
  * answered in the panel, v1 approved and live with the price and its
  * thumbnail, the panel's blank-state actions, a Chief of Staff change to
- * v2, a reminder from each source added and completed in the panel, and
+ * v2, a reminder from the chat shown and completed in the panel, and
  * the api's own reads of what the run wrote. The org is
  * cleared whole at the end, pass or fail.
  *
@@ -232,7 +232,11 @@ async function approveVersion(page: Page, n: number) {
   }
   await expect(approve).toBeEnabled()
   await approve.click()
-  await expect(panel(page).getByText(`Version ${n} is live.`)).toBeVisible({
+  // The site sits on the panel's Website tab, which appears once it is live.
+  const website = panel(page).getByRole("tab", { name: "Website" })
+  await expect(website).toBeVisible({ timeout: WAIT.publish })
+  await website.click()
+  await expect(panel(page).getByText(`Version ${n} is live`)).toBeVisible({
     timeout: WAIT.publish,
   })
 }
@@ -363,18 +367,19 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(host, "the workspace names no host").not.toBe("")
     await expectLive(page, host, [PRICE.shown])
     await expect(
-      panel(page)
-        .getByRole("region", { name: "Your website" })
-        .getByRole("img", {
-          name: "Your website's home page on a laptop, version 1",
-        })
+      panel(page).getByRole("tabpanel").getByRole("img", {
+        name: "Your website's home page on a laptop, version 1",
+      })
     ).toBeVisible()
   })
 
   await step("blank state: see notifications", async () => {
-    // Nothing waits on the owner once v1 is live, so "Waiting on you"
-    // offers the notifications page, where v1's publish is listed.
-    await panel(page).getByRole("link", { name: "See notifications" }).click()
+    // The bell at the top right opens the notifications page, where v1's
+    // publish is listed.
+    await page
+      .getByRole("banner")
+      .getByRole("link", { name: /^Notifications/ })
+      .click()
     await expect(page).toHaveURL(/\/app\/notifications$/)
     await expect(
       page.getByRole("heading", { name: "Notifications", level: 1 })
@@ -399,7 +404,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     // Nothing is new any more, so /app is a new chat, not onboarding.
     await visit(page, "/app")
     await expect(page).toHaveURL(/\/app\/?$/)
-    await expect(page.getByRole("button", { name: "Mode, Act" })).toBeVisible()
+    await expect(page.getByLabel("Message input")).toBeVisible()
     await page
       .getByLabel("Message input")
       .fill(`Change the hero to say "${HERO}"`)
@@ -416,32 +421,17 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expectLive(page, host, [HERO, PRICE.shown])
   })
 
-  await step("reminders from both sources, completed", async () => {
-    const reminders = panel(page).getByRole("region", { name: "Reminders" })
-    const status = reminders.getByRole("status")
+  await step("a reminder from the chat, shown and completed", async () => {
+    // Upcoming reminders sit on the panel's Reminders tab, which exists only
+    // while there is one.
+    const reminders = panel(page).getByRole("tabpanel")
     const noteOf = (title: string) =>
       reminders.locator('[data-slot="reminder-note"]', { hasText: title })
-    /** The note's own Done, then the note gone from the list. */
-    const complete = async (title: string) => {
-      await reminders.getByRole("button", { name: `Done: ${title}` }).click()
-      await expect(status).toHaveText("Marked done.")
-      await expect(noteOf(title)).toHaveCount(0)
-    }
     /** Which source the api recorded for the note, while it is open. */
     const sourceOf = async (title: string) =>
       (await readJson<Workspace>("/workspace")).reminders.notes.find(
         (each) => each.title === title
       )?.source
-
-    // The owner's own, through the panel's form.
-    const own = `Order more cloths ${token}`
-    await reminders.getByLabel("Add a reminder").fill(own)
-    await reminders.getByRole("button", { name: "Add reminder" }).click()
-    await expect(status).toHaveText("Added to your reminders.")
-    await expect(noteOf(own)).toBeVisible()
-    await expect(noteOf(own)).not.toContainText("Set by Reme")
-    expect(await sourceOf(own)).toBe("owner")
-    await complete(own)
 
     // The Chief of Staff's, through "+" and its approval card.
     await page.getByRole("button", { name: "Quick actions" }).click()
@@ -452,8 +442,6 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       `Remind me to ring the window cleaner about ${token} tomorrow at 10am`
     )
     await page.getByLabel("Send message").click()
-    // The tool's own card; its yes is scoped to the card, since the panel's
-    // form has an "Add reminder" button too.
     const card = page.locator('[data-slot="create-reminder"]').last()
     await card
       .getByRole("button", { name: "Add reminder" })
@@ -461,14 +449,21 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expect(card).toContainText("Added to Reminders.", {
       timeout: WAIT.chat,
     })
+    await panel(page)
+      .getByRole("tab", { name: /^Reminders/ })
+      .click({ timeout: WAIT.chat })
     // The title is the Chief of Staff's restatement, so it is found by the
     // run's token and then used whole.
     const set = noteOf(token)
     await expect(set).toContainText("Set by Reme", { timeout: WAIT.chat })
-    await expect(set).toContainText("Due ")
+    await expect(set).toContainText("Tomorrow")
     const setTitle = await set.locator("span").first().innerText()
     expect(await sourceOf(setTitle)).toBe("assistant")
-    await complete(setTitle)
+    await reminders.getByRole("button", { name: `Done: ${setTitle}` }).click()
+    // The last one done takes its tab with it.
+    await expect(
+      panel(page).getByRole("tab", { name: /^Reminders/ })
+    ).toHaveCount(0)
   })
 
   await step("the api's own reads of the run", async () => {

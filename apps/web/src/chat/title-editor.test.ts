@@ -39,6 +39,7 @@ async function shell(
       createElement(WorkspaceShell, {
         rail: null,
         panel: null,
+        panelLine: null,
         title: "Weekend prices",
         menu,
         renaming: next,

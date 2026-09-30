@@ -13,28 +13,35 @@ const HEIGHT = 900
 
 const railToggle = (page: Page) =>
   page.getByRole("button", { name: "Show menu" })
-const panelSheetToggle = (page: Page) =>
-  page.getByRole("button", { name: /^Show panel, 2 waiting on you$/ })
 const sheet = (page: Page) => page.locator('[data-slot="sheet-content"]')
+const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })
+/** The panel's header: one line of live activity, and its toggle. */
+const panelToggle = (page: Page) => panel(page).getByRole("button").first()
 
 /** Opens a sheet and waits for its entry transition to end before a scan. */
 async function openSheet(page: Page, toggle: ReturnType<typeof railToggle>) {
   await toggle.click()
   await expect(sheet(page)).toBeVisible()
   // Only animations that end: the panel's running step pulses for as long as
-  // the build runs, and waiting on it would wait forever.
-  await page.evaluate(() =>
-    Promise.all(
-      document
+  // the build runs, and waiting on it would wait forever. A transition cut
+  // short rejects and another starts in its place, so this waits until none
+  // is left running.
+  await page.evaluate(async () => {
+    for (;;) {
+      const running = document
         .getAnimations()
         .filter(
           (animation) =>
+            animation.playState === "running" &&
             animation.effect?.getTiming().iterations !==
-            Number.POSITIVE_INFINITY
+              Number.POSITIVE_INFINITY
         )
-        .map((animation) => animation.finished)
-    )
-  )
+      if (running.length === 0) return
+      await Promise.all(
+        running.map((animation) => animation.finished.catch(() => undefined))
+      )
+    }
+  })
 }
 
 /** Every focus stop a keyboard reaches from inside the sheet stays in it. */
@@ -56,6 +63,10 @@ async function expectFocusTrapped(page: Page) {
   }
 }
 
+const cookie = async (page: Page, name: string) =>
+  (await page.context().cookies()).find((candidate) => candidate.name === name)
+    ?.value
+
 for (const theme of ["light", "dark"] as const) {
   for (const [name, width] of Object.entries(WIDTHS)) {
     test(`the shell has no accessibility violations on a ${name} in ${theme}`, async ({
@@ -71,8 +82,8 @@ for (const theme of ["light", "dark"] as const) {
         await expect(sheet(page)).toHaveCount(0)
       }
       if (width < 1024) {
-        await openSheet(page, panelSheetToggle(page))
-        await axe(page, `${name} ${theme} panel sheet`)
+        await panelToggle(page).click()
+        await axe(page, `${name} ${theme} panel open`)
       }
     })
   }
@@ -80,88 +91,98 @@ for (const theme of ["light", "dark"] as const) {
 
 test("the layout changes shape at md and lg", async ({ page }) => {
   const rail = page.getByRole("complementary", { name: "Workspace" })
-  const panel = page.getByRole("complementary", { name: "Panel" })
 
   await open(page, "WorkspaceShell", WIDTHS.desktop)
   expect((await rail.boundingBox())?.width).toBe(240)
-  expect((await panel.boundingBox())?.width).toBe(320)
+  expect((await panel(page).boundingBox())?.width).toBe(352)
+  await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "true")
   await expect(railToggle(page)).toBeHidden()
-  await expect(panelSheetToggle(page)).toBeHidden()
 
   await open(page, "WorkspaceShell", WIDTHS.tablet)
   await expect(rail).toBeVisible()
-  await expect(panel).toBeHidden()
   await expect(railToggle(page)).toBeHidden()
-  await expect(panelSheetToggle(page)).toBeVisible()
+  // Below lg the panel covers the conversation, so it starts minimised.
+  await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "false")
 
   await open(page, "WorkspaceShell", WIDTHS.phone)
   await expect(rail).toBeHidden()
-  await expect(panel).toBeHidden()
   await expect(railToggle(page)).toBeVisible()
-  // The count is in the accessible name, and drawn on the toggle.
-  await expect(
-    panelSheetToggle(page).locator('[data-slot="panel-count"]')
-  ).toHaveText("2")
+  await expect(panel(page)).toBeVisible()
+  await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "false")
 })
 
-for (const [label, width, toggle] of [
-  ["the rail sheet on a phone", WIDTHS.phone, railToggle],
-  ["the panel sheet on a phone", WIDTHS.phone, panelSheetToggle],
-  ["the panel sheet on a tablet", WIDTHS.tablet, panelSheetToggle],
-] as const) {
-  test(`${label} traps focus and returns it on close`, async ({ page }) => {
-    await open(page, "WorkspaceShell", width)
-    await toggle(page).focus()
-    await page.keyboard.press("Enter")
-    await expect(sheet(page)).toBeVisible()
-    await expectFocusTrapped(page)
+test("the bell carries the unread count", async ({ page }) => {
+  await open(page, "WorkspaceShell", WIDTHS.phone)
+  await expect(
+    page.getByRole("link", { name: "Notifications, 3 unread" })
+  ).toBeVisible()
+  await expect(page.locator('[data-slot="unread-count"]')).toHaveText("3")
+})
 
-    await page.keyboard.press("Escape")
-    await expect(sheet(page)).toHaveCount(0)
-    await expect(toggle(page)).toBeFocused()
-  })
-}
+test("the rail sheet on a phone traps focus and returns it on close", async ({
+  page,
+}) => {
+  await open(page, "WorkspaceShell", WIDTHS.phone)
+  await railToggle(page).focus()
+  await page.keyboard.press("Enter")
+  await expect(sheet(page)).toBeVisible()
+  await expectFocusTrapped(page)
+
+  await page.keyboard.press("Escape")
+  await expect(sheet(page)).toHaveCount(0)
+  await expect(railToggle(page)).toBeFocused()
+})
 
 test("a link in a sheet closes it", async ({ page }) => {
   await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
-  await sheet(page).getByRole("link", { name: "Staff" }).click()
+  await sheet(page).getByRole("link", { name: "Approvals" }).click()
   await expect(sheet(page)).toHaveCount(0)
 })
 
-test("the panel toggle hides the panel and remembers it in a cookie", async ({
+test("the rail collapses and remembers it in a cookie", async ({ page }) => {
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
+  const rail = page.getByRole("complementary", { name: "Workspace" })
+  await page.getByRole("button", { name: "Hide sidebar" }).click()
+  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(0)
+  // Inert while collapsed, so nothing in it takes focus.
+  await expect(rail).toHaveAttribute("inert", "")
+  expect(await cookie(page, "reme-rail")).toBe("closed")
+
+  await page.getByRole("button", { name: "Show sidebar" }).click()
+  await expect
+    .poll(async () => (await rail.boundingBox())?.width ?? 0)
+    .toBe(240)
+  expect(await cookie(page, "reme-rail")).toBe("open")
+})
+
+test("the panel minimises to one line and remembers it in a cookie", async ({
   page,
 }) => {
   await open(page, "WorkspaceShell", WIDTHS.desktop)
-  const panel = page.getByRole("complementary", { name: "Panel" })
-  const cookie = async () =>
-    (await page.context().cookies()).find(
-      (candidate) => candidate.name === "reme-panel"
-    )?.value
+  const toggle = panelToggle(page)
+  const body = page.locator(`#${await toggle.getAttribute("aria-controls")}`)
+  await expect(body).toBeVisible()
 
-  await page.getByRole("button", { name: "Hide panel" }).click()
-  await expect(panel).toBeHidden()
-  await expect(
-    page.getByRole("button", { name: "Show panel", exact: true })
-  ).toHaveAttribute("aria-expanded", "false")
-  expect(await cookie()).toBe("closed")
+  await toggle.click()
+  await expect(body).toBeHidden()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  expect((await panel(page).boundingBox())?.height).toBeLessThan(60)
+  expect(await cookie(page, "reme-panel")).toBe("closed")
 
-  await page.getByRole("button", { name: "Show panel", exact: true }).click()
-  await expect(panel).toBeVisible()
-  expect(await cookie()).toBe("open")
+  await toggle.click()
+  await expect(body).toBeVisible()
+  expect(await cookie(page, "reme-panel")).toBe("open")
+  // Open, it stops at half the viewport and scrolls past that.
+  expect((await panel(page).boundingBox())?.height).toBeLessThanOrEqual(
+    HEIGHT / 2 + 48
+  )
 })
 
 test("an open sheet closes when the viewport grows past its breakpoint", async ({
   page,
 }) => {
-  await open(page, "WorkspaceShell", WIDTHS.tablet)
-  await panelSheetToggle(page).click()
-  await expect(sheet(page)).toBeVisible()
-  await page.setViewportSize({ width: WIDTHS.desktop, height: HEIGHT })
-  await expect(sheet(page)).toHaveCount(0)
-  await expect(page.getByRole("complementary", { name: "Panel" })).toBeVisible()
-
-  await page.setViewportSize({ width: WIDTHS.phone, height: HEIGHT })
+  await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
   await expect(sheet(page)).toBeVisible()
   await page.setViewportSize({ width: WIDTHS.tablet, height: HEIGHT })
@@ -177,21 +198,10 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
   // Dispatched rather than clicked: a real modified click opens a new tab,
   // which is the browser's business and not what this asserts.
   await sheet(page)
-    .getByRole("link", { name: "Staff" })
+    .getByRole("link", { name: "Approvals" })
     .dispatchEvent("click", { button: 0, metaKey: true, bubbles: true })
   await sheet(page)
-    .getByRole("link", { name: "Staff" })
+    .getByRole("link", { name: "Approvals" })
     .dispatchEvent("click", { button: 1, bubbles: true })
   await expect(sheet(page)).toBeVisible()
-})
-
-test("a reminder moves focus to the item it is about", async ({ page }) => {
-  await open(page, "WorkspaceShell", WIDTHS.desktop)
-  const panel = page.getByRole("complementary", { name: "Panel" })
-  await panel
-    .getByRole("link", { name: "Review version 4 before it closes" })
-    .click()
-  await expect(page.locator("#approval-sample")).toBeFocused()
-  // The address stays put: a hash change would be a navigation to the router.
-  expect(new URL(page.url()).hash).toBe("")
 })

@@ -1,5 +1,4 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
-import { CheckIcon } from "@phosphor-icons/react"
 import { cn } from "@workspace/ui/lib/utils"
 
 // shadcn's Base UI dropdown menu, cut to the parts in use, plus a link item on
@@ -71,32 +70,17 @@ function DropdownMenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
   )
 }
 
-function DropdownMenuRadioGroup(props: MenuPrimitive.RadioGroup.Props) {
+/** A hairline between groups of entries. */
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: MenuPrimitive.Separator.Props) {
   return (
-    <MenuPrimitive.RadioGroup
-      data-slot="dropdown-menu-radio-group"
+    <MenuPrimitive.Separator
+      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      data-slot="dropdown-menu-separator"
       {...props}
     />
-  )
-}
-
-/** A choice of one. The check sits at the end, where the eye lands last. */
-function DropdownMenuRadioItem({
-  className,
-  children,
-  ...props
-}: MenuPrimitive.RadioItem.Props) {
-  return (
-    <MenuPrimitive.RadioItem
-      className={cn(ITEM, "relative pr-8", className)}
-      data-slot="dropdown-menu-radio-item"
-      {...props}
-    >
-      {children}
-      <MenuPrimitive.RadioItemIndicator className="absolute right-2.5 flex">
-        <CheckIcon aria-hidden />
-      </MenuPrimitive.RadioItemIndicator>
-    </MenuPrimitive.RadioItem>
   )
 }
 
@@ -105,7 +89,6 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLinkItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 }
