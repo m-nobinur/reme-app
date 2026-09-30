@@ -34,6 +34,7 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
 import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
+import { SiteReadyCard } from "./site-ready"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
@@ -174,6 +175,7 @@ export function ChatPage() {
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
               <Thread
+                after={<SiteReadyCard />}
                 briefing={briefing.line}
                 components={{ ToolFallback: Approval }}
                 mode={mode}
