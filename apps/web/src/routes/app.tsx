@@ -1,6 +1,7 @@
 import {
   ArrowUpRightIcon,
   BuildingsIcon,
+  ChatCircleDotsIcon,
   FileTextIcon,
   FlowArrowIcon,
   GearSixIcon,
@@ -24,8 +25,8 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
-import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
-import { Button } from "@workspace/ui/components/button"
+import { railItemClass } from "@workspace/ui/components/app-shell"
+import { buttonVariants } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,16 +35,22 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import {
+  type HistoryEntry,
+  HistoryMenu,
+} from "@workspace/ui/components/history-menu"
+import {
   type NotificationEntry,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import { Hint } from "@workspace/ui/components/tooltip"
 import {
   ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
+import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useState } from "react"
 import {
   getWorkspaceFrame,
@@ -125,6 +132,19 @@ const HELP_PROMPT =
 /** How many notifications the bell's menu lists before "View all". */
 const MENU_ITEMS = 6
 
+/** The organisation's initials on a rounded square, where its name goes. */
+function OrgMark({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden
+      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground font-semibold text-[0.6875rem] text-background"
+      data-slot="mark"
+    >
+      {initialsOf(name)}
+    </span>
+  )
+}
+
 /** The panel's poll, through the server, with the tag it last saw. */
 const readWorkspace = async (etag: string | null): Promise<WorkspacePoll> => {
   const poll = await pollWorkspace({ data: { etag } })
@@ -151,6 +171,8 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  const orgName = active?.name ?? "No organisation"
+  const ownerName = owner.name || owner.email
   const notifications = notificationsOf(
     live.workspace?.attention ?? [],
     activity ?? []
@@ -220,6 +242,17 @@ function AppLayout() {
         : { link: <Link to="/app/notifications" /> }),
     })
   )
+  // The clock's list at the top right: every open chat, newest first.
+  const history = (conversations ?? [])
+    .filter((each) => !each.archived_at)
+    .map(
+      (each): HistoryEntry => ({
+        id: each.id,
+        title: conversationTitle(each),
+        at: each.updated_at,
+        link: <Link params={{ id: each.id }} to="/app/c/$id" />,
+      })
+    )
   const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
   const archive = async (target: Conversation) => {
     setFailed(null)
@@ -263,6 +296,23 @@ function AppLayout() {
             />
           ) : undefined
         }
+        actions={
+          <>
+            <Hint label="New chat">
+              <Link
+                aria-label="New chat"
+                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                // A fresh state on every click: on /app already, the address
+                // does not change, and the state is what says "start again".
+                state={() => ({ chat: crypto.randomUUID() })}
+                to="/app"
+              >
+                <NotePencilIcon aria-hidden />
+              </Link>
+            </Hint>
+            <HistoryMenu current={id} items={history} />
+          </>
+        }
         notifications={
           <NotificationMenu
             items={entries}
@@ -298,111 +348,31 @@ function AppLayout() {
         }
         rail={
           <>
-            <p
-              className="truncate px-2 font-medium text-sm"
-              title={active?.name}
-            >
-              {active?.name ?? "No organisation"}
-            </p>
-            <Link
-              activeOptions={{ exact: true }}
-              className={navLinkClass}
-              // A fresh state on every click: on /app already, the address
-              // does not change, and the state is what says "start again".
-              state={() => ({ chat: crypto.randomUUID() })}
-              to="/app"
-            >
-              <NotePencilIcon aria-hidden />
-              New chat
-            </Link>
-            {conversations?.some((each) => !each.archived_at) ? (
-              <AppNav aria-label="Chats">
-                {conversations
-                  .filter((each) => !each.archived_at)
-                  .map((each) => (
-                    <li key={each.id}>
-                      <Link
-                        className={navLinkClass}
-                        params={{ id: each.id }}
-                        to="/app/c/$id"
-                      >
-                        <span className="truncate">
-                          {conversationTitle(each)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-              </AppNav>
-            ) : null}
-            <div className="mt-auto flex items-center gap-1">
+            <Hint label={orgName} side="right">
+              <Link className={railItemClass} to="/app/profile">
+                <OrgMark name={orgName} />
+                <span className="truncate font-medium" data-slot="rail-label">
+                  {orgName}
+                </span>
+              </Link>
+            </Hint>
+            <div className="mt-auto flex flex-col gap-1">
               <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      className="min-w-0 flex-1 justify-start gap-2 px-1.5"
-                      data-slot="profile-menu"
-                      size="sm"
-                      variant="ghost"
-                    />
-                  }
-                >
-                  <span
-                    aria-hidden
-                    className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+                <Hint label="Help" side="right">
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        aria-label="Help"
+                        className={railItemClass}
+                        type="button"
+                      />
+                    }
                   >
-                    {initialsOf(owner.name || owner.email)}
-                  </span>
-                  <span className="truncate">{owner.name || owner.email}</span>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" side="top">
-                  <div className="flex flex-col px-2.5 py-1.5">
-                    <span className="truncate font-medium text-sm">
-                      {owner.name || owner.email}
-                    </span>
-                    {owner.name ? (
-                      <span className="truncate text-muted-foreground text-xs">
-                        {owner.email}
-                      </span>
-                    ) : null}
-                  </div>
-                  <DropdownMenuSeparator />
-                  {PROFILE_NAV.map((item) => (
-                    <DropdownMenuLinkItem
-                      key={item.to}
-                      render={<Link to={item.to} />}
-                    >
-                      <item.icon aria-hidden />
-                      {item.label}
-                    </DropdownMenuLinkItem>
-                  ))}
-                  <DropdownMenuLinkItem render={<Link to="/app/account" />}>
-                    <GearSixIcon aria-hidden />
-                    Account
-                  </DropdownMenuLinkItem>
-                  <DropdownMenuSeparator />
-                  {/* A plain link, not a router one: the router preloads a
-                    route on hover and focus, and /sign-out signs out in its
-                    loader. */}
-                  <DropdownMenuLinkItem href="/sign-out">
-                    <SignOutIcon aria-hidden />
-                    Sign out
-                  </DropdownMenuLinkItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      aria-label="Help"
-                      className="shrink-0"
-                      size="icon-sm"
-                      variant="ghost"
-                    />
-                  }
-                >
-                  <QuestionIcon aria-hidden />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" side="top">
+                    <QuestionIcon aria-hidden />
+                    <span data-slot="rail-label">Help</span>
+                  </DropdownMenuTrigger>
+                </Hint>
+                <DropdownMenuContent align="end" className="w-56" side="right">
                   {onboarding ? (
                     <DropdownMenuLinkItem
                       render={
@@ -424,7 +394,7 @@ function AppLayout() {
                       />
                     }
                   >
-                    <NotePencilIcon aria-hidden />
+                    <ChatCircleDotsIcon aria-hidden />
                     Ask Reme for help
                   </DropdownMenuLinkItem>
                   <DropdownMenuSeparator />
@@ -454,7 +424,75 @@ function AppLayout() {
                   </DropdownMenuLinkItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ThemeToggle className="shrink-0" />
+              <Hint label="Switch theme" side="right">
+                <ThemeToggle
+                  className={cn(railItemClass, "justify-start")}
+                  size={null}
+                />
+              </Hint>
+              <DropdownMenu>
+                <Hint label={ownerName} side="right">
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        aria-label={`Profile, ${ownerName}`}
+                        className={railItemClass}
+                        data-slot="profile-menu"
+                        type="button"
+                      />
+                    }
+                  >
+                    <span
+                      aria-hidden
+                      className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+                      data-slot="mark"
+                    >
+                      {initialsOf(ownerName)}
+                    </span>
+                    <span className="truncate" data-slot="rail-label">
+                      {ownerName}
+                    </span>
+                  </DropdownMenuTrigger>
+                </Hint>
+                <DropdownMenuContent align="end" className="w-60" side="right">
+                  <div className="flex flex-col px-2.5 py-1.5">
+                    <span className="truncate font-medium text-sm">
+                      {ownerName}
+                    </span>
+                    {owner.name ? (
+                      <span className="truncate text-muted-foreground text-xs">
+                        {owner.email}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
+                    <OrgMark name={orgName} />
+                    <span className="truncate">{orgName}</span>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {PROFILE_NAV.map((item) => (
+                    <DropdownMenuLinkItem
+                      key={item.to}
+                      render={<Link to={item.to} />}
+                    >
+                      <item.icon aria-hidden />
+                      {item.label}
+                    </DropdownMenuLinkItem>
+                  ))}
+                  <DropdownMenuLinkItem render={<Link to="/app/account" />}>
+                    <GearSixIcon aria-hidden />
+                    Account
+                  </DropdownMenuLinkItem>
+                  <DropdownMenuSeparator />
+                  {/* A plain link, not a router one: the router preloads a
+                    route on hover and focus, and /sign-out signs out in its
+                    loader. */}
+                  <DropdownMenuLinkItem href="/sign-out">
+                    <SignOutIcon aria-hidden />
+                    Sign out
+                  </DropdownMenuLinkItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </>
         }

@@ -178,6 +178,19 @@ test.describe("in London in summer time", () => {
     await expect(meta.locator("time")).toHaveText("10:30 am")
     // Answered, so seen.
     await expect(meta).toContainText("Seen")
+    // Under the bubble, not inside it, and flush with its right edge.
+    const bubble = await page
+      .locator(".aui-user-message-content")
+      .first()
+      .boundingBox()
+    const metaBox = await meta.boundingBox()
+    expect(bubble && metaBox).toBeTruthy()
+    if (bubble && metaBox) {
+      expect(metaBox.y).toBeGreaterThanOrEqual(bubble.y + bubble.height)
+      expect(
+        Math.abs(bubble.x + bubble.width - (metaBox.x + metaBox.width))
+      ).toBeLessThanOrEqual(12)
+    }
     await expect(
       page.locator('[data-slot="aui_assistant-message-footer"] time').first()
     ).toHaveText("10:31 am")

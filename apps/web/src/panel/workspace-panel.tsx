@@ -274,6 +274,50 @@ export function Decidable({
   )
 }
 
+/**
+ * The Website tab: the live site, and a change asked of it outside any
+ * review. Its key follows the note the way a review's does.
+ */
+function Website({
+  host,
+  live,
+  thumbnail,
+  refresh,
+}: {
+  host: string | null
+  live: number | null
+  thumbnail: Thumbnail
+  refresh: Refresh
+}) {
+  const { pending, error, run } = useWrite<"change">(refresh)
+  const [keys] = useState(attemptKeys)
+  const [status, setStatus] = useState<string | null>(null)
+  const change = (text: string) => {
+    setStatus(null)
+    return run("change", async () => {
+      const outcome = await askForChanges({
+        data: { text, key: keys.key(text) },
+      })
+      if (outcome.done) {
+        keys.done()
+        setStatus("Sent. Reme is on it; a new version comes to you for review.")
+      }
+      return outcome
+    })
+  }
+  return (
+    <YourWebsite
+      error={error}
+      host={host}
+      live={live}
+      onRequestChanges={change}
+      pending={pending !== null}
+      status={status}
+      thumbnail={thumbnail}
+    />
+  )
+}
+
 /** The first steps an empty workspace still needs, from its own rows. */
 const firstSteps = (workspace: Workspace) => [
   ...workspace.missingFacts.map((key) => ({
@@ -575,7 +619,12 @@ export function WorkspacePanel() {
       ) : null}
       {website ? (
         <TabsContent value="website">
-          <YourWebsite host={host} live={live} thumbnail={thumbnail} />
+          <Website
+            host={host}
+            live={live}
+            refresh={refresh}
+            thumbnail={thumbnail}
+          />
         </TabsContent>
       ) : null}
     </Tabs>

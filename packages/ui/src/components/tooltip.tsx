@@ -1,6 +1,7 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@workspace/ui/lib/utils"
+import * as React from "react"
 
 function TooltipProvider({
   // Hover intent, not instant: a tooltip that fires the moment the pointer
@@ -65,4 +66,39 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+/**
+ * Whether a `Hint` shows. False where the names are already on screen, such
+ * as the rail in its phone sheet, so Escape closes the sheet rather than a
+ * hint first.
+ */
+const hintsShown = React.createContext(true)
+
+/**
+ * The name of a control that shows only an icon, on hover and on focus.
+ * `children` is the control itself; it keeps its own `aria-label`.
+ */
+function Hint({
+  label,
+  side = "bottom",
+  children,
+}: {
+  label: string
+  side?: TooltipPrimitive.Positioner.Props["side"]
+  children: React.ReactElement
+}) {
+  return (
+    <Tooltip disabled={!React.useContext(hintsShown)}>
+      <TooltipTrigger render={children} />
+      <TooltipContent side={side}>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export {
+  Hint,
+  hintsShown,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+}

@@ -22,6 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
+import { hintsShown } from "@workspace/ui/components/tooltip"
 import {
   PANEL_COOKIE,
   type PanelPress,
@@ -102,23 +103,27 @@ const useWide = () =>
   )
 
 /**
- * The owner workspace: a 15rem rail, the conversation, and the live panel
- * floating at the top right, under the notifications bell.
+ * The owner workspace: a compact rail of icons, the conversation, and the
+ * live panel floating at the top right, under the notifications bell.
  *
- * From `md` the rail collapses with the toggle at the top left, remembered in
- * a cookie; below `md` it is a sheet from the left. The panel is a rounded
+ * From `md` the rail is a column of icons, each named on hover, that hides
+ * with the toggle at the top left, remembered in a cookie; below `md` it is a
+ * sheet from the left, where the names show beside the icons. A rail label
+ * is a `data-slot="rail-label"` span. The panel is a rounded
  * card whose header is always one line of live activity (`panelLine`); open,
  * it grows with its content to half the viewport's height and scrolls past
  * that. From `lg` the conversation keeps a column clear for it, so the two
  * never overlap, and whether it is open is remembered; below `lg` it starts
  * minimised, since there it covers the conversation. The rail, the panel and
  * the bell are slots, so this package still imports no router. `title` and
- * `menu` name the page in the top bar, and `notifications` sits at its right.
+ * `menu` name the page in the top bar; `actions` and `notifications` sit at
+ * its right.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelLine,
+  actions,
   notifications,
   defaultRailOpen = true,
   defaultPanelOpen = true,
@@ -142,6 +147,8 @@ function WorkspaceShell({
   renaming?: Renaming | undefined
   /** Why the last action on the title failed, such as an archive. */
   titleError?: string | undefined
+  /** Icon buttons at the top right, before the bell. */
+  actions?: ReactNode
   /** The bell and its menu, at the top right. */
   notifications?: ReactNode
   defaultRailOpen?: boolean
@@ -225,13 +232,14 @@ function WorkspaceShell({
           aria-label="Workspace"
           className={cn(
             "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-            railOpen ? "w-60 border-r" : "w-0"
+            railOpen ? "w-14 border-r" : "w-0",
+            "[&_[data-slot=rail-label]]:sr-only"
           )}
           data-state={railOpen ? "open" : "closed"}
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-60 flex-1 flex-col gap-4 overflow-y-auto p-3">
+          <div className="flex min-h-0 w-14 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden p-2">
             {rail}
           </div>
         </aside>
@@ -257,8 +265,8 @@ function WorkspaceShell({
               side="left"
             >
               <SheetTitle className="sr-only">Workspace</SheetTitle>
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 pt-12">
-                {rail}
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3 pt-12">
+                <hintsShown.Provider value={false}>{rail}</hintsShown.Provider>
               </div>
             </SheetContent>
           </Sheet>
@@ -301,6 +309,7 @@ function WorkspaceShell({
             )}
           </div>
 
+          {actions}
           {notifications}
         </header>
 

@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { Hint } from "@workspace/ui/components/tooltip"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import type { ComponentProps, ReactElement, ReactNode } from "react"
@@ -143,26 +144,28 @@ function NotificationMenu({
 }) {
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label={
-              unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
-            }
-            className="relative"
-            data-slot="notification-bell"
-            size="icon"
-            variant="ghost"
-          />
-        }
-      >
-        <BellIcon aria-hidden />
-        {unread > 0 ? (
-          <span aria-hidden className={BADGE} data-slot="unread-count">
-            {countLabel(unread)}
-          </span>
-        ) : null}
-      </DropdownMenuTrigger>
+      <Hint label="Notifications">
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label={
+                unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
+              }
+              className="relative"
+              data-slot="notification-bell"
+              size="icon"
+              variant="ghost"
+            />
+          }
+        >
+          <BellIcon aria-hidden />
+          {unread > 0 ? (
+            <span aria-hidden className={BADGE} data-slot="unread-count">
+              {countLabel(unread)}
+            </span>
+          ) : null}
+        </DropdownMenuTrigger>
+      </Hint>
       <DropdownMenuContent
         align="end"
         className="w-[min(22rem,calc(100vw-1.5rem))] p-0"

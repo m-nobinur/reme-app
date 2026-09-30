@@ -36,6 +36,7 @@ vi.mock("@/lib/api/server", () => server)
 
 const server = vi.hoisted(() => ({
   completeReminder: vi.fn(),
+  askForChanges: vi.fn(),
 }))
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
@@ -63,6 +64,7 @@ beforeEach(() => {
     active: { id: "00000000-0000-4000-8000-000000000001" },
   }
   server.completeReminder.mockReset()
+  server.askForChanges.mockReset()
   live = { workspace: EMPTY_WORKSPACE, failed: false, refresh: vi.fn() }
   container = document.createElement("div")
   document.body.appendChild(container)
@@ -218,6 +220,31 @@ it("links the live site by name, with the host as its title", async () => {
   expect(visit?.target).toBe("_blank")
   expect(visit?.rel).toBe("noreferrer")
   expect(container.textContent).toContain("Version 3 is live")
+})
+
+it("sends a change for the live site and says it went", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 3,
+    host: "brightclean-demo.example.invalid",
+  }
+  server.askForChanges.mockResolvedValueOnce({ done: true })
+  await render()
+  await act(async () => tab("Website")?.click())
+  await act(async () => buttonNamed("Request changes")?.click())
+  const field = container.querySelector("textarea")
+  if (!field) throw new Error("no change note")
+  field.value = "Add Saturday hours"
+  await act(async () => buttonNamed("Send")?.click())
+
+  expect(server.askForChanges).toHaveBeenCalledWith({
+    data: { text: "Add Saturday hours", key: expect.any(String) },
+  })
+  expect(live.refresh).toHaveBeenCalledOnce()
+  expect(container.querySelector("textarea")).toBeNull()
+  expect(container.querySelector('[role="status"]')?.textContent).toBe(
+    "Sent. Reme is on it; a new version comes to you for review."
+  )
 })
 
 it("shows a reminder done at once, and puts it back when that fails", async () => {

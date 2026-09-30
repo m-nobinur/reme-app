@@ -11,7 +11,7 @@ import {
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
@@ -364,6 +364,10 @@ function WaitingOnYou({
     </PanelSection>
   )
 }
+
+/** A change note's text box, for a review and for the live site alike. */
+const NOTE =
+  "min-h-20 w-full rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-50 md:text-sm"
 
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
@@ -781,7 +785,7 @@ function ApprovalItem({
             What should change?
           </label>
           <textarea
-            className="min-h-20 w-full rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-50 md:text-sm"
+            className={NOTE}
             disabled={busy !== null}
             id={`${id}-change`}
             maxLength={GOAL_MAX}
@@ -943,22 +947,59 @@ function ReminderList({
 type Thumbnail = { src: string } | "loading" | null
 
 /**
- * The site as it stands: the version that is live, and a link to it. The
- * host is the link's title rather than its text, since a long one would not
- * fit. The thumbnail is the panel's only image, at a fixed ratio so nothing
- * moves when it arrives; one that fails to load leaves the text alone.
+ * The site as it stands: the version that is live, a link to it and, beside
+ * the link, "Request changes", which opens a note in place. The host is the
+ * link's title rather than its text, since a long one would not fit. The
+ * thumbnail is the panel's only image, at a fixed ratio so nothing moves when
+ * it arrives; one that fails to load leaves the text alone. A change sent
+ * closes the note and hands focus back to the button; `status` is what the
+ * app says about it, announced politely.
  */
 function YourWebsite({
   host,
   live,
   thumbnail = null,
+  onRequestChanges,
+  pending: busy = false,
+  error = null,
+  status = null,
+  defaultAsking = false,
 }: {
   host: string | null
   live: number | null
   thumbnail?: Thumbnail
+  /** Sends a change for the live site; true once it was taken. */
+  onRequestChanges?: ((text: string) => Promise<boolean>) | undefined
+  pending?: boolean
+  error?: string | null
+  status?: string | null
+  /** Open on the change note, for the catalog. */
+  defaultAsking?: boolean
 }) {
+  const id = useId()
   const [broken, setBroken] = useState<string | null>(null)
+  const [asking, setAsking] = useState(defaultAsking)
+  const note = useRef<HTMLTextAreaElement>(null)
+  const toggle = useRef<HTMLButtonElement>(null)
+  // Focus follows the note when the owner opens or closes it, not on mount.
+  const moved = useRef<boolean>(false)
+  useEffect(() => {
+    if (moved.current) (asking ? note : toggle).current?.focus()
+    moved.current = false
+  }, [asking])
+  const show = (open: boolean) => {
+    moved.current = true
+    setAsking(open)
+  }
+
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const text = note.current?.value.trim() ?? ""
+    if (text && onRequestChanges && (await onRequestChanges(text))) show(false)
+  }
+
   const shot = live ? thumbnail : null
+  const change = live && onRequestChanges
   return (
     <div className="flex flex-col gap-3" data-slot="your-website">
       {shot === "loading" ? (
@@ -984,21 +1025,82 @@ function YourWebsite({
         />
         {live ? `Version ${live} is live` : "Nothing is published yet"}
       </p>
-      {host && live ? (
-        <a
-          className="flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 font-medium text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
-          href={`https://${host}`}
-          rel="noreferrer"
-          target="_blank"
-          title={host}
-        >
-          <span className="flex-1">Visit your website</span>
-          <span className="sr-only"> (opens in a new tab)</span>
-          <ArrowSquareOutIcon
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
+      {live && (host || change) ? (
+        // Side by side, each growing to share the row; a row too narrow for
+        // both wraps rather than squeezing the words.
+        <div className="flex flex-wrap gap-2">
+          {host ? (
+            <a
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "grow"
+              )}
+              href={`https://${host}`}
+              rel="noreferrer"
+              target="_blank"
+              title={host}
+            >
+              Visit your website
+              <span className="sr-only"> (opens in a new tab)</span>
+              <ArrowSquareOutIcon
+                aria-hidden
+                className="text-muted-foreground"
+              />
+            </a>
+          ) : null}
+          {change ? (
+            <Button
+              aria-expanded={asking}
+              className="grow"
+              disabled={busy}
+              onClick={() => show(!asking)}
+              ref={toggle}
+              size="lg"
+              variant="outline"
+            >
+              Request changes
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {change && asking ? (
+        <form className="flex flex-col gap-2" onSubmit={send}>
+          <label className="font-medium text-sm" htmlFor={`${id}-change`}>
+            What should change on your website?
+          </label>
+          <textarea
+            className={NOTE}
+            disabled={busy}
+            id={`${id}-change`}
+            maxLength={GOAL_MAX}
+            name="change"
+            ref={note}
+            required
           />
-        </a>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy} size="sm" type="submit">
+              {pending(busy, "Send", "Sending")}
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => show(false)}
+              size="sm"
+              variant="ghost"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+      {error ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {change ? (
+        <p className="text-sm empty:hidden" role="status">
+          {status}
+        </p>
       ) : null}
     </div>
   )
