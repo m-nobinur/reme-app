@@ -165,6 +165,14 @@ export const turnBody =
   }
 
 /**
+ * A session with no business behind it (`org.unresolved`), in the owner's
+ * words. It is a signup whose business did not reach the session yet, which
+ * the frame retries on the next page load.
+ */
+export const NO_BUSINESS =
+  "Your account is not linked to a business yet. Reload the page to finish setting it up. If this keeps happening, sign out and sign in again."
+
+/**
  * A refusal as the owner reads it: the api's envelope message, which it
  * writes for them, or the web route's own sentence, rather than the JSON the
  * AI SDK would otherwise show. The route's 401 is a session that ended, and
@@ -179,7 +187,13 @@ export async function chatFetch(
   const body: unknown = await response.json().catch(() => null)
   if (response.status === 401) throw new Error(SESSION_ENDED)
   const envelope = ErrorEnvelope.safeParse(body)
-  if (envelope.success) throw new Error(envelope.data.message)
+  if (envelope.success) {
+    throw new Error(
+      envelope.data.code === "org.unresolved"
+        ? NO_BUSINESS
+        : envelope.data.message
+    )
+  }
   const own =
     typeof body === "object" && body !== null && "error" in body
       ? body.error

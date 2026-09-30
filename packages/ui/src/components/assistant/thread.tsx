@@ -701,11 +701,14 @@ type Delivery = "sent" | "delivered" | "seen"
 /**
  * How far the owner's message has got, read from the message after it: none
  * yet is sent, an empty reply is the assistant thinking, a reply with anything
- * in it is seen.
+ * in it is seen. A reply that ended in an error leaves it sent.
  */
 const deliveryOf = (s: AssistantState): Delivery => {
   const next = s.thread.messages[s.message.index + 1]
   if (next?.role !== "assistant") return "sent"
+  // A turn refused or broken before Reme read it never arrived.
+  if (next.status?.type === "incomplete" && next.status.reason === "error")
+    return "sent"
   return next.content.length > 0 ? "seen" : "delivered"
 }
 
