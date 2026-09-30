@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { fields, site } from "../src/site-config"
+import { fields, quoteForm, site } from "../src/site-config"
 import {
   type Built,
   build,
@@ -20,9 +20,9 @@ const REQUIRED_FACTS = [
   "business.name",
   "business.phone",
   "business.email",
-  "hours.weekday",
-  "service_area.radius",
-  "pricing.standard_clean_hourly",
+  "business.industry",
+  "business.offerings",
+  "service_area.text",
 ]
 
 // The planted page carries an empty Hero, which the starter's own pages cannot
@@ -130,7 +130,6 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
   { name: "ValueProps", selector: "value-props", shows: "The same cleaner" },
   { name: "ServiceCards", selector: "service-cards", shows: "Weekly clean" },
   { name: "Steps", selector: "steps", shows: "Tell us about the home" },
-  { name: "PriceCard", selector: "price-card", shows: "$35.00 an hour" },
   {
     name: "Testimonials",
     selector: "testimonials",
@@ -147,6 +146,12 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
     name: "ContactDetails",
     selector: "contact-details",
     shows: "+15550142",
+  },
+  { name: "QuoteForm", selector: "quote-form", shows: "Send quote request" },
+  {
+    name: "Section",
+    selector: "section",
+    shows: "One cleaner keeps each home, on the same day every week.",
   },
 ]
 
@@ -190,6 +195,63 @@ describe("a component with its fields filled", () => {
     const pages = pagesOf(filled)
     expect(hasClass(pages, "hero")).toBe(true)
     expect(visible(pages)).toContain("A home you come back to")
+  })
+})
+
+describe("the quote form", () => {
+  const page = () => {
+    const found = pagesOf(filled).find((p) => p.file === "quote/index.html")
+    if (!found) throw new Error("no quote page")
+    return found
+  }
+
+  test("renders every configured field with its label, hint and required flag", () => {
+    const { elements, texts } = page()
+    for (const field of quoteForm.flatMap((group) => group.fields)) {
+      const id = `quote-${field.name}`
+      const control = elements.find((el) => el.attrs.id === id)
+      expect(control, id).toBeDefined()
+      expect(control?.attrs.name, id).toBe(field.name)
+      expect("required" in (control?.attrs ?? {}), id).toBe(field.required)
+      expect(
+        elements.some((el) => el.tag === "label" && el.attrs.for === id),
+        id
+      ).toBe(true)
+      expect(texts, id).toContain(FILLED[field.label])
+      if (field.hint) {
+        expect(control?.attrs["aria-describedby"], id).toBe(`${id}-hint`)
+        expect(texts, id).toContain(FILLED[field.hint])
+      }
+    }
+    for (const group of quoteForm) {
+      expect(texts).toContain(FILLED[group.legend])
+    }
+  })
+
+  test("offers the services as the choices, and sends by email until there is an endpoint", () => {
+    const { elements, texts } = page()
+    expect(texts).toEqual(
+      expect.arrayContaining(["Weekly clean", "Deep clean", "End of tenancy"])
+    )
+    const form = elements.find((el) => el.tag === "form")
+    expect(form?.attrs.action).toBe(
+      "mailto:hello@brightclean.invalid?subject=Quote%20request"
+    )
+    expect(form?.attrs.enctype).toBe("text/plain")
+  })
+
+  test("is the primary action in the header, the hero and the closing band", () => {
+    const home = pagesOf(filled).find((p) => p.file === "index.html")
+    const primary = (home?.elements ?? []).filter(
+      (el) =>
+        (el.attrs.class ?? "").split(" ").includes("action-primary") &&
+        el.tag === "a"
+    )
+    expect(primary.map((el) => el.attrs.href)).toEqual([
+      "/quote/",
+      "/quote/",
+      "/quote/",
+    ])
   })
 })
 
@@ -252,7 +314,7 @@ describe("structured data", () => {
 
     expect(items.length).toBeGreaterThan(0)
     expect(new Set(items.map((item) => item.value["@type"]))).toEqual(
-      new Set(["WebSite", "LocalBusiness", "Service"])
+      new Set(["WebSite", "LocalBusiness"])
     )
     for (const { value } of items) {
       expect(ALLOWED).toContain(value["@type"])

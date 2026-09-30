@@ -81,15 +81,6 @@ export interface components {
               }
             | {
                 /** @constant */
-                key: "pricing.standard_clean_hourly"
-                value: {
-                  amount_minor: number
-                  /** @enum {string} */
-                  currency: "GBP" | "USD" | "EUR"
-                }
-              }
-            | {
-                /** @constant */
                 key: "business.tagline"
                 value: {
                   tagline: string
@@ -470,16 +461,6 @@ export interface components {
         }
       | {
           /** @constant */
-          key: "pricing.standard_clean_hourly"
-          skippable: boolean
-          prefill: {
-            amount_minor: number
-            /** @enum {string} */
-            currency: "GBP" | "USD" | "EUR"
-          } | null
-        }
-      | {
-          /** @constant */
           key: "business.tagline"
           skippable: boolean
           prefill: {
@@ -691,15 +672,6 @@ export interface components {
                 value: {
                   centre: string
                   radius_km: number
-                }
-              }
-            | {
-                /** @constant */
-                key: "pricing.standard_clean_hourly"
-                value: {
-                  amount_minor: number
-                  /** @enum {string} */
-                  currency: "GBP" | "USD" | "EUR"
                 }
               }
             | {
@@ -1168,15 +1140,6 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
-                                  key: "pricing.standard_clean_hourly"
-                                  value: {
-                                    amount_minor: number
-                                    /** @enum {string} */
-                                    currency: "GBP" | "USD" | "EUR"
-                                  }
-                                }
-                              | {
-                                  /** @constant */
                                   key: "business.tagline"
                                   value: {
                                     tagline: string
@@ -1583,15 +1546,6 @@ export interface components {
           }
         | {
             /** @constant */
-            key: "pricing.standard_clean_hourly"
-            value: {
-              amount_minor: number
-              /** @enum {string} */
-              currency: "GBP" | "USD" | "EUR"
-            }
-          }
-        | {
-            /** @constant */
             key: "business.tagline"
             value: {
               tagline: string
@@ -1856,7 +1810,6 @@ export interface components {
               | "business.email"
               | "hours.weekday"
               | "service_area.radius"
-              | "pricing.standard_clean_hourly"
               | "business.tagline"
               | "business.industry"
               | "business.offerings"
@@ -1919,15 +1872,6 @@ export interface components {
                   value: {
                     centre: string
                     radius_km: number
-                  }
-                }
-              | {
-                  /** @constant */
-                  key: "pricing.standard_clean_hourly"
-                  value: {
-                    amount_minor: number
-                    /** @enum {string} */
-                    currency: "GBP" | "USD" | "EUR"
                   }
                 }
               | {
@@ -2403,7 +2347,6 @@ export interface components {
         | "business.email"
         | "hours.weekday"
         | "service_area.radius"
-        | "pricing.standard_clean_hourly"
         | "business.tagline"
         | "business.industry"
         | "business.offerings"
@@ -2511,7 +2454,6 @@ export interface components {
             | "business.email"
             | "hours.weekday"
             | "service_area.radius"
-            | "pricing.standard_clean_hourly"
             | "business.tagline"
             | "business.industry"
             | "business.offerings"
@@ -2692,15 +2634,6 @@ export interface components {
           value: {
             centre: string
             radius_km: number
-          }
-        }
-      | {
-          /** @constant */
-          key: "pricing.standard_clean_hourly"
-          value: {
-            amount_minor: number
-            /** @enum {string} */
-            currency: "GBP" | "USD" | "EUR"
           }
         }
       | {
@@ -3191,15 +3124,6 @@ export interface components {
           }
         | {
             /** @constant */
-            key: "pricing.standard_clean_hourly"
-            value: {
-              amount_minor: number
-              /** @enum {string} */
-              currency: "GBP" | "USD" | "EUR"
-            }
-          }
-        | {
-            /** @constant */
             key: "business.tagline"
             value: {
               tagline: string
@@ -3650,7 +3574,6 @@ export interface components {
         | "business.email"
         | "hours.weekday"
         | "service_area.radius"
-        | "pricing.standard_clean_hourly"
         | "business.tagline"
         | "business.industry"
         | "business.offerings"
@@ -3715,7 +3638,6 @@ export interface components {
                 | "business.email"
                 | "hours.weekday"
                 | "service_area.radius"
-                | "pricing.standard_clean_hourly"
                 | "business.tagline"
                 | "business.industry"
                 | "business.offerings"

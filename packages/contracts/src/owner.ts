@@ -42,8 +42,8 @@ const fact = <K extends string, V extends z.ZodRawShape>(
  * The value an owner can state for a fact, by key: what the starter site
  * requires (`required: true` in its site config) plus what onboarding learns
  * about the business, the assistant and the site the owner wants. The shapes
- * are the golden fixtures'. Currencies are the ones the content gate can
- * verify. The keys are `FactValue.options`; there is no second list.
+ * are the golden fixtures'. The keys are `FactValue.options`; there is no
+ * second list.
  *
  * Hours close after they open, on the same day, and a close of `00:00` is
  * midnight at the end of it. `HH:MM` compares as text. The order is checked
@@ -64,10 +64,6 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("service_area.radius", {
     centre: Text(80),
     radius_km: z.number().positive().max(200),
-  }),
-  fact("pricing.standard_clean_hourly", {
-    amount_minor: z.int().positive(),
-    currency: z.enum(["GBP", "USD", "EUR"]),
   }),
   fact("business.tagline", { tagline: Text(120) }),
   fact("business.industry", choiceFacts.industry),

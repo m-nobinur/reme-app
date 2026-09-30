@@ -4,7 +4,11 @@ import { site } from "../../site-config"
 import ContactDetails from "../ContactDetails/ContactDetails.astro"
 
 const hasContact = Boolean(
-  site.phone || site.email || site.weekdayHours || site.serviceArea
+  site.phone ||
+    site.email ||
+    site.weekdayHours ||
+    site.serviceAreaText ||
+    site.serviceArea
 )
 ---
 

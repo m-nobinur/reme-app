@@ -1,0 +1,108 @@
+---
+import { quoteForm, site } from "../../site-config"
+
+// A request goes to site.quoteFormAction once the platform has an endpoint
+// for it; that is where the endpoint plugs in. Until then it goes by email:
+// a mailto action with text/plain opens the visitor's mail app with each
+// field on its own line. With neither there is nowhere to send it, so the
+// form is left out rather than posting to itself.
+const byEmail = !site.quoteFormAction
+const action =
+  site.quoteFormAction ||
+  (site.email
+    ? `mailto:${site.email}?subject=${encodeURIComponent(site.quoteEmailSubject)}`
+    : "")
+
+/** Longest answer per input type; date and number take no maxlength. */
+const MAX: Record<string, number> = { text: 200, email: 254, tel: 40 }
+
+const groups = quoteForm
+  .map((group) => ({
+    legend: site[group.legend],
+    fields: group.fields
+      .filter((field) => site[field.label])
+      .map((field) => {
+        const options = (field.options ?? [])
+          .map((key) => site[key])
+          .filter(Boolean)
+        return {
+          ...field,
+          id: `quote-${field.name}`,
+          label: site[field.label],
+          hint: field.hint ? site[field.hint] : "",
+          options,
+          // A list with nothing in it is a question the visitor answers in words.
+          type:
+            field.type === "select" && options.length === 0
+              ? "text"
+              : field.type,
+        }
+      }),
+  }))
+  .filter((group) => group.fields.length > 0)
+---
+
+{
+  action && groups.length > 0 && (
+    <form
+      class="quote-form"
+      action={action}
+      method="post"
+      enctype={byEmail ? "text/plain" : undefined}
+    >
+      {groups.map((group) => (
+        <fieldset>
+          {group.legend && <legend>{group.legend}</legend>}
+          {group.fields.map((field) => {
+            const hint = field.hint ? `${field.id}-hint` : undefined
+            const common = {
+              id: field.id,
+              name: field.name,
+              required: field.required,
+              autocomplete: field.autocomplete,
+              "aria-describedby": hint,
+            }
+            return (
+              <div class="quote-field">
+                <label for={field.id}>
+                  {field.label}
+                  {!field.required && site.quoteOptional && (
+                    <span class="quote-optional">{site.quoteOptional}</span>
+                  )}
+                </label>
+                {field.hint && (
+                  <p class="quote-hint" id={hint}>
+                    {field.hint}
+                  </p>
+                )}
+                {field.type === "textarea" ? (
+                  <textarea {...common} rows="5" maxlength="2000" />
+                ) : field.type === "select" ? (
+                  <select {...common}>
+                    <option value="">{site.quoteChoose}</option>
+                    {field.options.map((option) => (
+                      <option>{option}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    {...common}
+                    type={field.type}
+                    maxlength={MAX[field.type]}
+                    min={field.type === "number" ? "0" : undefined}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </fieldset>
+      ))}
+      <div class="quote-submit">
+        <button class="action action-primary" type="submit">
+          {site.quoteSubmit}
+        </button>
+        {site.quoteNextSteps && <p>{site.quoteNextSteps}</p>}
+      </div>
+    </form>
+  )
+}

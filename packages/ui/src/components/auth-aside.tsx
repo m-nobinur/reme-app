@@ -17,7 +17,7 @@ const DEEP_SURFACE =
 
 const PROMISES: { icon: Icon; text: string }[] = [
   { icon: MoonStarsIcon, text: "Replies day and night" },
-  { icon: TagIcon, text: "Quotes from your prices" },
+  { icon: TagIcon, text: "Quote requests handled" },
   { icon: ShieldCheckIcon, text: "Big calls stay yours" },
 ]
 

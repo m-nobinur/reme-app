@@ -72,7 +72,6 @@ const TYPED: Record<AskableFactKey, Record<string, string>> = {
   "business.email": { address: "hello@example.com" },
   "hours.weekday": { open: "08:00", close: "17:30" },
   "service_area.radius": { centre: "Anytown", radius_km: "15" },
-  "pricing.standard_clean_hourly": { amount_minor: "18.50" },
   "business.tagline": { tagline: "Homes left spotless" },
   "business.offerings": { items: "Deep cleans, end of tenancy" },
   "business.audience": { text: "Busy families" },
@@ -94,19 +93,13 @@ it("builds a FactValue from every fact's inputs", () => {
   }
 })
 
-it("turns a UK number into E.164 and pounds into pence", () => {
+it("turns a UK number into E.164", () => {
   expect(
     answerValue(
       { kind: "fact", key: "business.phone" },
       form({ e164: "07700 900123" })
     )
   ).toEqual({ value: { e164: "+447700900123" } })
-  expect(
-    answerValue(
-      { kind: "fact", key: "pricing.standard_clean_hourly" },
-      form({ amount_minor: "18.50" })
-    )
-  ).toEqual({ value: { amount_minor: 1850, currency: "GBP" } })
 })
 
 it("names the input a fact's answer failed on", () => {

@@ -1,6 +1,10 @@
 import {
+  AskChoiceInput,
+  AskChoiceOutput,
   AskFactInput,
   AskFactOutput,
+  AskUploadInput,
+  AskUploadOutput,
   type FactValue,
   type FactValueKey,
   TOOL_CALL_CANCELLED,
@@ -175,6 +179,74 @@ export function askFactView(part: ToolPartView): AskFactView {
   return output.data.answer === "stated"
     ? { key, state: "answered", fact: output.data.fact }
     : { key, state: "skipped" }
+}
+
+/**
+ * An `ask_choice` or `ask_upload` card: waiting, answered, skipped, overtaken
+ * by a typed message, or broken. `input` rides along once answered, so the
+ * answer can be read back in the words the owner saw.
+ */
+export type AskView<I, O> =
+  | { state: "pending"; input: I }
+  | { state: "answered"; input: I | null; output: O }
+  | { state: "skipped" }
+  | { state: "cancelled" }
+  | { state: "error"; message: string }
+
+function askView<I, O extends { answer: string }>(
+  part: ToolPartView,
+  input: Schema<I>,
+  output: Schema<O>
+): AskView<I, Exclude<O, { answer: "skipped" }>> {
+  const args = input.safeParse(part.args)
+  if (part.isError) {
+    const message = errorOf(part.result)
+    return message === TOOL_CALL_CANCELLED
+      ? { state: "cancelled" }
+      : { state: "error", message: message || BROKEN }
+  }
+  if (part.result === undefined) {
+    return args.success
+      ? { state: "pending", input: args.data }
+      : { state: "error", message: BROKEN }
+  }
+  const parsed = output.safeParse(part.result)
+  if (!parsed.success) return { state: "error", message: BROKEN }
+  if (parsed.data.answer === "skipped") return { state: "skipped" }
+  return {
+    state: "answered",
+    input: args.success ? args.data : null,
+    output: parsed.data as Exclude<O, { answer: "skipped" }>,
+  }
+}
+
+export type AskChoiceView = AskView<
+  AskChoiceInput,
+  Extract<AskChoiceOutput, { answer: "chosen" }>
+>
+export const askChoiceView = (part: ToolPartView): AskChoiceView =>
+  askView(part, AskChoiceInput, AskChoiceOutput)
+
+export type AskUploadView = AskView<
+  AskUploadInput,
+  Extract<AskUploadOutput, { answer: "uploaded" }>
+>
+export const askUploadView = (part: ToolPartView): AskUploadView =>
+  askView(part, AskUploadInput, AskUploadOutput)
+
+/**
+ * A choice as the owner reads it back: the labels they picked, in the card's
+ * order, then their own words. An id the card no longer offers reads as
+ * itself rather than vanishing.
+ */
+export function choiceText(
+  input: AskChoiceInput | null,
+  output: { ids: string[]; other: string | null }
+): string {
+  const labels = output.ids.map(
+    (id) => input?.options.find((option) => option.id === id)?.label ?? id
+  )
+  return [...labels, ...(output.other ? [output.other] : [])].join(", ")
 }
 
 /** The fields of a message part `isHeld` reads. */

@@ -255,7 +255,7 @@ function TargetSample() {
         target={{
           kind: "sensitive_claim",
           fact_id: "10000001-0000-4000-8000-000000000044",
-          claim: "Standard clean, $35.00 an hour",
+          claim: "Fully insured and bonded",
         }}
       />
     </div>
@@ -318,9 +318,9 @@ const productCatalog: Entry[] = [
             meta: "You told Reme · version 1 · checked 6 Jan 2026",
           },
           {
-            id: "price",
-            term: "Standard clean hourly",
-            description: "$35.00 an hour",
+            id: "area",
+            term: "Service area",
+            description: "Fairhaven, within 25 km",
             meta: "You told Reme · version 2 · checked 6 Jan 2026",
           },
         ]}

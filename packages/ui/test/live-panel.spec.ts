@@ -27,7 +27,7 @@ test("each fact is asked with its native input", async ({ page }) => {
     item(page, "business.email").locator('input[type="email"]')
   ).toHaveCount(1)
   await expect(
-    item(page, "pricing.standard_clean_hourly").locator('input[type="number"]')
+    item(page, "service_area.radius").locator('input[type="number"]')
   ).toHaveCount(1)
   // Not a fact: text held to the question's own limit, email where it says so.
   await expect(item(page, "Parking").getByLabel("Your answer")).toHaveAttribute(

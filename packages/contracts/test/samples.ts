@@ -405,7 +405,7 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
     approvals: [{ version: 2, expires_at: LATER }],
-    missing_facts: ["pricing.standard_clean_hourly"],
+    missing_facts: ["business.tagline"],
   },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
@@ -528,8 +528,8 @@ export const samples: Record<ContractName, unknown> = {
     ],
   },
   FactValue: {
-    key: "pricing.standard_clean_hourly",
-    value: { amount_minor: 3500, currency: "GBP" },
+    key: "service_area.text",
+    value: { text: "Fairhaven and the villages around it" },
   },
   FailureReport: {
     failure_id: ULID,

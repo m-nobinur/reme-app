@@ -73,7 +73,7 @@ const FIXTURE = JSON.parse(
   list: unknown
   conversation: { id: string }
   histories: Record<
-    "start" | "typed" | "name" | "pricing" | "offered" | "denied" | "change",
+    "start" | "typed" | "name" | "tagline" | "offered" | "denied" | "change",
     unknown
   >
   streams: Record<"typed" | "name" | "skip" | "deny" | "change", Stream>
@@ -388,9 +388,9 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
 })
 
 it("offers the build, keeps a not now, and a typed change after it", async () => {
-  const chat = await open(FIXTURE.histories.pricing)
+  const chat = await open(FIXTURE.histories.tagline)
   // Every answer stays on screen in its place: the overtaken question, the
-  // owner's message, four answers and the open price question.
+  // owner's message, four answers and the open tagline question.
   expect(transcript(chat)).toEqual([
     "What is your business called?Not answered. You sent a message instead.",
     "Hello",
@@ -399,7 +399,7 @@ it("offers the build, keeps a not now, and a typed change after it", async () =>
     "Which email address should enquiries go to?hello@example.net",
     "What are your hours on weekdays?08:00 to 18:00",
     "Where do you work from, and how far do you travel?Leeds, within 15 km",
-    "What do you charge an hour for a standard clean?Hourly price, in poundsSaveSkip for now",
+    "How would you sum up your business in one line?TaglineSaveSkip for now",
   ])
   turns.push(sse(FIXTURE.streams.skip))
   await press(chat, "Skip for now")

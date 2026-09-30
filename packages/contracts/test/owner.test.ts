@@ -57,7 +57,6 @@ const facts = {
   "business.email": { address: "hello@brightclean.invalid" },
   "hours.weekday": { open: "08:00", close: "17:30" },
   "service_area.radius": { centre: "Fairhaven", radius_km: 25 },
-  "pricing.standard_clean_hourly": { amount_minor: 3500, currency: "GBP" },
   "business.tagline": { tagline: "Cleaning you can plan your week around" },
   "business.industry": {
     name: "Limousine and chauffeur hire",
@@ -160,20 +159,6 @@ describe("FactValue", () => {
       {
         key: "service_area.radius",
         value: { centre: "Fairhaven", radius_km: 0 },
-      },
-    ],
-    [
-      "a fractional minor amount",
-      {
-        key: "pricing.standard_clean_hourly",
-        value: { amount_minor: 35.5, currency: "GBP" },
-      },
-    ],
-    [
-      "a currency the content gate cannot verify",
-      {
-        key: "pricing.standard_clean_hourly",
-        value: { amount_minor: 3500, currency: "JPY" },
       },
     ],
     [
@@ -337,7 +322,6 @@ describe("the bridge's building blocks", () => {
       "business.email",
       "hours.weekday",
       "service_area.radius",
-      "pricing.standard_clean_hourly",
       "business.tagline",
       "business.industry",
       "business.offerings",

@@ -6,6 +6,7 @@ import { brandTheme } from "../brand"
 import Seo from "../components/Seo/Seo.astro"
 import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
 import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
+import { fontTheme, templateOf } from "../presets"
 import { site } from "../site-config"
 
 interface Props {
@@ -17,16 +18,16 @@ interface Props {
 
 const props = Astro.props
 // Empty unless the owner chose a colour, and empty again if what they chose is
-// not a hex colour. See src/brand.ts.
-const brand = brandTheme(site.brandColor)
+// not a hex colour. See src/brand.ts. The font rule likewise, from src/presets.ts.
+const theme = brandTheme(site.brandColor) + fontTheme(site.font)
 ---
 
-<html lang="en">
+<html lang="en" data-template={templateOf(site.template)}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo {...props} />
-    {brand && <style is:inline set:html={brand} />}
+    {theme && <style is:inline set:html={theme} />}
   </head>
   <body>
     <a class="skip-link" href="#main">{site.skipLink}</a>

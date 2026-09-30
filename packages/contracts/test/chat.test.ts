@@ -70,8 +70,8 @@ describe("AskFactInput", () => {
   it.each([
     ["a prefilled name", samples.AskFactInput],
     [
-      "a skippable price with nothing prefilled",
-      { key: "pricing.standard_clean_hourly", skippable: true, prefill: null },
+      "a skippable tagline with nothing prefilled",
+      { key: "business.tagline", skippable: true, prefill: null },
     ],
   ])("accepts %s", (_name, input) => {
     expect(verdict("AskFactInput", AskFactInput, input)).toEqual(ACCEPTED)

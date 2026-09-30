@@ -5,7 +5,7 @@ props: []
 constraints:
   - Reads service1Name to service3Body itself; a card renders only when one of
     its two fields is set.
-  - Prices stay in PriceCard, which renders the pricing fact.
+  - No prices anywhere. The site quotes on request, through the quote page.
 examples:
   - "<ServiceCards />"
 forbidden:

@@ -91,6 +91,9 @@ async function get(path: string): Promise<unknown | null> {
   return await response.json()
 }
 
+/** How long a photo upload has before the api starts answering. */
+const UPLOAD_TIMEOUT_MS = 120_000
+
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
@@ -625,6 +628,25 @@ export const apiSource: OwnerDataSource = {
   rateMessage,
   conversationMessages,
   chat: (raw) => call("/chat", { method: "POST", raw }),
+  assets: async ({ body, type, length, key }) => {
+    const session = await forwardedSession()
+    if (!session) return null
+    return await apiFetch(
+      new URL("/assets", apiUrl()),
+      {
+        method: "POST",
+        headers: {
+          cookie: sessionCookie(session),
+          "content-type": type,
+          "content-length": String(length),
+          "idempotency-key": key,
+        },
+        body,
+      },
+      // The api answers once every byte is in, which a slow line takes a while to send.
+      UPLOAD_TIMEOUT_MS
+    )
+  },
   decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

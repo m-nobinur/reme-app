@@ -8,7 +8,9 @@ import {
   ProhibitIcon,
   SealQuestionIcon,
 } from "@phosphor-icons/react"
+import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
+import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
 import {
   COS_CARDS,
   COS_READS,
@@ -28,8 +30,8 @@ import { cn } from "@workspace/ui/lib/utils"
  * has recorded it, which is why the buttons read their state from the part
  * rather than from a local flag.
  *
- * This is the component the thread's tool-call slot renders. `ask_fact` and
- * `request_change` get their own cards. Any other tool call the runtime is
+ * This is the component the thread's tool-call slot renders. `ask_fact`,
+ * `ask_choice`, `ask_upload` and `request_change` get their own cards. Any other tool call the runtime is
  * waiting on a human for is an approval, whatever it is called, and anything
  * else falls through to `ToolFallback`.
  */
@@ -139,6 +141,8 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
  */
 export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_fact: AskFact,
+  ask_choice: AskChoice,
+  ask_upload: AskUpload,
   request_change: RequestChange,
   ...COS_CARDS,
 }

@@ -113,7 +113,7 @@ function Hero({ actions }: { actions: ReactNode }) {
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground leading-relaxed">
             Reme is the AI assistant for cleaning businesses. It answers every
-            enquiry in your voice, prepares quotes from your own prices and
+            enquiry in your voice, gathers what each quote request needs and
             follows up until the customer decides. You stay in charge of
             everything that matters.
           </p>
@@ -129,12 +129,12 @@ const FEATURES: { icon: Icon; title: string; text: string }[] = [
   {
     icon: LightningIcon,
     title: "Replies in minutes, day or night",
-    text: "Enquiries from your website, quote forms and email land in one place. Reme answers each one in your voice, from the prices, hours and policies you have confirmed.",
+    text: "Enquiries from your website, quote forms and email land in one place. Reme answers each one in your voice, from the services, hours and policies you have confirmed.",
   },
   {
     icon: ReceiptIcon,
-    title: "Quotes from your own prices",
-    text: "Reme asks the questions it needs, then prepares the quote from your price rules. Anything outside them comes to you first.",
+    title: "Quote requests, ready to answer",
+    text: "Reme asks each customer what the job involves, then brings you the request with everything you need to quote. The quote is yours to set.",
   },
   {
     icon: ArrowsClockwiseIcon,
@@ -179,7 +179,7 @@ function Features() {
 const STEPS = [
   {
     title: "Tell Reme about your business",
-    text: "Answer a few questions in plain conversation. Your prices, hours and service area are saved as details you can review at any time.",
+    text: "Answer a few questions in plain conversation. Your services, hours and service area are saved as details you can review at any time.",
   },
   {
     title: "Go live",
@@ -222,7 +222,7 @@ const ON_ITS_OWN = [
   "Answer customers from your confirmed details",
   "Log every new lead and ask the right questions",
   "Follow up quiet leads and unanswered quotes",
-  "Prepare quotes inside your price rules",
+  "Gather the details each quote request needs",
 ] as const
 
 const WAITS_FOR_YOU = [

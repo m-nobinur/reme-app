@@ -258,7 +258,7 @@
         }
       ]
     },
-    "pricing": {
+    "tagline": {
       "messages": [
         {
           "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
@@ -439,7 +439,7 @@
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -638,7 +638,7 @@
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -854,7 +854,7 @@
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -1074,7 +1074,7 @@
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },

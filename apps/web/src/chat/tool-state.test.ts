@@ -8,7 +8,10 @@ import {
 } from "@workspace/contracts"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
+  askChoiceView,
   askFactView,
+  askUploadView,
+  choiceText,
   decisionView,
   isHeld,
   readView,
@@ -24,7 +27,7 @@ import { expect, it } from "vitest"
  */
 
 const ASK = {
-  key: "pricing.standard_clean_hourly",
+  key: "business.tagline",
   skippable: true,
   prefill: null,
 }
@@ -245,4 +248,76 @@ it("says a refusal in the owner's words, never the api's", () => {
   expect(refusalText(null, "Fallback.")).toBe("Fallback.")
   // A reminder whose outcome is unknown says so, rather than "refused".
   expect(refusalText("reminder.unconfirmed", "Fallback.")).toBe(UNCONFIRMED)
+})
+
+const CHOICE = {
+  step: "pronouns",
+  options: [
+    { id: "he_him", label: "he/him", hint: null, visual: null },
+    { id: "they_them", label: "they/them", hint: null, visual: null },
+  ],
+  multiple: true,
+  preselected: [],
+  other: { label: "Something else", placeholder: "Your words" },
+  skippable: true,
+}
+
+it("reads every ask_choice state, and the answer in the owner's words", () => {
+  expect(askChoiceView({ args: CHOICE })).toEqual({
+    state: "pending",
+    input: CHOICE,
+  })
+  const chosen = { answer: "chosen", ids: ["they_them"], other: "xe/xem" }
+  const answered = askChoiceView({ args: CHOICE, result: chosen })
+  expect(answered).toEqual({ state: "answered", input: CHOICE, output: chosen })
+  if (answered.state === "answered") {
+    expect(choiceText(answered.input, answered.output)).toBe(
+      "they/them, xe/xem"
+    )
+  }
+  expect(choiceText(null, { ids: ["gone"], other: null })).toBe("gone")
+  expect(
+    askChoiceView({ args: CHOICE, result: { answer: "skipped" } }).state
+  ).toBe("skipped")
+  expect(
+    askChoiceView({ args: CHOICE, isError: true, result: { error: CANCELLED } })
+      .state
+  ).toBe("cancelled")
+  expect(askChoiceView({ args: { step: "nope" } }).state).toBe("error")
+  expect(
+    askChoiceView({ args: CHOICE, result: { answer: "chosen" } }).state
+  ).toBe("error")
+})
+
+it("reads every ask_upload state", () => {
+  const input = {
+    accept: ["image/png"],
+    max_files: 2,
+    max_bytes: 1000,
+    skippable: false,
+  }
+  const asset = {
+    id: "0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+    name: "shop.png",
+    content_type: "image/png",
+    bytes: 900,
+  }
+  expect(askUploadView({ args: input })).toEqual({ state: "pending", input })
+  expect(
+    askUploadView({
+      args: input,
+      result: { answer: "uploaded", assets: [asset] },
+    })
+  ).toEqual({
+    state: "answered",
+    input,
+    output: { answer: "uploaded", assets: [asset] },
+  })
+  expect(
+    askUploadView({ args: input, result: { answer: "uploaded", assets: [] } })
+      .state
+  ).toBe("error")
+  expect(
+    askUploadView({ args: input, isError: true, result: { error: "boom" } })
+  ).toEqual({ state: "error", message: "boom" })
 })

@@ -130,9 +130,14 @@ export type ThreadProps = {
   quickActions?: readonly ThreadQuickAction[] | undefined
   /** A new mode object focuses the composer, so each press lands there. */
   mode?: ThreadMode | undefined
+  /**
+   * Drawn after the last message, from app state rather than the thread,
+   * such as the card that says a build is ready. Announced when it appears.
+   */
+  after?: ReactNode
 }
 
-type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus">
+type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus" | "after">
 
 const EMPTY_COMPONENTS: ThreadComponents = {}
 const EMPTY_SETTINGS: ThreadSettings = {}
@@ -212,6 +217,7 @@ export const Thread: FC<ThreadProps> = ({
   briefing,
   quickActions,
   mode,
+  after,
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
@@ -222,7 +228,12 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ThreadRoot autoFocus={autoFocus} isEmpty={isEmpty} stored={stored} />
+        <ThreadRoot
+          after={after}
+          autoFocus={autoFocus}
+          isEmpty={isEmpty}
+          stored={stored}
+        />
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
@@ -232,7 +243,8 @@ const ThreadRoot: FC<{
   isEmpty: boolean
   autoFocus: boolean
   stored: boolean
-}> = ({ isEmpty, autoFocus, stored }) => {
+  after: ReactNode
+}> = ({ isEmpty, autoFocus, stored, after }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
 
   return (
@@ -273,6 +285,10 @@ const ThreadRoot: FC<{
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+          </div>
+          {/* Always in the page, so a card that appears in it is read out. */}
+          <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
+            {after}
           </div>
 
           <ThreadPrimitive.ViewportFooter

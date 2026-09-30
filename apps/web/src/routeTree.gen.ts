@@ -24,6 +24,7 @@ import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as ApiAssetsRouteImport } from './routes/api.assets'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as AppConversationRouteImport } from './routes/app/_conversation'
 import { Route as AppAccountRouteImport } from './routes/app/account'
@@ -114,6 +115,11 @@ const VerifyEmailRoute = VerifyEmailRouteImport.update({
   path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAssetsRoute = ApiAssetsRouteImport.update({
+  id: '/api/assets',
+  path: '/api/assets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -230,6 +237,7 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/app/_conversation': typeof AppConversationRouteWithChildren
   '/app/account': typeof AppAccountRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/terms'
     | '/verify-email'
+    | '/api/assets'
     | '/api/chat'
     | '/app/account'
     | '/app/approvals'
@@ -323,6 +333,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/terms'
     | '/verify-email'
+    | '/api/assets'
     | '/api/chat'
     | '/app/account'
     | '/app/approvals'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/terms'
     | '/verify-email'
+    | '/api/assets'
     | '/api/chat'
     | '/app/_conversation'
     | '/app/account'
@@ -384,6 +396,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  ApiAssetsRoute: typeof ApiAssetsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSocialRoute: typeof ApiAuthSocialRoute
@@ -494,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/verify-email'
       fullPath: '/verify-email'
       preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assets': {
+      id: '/api/assets'
+      path: '/api/assets'
+      fullPath: '/api/assets'
+      preLoaderRoute: typeof ApiAssetsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -653,6 +673,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  ApiAssetsRoute: ApiAssetsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSocialRoute: ApiAuthSocialRoute,

@@ -5,9 +5,22 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
-import { TOOL_CALL_CANCELLED } from "@workspace/contracts"
+import {
+  FONTS,
+  INDUSTRIES,
+  PALETTES,
+  PRONOUNS,
+  TEMPLATES,
+  TONES,
+  TOOL_CALL_CANCELLED,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
+  UPLOAD_TYPES,
+} from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
@@ -70,7 +83,7 @@ const COS_TOOLS_FIXTURE = {
   zone: "Europe/London",
   question: (requestId: string) =>
     requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
-      ? "Hourly price for a standard clean"
+      ? "Service area"
       : null,
 }
 
@@ -292,7 +305,7 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
         "business.phone",
         stated("business.phone", { e164: "+447700900123" })
       ),
-      askFact("pricing.standard_clean_hourly", {
+      askFact("business.tagline", {
         result: { answer: "skipped" },
         skippable: true,
       }),
@@ -316,11 +329,207 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
     status: WAITING,
   },
   {
-    content: [askFact("pricing.standard_clean_hourly", { skippable: true })],
+    content: [askFact("business.tagline", { skippable: true })],
     role: "assistant",
     status: WAITING,
   },
 ]
+
+type Choice = {
+  id: string
+  label: string
+  hint?: string
+  visual?: { kind: string; colors?: string[]; family?: string; id?: string }
+}
+
+/** An `ask_choice` call in one of its states, from a contract preset list. */
+const askChoice = (
+  step: string,
+  options: readonly Choice[],
+  extra: {
+    result?: unknown
+    isError?: boolean
+    multiple?: boolean
+    preselected?: string[]
+    other?: { label: string; placeholder: string } | null
+    skippable?: boolean
+  } = {}
+) => ({
+  args: {
+    step,
+    options: options.map((each) => ({
+      id: each.id,
+      label: each.label,
+      hint: each.hint ?? null,
+      visual: each.visual ?? null,
+    })),
+    multiple: extra.multiple ?? false,
+    preselected: extra.preselected ?? [],
+    other: extra.other ?? null,
+    skippable: extra.skippable ?? false,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `choice_${step}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_choice",
+  type: "tool-call" as const,
+})
+
+const chosen = (ids: string[], other: string | null = null) => ({
+  result: { answer: "chosen", ids, other },
+})
+
+const question = (text: string) => ({ text, type: "text" as const })
+
+const PALETTE_OPTIONS = PALETTES.map((each) => ({
+  ...each,
+  visual: { kind: "swatches", colors: [...each.swatches] },
+}))
+const FONT_OPTIONS = FONTS.map((each) => ({
+  ...each,
+  visual: { kind: "font", family: each.family },
+}))
+const TEMPLATE_OPTIONS = TEMPLATES.map((each) => ({
+  ...each,
+  visual: { kind: "template", id: each.id },
+}))
+
+const ASK_CHOICE_STATES: ThreadMessageLike[] = [
+  {
+    content: [
+      askChoice("pronouns", PRONOUNS, chosen(["they_them"])),
+      askChoice("palette", PALETTE_OPTIONS, chosen([], "Navy and gold")),
+      askChoice("font", FONT_OPTIONS, {
+        result: { answer: "skipped" },
+        skippable: true,
+      }),
+      askChoice("tone", TONES, {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      askChoice("pages", TONES, { isError: true, result: { error: BROKEN } }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      question("What kind of business is Brightclean?"),
+      askChoice("industry", INDUSTRIES.slice(0, 6), {
+        other: { label: "Something else", placeholder: "Your industry" },
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("How should Sam sound when talking to your customers?"),
+      askChoice("tone", TONES, { preselected: ["friendly"] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Which colours feel like Brightclean?"),
+      askChoice("palette", PALETTE_OPTIONS, {
+        other: { label: "My own colours", placeholder: "Navy and gold" },
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("And the type?"),
+      askChoice("font", FONT_OPTIONS, { skippable: true }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Which layout suits you best?"),
+      askChoice("template", TEMPLATE_OPTIONS, { preselected: ["modern"] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** An `ask_upload` call in one of its states. */
+const askUpload = (
+  label: string,
+  extra: { result?: unknown; isError?: boolean } = {}
+) => ({
+  args: {
+    accept: [...UPLOAD_TYPES],
+    max_files: UPLOAD_MAX_FILES,
+    max_bytes: UPLOAD_MAX_BYTES,
+    skippable: true,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `upload_${label}`,
+  toolName: "ask_upload",
+  type: "tool-call" as const,
+})
+
+const PHOTO = {
+  id: "0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+  name: "kitchen.jpg",
+  content_type: "image/jpeg" as const,
+  bytes: 812_000,
+}
+
+const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
+  {
+    content: [
+      askUpload("one", {
+        result: { answer: "uploaded", assets: [PHOTO] },
+      }),
+      askUpload("two", {
+        result: {
+          answer: "uploaded",
+          assets: [
+            PHOTO,
+            { ...PHOTO, id: "1b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+          ],
+        },
+      }),
+      askUpload("skipped", { result: { answer: "skipped" } }),
+      askUpload("cancelled", {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      question(
+        "Do you have photos of a kitchen or bathroom after a clean? Real rooms help visitors picture the result."
+      ),
+      askUpload("open"),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** Stands in for the web's upload: a moment's wait, then the one photo stored. */
+const fakeUpload = async (files: File[]) => {
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  return {
+    assets: files.map((file, index) => ({
+      ...PHOTO,
+      id: `0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d${String(index).padStart(2, "0")}`,
+      name: file.name,
+    })),
+  }
+}
 
 const ONBOARDING_GOAL = "Build my website from the details I gave you."
 const BUILD_AT = "2026-09-27T10:00:00.000Z"
@@ -540,8 +749,8 @@ const WORKSPACE_READ = {
   questions: [
     {
       request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
-      field: "pricing.standard_clean_hourly",
-      why: "The prices page needs an hourly rate.",
+      field: "service_area.radius",
+      why: "The areas page needs how far you travel.",
       options: null,
       blocking: true,
     },
@@ -696,9 +905,9 @@ const RATED: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
-  ask("And the prices page?"),
+  ask("And the services page?"),
   {
-    content: [{ text: "It shows the hourly rate you gave.", type: "text" }],
+    content: [{ text: "It lists the services you gave.", type: "text" }],
     role: "assistant",
     status: DONE,
   },
@@ -1028,6 +1237,79 @@ const assistantCatalog = [
     name: "AskFact",
     render: () => (
       <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+    ),
+  },
+  {
+    name: "AskChoice",
+    render: () => (
+      <FixtureThread height="h-[140rem]" messages={ASK_CHOICE_STATES} />
+    ),
+  },
+  // The upload card and the provider that gives it the app's upload.
+  ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
+    name,
+    render: () => (
+      <UploadPhotosProvider value={fakeUpload}>
+        <FixtureThread height="h-[60rem]" messages={ASK_UPLOAD_STATES} />
+      </UploadPhotosProvider>
+    ),
+  })),
+  // At the end of an open thread, then its other states on their own:
+  // approving, refused and approved.
+  {
+    name: "SiteReady",
+    render: () => (
+      <div className="flex flex-col gap-6">
+        <FixtureThread
+          height="h-[30rem]"
+          messages={[
+            ask("Can you add a line about pets?"),
+            {
+              content: [
+                {
+                  text: "Noted. I will add it once the first version is ready.",
+                  type: "text",
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+          ]}
+          settings={{
+            after: (
+              <SiteReady
+                onApprove={noop}
+                onMakeChanges={noop}
+                onSeePreview={noop}
+                version={1}
+              />
+            ),
+          }}
+        />
+        <div className="flex max-w-xl flex-col gap-6">
+          <SiteReady
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            pending
+            version={2}
+          />
+          <SiteReady
+            error="A newer version replaced that one. Check the latest before you decide."
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={2}
+          />
+          <SiteReady
+            approved
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={3}
+          />
+        </div>
+      </div>
     ),
   },
   {

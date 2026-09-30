@@ -4,11 +4,13 @@ interface Props {
   heading: string
   /** One sentence under the heading, read from a site field. */
   lede?: string
+  /** A short line above the heading, such as the industry, from a site field. */
+  eyebrow?: string
   /** split for the home page, compact for a page header, centered otherwise. */
   variant?: "split" | "centered" | "compact"
 }
 
-const { heading, lede = "", variant = "centered" } = Astro.props
+const { heading, lede = "", eyebrow = "", variant = "centered" } = Astro.props
 // Rendered rather than slotted, so a hero whose actions all resolve to
 // nothing is a hero with no actions and not an empty row.
 const actions = Astro.slots.has("default")
@@ -21,6 +23,7 @@ const actions = Astro.slots.has("default")
     <section class:list={["hero", `hero-${variant}`]}>
       <div class="wrap hero-inner">
         <div class="hero-text">
+          {eyebrow && <p class="eyebrow">{eyebrow}</p>}
           {heading && <h1>{heading}</h1>}
           {lede && <p class="lede">{lede}</p>}
           {actions && <div class="actions" set:html={actions} />}

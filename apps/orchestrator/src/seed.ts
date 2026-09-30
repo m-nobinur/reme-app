@@ -7,8 +7,8 @@ import { manifestDigest } from "./repo-map.ts"
  * The seed (ruling 4): `packages/starter-site`'s config and `src`, with the
  * sandbox image's `package.json` so the site names exactly the dependencies
  * `/opt/astro/node_modules` holds. The package's tests, scripts and size
- * budget stay out, and so do the quote and booking pages, which a first
- * build does not ship. Bundled into the Worker as text; the model never
+ * budget stay out, and so does the booking page, which a first build does
+ * not ship. The quote page ships: it is where every call to action points. Bundled into the Worker as text; the model never
  * sees these paths, only the files in the sandbox.
  */
 // The glob skips dotfiles unless named, and the starter has one.
@@ -18,7 +18,6 @@ const SEED = import.meta.glob(
     "../../../packages/starter-site/tsconfig.json",
     "../../../packages/starter-site/.gitignore",
     "../../../packages/starter-site/src/**/*",
-    "!../../../packages/starter-site/src/pages/quote.astro",
     "!../../../packages/starter-site/src/pages/booking.astro",
     "../../../infra/sandbox/astro/package.json",
   ],

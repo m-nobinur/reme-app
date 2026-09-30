@@ -12,8 +12,9 @@ import { HIDDEN_FACTS_KEY, runGates } from "@workspace/gates"
  * - an invented claim, the shape that must be refused. The claims gate has to
  *   fail it and name the node it sits in (ADR-033).
  * - a hide, with the owner's `site.hidden_facts` record in the same snapshot.
- *   Every gate has to pass a site with no price anywhere, structured data
+ *   Every gate has to pass a site with no hours anywhere, structured data
  *   included, because `required` is about asking and never about rendering.
+ *   A price is refused outright: no fact states one, so none can be traced.
  * - honest marketing copy written from the facts the owner stated. Every gate
  *   has to pass a page carrying the testimonial, the rating, the years, the
  *   client count, the credential and the guarantee.
@@ -47,7 +48,7 @@ const record = (row) => ({
 /** What a snapshot holds: the current version of each key, never a closed one. */
 const FACTS = brightclean.facts.filter((row) => !row.validTo).map(record)
 
-/** The same snapshot plus the record of the price the owner left off the site. */
+/** The same snapshot plus the record of the hours the owner left off the site. */
 const HIDDEN = [
   ...FACTS,
   record({
@@ -55,7 +56,7 @@ const HIDDEN = [
     orgId: ORG,
     key: HIDDEN_FACTS_KEY,
     factType: "site_display",
-    value: ["pricing.standard_clean_hourly"],
+    value: ["hours.weekday"],
     provenanceSource: "owner_stated",
     provenanceConfidence: 1,
     validFrom: new Date("2026-01-06T09:00:00.000Z"),
@@ -71,8 +72,10 @@ const business = {
   openingHours: "Mo-Fr 08:00-17:00",
   areaServed: "Fairhaven",
 }
-const WITH_PRICE = JSON.stringify({ ...business, priceRange: "$35.00 an hour" })
-const NO_PRICE = JSON.stringify(business)
+const LD = JSON.stringify(business)
+const { openingHours: _, ...unhoured } = business
+const NO_HOURS = JSON.stringify(unhoured)
+const HOURS_LINE = "<p>Weekdays 08:00 to 17:00, within 25 km of Fairhaven.</p>"
 
 const doc = (main, ld) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>BrightClean</title><script type="application/ld+json">${ld}</script></head><body><main>${main}</main><footer><p><a href="/">Home</a></p></footer></body></html>`
@@ -85,15 +88,15 @@ const MARKETING = [
   "<p>Fully insured and bonded.</p>",
   "<p>Our put-it-right guarantee: tell us within two working days and we clean it again at no charge.</p>",
   '<blockquote><p>"They worked around my hours and the kitchen has never looked so clean."</p><cite>Marta L.</cite></blockquote>',
-  "<p>Weekdays 08:00 to 17:00, within 25 km of Fairhaven.</p>",
+  HOURS_LINE,
 ].join("")
 
 /** The shape that has to be refused: a rank and a review count no fact carries. */
 const INVENTED =
   "<p>The #1 rated cleaner in Fairhaven, with over 500 five-star reviews.</p>"
 
-const PRICE_TEXT = /[$£€]\s?\d/
-const PRICE_PROPERTY = /"(priceRange|offers)"/
+/** A price, which no fact states, so the content gate cannot trace it. */
+const PRICED = "<p>Standard cleans from $35 an hour.</p>"
 
 async function gates(html, facts) {
   const body = new TextEncoder().encode(html)
@@ -124,29 +127,32 @@ const failures = (results) =>
     .join("; ")
 
 export default async function ownerRequestShapes() {
-  const priced = doc(MARKETING, WITH_PRICE)
-
   // Honest copy, every claim traced to a fact the owner stated.
-  const honest = await gates(priced, FACTS)
+  const honest = await gates(doc(MARKETING, LD), FACTS)
   if (failures(honest)) {
     throw new Error(`honest marketing copy was refused: ${failures(honest)}`)
   }
 
-  // The hide, with the owner's record in the snapshot. No price in the copy
+  // The hide, with the owner's record in the snapshot. No hours in the copy
   // and none in the structured data, and every gate still passes.
-  const hiddenHtml = doc(MARKETING, NO_PRICE)
-  if (PRICE_TEXT.test(hiddenHtml) || PRICE_PROPERTY.test(hiddenHtml)) {
-    throw new Error("the hidden-price page still carries a price")
+  const hiddenHtml = doc(MARKETING.replace(HOURS_LINE, ""), NO_HOURS)
+  if (hiddenHtml.includes("08:00")) {
+    throw new Error("the hidden-hours page still carries the hours")
   }
   const hidden = await gates(hiddenHtml, HIDDEN)
   if (failures(hidden)) {
     throw new Error(
-      `a site with the price left off was refused: ${failures(hidden)}`
+      `a site with the hours left off was refused: ${failures(hidden)}`
     )
   }
 
+  // A price, which the owner never states: some gate has to refuse it.
+  if (!failures(await gates(doc(MARKETING + PRICED, LD), FACTS))) {
+    throw new Error("a price no fact states passed every gate")
+  }
+
   // The invented claim, which must be refused with the node that carries it.
-  const invented = await gates(doc(MARKETING + INVENTED, WITH_PRICE), FACTS)
+  const invented = await gates(doc(MARKETING + INVENTED, LD), FACTS)
   const claims = invented.get("claims")
   if (claims?.passed !== false) {
     throw new Error("an invented rank and review count passed the claims gate")
@@ -166,6 +172,6 @@ export default async function ownerRequestShapes() {
 
   console.log(
     `      3 request shapes over ${FACTS.length} facts: honest copy passed 6 gates, ` +
-      `the hidden price passed 6, the invented claim failed at ${claims.offending_node}`
+      `the hidden hours passed 6, a price was refused, the invented claim failed at ${claims.offending_node}`
   )
 }

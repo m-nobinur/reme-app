@@ -12,7 +12,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
-import { fields } from "../src/site-config"
+import { fields, quoteForm } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
 /** Reserved by RFC 2606, so nothing built here can name a real site. */
@@ -42,7 +42,8 @@ export async function build(
     writeFileSync(
       join(dir, "src/site-config.ts"),
       `export const site = ${JSON.stringify(options.site, null, 2)}\n\n` +
-        `export const fields = ${JSON.stringify(fields, null, 2)}\n`
+        `export const fields = ${JSON.stringify(fields, null, 2)}\n\n` +
+        `export const quoteForm = ${JSON.stringify(quoteForm, null, 2)}\n`
     )
   }
   for (const [name, source] of Object.entries(options.pages ?? {})) {
