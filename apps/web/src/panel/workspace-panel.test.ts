@@ -101,6 +101,13 @@ it('sends "Continue getting started" to the onboarding conversation', async () =
   })
 })
 
+it("sends an account with no business to name one first", async () => {
+  loader.active = null
+  await render()
+  expect(link("Name your business")?.dataset.to).toBe("/name-your-business")
+  expect(link("Start your website")).toBeUndefined()
+})
+
 it('reads the workspace again on "Try again"', async () => {
   live.workspace = null
   live.failed = true

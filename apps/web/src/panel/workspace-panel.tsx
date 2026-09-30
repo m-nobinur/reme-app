@@ -389,13 +389,21 @@ const NEXT_STEP = cn(
 )
 
 /**
- * Where a new owner takes the first step: the getting-started conversation
- * while it is open, or a new chat, whose empty thread offers "Build my
- * website".
+ * Where a new owner takes the first step: naming the business when the
+ * account has none, the getting-started conversation while it is open, or a
+ * new chat, whose empty thread offers "Build my website".
  */
 function FirstStep({ workspace }: { workspace: Workspace }) {
-  const { conversations } = frame.useLoaderData()
+  const { conversations, active } = frame.useLoaderData()
   const onboarding = onboardingFor(workspace, conversations)
+  // No business yet, as after a first Google sign-in: that comes first.
+  if (!active) {
+    return (
+      <Link className={NEXT_STEP} to="/name-your-business">
+        Name your business
+      </Link>
+    )
+  }
   return onboarding ? (
     <Link className={NEXT_STEP} params={{ id: onboarding }} to="/app/c/$id">
       Continue getting started

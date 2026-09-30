@@ -17,6 +17,7 @@ import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as NameYourBusinessRouteImport } from './routes/name-your-business'
 import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
 import { Route as MfaRouteImport } from './routes/mfa'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
@@ -74,6 +75,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NameYourBusinessRoute = NameYourBusinessRouteImport.update({
+  id: '/name-your-business',
+  path: '/name-your-business',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MfaSetupRoute = MfaSetupRouteImport.update({
@@ -173,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/name-your-business': typeof NameYourBusinessRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/name-your-business': typeof NameYourBusinessRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/mfa': typeof MfaRoute
   '/mfa-setup': typeof MfaSetupRoute
+  '/name-your-business': typeof NameYourBusinessRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -257,6 +266,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/name-your-business'
     | '/privacy'
     | '/reset-password'
     | '/sign-in'
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/name-your-business'
     | '/privacy'
     | '/reset-password'
     | '/sign-in'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/mfa'
     | '/mfa-setup'
+    | '/name-your-business'
     | '/privacy'
     | '/reset-password'
     | '/sign-in'
@@ -339,6 +351,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MfaRoute: typeof MfaRoute
   MfaSetupRoute: typeof MfaSetupRoute
+  NameYourBusinessRoute: typeof NameYourBusinessRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignInRoute: typeof SignInRoute
@@ -408,6 +421,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/name-your-business': {
+      id: '/name-your-business'
+      path: '/name-your-business'
+      fullPath: '/name-your-business'
+      preLoaderRoute: typeof NameYourBusinessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mfa-setup': {
@@ -582,6 +602,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   MfaRoute: MfaRoute,
   MfaSetupRoute: MfaSetupRoute,
+  NameYourBusinessRoute: NameYourBusinessRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignInRoute: SignInRoute,

@@ -7,6 +7,7 @@ import { digits, record, secret, text } from "./input"
 import { createOrgForSession } from "./org"
 import { clearOrgIntent, readOrgIntent } from "./org-intent"
 import { clearPending, readPending, updatePending } from "./pending"
+import { safeReturnTo } from "./redirect-target"
 import { type AuthOutcome, authenticate, writeSession } from "./session"
 import { throttle } from "./throttle"
 import { sessionOptions, workos } from "./workos"
@@ -453,6 +454,77 @@ export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
     }
   }
 )
+
+// --- a business for an account that has none --------------------------------
+
+/**
+ * Creates the business for a signed-in account that has none, the way signup
+ * would have, and writes the session that carries it. A first Google sign-in
+ * lands here: WorkOS makes the account, and nothing asked for the business.
+ */
+export const nameBusiness = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    // A display name, as on /sign-up: the api makes the organization itself.
+    return {
+      businessName: text(data.businessName, 120),
+      returnTo: data.returnTo,
+    }
+  })
+  .handler(async ({ data }): Promise<AuthOutcome> => {
+    const returnTo = safeReturnTo(data.returnTo)
+    const auth = getAuthKitContextOrNull()?.auth()
+    if (!auth?.user) {
+      return {
+        status: "failed",
+        failure: {
+          code: "no_session",
+          message: "Your session has ended. Sign in again to carry on.",
+        },
+      }
+    }
+    // Already has one, from another tab or a retry: nothing to make.
+    if (auth.organizationId)
+      return { status: "signed-in", redirectTo: returnTo }
+    if (!data.businessName) {
+      return {
+        status: "failed",
+        failure: {
+          code: "business_name_missing",
+          message: "Enter your business name.",
+        },
+      }
+    }
+    const sealedSession = await forwardedSession()
+    const saved = sealedSession
+      ? await createOrgForSession({
+          sealedSession,
+          workosUserId: auth.user.id,
+          name: data.businessName,
+        }).catch((error: unknown) => {
+          // The message only, as at signup (R9).
+          console.error(
+            JSON.stringify({
+              at: "name-business",
+              message: error instanceof Error ? error.message : "unknown",
+            })
+          )
+          return sealedSession
+        })
+      : null
+    if (!saved || saved === sealedSession) {
+      return {
+        status: "failed",
+        failure: {
+          code: "business_not_saved",
+          message: "Your business did not save. Try again.",
+        },
+      }
+    }
+    await writeSession(saved)
+    await clearOrgIntent().catch(() => undefined)
+    return { status: "signed-in", redirectTo: returnTo }
+  })
 
 // --- leaving ----------------------------------------------------------------
 
