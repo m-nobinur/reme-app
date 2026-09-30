@@ -1,7 +1,6 @@
 import {
   AssistantRuntimeProvider,
   useRemoteThreadListRuntime,
-  WebSpeechDictationAdapter,
 } from "@assistant-ui/react"
 import { ChatsCircleIcon } from "@phosphor-icons/react"
 import {
@@ -17,19 +16,11 @@ import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
   Thread,
-  type ThreadMode,
 } from "@workspace/ui/components/assistant/thread"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { browserZone } from "@workspace/ui/lib/zone"
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react"
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import { briefingOf } from "@/lib/briefing"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
@@ -37,28 +28,6 @@ import { missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
 
 const frame = getRouteApi("/app")
-
-/**
- * The mode outlives a conversation: "New chat" and a move between chats keep
- * what the owner picked. Per tab, and a storage failure is only a default.
- */
-const MODE_KEY = "reme-mode"
-
-function storedMode(): ThreadMode {
-  try {
-    return sessionStorage.getItem(MODE_KEY) === "ask" ? "ask" : "act"
-  } catch {
-    return "act"
-  }
-}
-
-function storeMode(mode: ThreadMode) {
-  try {
-    sessionStorage.setItem(MODE_KEY, mode)
-  } catch {
-    // The choice still holds for this conversation.
-  }
-}
 
 /**
  * The conversation at `/app` (a new one) and `/app/c/$id` (a stored one).
@@ -78,24 +47,8 @@ export function ChatPage() {
     () => briefingOf(active, live.workspace),
     [active, live.workspace]
   )
-  // Client only (the route has `ssr: false`), so storage can be read here.
-  const [mode, setMode] = useState(storedMode)
-  const changeMode = useCallback((next: ThreadMode) => {
-    setMode(next)
-    storeMode(next)
-  }, [])
-  // Client only (the route has `ssr: false`), so the browser can be asked.
-  const [dictation] = useState(() =>
-    WebSpeechDictationAdapter.isSupported()
-      ? new WebSpeechDictationAdapter({ language: "en-GB" })
-      : undefined
-  )
-  // Read at send time, so a mode picked after the thread opened still goes.
-  const modeNow = useRef(mode)
-  modeNow.current = mode
   const useThreadRuntime = () =>
     useConversationRuntime({
-      mode: () => modeNow.current,
       // A turn can change what waits on the owner and the conversation's
       // title, so the frame reads both again: the panel adopts the new
       // workspace and the rail the new list.
@@ -108,7 +61,6 @@ export function ChatPage() {
       // A stored conversation never offers them: one pressed while its
       // history loaded started a second conversation.
       suggestions: id ? [] : briefing.suggestions,
-      dictation,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -181,9 +133,6 @@ export function ChatPage() {
             <Thread
               briefing={briefing.line}
               components={{ ToolFallback: Approval }}
-              context={briefing.context}
-              mode={mode}
-              onModeChange={changeMode}
               placeholder="Ask, or tell me what to change"
               quickActions={OWNER_QUICK_ACTIONS}
               stored={Boolean(id)}

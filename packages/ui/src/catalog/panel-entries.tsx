@@ -5,18 +5,23 @@ import {
 } from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
-  AddReminder,
   ApprovalItem,
   ComingUp,
+  LiveLine,
   PanelBlank,
   QuestionItem,
+  ReminderList,
   ReminderNote,
-  type ReminderRow,
-  Reminders,
   WaitingOnYou,
   WorkingOn,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@workspace/ui/components/tabs"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
 import type { ReactNode } from "react"
 
@@ -118,43 +123,26 @@ const working = (state: AssignmentState, extra = {}) => (
 )
 
 /**
- * One row per derived rule, in the words `apps/web/src/lib/reminders.ts`
- * writes. The first two point at items in the sample panel.
+ * Reminders written down, one of each kind: the owner's due within the hour,
+ * the Chief of Staff's, and one with no time. `due` is as `apps/web` formats
+ * it in the reader's zone.
  */
-const REMINDERS = {
-  review: {
-    id: "review",
-    text: "Review version 4 before it closes",
-    href: "#approval-sample",
-  },
-  question: {
-    id: "question",
-    text: "Answer the question about weekday hours",
-    detail: "Waiting on you since 1 Oct 2026, 09:00",
-    href: "#question-sample",
-  },
-  preview: { id: "preview", text: "Version 3 is ready but not published" },
-  facts: {
-    id: "facts",
-    text: "Tell Reme your phone number and weekday hours",
-  },
-} satisfies Record<string, ReminderRow>
-
-/**
- * Reminders written down, one of each kind: the owner's with a time, the
- * Chief of Staff's, and one with no time. `due` is as `apps/web` formats it
- * in the reader's zone.
- */
-type Note = { title: string; due: string | null; byAssistant: boolean }
+type Note = {
+  title: string
+  due: string | null
+  soon?: boolean
+  byAssistant: boolean
+}
 const NOTES: Record<"owner" | "assistant" | "undated", Note> = {
   owner: {
     title: "Call the supplier about eco sprays",
-    due: "2 Oct 2026, 14:00",
+    due: "Today, 2:00 pm",
+    soon: true,
     byAssistant: false,
   },
   assistant: {
     title: "Send the Hartley Road quote",
-    due: "3 Oct 2026, 09:30",
+    due: "Sat 3 Oct, 9:30 am",
     byAssistant: true,
   },
   undated: {
@@ -166,14 +154,6 @@ const NOTES: Record<"owner" | "assistant" | "undated", Note> = {
 
 const reminderNote = (props: Note, extra = {}) => (
   <ReminderNote onDone={noop} {...props} {...extra} />
-)
-
-/** The add form; a submit is added after a moment, and the form clears. */
-const addForm = (extra = {}) => (
-  <AddReminder
-    onAdd={() => new Promise((done) => setTimeout(() => done(true), 400))}
-    {...extra}
-  />
 )
 
 /** A panel item a reminder can point at, as `apps/web` wraps them. */
@@ -190,41 +170,63 @@ const target = (id: string, item: ReactNode) => (
 /** The panel as a workspace shows it mid-build, for the shell's own entry. */
 function SamplePanel() {
   return (
-    <>
-      {working("validating", {
-        build: {
-          goal: "Lead the hero with end of tenancy cleans",
-          state: "validating",
-          version: 4,
-          startedAt: STARTED,
-        },
-        queued: ["Add Saturday hours to the contact section"],
-      })}
-      <WaitingOnYou>
-        {target(
-          "question-sample",
-          question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
-        )}
-        {target("approval-sample", approval())}
-      </WaitingOnYou>
-      <ComingUp
-        items={[
-          { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
-        ]}
-      />
-      <Reminders
-        action={addForm()}
-        items={[REMINDERS.review, REMINDERS.question]}
-      >
-        <ReminderNote key="owner" onDone={noop} {...NOTES.owner} />
-        <ReminderNote key="assistant" onDone={noop} {...NOTES.assistant} />
-      </Reminders>
-      <YourWebsite
-        host="brightclean-demo.example.invalid"
-        live={3}
-        thumbnail={THUMBNAIL}
-      />
-    </>
+    <Tabs defaultValue="activity">
+      <TabsList>
+        <TabsTrigger value="activity">Activity</TabsTrigger>
+        <TabsTrigger value="reminders">
+          Reminders
+          <span className="text-muted-foreground tabular-nums">2</span>
+        </TabsTrigger>
+        <TabsTrigger value="website">Website</TabsTrigger>
+      </TabsList>
+      <TabsContent keepMounted value="activity">
+        {working("validating", {
+          build: {
+            goal: "Lead the hero with end of tenancy cleans",
+            state: "validating",
+            version: 4,
+            startedAt: STARTED,
+          },
+          queued: ["Add Saturday hours to the contact section"],
+        })}
+        <WaitingOnYou>
+          {target(
+            "question-sample",
+            question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
+          )}
+          {target("approval-sample", approval())}
+        </WaitingOnYou>
+        <ComingUp
+          items={[
+            { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+          ]}
+        />
+      </TabsContent>
+      <TabsContent value="reminders">
+        <ReminderList>
+          <ReminderNote key="owner" onDone={noop} {...NOTES.owner} />
+          <ReminderNote key="assistant" onDone={noop} {...NOTES.assistant} />
+        </ReminderList>
+      </TabsContent>
+      <TabsContent value="website">
+        <YourWebsite
+          host="brightclean-demo.example.invalid"
+          live={3}
+          thumbnail={THUMBNAIL}
+        />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+/** `SamplePanel` in one line, as `apps/web` words it for that state. */
+function SamplePanelLine() {
+  return (
+    <LiveLine
+      detail="checking the site"
+      lead="Building version 4,"
+      tone="working"
+    />
   )
 }
 
@@ -361,12 +363,7 @@ const panelCatalog: Entry[] = [
       </WaitingOnYou>
     ),
   },
-  {
-    name: "WaitingOnYou empty",
-    render: () => (
-      <WaitingOnYou action={nextStep("#notifications", "See notifications")} />
-    ),
-  },
+  { name: "WaitingOnYou empty", render: () => <WaitingOnYou /> },
   {
     name: "WaitingOnYou error",
     render: () => (
@@ -389,36 +386,22 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    name: "Reminders",
+    name: "ReminderList",
     render: () => (
-      <Reminders action={addForm()} items={Object.values(REMINDERS)}>
+      <ReminderList>
         {Object.entries(NOTES).map(([key, note]) => (
           <ReminderNote key={key} onDone={noop} {...note} />
         ))}
-      </Reminders>
+      </ReminderList>
     ),
   },
   {
-    name: "Reminders review",
-    render: () => <Reminders items={[REMINDERS.review]} />,
-  },
-  {
-    name: "Reminders question",
-    render: () => <Reminders items={[REMINDERS.question]} />,
-  },
-  {
-    name: "Reminders preview",
-    render: () => <Reminders items={[REMINDERS.preview]} />,
-  },
-  {
-    name: "Reminders facts",
-    render: () => <Reminders items={[REMINDERS.facts]} />,
-  },
-  {
-    // Nothing to remember: the section still shows, with the form as its
-    // next step.
-    name: "Reminders empty",
-    render: () => <Reminders action={addForm()} items={[]} />,
+    name: "ReminderList marked done",
+    render: () => (
+      <ReminderList status="Marked done.">
+        <ReminderNote key="assistant" onDone={noop} {...NOTES.assistant} />
+      </ReminderList>
+    ),
   },
   { name: "ReminderNote", render: () => reminderNote(NOTES.owner) },
   {
@@ -437,27 +420,41 @@ const panelCatalog: Entry[] = [
         error: "That did not go through. Try again.",
       }),
   },
-  { name: "AddReminder", render: () => addForm() },
+  { name: "LiveLine", render: () => <SamplePanelLine /> },
+  // The panel's own tabs are the tabs' sample: Activity, Reminders, Website.
+  { name: "Tabs", render: () => <SamplePanel /> },
+  { name: "TabsList", render: () => <SamplePanel /> },
+  { name: "TabsTrigger", render: () => <SamplePanel /> },
+  { name: "TabsContent", render: () => <SamplePanel /> },
   {
-    name: "AddReminder submitting",
-    render: () => addForm({ pending: true }),
-  },
-  {
-    name: "AddReminder refused",
-    render: () => addForm({ error: "That time has already passed." }),
-  },
-  {
-    // Added: the form is empty again, the reminder is in the list, and the
-    // section says so.
-    name: "AddReminder succeeded",
+    name: "LiveLine waiting",
     render: () => (
-      <Reminders
-        action={addForm()}
-        items={[]}
-        status="Added to your reminders."
-      >
-        <ReminderNote key="added" onDone={noop} {...NOTES.undated} />
-      </Reminders>
+      <LiveLine detail="waiting on you" lead="2 things" tone="live" />
+    ),
+  },
+  {
+    name: "LiveLine live",
+    render: () => (
+      <LiveLine detail="site live on v3" lead="Brightclean," tone="live" />
+    ),
+  },
+  {
+    name: "LiveLine idle",
+    render: () => (
+      <LiveLine detail="no site yet" lead="Brightclean," tone="idle" />
+    ),
+  },
+  {
+    // A long business name truncates; the line never wraps.
+    name: "LiveLine truncated",
+    render: () => (
+      <div className="w-64">
+        <LiveLine
+          detail="site live on v12"
+          lead="Brightclean End of Tenancy and Carpet Specialists,"
+          tone="live"
+        />
+      </div>
     ),
   },
   {
@@ -522,4 +519,4 @@ const panelCatalog: Entry[] = [
   },
 ]
 
-export { panelCatalog, SamplePanel }
+export { panelCatalog, SamplePanel, SamplePanelLine }

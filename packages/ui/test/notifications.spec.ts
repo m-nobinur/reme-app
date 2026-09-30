@@ -26,7 +26,6 @@ const ENTRIES = [
   "WaitingOnYou error",
   "PanelBlank",
   "PanelBlank ready to build",
-  "Reminders empty",
 ]
 
 for (const theme of ["light", "dark"] as const) {
@@ -108,17 +107,7 @@ test("the unread count reads as a number and caps at 99+", async ({ page }) => {
   await expect(page.getByRole("link")).toHaveAccessibleName(/120 unread/)
 })
 
-test("the phone's menu toggle carries the unread count", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 })
-  await page.goto("/?entry=WorkspaceShell")
-  await expect(
-    page.getByRole("button", { name: "Show menu, 3 unread notifications" })
-  ).toBeVisible()
-  await expect(page.locator('[data-slot="rail-count"]')).toHaveText("3")
-})
-
 for (const [entry, name, hash] of [
-  ["WaitingOnYou empty", "See notifications", "#notifications"],
   ["PanelBlank", "Continue getting started", "#getting-started"],
   ["PanelBlank ready to build", "Start your website", "#new-chat"],
 ] as const) {
@@ -128,17 +117,6 @@ for (const [entry, name, hash] of [
     expect(new URL(page.url()).hash).toBe(hash)
   })
 }
-
-test("Reminders empty offers the add form, and a reminder added clears it", async ({
-  page,
-}) => {
-  await open(page, "Reminders empty")
-  await expect(page.getByText("Nothing to remember yet.")).toBeVisible()
-  const title = page.getByLabel("Add a reminder")
-  await title.fill("Order more microfibre cloths")
-  await page.getByRole("button", { name: "Add reminder" }).click()
-  await expect(title).toHaveValue("")
-})
 
 test("a panel that did not load offers Try again, and it reads again", async ({
   page,

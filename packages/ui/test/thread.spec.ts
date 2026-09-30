@@ -82,7 +82,7 @@ test.describe("with reduced motion", () => {
   }
 })
 
-test("the empty state opens on the briefing, the business and what to ask", async ({
+test("the empty state opens on the briefing and what to ask", async ({
   page,
 }) => {
   await open(page, "ThreadEmpty")
@@ -91,9 +91,6 @@ test("the empty state opens on the briefing, the business and what to ask", asyn
   ).toBeVisible()
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveText(
     "v3 is live. Version 4 is ready for you to approve."
-  )
-  await expect(page.locator('[data-slot="aui_composer-context"]')).toHaveText(
-    "Brightclean, site live on v3"
   )
   await expect(input(page)).toHaveAttribute(
     "placeholder",
@@ -106,14 +103,9 @@ test("the empty state opens on the briefing, the business and what to ask", asyn
   ])
 })
 
-test("with nothing read, the empty state has no line and no chip", async ({
-  page,
-}) => {
+test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)
-  await expect(page.locator('[data-slot="aui_composer-context"]')).toHaveCount(
-    0
-  )
   await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveCount(0)
 })
 
@@ -154,21 +146,6 @@ test("Escape from quick actions hands focus back to the button", async ({
   await expect(input(page)).toHaveValue("")
 })
 
-test("the mode chip switches between Act and Ask", async ({ page }) => {
-  await open(page, "ThreadEmpty")
-  await openMenu(page, "Mode, Act")
-  await expect(
-    menu(page).getByRole("menuitemradio", { name: /^Act/ })
-  ).toHaveAttribute("aria-checked", "true")
-  // Nothing enforces the mode yet, so the copy states intent, not a guarantee.
-  await expect(
-    menu(page).getByRole("menuitemradio", { name: /^Ask/ })
-  ).toContainText("Questions only")
-  await menu(page).getByRole("menuitemradio", { name: /^Ask/ }).click()
-  await expect(menu(page)).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "Mode, Ask" })).toBeVisible()
-})
-
 test("the composer's focus ring is one pixel, not a halo", async ({ page }) => {
   await open(page, "ThreadEmpty")
   await input(page).focus()
@@ -192,9 +169,31 @@ test.describe("in London in summer time", () => {
       page.locator('[data-slot="aui_date-divider"] time')
     ).toHaveText([/^24 Sept? 2026$/, /^26 Sept? 2026$/])
   })
+
+  test("each message shows its local time, and the owner's a tick", async ({
+    page,
+  }) => {
+    await open(page, "Thread")
+    const meta = page.locator('[data-slot="aui_user-message-meta"]').first()
+    await expect(meta.locator("time")).toHaveText("10:30 am")
+    // Answered, so seen.
+    await expect(meta).toContainText("Seen")
+    await expect(
+      page.locator('[data-slot="aui_assistant-message-footer"] time').first()
+    ).toHaveText("10:31 am")
+  })
 })
 
-test("the owner's messages sit right and the replies left, with copy", async ({
+test("a message with an empty reply after it is delivered, not seen", async ({
+  page,
+}) => {
+  await open(page, "ThreadError")
+  await expect(
+    page.locator('[data-slot="aui_user-message-delivery"]')
+  ).toHaveAttribute("data-state", "delivered")
+})
+
+test("the owner's messages sit right and the replies left", async ({
   page,
 }) => {
   await open(page, "Thread")
@@ -208,12 +207,6 @@ test("the owner's messages sit right and the replies left, with copy", async ({
   if (userBox && replyBox) {
     expect(userBox.x).toBeGreaterThan(replyBox.x + 100)
   }
-  await expect(
-    page
-      .locator('[data-slot="aui_assistant-message-root"]')
-      .last()
-      .getByRole("button", { name: "Copy" })
-  ).toBeVisible()
 })
 
 test("a running reply offers Stop, and a failed one says why", async ({
@@ -250,10 +243,6 @@ for (const theme of ["light", "dark"] as const) {
 
       await openMenu(page, "Quick actions")
       await axe(page, `${name} ${theme} quick actions`)
-      await closeMenu(page)
-
-      await openMenu(page, /^Mode/)
-      await axe(page, `${name} ${theme} mode`)
       await closeMenu(page)
 
       await openMenu(page, "Conversation actions")

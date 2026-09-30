@@ -174,15 +174,13 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-/** The runtime the chat page builds per thread, in Act mode. */
+/** The runtime the chat page builds per thread. */
 const useThreadRuntime = () =>
   useConversationRuntime({
-    mode: () => "act",
     onFinish: () => undefined,
     // On offer, as the page offers them on a new chat; a stored
     // conversation must never show one.
     suggestions: [{ prompt: "Build my website" }],
-    dictation: undefined,
   })
 
 function Chat() {
@@ -244,11 +242,19 @@ const transcript = (container: HTMLElement) =>
     ...container.querySelectorAll(
       '[data-slot="aui_user-message-root"], [data-slot="ask-fact"], [data-slot="request-change"]'
     ),
-  ].map(
-    (node) =>
+  ].map((node) => {
+    // Without the time and tick: a message sent live shows the clock's time,
+    // and the fixture rows were stored on another day.
+    const copy = node.cloneNode(true) as Element
+    for (const meta of copy.querySelectorAll(
+      '[data-slot="aui_user-message-meta"]'
+    ))
+      meta.remove()
+    return (
       (node.closest('[data-slot="tool-group-root"]') ? "folded: " : "") +
-      node.textContent?.replace(/\s+/g, " ").trim()
-  )
+      copy.textContent?.replace(/\s+/g, " ").trim()
+    )
+  })
 
 /** The first button by that name the owner can still press. */
 const button = (container: HTMLElement, name: string) => {

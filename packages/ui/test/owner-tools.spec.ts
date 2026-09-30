@@ -166,9 +166,9 @@ for (const theme of ["light", "dark"] as const) {
   }
 }
 
-test("a message of cards alone has no copy row", async ({ page }) => {
+test("a message of cards alone has no action bar", async ({ page }) => {
   await open(page, "Onboarding")
-  await expect(page.getByRole("button", { name: "Copy" })).toHaveCount(0)
+  await expect(page.locator(".aui-assistant-action-bar-root")).toHaveCount(0)
 })
 
 for (const width of [390, 1440]) {

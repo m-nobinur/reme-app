@@ -158,6 +158,14 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } })
 
+  test("the working line's dot does not pulse", async ({ page }) => {
+    await open(page, "LiveLine", 400)
+    const dot = page.locator('[data-slot="live-line"] > span').first()
+    expect(
+      await dot.evaluate((node) => getComputedStyle(node).animationName)
+    ).toBe("none")
+  })
+
   test("the running step does not pulse", async ({ page }) => {
     await open(page, "WorkingOn", 400)
     const bar = page.locator('[aria-current="step"] [data-slot="step-bar"]')
@@ -216,22 +224,36 @@ test("the site thumbnail holds its space, and a broken one leaves the text", asy
   await open(page, "YourWebsite screenshot failed", 400)
   const failed = entry("YourWebsite screenshot failed")
   await expect(failed.getByRole("img")).toHaveCount(0)
-  await expect(failed.getByText("Version 3 is live.")).toBeVisible()
+  await expect(failed.getByText("Version 3 is live")).toBeVisible()
 })
 
-/** Every state of a written reminder and of the add form. */
+test("the site is a link by name, with the host as its title", async ({
+  page,
+}) => {
+  await open(page, "YourWebsite", 400)
+  const visit = page.getByRole("link", { name: /Visit your website/ })
+  await expect(visit).toHaveAttribute(
+    "title",
+    "brightclean-demo.example.invalid"
+  )
+  await expect(visit).toHaveAttribute("target", "_blank")
+  await expect(visit).toHaveAttribute("rel", "noreferrer")
+  await expect(page.getByText("brightclean-demo.example.invalid")).toHaveCount(
+    0
+  )
+})
+
+/** Every state of a written reminder, and the panel's one line. */
 const REMINDER_ENTRIES = [
-  "Reminders",
-  "Reminders empty",
+  "ReminderList",
+  "ReminderList marked done",
   "ReminderNote",
   "ReminderNote set by Reme",
   "ReminderNote undated",
   "ReminderNote pending",
   "ReminderNote failed",
-  "AddReminder",
-  "AddReminder submitting",
-  "AddReminder refused",
-  "AddReminder succeeded",
+  "LiveLine",
+  "LiveLine idle",
 ]
 
 for (const theme of ["light", "dark"] as const) {
@@ -262,14 +284,15 @@ for (const theme of ["light", "dark"] as const) {
 test("each written reminder has its own Done, named for it", async ({
   page,
 }) => {
-  await open(page, "Reminders", 400)
+  await open(page, "ReminderList", 400)
   await expect(
     page.getByRole("button", { name: "Done: Send the Hartley Road quote" })
   ).toBeVisible()
   await expect(page.getByText("Set by Reme")).toHaveCount(1)
-  await expect(page.getByText("Due 2 Oct 2026, 14:00")).toBeVisible()
-  // Written reminders come before the derived ones.
-  await expect(page.locator("li").first()).toContainText(
+  await expect(page.getByText("Due Sat 3 Oct, 9:30 am")).toBeVisible()
+  // One due within the hour is marked, and only that one.
+  await expect(page.locator('[data-soon="true"]')).toHaveCount(1)
+  await expect(page.locator('[data-soon="true"]')).toContainText(
     "Call the supplier about eco sprays"
   )
 })
@@ -288,28 +311,19 @@ test("a reminder being marked done shows done, and keeps its button", async ({
   await expect(done).toHaveAttribute("aria-disabled", "true")
 })
 
-test("a reminder is added in place, with a native date and time", async ({
+test("the panel's line stays on one line, however long the name", async ({
   page,
 }) => {
-  await open(page, "AddReminder", 400)
-  await expect(page.getByLabel("When (optional)")).toHaveAttribute(
-    "type",
-    "datetime-local"
-  )
-  await page.getByRole("button", { name: "Add reminder" }).click()
-  await expect(page.getByRole("alert")).toHaveText(
-    "Write what to remember first."
-  )
-  await expect(page.getByLabel("Add a reminder")).toHaveAttribute(
-    "aria-invalid",
-    "true"
-  )
-  await page.getByLabel("Add a reminder").fill("Book the van in")
-  await page.getByLabel("When (optional)").fill("2026-10-02T14:00")
-  await page.getByRole("button", { name: "Add reminder" }).click()
-  await expect(page.getByLabel("Add a reminder")).toHaveValue("")
-  await expect(page.getByLabel("When (optional)")).toHaveValue("")
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await open(page, "LiveLine truncated", 400)
+  const text = page.locator('[data-slot="live-line"] > span').last()
+  const { height, lineHeight } = await text.evaluate((node) => ({
+    height: node.getBoundingClientRect().height,
+    lineHeight: Number.parseFloat(getComputedStyle(node).lineHeight),
+  }))
+  expect(height).toBeLessThanOrEqual(lineHeight + 1)
+  expect(
+    await text.evaluate((node) => node.scrollWidth > node.clientWidth)
+  ).toBe(true)
 })
 
 test("a blank section's next step looks like a button, with a visible border", async ({

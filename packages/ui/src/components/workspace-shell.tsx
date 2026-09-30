@@ -1,5 +1,7 @@
 import {
   ArchiveIcon,
+  BellIcon,
+  CaretDownIcon,
   DotsThreeIcon,
   ListIcon,
   NotePencilIcon,
@@ -7,7 +9,7 @@ import {
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { countLabel } from "@workspace/ui/components/app-shell"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,11 +24,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
+import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
+  cloneElement,
   type FormEvent,
   type MouseEvent,
   type ReactElement,
@@ -36,14 +39,15 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react"
 
 /** A year: the choice is a preference, not a session. */
-const PANEL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
-function rememberPanel(open: boolean) {
+function remember(cookie: string, open: boolean) {
   // biome-ignore lint/suspicious/noDocumentCookie: one preference the server has to read on the next request, which the Cookie Store API cannot promise in every browser this app supports.
-  document.cookie = `${PANEL_COOKIE}=${open ? "open" : "closed"}; path=/; max-age=${PANEL_COOKIE_MAX_AGE}; samesite=lax`
+  document.cookie = `${cookie}=${open ? "open" : "closed"}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`
 }
 
 /**
@@ -66,7 +70,7 @@ function closeOnLink(close: () => void) {
 
 /**
  * Closes a sheet once the viewport reaches the width where its content is
- * inline again, so the rail or panel it holds is never missing from both.
+ * inline again, so the rail it holds is never missing from both.
  */
 function useCloseAt(query: string, close: () => void) {
   useEffect(() => {
@@ -81,25 +85,46 @@ function useCloseAt(query: string, close: () => void) {
   }, [query, close])
 }
 
+/** Tailwind's `lg`: from here the panel's open state is the remembered one. */
+const WIDE = "(min-width: 64rem)"
+const onWidth = (change: () => void) => {
+  const media = window.matchMedia(WIDE)
+  media.addEventListener("change", change)
+  return () => media.removeEventListener("change", change)
+}
+/** Wide on the server, so the first client render matches its HTML. */
+const useWide = () =>
+  useSyncExternalStore(
+    onWidth,
+    () => window.matchMedia(WIDE).matches,
+    () => true
+  )
+
 /** A count drawn on a toggle's corner. */
 const BADGE =
   "absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-medium text-[0.8125rem] text-primary-foreground tabular-nums leading-none"
 
 /**
- * The owner workspace: a 15rem rail, the conversation, and a 20rem panel.
+ * The owner workspace: a 15rem rail, the conversation, and the live panel
+ * floating over the conversation's top right corner.
  *
- * Below `md` the rail is a sheet from the left, and below `lg` the panel is a
- * sheet from the right. Both toggles sit top right. `panelCount` is what the
- * panel is waiting on the owner for; the phone toggle shows it, because there
- * the panel is out of sight. The rail and the panel are slots, so this package
- * still imports no router. `title` and `menu` name the page in the top bar,
- * which on a phone is the only place it is named above the fold.
+ * From `md` the rail collapses with the toggle at the top left, remembered in
+ * a cookie; below `md` it is a sheet from the left. The panel is a rounded
+ * card whose header is always one line of live activity (`panelLine`); open,
+ * it grows with its content to half the viewport's height and scrolls past
+ * that. From `lg` whether it is open is remembered; below `lg` it starts
+ * minimised, since there it covers the conversation. The rail and the panel
+ * are slots, so this package still imports no router. `title` and `menu`
+ * name the page in the top bar, and `notifications` is the link the bell at
+ * the top right renders as, with `unread` drawn on it.
  */
 function WorkspaceShell({
   rail,
   panel,
-  panelCount = 0,
-  railCount = 0,
+  panelLine,
+  unread = 0,
+  notifications,
+  defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel = false,
   title,
@@ -111,6 +136,8 @@ function WorkspaceShell({
 }: {
   rail: ReactNode
   panel: ReactNode
+  /** One line of live activity: the panel's header, and all of it minimised. */
+  panelLine: ReactNode
   /** Plain text, never markup: a title can be the owner's or the model's words. */
   title?: string | undefined
   /** The page's ··· menu, drawn beside the title. */
@@ -119,50 +146,52 @@ function WorkspaceShell({
   renaming?: Renaming | undefined
   /** Why the last action on the title failed, such as an archive. */
   titleError?: string | undefined
-  panelCount?: number
-  /** What the rail holds unread; the phone's menu toggle shows it. */
-  railCount?: number
+  /** How many notifications are unread; the bell shows it. */
+  unread?: number
+  /** The link element the bell renders as, from the app's router. */
+  notifications?: ReactElement<ComponentProps<"a">> | undefined
+  defaultRailOpen?: boolean
   defaultPanelOpen?: boolean
   /**
    * The owner followed a link to the panel: it opens when this turns true,
-   * even if they had closed it.
+   * even if they had minimised it.
    */
   openPanel?: boolean
   children: ReactNode
   className?: string
 }) {
-  const [panelOpen, setPanelOpen] = useState(defaultPanelOpen)
+  const [railOpen, setRailOpen] = useState(defaultRailOpen)
   const [railSheet, setRailSheet] = useState(false)
-  const [panelSheet, setPanelSheet] = useState(false)
-  // Tailwind's `md` and `lg`, the widths the sheets hand back to the layout.
+  const [panelOpen, setPanelOpen] = useState(defaultPanelOpen)
+  const [narrowOpen, setNarrowOpen] = useState(false)
+  const wide = useWide()
+  const expanded = wide ? panelOpen : narrowOpen
+  const panelId = useId()
+  // Tailwind's `md`, the width the sheet hands the rail back to the layout.
   useCloseAt(
     "(min-width: 48rem)",
     useCallback(() => setRailSheet(false), [])
   )
-  useCloseAt(
-    "(min-width: 64rem)",
-    useCallback(() => setPanelSheet(false), [])
-  )
 
-  const togglePanel = () => {
-    const next = !panelOpen
-    setPanelOpen(next)
-    rememberPanel(next)
+  const toggleRail = () => {
+    const next = !railOpen
+    setRailOpen(next)
+    remember(RAIL_COOKIE, next)
   }
 
-  // Sent here to the panel: open it inline from `lg`, as its sheet below.
-  useEffect(() => {
-    if (!openPanel) return
-    if (window.matchMedia("(min-width: 64rem)").matches) {
-      setPanelOpen(true)
-      rememberPanel(true)
+  const setPanel = useCallback((open: boolean) => {
+    if (window.matchMedia(WIDE).matches) {
+      setPanelOpen(open)
+      remember(PANEL_COOKIE, open)
     } else {
-      setPanelSheet(true)
+      setNarrowOpen(open)
     }
-  }, [openPanel])
+  }, [])
 
-  const waiting =
-    panelCount > 0 ? `Show panel, ${panelCount} waiting on you` : "Show panel"
+  // Sent here to the panel: open it, whatever the width.
+  useEffect(() => {
+    if (openPanel) setPanel(true)
+  }, [openPanel, setPanel])
 
   return (
     <div
@@ -180,41 +209,39 @@ function WorkspaceShell({
       </a>
 
       {/* One copy of the rail at a time: while the sheet holds it, the inline
-          one (hidden below md anyway) is not rendered, so no id repeats. */}
+          one (hidden below md anyway) is not rendered, so no id repeats.
+          Collapsed, it is inert, so nothing in it takes focus. */}
       {railSheet ? null : (
         <aside
           aria-label="Workspace"
-          className="hidden w-60 shrink-0 flex-col border-border border-r bg-rail text-rail-foreground md:flex"
+          className={cn(
+            "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
+            railOpen ? "w-60 border-r" : "w-0"
+          )}
+          data-state={railOpen ? "open" : "closed"}
+          id="workspace-rail"
+          inert={!railOpen}
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
+          <div className="flex min-h-0 w-60 flex-1 flex-col gap-4 overflow-y-auto p-3">
             {rail}
           </div>
         </aside>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-1 px-2">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
                 <Button
-                  aria-label={
-                    railCount > 0
-                      ? `Show menu, ${railCount} unread notifications`
-                      : "Show menu"
-                  }
-                  className="relative md:hidden"
+                  aria-label="Show menu"
+                  className="md:hidden"
                   size="icon"
                   variant="ghost"
                 />
               }
             >
               <ListIcon aria-hidden />
-              {railCount > 0 ? (
-                <span aria-hidden className={BADGE} data-slot="rail-count">
-                  {countLabel(railCount)}
-                </span>
-              ) : null}
             </SheetTrigger>
             <SheetContent
               onClick={closeOnLink(() => setRailSheet(false))}
@@ -227,7 +254,19 @@ function WorkspaceShell({
             </SheetContent>
           </Sheet>
 
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-2">
+          <Button
+            aria-controls="workspace-rail"
+            aria-expanded={railOpen}
+            aria-label={railOpen ? "Hide sidebar" : "Show sidebar"}
+            className="hidden md:inline-flex"
+            onClick={toggleRail}
+            size="icon"
+            variant="ghost"
+          >
+            <SidebarSimpleIcon aria-hidden />
+          </Button>
+
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1">
             {renaming ? (
               <TitleEditor {...renaming} />
             ) : (
@@ -253,43 +292,33 @@ function WorkspaceShell({
             )}
           </div>
 
-          <Button
-            aria-controls="workspace-panel"
-            aria-expanded={panelOpen}
-            aria-label={panelOpen ? "Hide panel" : "Show panel"}
-            className="hidden lg:inline-flex"
-            onClick={togglePanel}
-            size="icon"
-            variant="ghost"
-          >
-            <SidebarSimpleIcon aria-hidden className="-scale-x-100" />
-          </Button>
-
-          <Sheet onOpenChange={setPanelSheet} open={panelSheet}>
-            <SheetTrigger
-              render={
-                <Button
-                  aria-label={waiting}
-                  className="relative lg:hidden"
-                  size="icon"
-                  variant="ghost"
-                />
-              }
-            >
-              <SidebarSimpleIcon aria-hidden className="-scale-x-100" />
-              {panelCount > 0 ? (
-                <span aria-hidden className={BADGE} data-slot="panel-count">
-                  {panelCount}
-                </span>
-              ) : null}
-            </SheetTrigger>
-            <SheetContent onClick={closeOnLink(() => setPanelSheet(false))}>
-              <SheetTitle className="sr-only">Panel</SheetTitle>
-              <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 pt-12">
-                {panel}
-              </div>
-            </SheetContent>
-          </Sheet>
+          {notifications
+            ? cloneElement(notifications, {
+                "aria-label":
+                  unread > 0
+                    ? `Notifications, ${unread} unread`
+                    : "Notifications",
+                className: buttonVariants({
+                  variant: "ghost",
+                  size: "icon",
+                  className: "relative",
+                }),
+                children: (
+                  <>
+                    <BellIcon aria-hidden />
+                    {unread > 0 ? (
+                      <span
+                        aria-hidden
+                        className={BADGE}
+                        data-slot="unread-count"
+                      >
+                        {countLabel(unread)}
+                      </span>
+                    ) : null}
+                  </>
+                ),
+              })
+            : null}
         </header>
 
         <main
@@ -301,22 +330,55 @@ function WorkspaceShell({
         >
           {children}
         </main>
-      </div>
 
-      {panelSheet ? null : (
         <aside
           aria-label="Panel"
-          className={cn(
-            "hidden w-80 shrink-0 flex-col border-border border-l bg-rail text-rail-foreground",
-            panelOpen && "lg:flex"
-          )}
+          className="absolute top-13 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
+          data-state={expanded ? "open" : "closed"}
           id="workspace-panel"
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+          <button
+            aria-controls={panelId}
+            aria-expanded={expanded}
+            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+            onClick={() => setPanel(!expanded)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1">{panelLine}</span>
+            <span className="sr-only">
+              {expanded ? ", minimise the panel" : ", open the panel"}
+            </span>
+            <CaretDownIcon
+              aria-hidden
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                expanded && "rotate-180"
+              )}
+            />
+          </button>
+          {/* Kept mounted while minimised, so a half-written answer or a
+              chosen tab survives it. The server renders it open from lg,
+              where the cookie says so, and minimised below. */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: a listener for the links inside, which a keyboard activates with a click too. */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
+          <div
+            className={cn(
+              "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t p-4",
+              wide
+                ? panelOpen
+                  ? "hidden lg:flex"
+                  : "hidden"
+                : narrowOpen
+                  ? "flex"
+                  : "hidden"
+            )}
+            id={panelId}
+            onClick={wide ? undefined : closeOnLink(() => setNarrowOpen(false))}
+          >
             {panel}
           </div>
         </aside>
-      )}
+      </div>
     </div>
   )
 }

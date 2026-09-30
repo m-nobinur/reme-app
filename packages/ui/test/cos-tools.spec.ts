@@ -158,13 +158,17 @@ test("a reply with words takes a thumb, and says which one is pressed", async ({
 }) => {
   await open(page, "ReplyFeedback")
   const entry = page.locator('[data-entry="ReplyFeedback"]')
-  // The rated reply is not the last, so its bar shows on hover.
+  // A reply's thumbs show on hover, and are not there to see until then.
   const replies = entry.locator('[data-slot="aui_assistant-message-root"]')
+  const bar = replies.nth(0).locator(".aui-assistant-action-bar-root")
+  await expect(bar).toHaveCSS("opacity", "0")
   await replies.nth(0).hover()
+  await expect(bar).toHaveCSS("opacity", "1")
   await expect(
     replies.nth(0).getByRole("button", { name: "Helpful", exact: true })
   ).toHaveAttribute("aria-pressed", "true")
   const last = replies.nth(1)
+  await last.hover()
   await expect(
     last.getByRole("button", { name: "Helpful", exact: true })
   ).toHaveAttribute("aria-pressed", "false")
@@ -172,6 +176,22 @@ test("a reply with words takes a thumb, and says which one is pressed", async ({
   await expect(
     last.getByRole("button", { name: "Not helpful" })
   ).toHaveAttribute("aria-pressed", "true")
+})
+
+test("a reply's thumbs show to the keyboard as well as the pointer", async ({
+  page,
+}) => {
+  await open(page, "ReplyFeedback")
+  const reply = page
+    .locator(
+      '[data-entry="ReplyFeedback"] [data-slot="aui_assistant-message-root"]'
+    )
+    .first()
+  await reply.getByRole("button", { name: "Helpful", exact: true }).focus()
+  await expect(reply.locator(".aui-assistant-action-bar-root")).toHaveCSS(
+    "opacity",
+    "1"
+  )
 })
 
 for (const theme of ["light", "dark"] as const) {

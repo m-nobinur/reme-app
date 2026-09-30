@@ -80,8 +80,8 @@ test("the panel shows a new owner their first steps and nothing else", async ({
 test("the panel is where the owner left it on the first paint", async ({
   page,
 }) => {
-  // The server reads the cookie, so the HTML already carries the answer: an
-  // open panel is `lg:flex`, a closed one is not. Read from the response, not
+  // The server reads the cookie, so the HTML already carries the answer in
+  // the panel's `data-state`. Read from the response, not
   // the page, because after hydration the client could have fixed a wrong
   // first paint and this would pass on the shift it exists to prevent.
   //
@@ -109,8 +109,8 @@ test("the panel is where the owner left it on the first paint", async ({
     expect(closed, `no panel in the server HTML of ${path}`).toContain(
       "workspace-panel"
     )
-    expect(closed).not.toContain("lg:flex")
-    expect(await panelClass(path, "open"), path).toContain("lg:flex")
+    expect(closed).toContain('data-state="closed"')
+    expect(await panelClass(path, "open"), path).toContain('data-state="open"')
   }
 })
 
@@ -195,29 +195,17 @@ test("New chat starts an empty conversation", async ({ page }) => {
   await expect(page.getByText("How did this week go?")).toHaveCount(0)
 })
 
-test("every chat request carries the mode, and a new chat keeps it", async ({
+test("every chat request is sent to act, with no mode to pick", async ({
   page,
 }) => {
   await visit(page, "/app")
-  const sent = () =>
-    page
-      .waitForRequest((request) => request.url().endsWith("/api/chat"))
-      .then((request) => request.postDataJSON()?.mode)
-
-  let mode = sent()
+  const mode = page
+    .waitForRequest((request) => request.url().endsWith("/api/chat"))
+    .then((request) => request.postDataJSON()?.mode)
   await page.getByLabel("Message input").fill("How did this week go?")
   await page.getByLabel("Send message").click()
   expect(await mode).toBe("act")
-
-  await page.getByRole("button", { name: "Mode, Act" }).click()
-  await page.getByRole("menuitemradio", { name: /^Ask/ }).click()
-  await page.getByRole("link", { name: "New chat" }).click()
-  await expect(page.getByRole("button", { name: "Mode, Ask" })).toBeVisible()
-
-  mode = sent()
-  await page.getByLabel("Message input").fill("What is waiting on me?")
-  await page.getByLabel("Send message").click()
-  expect(await mode).toBe("ask")
+  await expect(page.getByRole("button", { name: /^Mode/ })).toHaveCount(0)
 })
 
 test("the top bar names a new chat and a stored one truthfully", async ({
@@ -258,7 +246,8 @@ test("each page opens at the top, and Back returns to where the owner was", asyn
       })
   )
 
-  await page.getByRole("link", { name: "Pipeline" }).click()
+  await page.locator('[data-slot="profile-menu"]').click()
+  await page.getByRole("menuitem", { name: "Pipeline" }).click()
   await expect(page).toHaveURL(/\/app\/pipeline/)
   await expect.poll(top).toBe(0)
 

@@ -2,13 +2,13 @@ import {
   ArrowSquareOutIcon,
   CheckCircleIcon,
   CircleIcon,
+  ClockIcon,
 } from "@phosphor-icons/react"
 import {
   type ApprovalTarget,
   type AssignmentState,
   type DecisionRequest,
   GOAL_MAX,
-  Reminder,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { Button } from "@workspace/ui/components/button"
@@ -27,9 +27,7 @@ import {
   Children,
   type FormEvent,
   isValidElement,
-  type MouseEvent,
   type ReactNode,
-  type Ref,
   useEffect,
   useId,
   useRef,
@@ -50,24 +48,16 @@ const LINK =
 function PanelSection({
   title,
   count,
-  headingRef,
   children,
 }: {
   title: string
   count?: number
-  /** Makes the heading focusable by script, for focus that loses its row. */
-  headingRef?: Ref<HTMLHeadingElement>
   children: ReactNode
 }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h2
-        className="flex items-baseline gap-2 rounded-sm font-semibold text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring"
-        id={id}
-        ref={headingRef}
-        tabIndex={headingRef ? -1 : undefined}
-      >
+      <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
         {title}
         {count ? (
           <span className="font-normal text-muted-foreground tabular-nums">
@@ -106,7 +96,7 @@ const STEPS = ["Queued", "Building", "Checking", "Ready"] as const
  * state has a row, so a state added to the contract fails the build until it
  * is placed.
  */
-const STAGE = {
+const BUILD_STAGES = {
   queued: { step: 0, note: "Waiting to start." },
   briefing: { step: 1, note: "Reading your brief." },
   planning: { step: 1, note: "Planning the changes." },
@@ -137,12 +127,12 @@ function stageWord(state: AssignmentState): string {
     return "Waiting on you"
   }
   if (state === "paused") return "Paused"
-  return STEPS[STAGE[state].step]
+  return STEPS[BUILD_STAGES[state].step]
 }
 
 /** The states a Stop still means something in. */
 const STOPPABLE = (state: AssignmentState) =>
-  STAGE[state].step < 3 && state !== "failed" && state !== "cancelled"
+  BUILD_STAGES[state].step < 3 && state !== "failed" && state !== "cancelled"
 
 function duration(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
@@ -199,7 +189,7 @@ function WorkingOn({
   /** Open on the Stop question, for the catalog. */
   defaultConfirming?: boolean
 }) {
-  const stage = STAGE[build.state]
+  const stage = BUILD_STAGES[build.state]
   const elapsed = useElapsed(build.startedAt, now)
   // "asking" once Stop is pressed, "kept" once the owner keeps building.
   // A Stop in flight keeps the question on screen, with its buttons
@@ -338,14 +328,11 @@ function WaitingOnYou({
   children,
   status = null,
   error = null,
-  action = null,
   onRetry,
 }: {
   children?: ReactNode
   status?: string | null
   error?: string | null
-  /** The owner's next step while nothing waits on them. */
-  action?: ReactNode
   /** Read the list again now, offered when it did not load. */
   onRetry?: () => Promise<void>
 }) {
@@ -368,13 +355,7 @@ function WaitingOnYou({
           land here.
         </p>
       )}
-      {items.length ? null : error ? (
-        onRetry ? (
-          <Retry onRetry={onRetry} />
-        ) : null
-      ) : (
-        action
-      )}
+      {!items.length && error && onRetry ? <Retry onRetry={onRetry} /> : null}
     </PanelSection>
   )
 }
@@ -845,37 +826,18 @@ function ComingUp({
   )
 }
 
-/** One reminder: what needs doing, and where in the panel it is. */
-type ReminderRow = {
-  id: string
-  text: string
-  detail?: string | null
-  /** `#` and the id of the panel element it points at. */
-  href?: string | null
-}
-
-/**
- * Focus the element a reminder points at, which scrolls it into view, and
- * leave the address alone. The target carries `tabIndex={-1}`. Without one
- * on the page, the link does what a link does.
- */
-function jump(event: MouseEvent<HTMLAnchorElement>) {
-  const target = document.getElementById(event.currentTarget.hash.slice(1))
-  if (!target) return
-  event.preventDefault()
-  target.focus()
-}
-
 /**
  * A reminder someone wrote down, completed in place. The title is the
  * owner's text, rendered as text. `due` is already in the reader's own zone,
  * or null while that zone is not known, so one time is never shown two ways.
- * Pending shows the reminder as done until the list is read again; a failure
- * puts it back, with the reason under it.
+ * `soon` marks one due within the hour. Pending shows the reminder as done
+ * until the list is read again; a failure puts it back, with the reason
+ * under it.
  */
 function ReminderNote({
   title,
   due,
+  soon = false,
   byAssistant,
   onDone,
   pending: busy = false,
@@ -883,6 +845,7 @@ function ReminderNote({
 }: {
   title: string
   due: string | null
+  soon?: boolean
   /** Set by the assistant (Reme to the owner) rather than by the owner. */
   byAssistant: boolean
   onDone: () => void
@@ -891,20 +854,37 @@ function ReminderNote({
 }) {
   return (
     <div
-      className="flex items-start gap-3 py-2"
+      className="flex items-start gap-3 py-2.5"
       data-slot="reminder-note"
+      data-soon={soon || undefined}
       data-state={busy ? "done" : "open"}
     >
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
           className={cn(
-            "wrap-break-word text-sm",
+            "wrap-break-word font-medium text-sm",
             busy && "text-muted-foreground line-through"
           )}
         >
           {title}
         </span>
-        {due ? <span className={META}>Due {due}</span> : null}
+        {due ? (
+          <span
+            className={cn(
+              META,
+              "flex items-center gap-1 tabular-nums",
+              soon && "font-medium text-primary"
+            )}
+          >
+            <ClockIcon
+              aria-hidden
+              className="size-3.5 shrink-0"
+              weight={soon ? "fill" : "regular"}
+            />
+            <span className="sr-only">Due </span>
+            {due}
+          </span>
+        ) : null}
         {byAssistant ? <span className={META}>Set by Reme</span> : null}
         {error ? (
           <p className="text-[0.8125rem] text-destructive" role="alert">
@@ -927,158 +907,30 @@ function ReminderNote({
   )
 }
 
-const TITLE_MAX = Reminder.shape.title.maxLength ?? 200
-
 /**
- * Write a reminder in place: what, and optionally when, as the owner's own
- * local time from the native picker. `onAdd` answers whether it was added;
- * the form clears only then, so a refusal keeps what was typed.
+ * The reminders still ahead (the children, `ReminderNote`s, soonest first),
+ * under a tab that names them, so there is no heading here. `status` is the
+ * last thing the owner did, announced politely.
  */
-function AddReminder({
-  onAdd,
-  pending: busy = false,
-  error = null,
-}: {
-  /** `due` is the picker's value as typed (`2026-10-03T14:00`), or empty. */
-  onAdd: (title: string, due: string) => Promise<boolean>
-  pending?: boolean
-  error?: string | null
-}) {
-  const id = useId()
-  const [invalid, setInvalid] = useState<string | null>(null)
-  const shown = invalid ?? error
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const title = String(data.get("title") ?? "").trim()
-    if (!title) {
-      setInvalid("Write what to remember first.")
-      return
-    }
-    setInvalid(null)
-    void onAdd(title, String(data.get("due") ?? "")).then((added) => {
-      if (added) form.reset()
-    })
-  }
-
-  return (
-    <form
-      className="flex flex-col gap-2"
-      data-slot="add-reminder"
-      noValidate
-      onSubmit={submit}
-    >
-      <Field
-        aria-invalid={invalid ? true : undefined}
-        autoComplete="off"
-        id={`${id}-title`}
-        label="Add a reminder"
-        maxLength={TITLE_MAX}
-        name="title"
-        readOnly={busy}
-      />
-      <Field
-        id={`${id}-due`}
-        label="When (optional)"
-        name="due"
-        readOnly={busy}
-        type="datetime-local"
-      />
-      {shown ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
-          {shown}
-        </p>
-      ) : null}
-      <Button
-        className="self-start"
-        disabled={busy}
-        focusableWhenDisabled
-        size="sm"
-        type="submit"
-        variant="outline"
-      >
-        {pending(busy, "Add reminder", "Adding")}
-      </Button>
-    </form>
-  )
-}
-
-/**
- * What the owner has to remember: the reminders written down (the children,
- * `ReminderNote`s, soonest due first as the api lists them), then what the
- * api derived, each linked to the item it is about when the panel shows it.
- * `action` is the form that adds one, and the section's blank-state action.
- */
-function Reminders({
-  items,
+function ReminderList({
   children,
-  action = null,
   status = null,
 }: {
-  items: ReminderRow[]
-  children?: ReactNode
-  action?: ReactNode
+  children: ReactNode
   status?: string | null
 }) {
   const notes = Children.toArray(children).filter(isValidElement)
-  const heading = useRef<HTMLHeadingElement>(null)
-  // The note that last held focus. When it leaves the list (marked done)
-  // and focus went with it, focus moves to the heading, not the page.
-  const focused = useRef<string | null>(null)
-  useEffect(() => {
-    const key = focused.current
-    if (key === null || notes.some((note) => note.key === key)) return
-    focused.current = null
-    if (document.activeElement === document.body) heading.current?.focus()
-  })
-
   return (
-    <PanelSection headingRef={heading} title="Reminders">
+    <div className="flex flex-col gap-2" data-slot="reminder-list">
       <p className="text-sm empty:hidden" role="status">
         {status}
       </p>
-      {notes.length || items.length ? (
-        <ul className="flex flex-col divide-y divide-border">
-          {notes.map((note) => (
-            <li
-              key={note.key}
-              onBlur={(event) => {
-                if (event.relatedTarget) focused.current = null
-              }}
-              onFocus={() => {
-                focused.current = note.key
-              }}
-            >
-              {note}
-            </li>
-          ))}
-          {items.map((item) => (
-            <li className="flex flex-col py-2" key={item.id}>
-              {item.href ? (
-                <a
-                  className="self-start rounded-sm py-0.5 text-sm underline decoration-muted-foreground underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring"
-                  href={item.href}
-                  onClick={jump}
-                >
-                  {item.text}
-                </a>
-              ) : (
-                <span className="text-sm">{item.text}</span>
-              )}
-              {item.detail ? <span className={META}>{item.detail}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className={META}>
-          Nothing to remember yet. Add one here, or ask Reme in the chat to
-          remind you.
-        </p>
-      )}
-      {action}
-    </PanelSection>
+      <ul className="flex flex-col divide-y divide-border">
+        {notes.map((note) => (
+          <li key={note.key}>{note}</li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -1086,9 +938,10 @@ function Reminders({
 type Thumbnail = { src: string } | "loading" | null
 
 /**
- * The site as it stands: the version that is live, and where. The
- * thumbnail is the panel's only image, at a fixed ratio so nothing moves
- * when it arrives; one that fails to load leaves the text alone.
+ * The site as it stands: the version that is live, and a link to it. The
+ * host is the link's title rather than its text, since a long one would not
+ * fit. The thumbnail is the panel's only image, at a fixed ratio so nothing
+ * moves when it arrives; one that fails to load leaves the text alone.
  */
 function YourWebsite({
   host,
@@ -1102,7 +955,7 @@ function YourWebsite({
   const [broken, setBroken] = useState<string | null>(null)
   const shot = live ? thumbnail : null
   return (
-    <PanelSection title="Your website">
+    <div className="flex flex-col gap-3" data-slot="your-website">
       {shot === "loading" ? (
         <Skeleton className="aspect-[16/10] w-full rounded-md" />
       ) : shot && shot.src !== broken ? (
@@ -1116,11 +969,75 @@ function YourWebsite({
           width={320}
         />
       ) : null}
-      <p className="text-sm">
-        {live ? `Version ${live} is live.` : "Nothing is published yet."}
+      <p className="flex items-center gap-2 text-sm">
+        <span
+          aria-hidden
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            live ? "bg-primary" : "bg-muted-foreground/40"
+          )}
+        />
+        {live ? `Version ${live} is live` : "Nothing is published yet"}
       </p>
-      {host && live ? <OutLink href={`https://${host}`}>{host}</OutLink> : null}
-    </PanelSection>
+      {host && live ? (
+        <a
+          className="flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 font-medium text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+          href={`https://${host}`}
+          rel="noreferrer"
+          target="_blank"
+          title={host}
+        >
+          <span className="flex-1">Visit your website</span>
+          <span className="sr-only"> (opens in a new tab)</span>
+          <ArrowSquareOutIcon
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+        </a>
+      ) : null}
+    </div>
+  )
+}
+
+/* The minimised panel ---------------------------------------------------- */
+
+/**
+ * The panel in one line, for its header and for all of it when minimised:
+ * a dot for the site (pulsing while a build works, the accent while a
+ * version is live), the lead words, and the rest quieter. It never wraps;
+ * the app picks what the line says. Spans only, and no live region: the
+ * shell puts it inside the button that opens the panel.
+ */
+function LiveLine({
+  tone,
+  lead,
+  detail = null,
+}: {
+  tone: "working" | "live" | "idle"
+  lead: string
+  detail?: string | null
+}) {
+  return (
+    <span
+      className="flex min-w-0 items-center gap-2 text-sm"
+      data-slot="live-line"
+      data-tone={tone}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          tone === "idle" ? "bg-muted-foreground/40" : "bg-primary",
+          tone === "working" && "animate-pulse motion-reduce:animate-none"
+        )}
+      />
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{lead}</span>
+        {detail ? (
+          <span className="text-muted-foreground"> {detail}</span>
+        ) : null}
+      </span>
+    </span>
   )
 }
 
@@ -1168,17 +1085,18 @@ function PanelBlank({
   )
 }
 
-export type { Preview, ReminderRow, Thumbnail }
+export type { Preview, Thumbnail }
 export {
-  AddReminder,
   AnswerInputs,
   ApprovalItem,
   approvalDecision,
+  BUILD_STAGES,
   ComingUp,
+  LiveLine,
   PanelBlank,
   QuestionItem,
+  ReminderList,
   ReminderNote,
-  Reminders,
   stageWord,
   WaitingOnYou,
   WorkingOn,

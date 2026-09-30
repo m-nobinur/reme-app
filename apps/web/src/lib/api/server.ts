@@ -8,7 +8,7 @@ import {
   Timestamp,
   Uuid,
 } from "@workspace/contracts"
-import { PANEL_COOKIE } from "@workspace/ui/lib/panel"
+import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
@@ -92,6 +92,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     /** No organisation yet, and a business name signup could not write. */
     orgPending: boolean
     panelOpen: boolean
+    railOpen: boolean
     /**
      * What waits on the owner, and where the site is. Null when the read
      * failed: the frame still renders, and says so.
@@ -115,6 +116,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
         active,
         orgPending: getCookie(ORG_INTENT) !== undefined,
         panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+        railOpen: getCookie(RAIL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
         conversations: [],
         names: {},
@@ -134,6 +136,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       active,
       orgPending: false,
       panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+      railOpen: getCookie(RAIL_COOKIE) !== "closed",
       workspace,
       conversations,
       activity,

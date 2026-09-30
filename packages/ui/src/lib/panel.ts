@@ -4,3 +4,6 @@
  * dialog code under it.
  */
 export const PANEL_COOKIE = "reme-panel"
+
+/** The cookie that remembers whether the rail is open, from `md`. */
+export const RAIL_COOKIE = "reme-rail"
