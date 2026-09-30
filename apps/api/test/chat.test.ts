@@ -9,9 +9,14 @@ import {
   StaffDirectory,
 } from "@workspace/contracts"
 import {
+  appendSessionEvent,
+  chiefStaffId,
   conversationMessages,
   conversations,
   eq,
+  events,
+  facts,
+  newUlid,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -23,10 +28,12 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   ASK_REPLY,
   CANCELLED,
+  type ChatDeps,
   chat,
   firstMessage,
   nextStep,
@@ -316,7 +323,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
   /** The owner's side of a chat: turns sent with this id source. */
   const talker = (
     who: Owner,
-    newId: () => string = () => crypto.randomUUID()
+    newId: () => string = () => crypto.randomUUID(),
+    deps: Omit<ChatDeps, "newId"> = {}
   ) => {
     const session = {
       workosUserId: who.workosUserId,
@@ -342,7 +350,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         } as unknown as Env,
         using,
         { orgId: who.orgId, session },
-        { newId }
+        { newId, ...deps }
       )
       return { response, text: await response.text() }
     }
@@ -1407,6 +1415,452 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(ErrorEnvelope.parse(JSON.parse(text)).code).toBe("chat.stale")
       expect((await me.rows(id)).at(-1)?.content).toEqual(moved)
     })
+  })
+
+  describe("the onboarding planner", () => {
+    /** A planner model that answers each call with the next plan, or throws. */
+    const planner = (answers: (object | Error)[]) => {
+      const calls: string[] = []
+      const model = new MockLanguageModelV4({
+        doGenerate: async (options) => {
+          const answer = answers[calls.length] ?? answers.at(-1)
+          calls.push(JSON.stringify(options.prompt))
+          if (answer instanceof Error) throw answer
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(answer) }],
+            finishReason: { unified: "stop" as const, raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 5000,
+                noCache: 5000,
+                cacheRead: undefined,
+                cacheWrite: undefined,
+              },
+              outputTokens: { total: 400, text: 400, reasoning: undefined },
+            },
+            warnings: [],
+          }
+        },
+      })
+      return { model, calls }
+    }
+    const plan = (over: object) => ({
+      facts: {},
+      chosen_for_owner: [],
+      pending_card: null,
+      say: "Thank you.",
+      next: { kind: "answer_only" },
+      ...over,
+    })
+    const logged = (who: Owner, id: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({
+            type: events.type,
+            payload: events.payload,
+            taint: events.taint,
+          })
+          .from(events)
+          .where(eq(events.sessionId, id))
+          .orderBy(events.seq)
+      )
+    const factsOf = async (who: Owner) =>
+      FactList.parse(
+        await (await who.call(stubOrchestrator(), "/facts")).json()
+      ).facts
+    const answer = (at: UIMessage, output: unknown) => ({
+      turn: {
+        kind: "results",
+        message_id: at.id,
+        results: [
+          {
+            kind: "answer",
+            tool_call_id: pendingCall(at).toolCallId,
+            output,
+          },
+        ],
+      },
+    })
+
+    it("reads a long first reply over the industry card, states its facts and logs the call as a turn", async () => {
+      const who = await owner(kit, url as string, "chat-planner")
+      const { model, calls } = planner([
+        plan({
+          facts: {
+            "business.industry": {
+              name: "Limousine hire",
+              category: "chauffeur",
+            },
+            "business.offerings": { items: ["Weddings", "Proms"] },
+            "business.phone": { e164: "+447700900412" },
+          },
+          pending_card: "answered",
+          say: "Weddings and proms, lovely. Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ])
+      const me = talker(who, undefined, { planner: model })
+      const id = await me.onboarding()
+      const [first] = await me.rows(id)
+      const text =
+        "We're a limo firm in Manchester, weddings and proms. Call 07700 900 412."
+      const done = await me.turn(id, {
+        turn: { kind: "message", message_id: "u_plan_1", text },
+      })
+      expect(calls).toHaveLength(1)
+      // The owner's words reach the model only inside the data block.
+      expect(calls[0]).toContain('data source=\\"onboarding\\"')
+      expect(calls[0]).not.toContain(who.orgId)
+      // The card is cancelled as assistant-ui cancels it; ask_open is text only.
+      const rows = await me.rows(id)
+      expect(rows.map((r) => r.id)).toEqual([
+        first?.id,
+        "u_plan_1",
+        done.after.id,
+      ])
+      const cancelled = rows[0]?.content as { parts: ToolPart[] } | undefined
+      expect(cancelled?.parts[2]?.state).toBe("output-error")
+      expect(done.after.parts).toEqual([
+        { type: "step-start" },
+        {
+          type: "text",
+          text: "Weddings and proms, lovely. Who books you most?",
+          state: "done",
+        },
+      ])
+      const stated = await factsOf(who)
+      expect(
+        stated
+          .filter((f) => f.key !== "business.name")
+          .map((f) => [f.key, f.provenance.source])
+          .sort()
+      ).toEqual([
+        ["business.industry", "owner_stated"],
+        ["business.offerings", "owner_stated"],
+        ["business.phone", "owner_stated"],
+      ])
+      // Logged as a CoS turn: its instructions, its data, the call, the answer, the close.
+      const log = await logged(who, id)
+      expect(log.map((e) => e.type)).toEqual([
+        "cos.prefix",
+        "cos.context",
+        "cos.call",
+        "cos.step",
+        "cos.turn",
+      ])
+      expect(log[1]?.payload).toMatchObject({
+        context_policy_version: "onboarding-1",
+        active_tools: [],
+        text: expect.stringContaining("limo firm"),
+      })
+      expect(log[1]?.taint).toEqual(["untrusted_input"])
+      expect(log[4]?.payload).toMatchObject({
+        outcome: "answered",
+        steps: 1,
+        cost_usd: expect.any(Number),
+      })
+      expect(
+        (log[4]?.payload as { cost_usd: number } | undefined)?.cost_usd
+      ).toBeGreaterThan(0)
+      // A text-only question is answered in words; nothing waits.
+      const next = planner([
+        plan({
+          facts: { "business.audience": { text: "Couples" } },
+          say: "Couples, got it.",
+          next: { kind: "ask_open", about: "business.overview" },
+        }),
+      ])
+      await talker(who, undefined, { planner: next.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_plan_2", text: "Couples" },
+      })
+      expect(next.calls[0]).toContain('\\"waiting_card\\":null')
+    }, 60_000)
+
+    it("shows the waiting card again after a side question, and answers a card by planning what follows", async () => {
+      const who = await owner(kit, url as string, "chat-side")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+      })
+      const opened = talker(who)
+      const id = await opened.onboarding()
+      // The script's card for the layout, from a typed industry.
+      const asked = await opened.turn(id, {
+        turn: { kind: "message", message_id: "u_side_0", text: "cleaning" },
+      })
+      const card = pendingCall(asked.after)
+      expect(card.input).toMatchObject({ step: "template" })
+      const side = planner([
+        plan({
+          pending_card: "unanswered",
+          say: "Yes, you can change it later. Which layout suits you?",
+        }),
+      ])
+      const aside = await talker(who, undefined, { planner: side.model }).turn(
+        id,
+        {
+          turn: {
+            kind: "message",
+            message_id: "u_side_1",
+            text: "can I change this later?",
+          },
+        }
+      )
+      const again = pendingCall(aside.after)
+      expect(again.toolCallId).not.toBe(card.toolCallId)
+      expect(again.input).toEqual(card.input)
+      // The card's answer is the script's; the planner says what comes next.
+      const next = planner([
+        plan({
+          say: "Bold it is. Now the colours.",
+          next: { kind: "ask_choice", step: "palette", preselected: [] },
+        }),
+      ])
+      const picked = await talker(who, undefined, { planner: next.model }).turn(
+        id,
+        answer(aside.after, { answer: "chosen", ids: ["bold"], other: null })
+      )
+      expect(next.calls[0]).toContain("picked Bold")
+      expect(picked.after.parts.slice(-4)).toMatchObject([
+        { type: "tool-ask_choice", state: "output-available" },
+        { type: "step-start" },
+        { type: "text", text: "Bold it is. Now the colours." },
+        {
+          type: "tool-ask_choice",
+          state: "input-available",
+          input: { step: "palette" },
+        },
+      ])
+      expect(
+        (await factsOf(who)).find((f) => f.key === "site.template")?.value
+      ).toEqual({ id: "bold" })
+    }, 60_000)
+
+    it("proposes the quote form, takes changes as words, states the confirmed form and starts the build after it commits", async () => {
+      const who = await owner(kit, url as string, "chat-quote")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ facts: UP_TO_PHOTOS }),
+      })
+      const id = await talker(who).onboarding()
+      const fields = [
+        {
+          key: "rooms",
+          label: "Bedrooms",
+          type: "number",
+          required: true,
+          hint: null,
+          options: null,
+        },
+        {
+          key: "often",
+          label: "How often",
+          type: "select",
+          required: true,
+          hint: null,
+          options: ["Weekly", "Fortnightly"],
+        },
+      ]
+      const dated = [
+        ...fields,
+        {
+          key: "pets",
+          label: "Any pets?",
+          type: "text",
+          required: false,
+          hint: null,
+          options: null,
+        },
+      ]
+      const photos = planner([
+        plan({
+          pending_card: "answered",
+          say: "Do you have photos of your cleans, or a logo?",
+          next: { kind: "ask_upload" },
+        }),
+      ])
+      const t = (model: ReturnType<typeof planner>["model"]) =>
+        talker(who, undefined, { planner: model })
+      const asked = await t(photos.model).turn(id, {
+        turn: { kind: "message", message_id: "u_q_1", text: "Cleaning" },
+      })
+      expect(pendingCall(asked.after).type).toBe("tool-ask_upload")
+      const quote = planner([
+        plan({
+          say: "No photos, fine. What do you need to know to quote?",
+          next: { kind: "ask_open", about: "quote.form" },
+        }),
+      ])
+      await t(quote.model).turn(id, answer(asked.after, { answer: "skipped" }))
+      const proposal = planner([
+        plan({
+          say: "Here is the form.",
+          next: { kind: "review_quote_form", fields, note: null },
+        }),
+      ])
+      const proposed = await t(proposal.model).turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_q_2",
+          text: "rooms and how often",
+        },
+      })
+      expect(pendingCall(proposed.after)).toMatchObject({
+        type: "tool-review_quote_form",
+        input: { fields, note: null },
+      })
+      const changes = planner([
+        plan({
+          say: "Added pets.",
+          next: { kind: "review_quote_form", fields: dated, note: null },
+        }),
+      ])
+      const changed = await t(changes.model).turn(
+        id,
+        answer(proposed.after, {
+          answer: "changes",
+          text: "Ask about pets too",
+        })
+      )
+      expect(changes.calls[0]).toContain(
+        "asked for changes: Ask about pets too"
+      )
+      expect((await factsOf(who)).some((f) => f.key === "quote.form")).toBe(
+        false
+      )
+      // Confirmed: the form is stated, committed, and only then the build starts.
+      let seen: unknown[] = []
+      const stub = stubOrchestrator(async (request) => {
+        seen = await kit.withOrg({ orgId: who.orgId }, async (db) =>
+          (
+            await db.select().from(facts).where(eq(facts.key, "quote.form"))
+          ).map((f) => f.value)
+        )
+        return building().fetch(request)
+      })
+      const start = planner([
+        plan({
+          say: "That's everything. The build is under way.",
+          next: { kind: "start_build" },
+        }),
+      ])
+      const started = await talker(who, undefined, {
+        planner: start.model,
+      }).turn(
+        id,
+        answer(changed.after, { answer: "confirmed", fields: dated }),
+        stub
+      )
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `onboarding:${id}`
+      )
+      expect(seen).toEqual([{ fields: dated }])
+      expect(started.after.parts.slice(-5)).toMatchObject([
+        { type: "tool-review_quote_form", state: "output-available" },
+        { type: "step-start" },
+        {
+          type: "tool-request_change",
+          state: "output-available",
+          output: { outcome: "started" },
+        },
+        { type: "step-start" },
+        { type: "text", text: "That's everything. The build is under way." },
+      ])
+      expect(
+        await kit.withOrg({ orgId: who.orgId }, (db) => readScript(db, id))
+      ).toMatchObject({ offered: true })
+      const closes = (await logged(who, id)).filter(
+        (e) => e.type === "cos.turn"
+      )
+      expect(
+        closes.map((e) => (e.payload as { outcome: string }).outcome)
+      ).toEqual(Array(5).fill("answered"))
+    }, 90_000)
+
+    it("lets the script answer a turn the planner cannot: a failing model, and a spent budget", async () => {
+      const who = await owner(kit, url as string, "chat-fallback")
+      const broken = planner([new Error("provider down")])
+      const me = talker(who, undefined, { planner: broken.model })
+      const id = await me.onboarding()
+      const done = await me.turn(id, {
+        turn: { kind: "message", message_id: "u_fb_1", text: "Dog grooming" },
+      })
+      expect(broken.calls).toHaveLength(1)
+      // The script's own answer: the industry stated, then its next card.
+      expect(done.after.parts.slice(1)).toMatchObject([
+        { type: "text", state: "done" },
+        { type: "tool-ask_fact", input: { key: "business.offerings" } },
+      ])
+      const log = await logged(who, id)
+      expect(log.at(-1)?.payload).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+
+      // Over the day's cap: no model call at all.
+      await kit.withOrg({ orgId: who.orgId }, async (db) => {
+        const chief = await chiefStaffId(db)
+        const turnId = newUlid()
+        for (const [type, payload] of [
+          [
+            "cos.context",
+            {
+              turn_id: turnId,
+              prefix_sha256: "a".repeat(64),
+              context_policy_version: "4",
+              mode: "ask",
+              active_tools: [],
+              text: "x",
+              reserved_usd: 0,
+            },
+          ],
+          [
+            "cos.turn",
+            {
+              outcome: "answered",
+              turn_id: turnId,
+              model: "m",
+              usage: {
+                input_tokens: 0,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+              },
+              cost_usd: 1,
+              tools: [],
+              steps: 1,
+              first_chunk_ms: 1,
+            },
+          ],
+        ] as const) {
+          await appendSessionEvent(db, {
+            orgId: who.orgId,
+            staffId: chief as string,
+            assignmentId: null,
+            sessionId: id,
+            type,
+            payload,
+            taint: [],
+          })
+        }
+      })
+      const spent = planner([plan({ say: "never sent" })])
+      const capped = await talker(who, undefined, {
+        planner: spent.model,
+      }).turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_fb_2",
+          text: "Full grooms and nail clips",
+        },
+      })
+      expect(spent.calls).toHaveLength(0)
+      expect(pendingCall(capped.after).input).toMatchObject({
+        key: "business.audience",
+      })
+    }, 60_000)
   })
 
   it("answers through the worker, as the web calls it", async () => {
