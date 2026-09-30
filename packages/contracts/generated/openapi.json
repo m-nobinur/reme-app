@@ -273,33 +273,6 @@
                     "properties": {
                       "key": {
                         "type": "string",
-                        "const": "pricing.standard_clean_hourly"
-                      },
-                      "value": {
-                        "type": "object",
-                        "properties": {
-                          "amount_minor": {
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "currency": {
-                            "type": "string",
-                            "enum": ["GBP", "USD", "EUR"]
-                          }
-                        },
-                        "required": ["amount_minor", "currency"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["key", "value"],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "key": {
-                        "type": "string",
                         "const": "business.tagline"
                       },
                       "value": {
@@ -1580,43 +1553,6 @@
             "properties": {
               "key": {
                 "type": "string",
-                "const": "pricing.standard_clean_hourly"
-              },
-              "skippable": {
-                "type": "boolean"
-              },
-              "prefill": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "amount_minor": {
-                        "type": "integer",
-                        "exclusiveMinimum": 0,
-                        "maximum": 9007199254740991
-                      },
-                      "currency": {
-                        "type": "string",
-                        "enum": ["GBP", "USD", "EUR"]
-                      }
-                    },
-                    "required": ["amount_minor", "currency"],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["key", "skippable", "prefill"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string",
                 "const": "business.tagline"
               },
               "skippable": {
@@ -2401,33 +2337,6 @@
                           }
                         },
                         "required": ["centre", "radius_km"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["key", "value"],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "key": {
-                        "type": "string",
-                        "const": "pricing.standard_clean_hourly"
-                      },
-                      "value": {
-                        "type": "object",
-                        "properties": {
-                          "amount_minor": {
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "currency": {
-                            "type": "string",
-                            "enum": ["GBP", "USD", "EUR"]
-                          }
-                        },
-                        "required": ["amount_minor", "currency"],
                         "additionalProperties": false
                       }
                     },
@@ -3988,40 +3897,6 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
-                                                  "const": "pricing.standard_clean_hourly"
-                                                },
-                                                "value": {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "amount_minor": {
-                                                      "type": "integer",
-                                                      "exclusiveMinimum": 0,
-                                                      "maximum": 9007199254740991
-                                                    },
-                                                    "currency": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "GBP",
-                                                        "USD",
-                                                        "EUR"
-                                                      ]
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "amount_minor",
-                                                    "currency"
-                                                  ],
-                                                  "additionalProperties": false
-                                                }
-                                              },
-                                              "required": ["key", "value"],
-                                              "additionalProperties": false
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "key": {
-                                                  "type": "string",
                                                   "const": "business.tagline"
                                                 },
                                                 "value": {
@@ -5478,33 +5353,6 @@
                   "properties": {
                     "key": {
                       "type": "string",
-                      "const": "pricing.standard_clean_hourly"
-                    },
-                    "value": {
-                      "type": "object",
-                      "properties": {
-                        "amount_minor": {
-                          "type": "integer",
-                          "exclusiveMinimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "currency": {
-                          "type": "string",
-                          "enum": ["GBP", "USD", "EUR"]
-                        }
-                      },
-                      "required": ["amount_minor", "currency"],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": ["key", "value"],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "key": {
-                      "type": "string",
                       "const": "business.tagline"
                     },
                     "value": {
@@ -6376,7 +6224,6 @@
                         "business.email",
                         "hours.weekday",
                         "service_area.radius",
-                        "pricing.standard_clean_hourly",
                         "business.tagline",
                         "business.industry",
                         "business.offerings",
@@ -6551,33 +6398,6 @@
                                 }
                               },
                               "required": ["centre", "radius_km"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["key", "value"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "key": {
-                              "type": "string",
-                              "const": "pricing.standard_clean_hourly"
-                            },
-                            "value": {
-                              "type": "object",
-                              "properties": {
-                                "amount_minor": {
-                                  "type": "integer",
-                                  "exclusiveMinimum": 0,
-                                  "maximum": 9007199254740991
-                                },
-                                "currency": {
-                                  "type": "string",
-                                  "enum": ["GBP", "USD", "EUR"]
-                                }
-                              },
-                              "required": ["amount_minor", "currency"],
                               "additionalProperties": false
                             }
                           },
@@ -8076,7 +7896,6 @@
                 "business.email",
                 "hours.weekday",
                 "service_area.radius",
-                "pricing.standard_clean_hourly",
                 "business.tagline",
                 "business.industry",
                 "business.offerings",
@@ -8389,7 +8208,6 @@
                     "business.email",
                     "hours.weekday",
                     "service_area.radius",
-                    "pricing.standard_clean_hourly",
                     "business.tagline",
                     "business.industry",
                     "business.offerings",
@@ -9120,33 +8938,6 @@
                   }
                 },
                 "required": ["centre", "radius_km"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["key", "value"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string",
-                "const": "pricing.standard_clean_hourly"
-              },
-              "value": {
-                "type": "object",
-                "properties": {
-                  "amount_minor": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "currency": {
-                    "type": "string",
-                    "enum": ["GBP", "USD", "EUR"]
-                  }
-                },
-                "required": ["amount_minor", "currency"],
                 "additionalProperties": false
               }
             },
@@ -10622,7 +10413,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 22,
+            "maxItems": 21,
             "type": "array",
             "items": {
               "oneOf": [
@@ -10745,33 +10536,6 @@
                         }
                       },
                       "required": ["centre", "radius_km"],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": ["key", "value"],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "key": {
-                      "type": "string",
-                      "const": "pricing.standard_clean_hourly"
-                    },
-                    "value": {
-                      "type": "object",
-                      "properties": {
-                        "amount_minor": {
-                          "type": "integer",
-                          "exclusiveMinimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "currency": {
-                          "type": "string",
-                          "enum": ["GBP", "USD", "EUR"]
-                        }
-                      },
-                      "required": ["amount_minor", "currency"],
                       "additionalProperties": false
                     }
                   },
@@ -12358,7 +12122,6 @@
                 "business.email",
                 "hours.weekday",
                 "service_area.radius",
-                "pricing.standard_clean_hourly",
                 "business.tagline",
                 "business.industry",
                 "business.offerings",
@@ -12552,7 +12315,6 @@
                               "business.email",
                               "hours.weekday",
                               "service_area.radius",
-                              "pricing.standard_clean_hourly",
                               "business.tagline",
                               "business.industry",
                               "business.offerings",
