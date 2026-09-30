@@ -213,6 +213,32 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
   })
 
+  it("traces every service line to a fact and names the specifics a build once invented", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "Every service description, benefit, process step, FAQ answer and line that reads like a customer's words traces to one of them"
+    )
+    for (const specific of [
+      "no airports, venues or landmarks",
+      "meet and greet",
+      "no response or arrival time",
+      "no fleet or team size",
+      "no qualification or membership",
+    ]) {
+      expect(rules, specific).toContain(specific)
+    }
+    expect(rules).toContain("When the facts are thin, write less")
+    expect(rules).toContain(
+      "An FAQ answer only restates a fact below or points the visitor to Request a quote"
+    )
+  })
+
+  it("has the Developer check its own copy against the facts before it reports", () => {
+    expect(text(false)).toMatch(
+      /Before report_complete, read back every sentence you wrote\..*name the fact it came from\. Cut or generalise any you cannot, and list what you cut in risks\./
+    )
+  })
+
   it("names the onboarding facts the copy is written from", () => {
     const rules = text(false)
     for (const key of [

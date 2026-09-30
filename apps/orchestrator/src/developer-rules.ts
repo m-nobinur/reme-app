@@ -100,6 +100,19 @@ export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
   factValue(facts, "media.uploads")?.items ?? []
 
 /**
+ * Where the words come from. A build once promised airport meet-and-greets
+ * that no fact mentioned; these rules name that kind of specific and end in
+ * a check the Developer runs on its own copy before it reports.
+ */
+const CONTENT_RULES = [
+  "- Write the copy from business.industry, business.offerings, business.audience, business.overview, service_area.text and the contact facts below: what the business does, for whom, how it works with a customer and where. Every service description, benefit, process step, FAQ answer and line that reads like a customer's words traces to one of them. Rephrase; never add.",
+  '- A benefit heading may stay general ("Easy to book", "Local to you"), but no line states a specific that no fact states: no place beyond service_area.text (no airports, venues or landmarks), no service extra such as meet and greet or a driver who keeps in touch, no response or arrival time, no years, no award, no fleet or team size, no qualification or membership, no named equipment, product or brand.',
+  "- When the facts are thin, write less: fewer cards, shorter lines, plainer words. Leave an optional field empty rather than fill it with something the facts do not say.",
+  "- An FAQ answer only restates a fact below or points the visitor to Request a quote. Leave out a question no fact answers.",
+  "- Before report_complete, read back every sentence you wrote. For each specific in it (a place, a service, an extra, a time, a number, a person, a qualification) name the fact it came from. Cut or generalise any you cannot, and list what you cut in risks.",
+]
+
+/**
  * What the owner chose in onboarding, as rules: the layout, colours, font,
  * pages, voice and photos, and which facts the copy is written from. A
  * preset becomes its value; the owner's own words are guidance, quoted.
@@ -117,7 +130,7 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
     (id) => !(FIXED_PAGES as readonly string[]).includes(id)
   )
   return [
-    "- Write the copy from business.industry, business.offerings, business.audience, business.overview and service_area.text below: what the business does, for whom, how a job goes and where it works. Rephrase them; never add a claim they do not make.",
+    ...CONTENT_RULES,
     ...(template
       ? [
           `- Layout: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"); apply it through the fields src/site-config.ts gives for it.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
