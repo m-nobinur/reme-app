@@ -650,7 +650,10 @@ const lines = (v: Voice): [string, string][] => [
 const NAMED = ["opener", "industry", "assistant.name", "upload", "started"]
 
 describe("the onboarding copy", () => {
-  it("never uses an em dash, a price, a currency or a tier, and names the business where it should", () => {
+  it("never uses an em dash, a price, a currency or a tier, and names the business where it should", {
+    // Every line, every org, industry and tone: slow when the suite runs in parallel.
+    timeout: 30_000,
+  }, () => {
     for (const org of ORGS) {
       for (const industry of INDUSTRY_VOICES) {
         for (const { id: tone } of TONES) {
