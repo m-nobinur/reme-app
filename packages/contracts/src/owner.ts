@@ -81,6 +81,7 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("site.font", choiceFacts.font),
   fact("site.pages", choiceFacts.pages),
   fact("media.uploads", choiceFacts.uploads),
+  fact("quote.form", choiceFacts.quoteForm),
 ])
 
 export type FactValueKey = FactValue["key"]
@@ -105,6 +106,7 @@ export const CHOICE_FACT_KEYS = [
   "site.font",
   "site.pages",
   "media.uploads",
+  "quote.form",
 ] as const satisfies readonly FactValueKey[]
 export type ChoiceFactKey = (typeof CHOICE_FACT_KEYS)[number]
 

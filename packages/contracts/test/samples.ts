@@ -102,6 +102,56 @@ export const samples: Record<ContractName, unknown> = {
     max_bytes: 5242880,
     skippable: true,
   },
+  QuoteField: {
+    key: "pickup",
+    label: "Pick-up address",
+    type: "text",
+    required: true,
+    hint: "Street and town",
+    options: null,
+  },
+  ReviewQuoteFormInput: {
+    fields: [
+      {
+        key: "pickup",
+        label: "Pick-up address",
+        type: "text",
+        required: true,
+        hint: null,
+        options: null,
+      },
+      {
+        key: "passengers",
+        label: "Number of passengers",
+        type: "number",
+        required: true,
+        hint: null,
+        options: null,
+      },
+    ],
+    note: "A chauffeur firm needs the route, the date and the party size.",
+  },
+  ReviewQuoteFormOutput: {
+    answer: "confirmed",
+    fields: [
+      {
+        key: "pickup",
+        label: "Pick-up address",
+        type: "text",
+        required: true,
+        hint: null,
+        options: null,
+      },
+      {
+        key: "passengers",
+        label: "Number of passengers",
+        type: "number",
+        required: true,
+        hint: null,
+        options: null,
+      },
+    ],
+  },
   AskUploadOutput: {
     answer: "uploaded",
     assets: [

@@ -4,6 +4,7 @@ import { ConversationMessage } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
+  QuoteFields,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -174,6 +175,29 @@ export const AskUploadOutput = z.discriminatedUnion("answer", [
 ])
 
 /**
+ * `review_quote_form`'s input: the questions the assistant proposes for the
+ * site's quote request form, drawn from what the owner said they need to
+ * know to quote a job. The owner keeps, drops or marks each as required, or
+ * asks for something else in their own words. `note` is one short line on
+ * why these questions.
+ */
+export const ReviewQuoteFormInput = z.strictObject({
+  fields: QuoteFields,
+  note: Text(300).nullable(),
+})
+
+/**
+ * `review_quote_form`'s output. `confirmed` carries the list the owner
+ * settled on, which the api checks as `QuoteFields` and stores as the
+ * `quote.form` fact. `changes` is what the owner wants different, as data for
+ * the assistant's next proposal.
+ */
+export const ReviewQuoteFormOutput = z.discriminatedUnion("answer", [
+  z.strictObject({ answer: z.literal("confirmed"), fields: QuoteFields }),
+  z.strictObject({ answer: z.literal("changes"), text: Text(ANSWER_TEXT_MAX) }),
+])
+
+/**
  * `request_change`'s output once the owner said yes: the build it started,
  * or why it was refused. Its input is `OwnerChangeRequest`. A no is the AI
  * SDK's `output-denied`, with no output.
@@ -192,7 +216,12 @@ const ChatResult = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("answer"),
     tool_call_id: ToolCallId,
-    output: z.union([AskFactOutput, AskChoiceOutput, AskUploadOutput]),
+    output: z.union([
+      AskFactOutput,
+      AskChoiceOutput,
+      AskUploadOutput,
+      ReviewQuoteFormOutput,
+    ]),
   }),
   z.strictObject({
     kind: z.literal("approval"),
@@ -257,6 +286,8 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
+export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
 export type AskUploadInput = z.infer<typeof AskUploadInput>
 export type AskUploadOutput = z.infer<typeof AskUploadOutput>
 export type AskFactInput = z.infer<typeof AskFactInput>

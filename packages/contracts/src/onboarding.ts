@@ -151,6 +151,54 @@ export const UploadedAssets = z.strictObject({
   assets: z.array(Asset).min(1).max(UPLOAD_MAX_FILES),
 })
 
+/**
+ * One question the quote request form asks a customer, beyond the contact
+ * details the site always asks (name, email, phone). The owner and the
+ * assistant decide these in onboarding from what the business needs to know
+ * before it can quote; the starter renders exactly this list, so a limousine
+ * firm can ask for a pick-up, a drop-off and passengers while a cleaner asks
+ * for rooms and access. `key` names the input; `options` belong to `select`.
+ */
+export const QUOTE_FIELD_TYPES = [
+  "text",
+  "textarea",
+  "number",
+  "date",
+  "select",
+  "tel",
+  "email",
+] as const
+export const QuoteFieldType = z.enum(QUOTE_FIELD_TYPES)
+
+export const QuoteField = z
+  .strictObject({
+    key: z.string().regex(/^[a-z][a-z0-9_]{1,30}$/),
+    label: Text(80),
+    type: QuoteFieldType,
+    required: z.boolean(),
+    hint: Text(120).nullable(),
+    options: z.array(Text(60)).min(2).max(12).nullable(),
+  })
+  .refine((field) => (field.type === "select") === (field.options !== null), {
+    path: ["options"],
+    message: "options belong to a select, and a select needs them",
+  })
+
+/** The most and fewest questions a request form may add. */
+export const QUOTE_FIELDS_MIN = 2
+export const QUOTE_FIELDS_MAX = 8
+
+export const QuoteFields = z
+  .array(QuoteField)
+  .min(QUOTE_FIELDS_MIN)
+  .max(QUOTE_FIELDS_MAX)
+  .refine(
+    (fields) => new Set(fields.map((f) => f.key)).size === fields.length,
+    {
+      message: "each question needs its own key",
+    }
+  )
+
 /** A preset's `id` for a choice that also takes the owner's own words. */
 const orCustom = <T extends z.ZodEnum>(id: T) =>
   z.union([id, z.literal("custom")])
@@ -169,6 +217,7 @@ export const choiceFacts = {
     custom: Text(200).optional(),
   },
   uploads: { items: z.array(Asset).min(1).max(UPLOAD_MAX_FILES) },
+  quoteForm: { fields: QuoteFields },
 } as const
 
 export type IndustryId = z.infer<typeof IndustryId>
@@ -178,5 +227,6 @@ export type TemplateId = z.infer<typeof TemplateId>
 export type PaletteId = z.infer<typeof PaletteId>
 export type FontId = z.infer<typeof FontId>
 export type PageId = z.infer<typeof PageId>
+export type QuoteField = z.infer<typeof QuoteField>
 export type Asset = z.infer<typeof Asset>
 export type UploadedAssets = z.infer<typeof UploadedAssets>

@@ -136,6 +136,33 @@ const SHAPES: [FactValue, string, string][] = [
     "Your photos",
     "fleet-front.jpg",
   ],
+  [
+    {
+      key: "quote.form",
+      value: {
+        fields: [
+          {
+            key: "pickup",
+            label: "Pick-up address",
+            type: "text",
+            required: true,
+            hint: null,
+            options: null,
+          },
+          {
+            key: "passengers",
+            label: "Passengers",
+            type: "number",
+            required: true,
+            hint: null,
+            options: null,
+          },
+        ],
+      },
+    },
+    "Quote request questions",
+    "Pick-up address, Passengers",
+  ],
 ]
 
 it("has a sample for every FactValue branch", () => {

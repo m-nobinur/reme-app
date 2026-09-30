@@ -772,6 +772,99 @@
                     },
                     "required": ["key", "value"],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "quote.form"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "fields": {
+                            "minItems": 2,
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "textarea",
+                                    "number",
+                                    "date",
+                                    "select",
+                                    "tel",
+                                    "email"
+                                  ]
+                                },
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "hint": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "options": {
+                                  "anyOf": [
+                                    {
+                                      "minItems": 2,
+                                      "maxItems": 12,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 60,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "label",
+                                "type",
+                                "required",
+                                "hint",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["fields"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -2203,6 +2296,109 @@
             },
             "required": ["key", "skippable", "prefill"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "quote.form"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "fields": {
+                        "minItems": 2,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "textarea",
+                                "number",
+                                "date",
+                                "select",
+                                "tel",
+                                "email"
+                              ]
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "hint": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "options": {
+                              "anyOf": [
+                                {
+                                  "minItems": 2,
+                                  "maxItems": 12,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 60,
+                                    "pattern": "\\S"
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "type",
+                            "required",
+                            "hint",
+                            "options"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["fields"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
           }
         ]
       },
@@ -2842,6 +3038,99 @@
                           }
                         },
                         "required": ["items"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "quote.form"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "fields": {
+                            "minItems": 2,
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "textarea",
+                                    "number",
+                                    "date",
+                                    "select",
+                                    "tel",
+                                    "email"
+                                  ]
+                                },
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "hint": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "options": {
+                                  "anyOf": [
+                                    {
+                                      "minItems": 2,
+                                      "maxItems": 12,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 60,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "label",
+                                "type",
+                                "required",
+                                "hint",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["fields"],
                         "additionalProperties": false
                       }
                     },
@@ -4414,6 +4703,99 @@
                                               },
                                               "required": ["key", "value"],
                                               "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "quote.form"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "fields": {
+                                                      "minItems": 2,
+                                                      "maxItems": 8,
+                                                      "type": "array",
+                                                      "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "key": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                                          },
+                                                          "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 80,
+                                                            "pattern": "\\S"
+                                                          },
+                                                          "type": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "text",
+                                                              "textarea",
+                                                              "number",
+                                                              "date",
+                                                              "select",
+                                                              "tel",
+                                                              "email"
+                                                            ]
+                                                          },
+                                                          "required": {
+                                                            "type": "boolean"
+                                                          },
+                                                          "hint": {
+                                                            "anyOf": [
+                                                              {
+                                                                "type": "string",
+                                                                "minLength": 1,
+                                                                "maxLength": 120,
+                                                                "pattern": "\\S"
+                                                              },
+                                                              {
+                                                                "type": "null"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "options": {
+                                                            "anyOf": [
+                                                              {
+                                                                "minItems": 2,
+                                                                "maxItems": 12,
+                                                                "type": "array",
+                                                                "items": {
+                                                                  "type": "string",
+                                                                  "minLength": 1,
+                                                                  "maxLength": 60,
+                                                                  "pattern": "\\S"
+                                                                }
+                                                              },
+                                                              {
+                                                                "type": "null"
+                                                              }
+                                                            ]
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "key",
+                                                          "label",
+                                                          "type",
+                                                          "required",
+                                                          "hint",
+                                                          "options"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": ["fields"],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": ["key", "value"],
+                                              "additionalProperties": false
                                             }
                                           ]
                                         }
@@ -4552,6 +4934,113 @@
                                         }
                                       },
                                       "required": ["answer"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "confirmed"
+                                        },
+                                        "fields": {
+                                          "minItems": 2,
+                                          "maxItems": 8,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "key": {
+                                                "type": "string",
+                                                "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                              },
+                                              "label": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 80,
+                                                "pattern": "\\S"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "text",
+                                                  "textarea",
+                                                  "number",
+                                                  "date",
+                                                  "select",
+                                                  "tel",
+                                                  "email"
+                                                ]
+                                              },
+                                              "required": {
+                                                "type": "boolean"
+                                              },
+                                              "hint": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 120,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "options": {
+                                                "anyOf": [
+                                                  {
+                                                    "minItems": 2,
+                                                    "maxItems": 12,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 60,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "key",
+                                              "label",
+                                              "type",
+                                              "required",
+                                              "hint",
+                                              "options"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": ["answer", "fields"],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "changes"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 500,
+                                          "pattern": "\\S"
+                                        }
+                                      },
+                                      "required": ["answer", "text"],
                                       "additionalProperties": false
                                     }
                                   ]
@@ -5847,6 +6336,99 @@
                   },
                   "required": ["key", "value"],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "quote.form"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "fields": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "pattern": "\\S"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "textarea",
+                                  "number",
+                                  "date",
+                                  "select",
+                                  "tel",
+                                  "email"
+                                ]
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "hint": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "options": {
+                                "anyOf": [
+                                  {
+                                    "minItems": 2,
+                                    "maxItems": 12,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 60,
+                                      "pattern": "\\S"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "label",
+                              "type",
+                              "required",
+                              "hint",
+                              "options"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["fields"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -6239,7 +6821,8 @@
                         "site.palette",
                         "site.font",
                         "site.pages",
-                        "media.uploads"
+                        "media.uploads",
+                        "quote.form"
                       ]
                     }
                   }
@@ -6903,6 +7486,99 @@
                                 }
                               },
                               "required": ["items"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "quote.form"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "fields": {
+                                  "minItems": 2,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "key": {
+                                        "type": "string",
+                                        "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                      },
+                                      "label": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 80,
+                                        "pattern": "\\S"
+                                      },
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "text",
+                                          "textarea",
+                                          "number",
+                                          "date",
+                                          "select",
+                                          "tel",
+                                          "email"
+                                        ]
+                                      },
+                                      "required": {
+                                        "type": "boolean"
+                                      },
+                                      "hint": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 120,
+                                            "pattern": "\\S"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "options": {
+                                        "anyOf": [
+                                          {
+                                            "minItems": 2,
+                                            "maxItems": 12,
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 60,
+                                              "pattern": "\\S"
+                                            }
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "key",
+                                      "label",
+                                      "type",
+                                      "required",
+                                      "hint",
+                                      "options"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": ["fields"],
                               "additionalProperties": false
                             }
                           },
@@ -7911,7 +8587,8 @@
                 "site.palette",
                 "site.font",
                 "site.pages",
-                "media.uploads"
+                "media.uploads",
+                "quote.form"
               ]
             }
           }
@@ -8223,7 +8900,8 @@
                     "site.palette",
                     "site.font",
                     "site.pages",
-                    "media.uploads"
+                    "media.uploads",
+                    "quote.form"
                   ]
                 }
               }
@@ -9435,6 +10113,99 @@
             },
             "required": ["key", "value"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "quote.form"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "fields": {
+                    "minItems": 2,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "textarea",
+                            "number",
+                            "date",
+                            "select",
+                            "tel",
+                            "email"
+                          ]
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "hint": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "pattern": "\\S"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "options": {
+                          "anyOf": [
+                            {
+                              "minItems": 2,
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 60,
+                                "pattern": "\\S"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "label",
+                        "type",
+                        "required",
+                        "hint",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["fields"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
           }
         ]
       },
@@ -9948,6 +10719,70 @@
         "required": ["state", "phase", "metrics"],
         "additionalProperties": false
       },
+      "QuoteField": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,30}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "textarea",
+              "number",
+              "date",
+              "select",
+              "tel",
+              "email"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "minItems": 2,
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["key", "label", "type", "required", "hint", "options"],
+        "additionalProperties": false
+      },
       "Reminder": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10173,6 +11008,210 @@
               }
             },
             "required": ["outcome", "error"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ReviewQuoteFormInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "fields": {
+            "minItems": 2,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "textarea",
+                    "number",
+                    "date",
+                    "select",
+                    "tel",
+                    "email"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "hint": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "options": {
+                  "anyOf": [
+                    {
+                      "minItems": 2,
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "\\S"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type",
+                "required",
+                "hint",
+                "options"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["fields", "note"],
+        "additionalProperties": false
+      },
+      "ReviewQuoteFormOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "confirmed"
+              },
+              "fields": {
+                "minItems": 2,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "textarea",
+                        "number",
+                        "date",
+                        "select",
+                        "tel",
+                        "email"
+                      ]
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "hint": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "options": {
+                      "anyOf": [
+                        {
+                          "minItems": 2,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60,
+                            "pattern": "\\S"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label",
+                    "type",
+                    "required",
+                    "hint",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["answer", "fields"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "changes"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "\\S"
+              }
+            },
+            "required": ["answer", "text"],
             "additionalProperties": false
           }
         ]
@@ -10413,7 +11452,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 21,
+            "maxItems": 22,
             "type": "array",
             "items": {
               "oneOf": [
@@ -11036,6 +12075,99 @@
                         }
                       },
                       "required": ["items"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "quote.form"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "fields": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "pattern": "\\S"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "textarea",
+                                  "number",
+                                  "date",
+                                  "select",
+                                  "tel",
+                                  "email"
+                                ]
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "hint": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "options": {
+                                "anyOf": [
+                                  {
+                                    "minItems": 2,
+                                    "maxItems": 12,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 60,
+                                      "pattern": "\\S"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "label",
+                              "type",
+                              "required",
+                              "hint",
+                              "options"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["fields"],
                       "additionalProperties": false
                     }
                   },
@@ -12137,7 +13269,8 @@
                 "site.palette",
                 "site.font",
                 "site.pages",
-                "media.uploads"
+                "media.uploads",
+                "quote.form"
               ]
             }
           },
@@ -12330,7 +13463,8 @@
                               "site.palette",
                               "site.font",
                               "site.pages",
-                              "media.uploads"
+                              "media.uploads",
+                              "quote.form"
                             ]
                           }
                         }

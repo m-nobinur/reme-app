@@ -9,6 +9,8 @@ import {
   ChatRequest,
   type ChatResult,
   RequestChangeOutput,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
   TOOL_FAILED,
   TOOL_UNKNOWN,
@@ -398,5 +400,90 @@ describe("the onboarding cards", () => {
         ACCEPTED
       )
     }
+  })
+})
+
+describe("the quote form review", () => {
+  const field = (over: object) => ({
+    key: "rooms",
+    label: "Rooms",
+    type: "number",
+    required: true,
+    hint: null,
+    options: null,
+    ...over,
+  })
+  const two = [field({}), field({ key: "access", label: "Access" })]
+
+  it("takes the sample proposal and a confirmed or changed answer", () => {
+    expect(
+      verdict(
+        "ReviewQuoteFormInput",
+        ReviewQuoteFormInput,
+        samples.ReviewQuoteFormInput
+      )
+    ).toEqual(ACCEPTED)
+    expect(
+      verdict(
+        "ReviewQuoteFormOutput",
+        ReviewQuoteFormOutput,
+        samples.ReviewQuoteFormOutput
+      )
+    ).toEqual(ACCEPTED)
+    expect(
+      verdict("ReviewQuoteFormOutput", ReviewQuoteFormOutput, {
+        answer: "changes",
+        text: "Ask for the floor too",
+      })
+    ).toEqual(ACCEPTED)
+  })
+
+  // Only the published JSON Schema cannot say these two rules (a select has
+  // options and a text has none; keys are unique), so Zod alone is asked.
+  it.each([
+    ["one question", [field({})]],
+    [
+      "nine questions",
+      Array.from({ length: 9 }, (_, i) => field({ key: `q${i}x` })),
+    ],
+    ["a key with capitals", [field({ key: "Rooms" }), field({ key: "other" })]],
+    ["an unknown type", [field({ type: "file" }), field({ key: "b_b" })]],
+  ])("refuses %s", (_name, fields) => {
+    expect(
+      verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
+        fields,
+        note: null,
+      })
+    ).toEqual(REFUSED)
+  })
+
+  it.each([
+    ["a repeated key", [field({}), field({})]],
+    [
+      "a select with no options",
+      [field({ type: "select" }), field({ key: "b_b" })],
+    ],
+    [
+      "options on a text",
+      [field({ options: ["a", "b"] }), field({ key: "b_b" })],
+    ],
+  ])("refuses %s in Zod", (_name, fields) => {
+    expect(ReviewQuoteFormInput.safeParse({ fields, note: null }).success).toBe(
+      false
+    )
+  })
+
+  it("accepts a select with its options", () => {
+    const select = field({
+      key: "frequency",
+      type: "select",
+      options: ["Weekly", "One-off"],
+    })
+    expect(
+      verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
+        fields: [select, ...two],
+        note: null,
+      })
+    ).toEqual(ACCEPTED)
   })
 })
