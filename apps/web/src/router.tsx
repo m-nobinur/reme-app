@@ -114,6 +114,11 @@ declare module "@tanstack/react-router" {
     panel?: PanelPress
     /** Sent as the first message of the new chat `chat` starts. */
     ask?: string
+    /**
+     * Set fresh by the panel's Request changes: the chat's composer takes
+     * the mode, once per `key`, and the owner's next send carries it.
+     */
+    compose?: { mode: "site_change"; key: string }
   }
   interface StaticDataRouteOption {
     /**

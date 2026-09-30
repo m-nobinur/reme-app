@@ -286,21 +286,49 @@ const reminder = (title: string, due: string | null) =>
     due_at: due,
   }) as unknown as Workspace["reminderNotes"][number]
 
-it("tells an owner with nothing waiting that they are caught up", () => {
+it("says in one line that an owner with nothing waiting is caught up", () => {
   expect(digestOf(workspace({ live: 4 }), names, NOW)).toEqual([
-    "You're all caught up. Nothing needs you right now.",
-    "Your website is live on version 4.",
-    "Ask Reme in the chat to change something on your website, or to set a reminder.",
+    "All caught up. Your site is live on version 4.",
   ])
-  expect(
-    digestOf(workspace({ building: true, open: true }), names, NOW)
-  ).toEqual([
-    "You're all caught up. Nothing needs you right now.",
-    "Reme is building your first website now.",
+  expect(digestOf(workspace({ open: true }), names, NOW)).toEqual([
+    "All caught up. Your website is under way.",
+  ])
+  expect(digestOf(workspace(), names, NOW)).toEqual([
+    "Tell Reme about your business to start your website.",
   ])
 })
 
-it("leads with today's reminders, then reviews and questions, three at most", () => {
+it("leads with what Reme is doing, then what the owner does next", () => {
+  expect(
+    digestOf(workspace({ building: true, open: true }), names, NOW)
+  ).toEqual(["Reme is building your website."])
+  expect(
+    digestOf(
+      workspace({
+        live: 4,
+        building: true,
+        open: true,
+        attention: [approval(5)],
+      }),
+      names,
+      NOW
+    )
+  ).toEqual(["Reme is updating your website.", "Version 5 is ready to review."])
+  expect(
+    digestOf(
+      workspace({
+        live: 4,
+        building: true,
+        open: true,
+        attention: [approval(5), question("A"), question("B")],
+      }),
+      names,
+      NOW
+    )
+  ).toEqual(["Reme is updating your website.", "3 things need you."])
+})
+
+it("puts today's reminder first and keeps to two lines", () => {
   const asked = {
     ...question("Reme"),
     raisedById: "staff-sam",
@@ -310,7 +338,7 @@ it("leads with today's reminders, then reviews and questions, three at most", ()
     digestOf(
       workspace({
         live: 4,
-        attention: [approval(5), asked],
+        attention: [asked],
         reminderNotes: [
           reminder("Call the supplier", at(1, 15)),
           reminder("Order more cloths", at(2, 9)),
@@ -319,11 +347,7 @@ it("leads with today's reminders, then reviews and questions, three at most", ()
       names,
       NOW
     )
-  ).toEqual([
-    "You have a reminder today at 15:00: Call the supplier.",
-    "Version 5 of your website is ready for you to review below.",
-    "Sam asked about weekday hours. Answer it below.",
-  ])
+  ).toEqual(["Call the supplier at 15:00.", "Sam asked about weekday hours."])
   expect(
     digestOf(
       workspace({
@@ -338,10 +362,16 @@ it("leads with today's reminders, then reviews and questions, three at most", ()
       NOW
     )
   ).toEqual([
-    "You have 2 reminders today. The next is at 15:00: Call the supplier.",
-    "2 versions of your website are ready for you to review below.",
-    "Your team has 2 questions for you below.",
+    "2 reminders today, the next at 15:00.",
+    "4 more things need you.",
   ])
+  expect(
+    digestOf(
+      workspace({ live: 4, attention: [approval(5), approval(6)] }),
+      names,
+      NOW
+    )
+  ).toEqual(["2 versions are ready to review."])
 })
 
 it("names missing facts only when no question asks for them", () => {
@@ -350,10 +380,7 @@ it("names missing facts only when no question asks for them", () => {
   ]
   expect(
     digestOf(workspace({ open: true, derivedReminders: facts }), names, NOW)
-  ).toEqual([
-    "Reme still needs your phone number.",
-    "Your first website is under way.",
-  ])
+  ).toEqual(["Reme needs your phone number."])
   expect(
     digestOf(
       workspace({
@@ -365,8 +392,8 @@ it("names missing facts only when no question asks for them", () => {
       }),
       names,
       NOW
-    )[1]
-  ).toBe("Your website is live on version 2.")
+    )
+  ).toEqual(["Sam asked about phone number."])
 })
 
 it("says nothing about today before the browser's clock is known", () => {
@@ -376,12 +403,9 @@ it("says nothing about today before the browser's clock is known", () => {
   })
   // The reminder could be today, so the server claims neither way.
   expect(digestOf(later, names, null)).toEqual([
-    "Your website is live on version 4.",
+    "Your site is live on version 4.",
   ])
   expect(
     digestOf(workspace({ attention: [approval(2)], open: true }), names, null)
-  ).toEqual([
-    "Version 2 of your website is ready for you to review below.",
-    "Your first website is under way.",
-  ])
+  ).toEqual(["Version 2 is ready to review."])
 })

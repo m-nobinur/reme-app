@@ -236,6 +236,22 @@ test("the top bar holds new chat, the history and the bell", async ({
   ).toHaveCount(0)
 })
 
+test("the profile menu switches the theme", async ({ page }) => {
+  await visit(page, "/app/staff")
+  const dark = () =>
+    page.evaluate(() => document.documentElement.classList.contains("dark"))
+  const before = await dark()
+  await page.locator('[data-slot="profile-menu"]').click()
+  await page
+    .getByRole("menuitem", { name: before ? "Light theme" : "Dark theme" })
+    .click()
+  await expect.poll(dark).toBe(!before)
+  // It stays open and names the way back.
+  await expect(
+    page.getByRole("menuitem", { name: before ? "Dark theme" : "Light theme" })
+  ).toBeVisible()
+})
+
 test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
   await visit(page, "/app/staff")
   const sent = page

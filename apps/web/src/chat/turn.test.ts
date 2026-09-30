@@ -63,6 +63,33 @@ it("a typed message sends only itself, with the mode", () => {
   })
 })
 
+it("a message sent in website change mode says so; a results turn never does", async () => {
+  const typed: ChatMessage = {
+    id: "msg_user",
+    role: "user",
+    parts: [{ type: "text", text: "Add Saturday hours" }],
+  }
+  const body = turnBody(
+    () => Promise.resolve({ remoteId: CONVERSATION }),
+    () => "act",
+    { current: undefined }
+  )
+  const sent = await body({
+    messages: [typed],
+    body: { intent: "site_change" },
+  })
+  expect(ChatRequest.parse(sent.body).intent).toBe("site_change")
+  const plain = await body({ messages: [typed] })
+  expect(plain.body).not.toHaveProperty("intent")
+  const results = chatTurn(
+    CONVERSATION,
+    "act",
+    [assistant(ask("output-available", { output: STATED }))],
+    "site_change"
+  )
+  expect(results).not.toHaveProperty("intent")
+})
+
 it("every turn carries the browser's time zone", () => {
   const message = chatTurn(CONVERSATION, "act", [
     { id: "msg_user", role: "user", parts: [{ type: "text", text: "Hi" }] },

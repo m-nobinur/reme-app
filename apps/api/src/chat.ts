@@ -536,7 +536,13 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const context = contextOf(mode, workspace, zone ?? null)
+      const context = contextOf(
+        mode,
+        workspace,
+        zone ?? null,
+        new Date(),
+        turn.kind === "message" ? parsed.data.intent : undefined
+      )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
         messages: opening.messages,

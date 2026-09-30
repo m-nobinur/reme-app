@@ -243,30 +243,18 @@ test("the site is a link by name, with the host as its title", async ({
   )
 })
 
-test("Request changes sits beside Visit and opens a labelled note", async ({
-  page,
-}) => {
+test("Request changes sits beside Visit", async ({ page }) => {
   await open(page, "YourWebsite", 400)
   const visit = page.getByRole("link", { name: /Visit your website/ })
   const request = page.getByRole("button", { name: "Request changes" })
   const [a, b] = [await visit.boundingBox(), await request.boundingBox()]
   expect(a?.y).toBe(b?.y)
   expect(a?.height).toBe(b?.height)
-
-  await request.click()
-  await expect(request).toHaveAttribute("aria-expanded", "true")
-  const note = page.getByLabel("What should change on your website?")
-  await expect(note).toBeFocused()
-  await expect(page.getByRole("button", { name: "Send" })).toBeVisible()
   const results = await new AxeBuilder({ page })
     .withTags(WCAG)
     .include('[data-entry="YourWebsite"]')
     .analyze()
   expect(results.violations).toEqual([])
-
-  await page.getByRole("button", { name: "Cancel" }).click()
-  await expect(note).toHaveCount(0)
-  await expect(request).toBeFocused()
 
   // Nothing live, nothing to change.
   await open(page, "YourWebsite unpublished", 400)

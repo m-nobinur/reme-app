@@ -21,10 +21,12 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChecksIcon,
+  PaintBrushIcon,
   PlusIcon,
   SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  XIcon,
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
@@ -52,8 +54,10 @@ import {
   createContext,
   type FC,
   type PropsWithChildren,
+  type ReactNode,
   type RefObject,
   useContext,
+  useEffect,
   useMemo,
   useRef,
 } from "react"
@@ -92,6 +96,24 @@ export const OWNER_QUICK_ACTIONS: readonly ThreadQuickAction[] = [
   { title: "Remind me", prompt: "Remind me to " },
 ]
 
+/**
+ * A mode the composer is in: a chip beside "+" names it, and its placeholder
+ * replaces the thread's. `onClear` is the chip's ×.
+ */
+export type ThreadMode = {
+  label: string
+  icon: ReactNode
+  placeholder: string
+  onClear: () => void
+}
+
+/** Website change mode, which the panel's Request changes turns on. */
+export const SITE_CHANGE_MODE: Omit<ThreadMode, "onClear"> = {
+  label: "Website change",
+  icon: <PaintBrushIcon aria-hidden />,
+  placeholder: "Describe what to change on your website…",
+}
+
 export type ThreadProps = {
   components?: ThreadComponents | undefined
   /**
@@ -104,6 +126,8 @@ export type ThreadProps = {
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
+  /** A new mode object focuses the composer, so each press lands there. */
+  mode?: ThreadMode | undefined
 }
 
 type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus">
@@ -178,11 +202,12 @@ export const Thread: FC<ThreadProps> = ({
   placeholder,
   briefing,
   quickActions,
+  mode,
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
-    () => ({ placeholder, briefing, quickActions }),
-    [placeholder, briefing, quickActions]
+    () => ({ placeholder, briefing, quickActions, mode }),
+    [placeholder, briefing, quickActions, mode]
   )
 
   return (
@@ -398,8 +423,13 @@ const ThreadSuggestionItem: FC = () => {
 }
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { placeholder = "Send a message" } = useContext(ThreadSettingsContext)
+  const { placeholder = "Send a message", mode } = useContext(
+    ThreadSettingsContext
+  )
   const input = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (mode) input.current?.focus()
+  }, [mode])
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       {/* A one-pixel ring on top of the border: the composer holds focus
@@ -410,7 +440,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
       >
         <ComposerPrimitive.Input
           ref={input}
-          placeholder={placeholder}
+          placeholder={mode?.placeholder ?? placeholder}
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}
@@ -472,13 +502,44 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
+/** The chip naming the composer's mode; its × leaves it and keeps focus in the composer. */
+const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
+  input,
+}) => {
+  const { mode } = useContext(ThreadSettingsContext)
+  if (!mode) return null
+  return (
+    <span
+      data-slot="aui_composer-mode"
+      className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full bg-primary/10 pr-0.5 pl-2.5 font-medium text-primary text-xs [&_svg]:size-3.5 [&_svg]:shrink-0"
+    >
+      {mode.icon}
+      <span className="truncate">{mode.label}</span>
+      <Button
+        aria-label={`Leave ${mode.label.toLowerCase()} mode`}
+        className="rounded-full text-primary hover:bg-primary/15 hover:text-primary"
+        onClick={() => {
+          mode.onClear()
+          input.current?.focus()
+        }}
+        size="icon-xs"
+        type="button"
+        variant="ghost"
+      >
+        <XIcon aria-hidden />
+      </Button>
+    </span>
+  )
+}
+
 const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   input,
 }) => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
         <QuickActions input={input} />
+        <ComposerMode input={input} />
       </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => !s.thread.isRunning}>

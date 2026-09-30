@@ -948,56 +948,25 @@ type Thumbnail = { src: string } | "loading" | null
 
 /**
  * The site as it stands: the version that is live, a link to it and, beside
- * the link, "Request changes", which opens a note in place. The host is the
- * link's title rather than its text, since a long one would not fit. The
- * thumbnail is the panel's only image, at a fixed ratio so nothing moves when
- * it arrives; one that fails to load leaves the text alone. A change sent
- * closes the note and hands focus back to the button; `status` is what the
- * app says about it, announced politely.
+ * the link, "Request changes", which the app answers by putting the chat's
+ * composer into website change mode. The host is the link's title rather
+ * than its text, since a long one would not fit. The thumbnail is the
+ * panel's only image, at a fixed ratio so nothing moves when it arrives; one
+ * that fails to load leaves the text alone.
  */
 function YourWebsite({
   host,
   live,
   thumbnail = null,
   onRequestChanges,
-  pending: busy = false,
-  error = null,
-  status = null,
-  defaultAsking = false,
 }: {
   host: string | null
   live: number | null
   thumbnail?: Thumbnail
-  /** Sends a change for the live site; true once it was taken. */
-  onRequestChanges?: ((text: string) => Promise<boolean>) | undefined
-  pending?: boolean
-  error?: string | null
-  status?: string | null
-  /** Open on the change note, for the catalog. */
-  defaultAsking?: boolean
+  /** Starts a change to the live site in the chat. */
+  onRequestChanges?: (() => void) | undefined
 }) {
-  const id = useId()
   const [broken, setBroken] = useState<string | null>(null)
-  const [asking, setAsking] = useState(defaultAsking)
-  const note = useRef<HTMLTextAreaElement>(null)
-  const toggle = useRef<HTMLButtonElement>(null)
-  // Focus follows the note when the owner opens or closes it, not on mount.
-  const moved = useRef<boolean>(false)
-  useEffect(() => {
-    if (moved.current) (asking ? note : toggle).current?.focus()
-    moved.current = false
-  }, [asking])
-  const show = (open: boolean) => {
-    moved.current = true
-    setAsking(open)
-  }
-
-  const send = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const text = note.current?.value.trim() ?? ""
-    if (text && onRequestChanges && (await onRequestChanges(text))) show(false)
-  }
-
   const shot = live ? thumbnail : null
   const change = live && onRequestChanges
   return (
@@ -1050,11 +1019,10 @@ function YourWebsite({
           ) : null}
           {change ? (
             <Button
-              aria-expanded={asking}
               className="grow"
-              disabled={busy}
-              onClick={() => show(!asking)}
-              ref={toggle}
+              // It moves the owner to the composer, so the phone sheet goes.
+              data-leaves-panel
+              onClick={onRequestChanges}
               size="lg"
               variant="outline"
             >
@@ -1063,45 +1031,6 @@ function YourWebsite({
           ) : null}
         </div>
       ) : null}
-      {change && asking ? (
-        <form className="flex flex-col gap-2" onSubmit={send}>
-          <label className="font-medium text-sm" htmlFor={`${id}-change`}>
-            What should change on your website?
-          </label>
-          <textarea
-            className={NOTE}
-            disabled={busy}
-            id={`${id}-change`}
-            maxLength={GOAL_MAX}
-            name="change"
-            ref={note}
-            required
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={busy} size="sm" type="submit">
-              {pending(busy, "Send", "Sending")}
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => show(false)}
-              size="sm"
-              variant="ghost"
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : null}
-      {error ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {change ? (
-        <p className="text-sm empty:hidden" role="status">
-          {status}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -1109,16 +1038,16 @@ function YourWebsite({
 /* Today ---------------------------------------------------------------- */
 
 /**
- * The panel's opening sentences: what today holds for the owner, written by
- * the app from the workspace. The first leads and the rest are quieter. No
- * live region: it changes with every read, and the sections below announce
- * what the owner did.
+ * The panel's opening lines, written by the app from the workspace: one or
+ * two short sentences, the first leading and the second quieter. No live
+ * region: it changes with every read, and the sections below announce what
+ * the owner did.
  */
 function PanelDigest({ sentences }: { sentences: string[] }) {
   const [lead, ...rest] = sentences
   if (!lead) return null
   return (
-    <div className="flex flex-col gap-1" data-slot="panel-digest">
+    <div className="flex flex-col gap-0.5" data-slot="panel-digest">
       <p className="text-sm">{lead}</p>
       {rest.map((sentence) => (
         <p className={META} key={sentence}>

@@ -19,27 +19,39 @@ const onThemeChange = (change: () => void) => {
 }
 const isDark = () => document.documentElement.classList.contains("dark")
 
+/** Flips the theme and remembers it, from any control that offers it. */
+function toggleTheme() {
+  const dark = document.documentElement.classList.toggle("dark")
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, dark ? "dark" : "light")
+  } catch {
+    // Storage can be blocked; the theme still applies for this document.
+  }
+}
+
+/** Whether the dark theme is on; undefined on the server, which cannot know. */
+const useDarkTheme = () =>
+  useSyncExternalStore(onThemeChange, isDark, () => undefined)
+
 /**
  * Flips the `dark` class on the document and remembers the choice. The icons
  * swap through the same `dark:` variant as everything else, so they are
  * correct on the server render. The pressed state is not known there, so it
  * is left off until the browser reads the class.
  */
-function ThemeToggle(props: ComponentProps<typeof Button>) {
-  const pressed = useSyncExternalStore(onThemeChange, isDark, () => undefined)
+function ThemeToggle({ onClick, ...props }: ComponentProps<typeof Button>) {
+  const pressed = useDarkTheme()
   return (
     <Button
       variant="ghost"
       size="icon"
       aria-label="Dark theme"
       aria-pressed={pressed}
-      onClick={() => {
-        const dark = document.documentElement.classList.toggle("dark")
-        try {
-          localStorage.setItem(THEME_STORAGE_KEY, dark ? "dark" : "light")
-        } catch {
-          // Storage can be blocked; the theme still applies for this document.
-        }
+      // Composed rather than overridable: a wrapper such as a tooltip passes
+      // its own onClick, which used to replace this one.
+      onClick={(event) => {
+        toggleTheme()
+        onClick?.(event)
       }}
       {...props}
     >
@@ -49,4 +61,10 @@ function ThemeToggle(props: ComponentProps<typeof Button>) {
   )
 }
 
-export { THEME_STORAGE_KEY, ThemeToggle, themeInitScript }
+export {
+  THEME_STORAGE_KEY,
+  ThemeToggle,
+  themeInitScript,
+  toggleTheme,
+  useDarkTheme,
+}

@@ -183,7 +183,7 @@ test("the history lists chats newest first, searchable, a page at a time", async
   )
 })
 
-test("the panel sits under the bell, clear of the page from lg", async ({
+test("the panel floats under the bell, and the page centres in the full width", async ({
   page,
 }) => {
   await open(page, "WorkspaceShell", WIDTHS.desktop)
@@ -191,16 +191,18 @@ test("the panel sits under the bell, clear of the page from lg", async ({
     .locator('[data-slot="notification-bell"]')
     .boundingBox()
   const card = await panel(page).boundingBox()
+  const main = await page.locator("#main").boundingBox()
   const page_ = await page.locator('[data-slot="workspace-page"]').boundingBox()
-  if (!bell || !card || !page_) throw new Error("not laid out")
+  if (!bell || !card || !main || !page_) throw new Error("not laid out")
   expect(card.y).toBeGreaterThanOrEqual(bell.y + bell.height)
   expect(card.x + card.width).toBeGreaterThanOrEqual(bell.x + bell.width - 1)
-  expect(page_.x + page_.width).toBeLessThanOrEqual(card.x)
-
-  // Minimised, the page keeps its column: the card only gets shorter.
+  // Centred in main, open or not: the panel takes no column of its own.
+  const left = page_.x - main.x
+  const right = main.x + main.width - (page_.x + page_.width)
+  expect(Math.abs(left - right)).toBeLessThanOrEqual(16)
   await panelToggle(page).click()
   const after = await page.locator('[data-slot="workspace-page"]').boundingBox()
-  expect(after?.width).toBe(page_.width)
+  expect(after?.x).toBe(page_.x)
 })
 
 test("the rail sheet on a phone traps focus and returns it on close", async ({

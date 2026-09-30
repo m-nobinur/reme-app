@@ -24,12 +24,14 @@ export const textOf = (message: ChatMessage) =>
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
  * message, or every answer to `ask_fact` and every yes or no on a tool in
- * the last step, as the SDK sends them together.
+ * the last step, as the SDK sends them together. `intent` goes with a typed
+ * message only.
  */
 export function chatTurn(
   conversationId: string,
   mode: ChatRequest["mode"],
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  intent?: ChatRequest["intent"]
 ): ChatRequest {
   // The browser's zone, so the Chief of Staff can read "Friday at 9". The
   // reminder card names the same zone, from the same source.
@@ -40,6 +42,7 @@ export function chatTurn(
       conversation_id: conversationId,
       mode,
       time_zone,
+      ...(intent ? { intent } : {}),
       turn: { kind: "message", message_id: last.id, text: textOf(last) },
     }
   }
@@ -150,7 +153,8 @@ export const sendsOn = ({ messages }: { messages: ChatMessage[] }) =>
 /**
  * The transport's request body, which is the turn. It records the message
  * being sent before anything it awaits, so a send that fails at any point
- * restores this message, never one from an earlier send.
+ * restores this message, never one from an earlier send. `body.intent` is
+ * what the owner's send carried, fixed when they pressed send.
  */
 export const turnBody =
   (
@@ -158,10 +162,16 @@ export const turnBody =
     mode: () => ChatRequest["mode"],
     sending: { current: ChatMessage | undefined }
   ) =>
-  async ({ messages }: { messages: ChatMessage[] }) => {
+  async ({
+    messages,
+    body,
+  }: {
+    messages: ChatMessage[]
+    body?: { intent?: ChatRequest["intent"] } | undefined
+  }) => {
     sending.current = messages.at(-1)
     const { remoteId } = await initialize()
-    return { body: chatTurn(remoteId, mode(), messages) }
+    return { body: chatTurn(remoteId, mode(), messages, body?.intent) }
   }
 
 /**
