@@ -1,4 +1,5 @@
 import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router"
+import { ThreadPending } from "@workspace/ui/components/assistant/thread-pending"
 
 /**
  * The conversation, around `/app` and `/app/c/$id` both, so one runtime
@@ -19,4 +20,9 @@ export const Route = createFileRoute("/app/_conversation")({
     ? () => null
     : lazyRouteComponent(() => import("@/chat/chat-page"), "ChatPage"),
   ssr: false,
+  // The server renders this while the chat chunk loads. It is the thread's
+  // own shape, and it shows at once: the router's default waits 1s before
+  // showing a pending screen, which leaves a blank page until then.
+  pendingComponent: ThreadPending,
+  pendingMs: 0,
 })

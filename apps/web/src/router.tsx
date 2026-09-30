@@ -82,6 +82,9 @@ export function getRouter() {
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     defaultPendingComponent: () => <LoadingState className="m-6" />,
+    // The default holds a pending screen for 500ms once it shows, so a route
+    // whose data is ready keeps its skeleton on screen for half a second.
+    defaultPendingMinMs: 0,
     defaultErrorComponent: RouteError,
     defaultNotFoundComponent: RouteNotFound,
     ssr: { nonce: requestNonce() },
