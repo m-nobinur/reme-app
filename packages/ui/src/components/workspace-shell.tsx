@@ -118,7 +118,8 @@ const useWide = () =>
  * it grows with its content to half the viewport's height and scrolls past
  * that. It floats over the page rather than taking a column, so the
  * conversation stays centred. From `lg` whether it is open is remembered;
- * below `lg` it starts minimised, since there it covers the conversation. The rail, the panel and
+ * below `lg` it starts minimised, since there it covers the conversation.
+ * With no `panel` there is no card and no space kept for it. The rail, the panel and
  * the bell are slots, so this package still imports no router. `title` and
  * `menu` name the page in the top bar; `actions` and `notifications` sit at
  * its right.
@@ -140,6 +141,10 @@ function WorkspaceShell({
   className,
 }: {
   rail: ReactNode
+  /**
+   * The panel's content. Null when the app has nothing to show on this page:
+   * then there is no panel at all, and the page takes back its space.
+   */
   panel: ReactNode
   /** One line of live activity: the panel's header, and all of it minimised. */
   panelLine: ReactNode
@@ -172,6 +177,7 @@ function WorkspaceShell({
   const wide = useWide()
   const expanded = wide ? panelOpen : narrowOpen
   const panelId = useId()
+  const hasPanel = panel !== null && panel !== undefined
   // Tailwind's `md`, the width the sheet hands the rail back to the layout.
   useCloseAt(
     "(min-width: 48rem)",
@@ -321,7 +327,10 @@ function WorkspaceShell({
           // The panel floats over the page's top right, so the conversation
           // centres in the full width. Below lg its line sits under the bar,
           // so the page starts below it.
-          className="min-h-0 flex-1 overflow-y-auto max-lg:pt-13"
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            hasPanel && "max-lg:pt-13"
+          )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
           data-scroll-restoration-id="main"
@@ -330,53 +339,57 @@ function WorkspaceShell({
           {children}
         </main>
 
-        <aside
-          aria-label="Panel"
-          className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
-          data-state={expanded ? "open" : "closed"}
-          id="workspace-panel"
-        >
-          <button
-            aria-controls={panelId}
-            aria-expanded={expanded}
-            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
-            onClick={() => setPanel(!expanded)}
-            type="button"
+        {hasPanel ? (
+          <aside
+            aria-label="Panel"
+            className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
+            data-state={expanded ? "open" : "closed"}
+            id="workspace-panel"
           >
-            <span className="min-w-0 flex-1">{panelLine}</span>
-            <span className="sr-only">
-              {expanded ? ", minimise the panel" : ", open the panel"}
-            </span>
-            <CaretDownIcon
-              aria-hidden
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-                expanded && "rotate-180"
-              )}
-            />
-          </button>
-          {/* Kept mounted while minimised, so a half-written answer or a
+            <button
+              aria-controls={panelId}
+              aria-expanded={expanded}
+              className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+              onClick={() => setPanel(!expanded)}
+              type="button"
+            >
+              <span className="min-w-0 flex-1">{panelLine}</span>
+              <span className="sr-only">
+                {expanded ? ", minimise the panel" : ", open the panel"}
+              </span>
+              <CaretDownIcon
+                aria-hidden
+                className={cn(
+                  "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                  expanded && "rotate-180"
+                )}
+              />
+            </button>
+            {/* Kept mounted while minimised, so a half-written answer or a
               chosen tab survives it. The server renders it open from lg,
               where the cookie says so, and minimised below. */}
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: a listener for the links inside, which a keyboard activates with a click too. */}
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
-          <div
-            className={cn(
-              "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t p-4",
-              wide
-                ? panelOpen
-                  ? "hidden lg:flex"
-                  : "hidden"
-                : narrowOpen
-                  ? "flex"
-                  : "hidden"
-            )}
-            id={panelId}
-            onClick={wide ? undefined : closeOnLink(() => setNarrowOpen(false))}
-          >
-            {panel}
-          </div>
-        </aside>
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: a listener for the links inside, which a keyboard activates with a click too. */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
+            <div
+              className={cn(
+                "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t p-4",
+                wide
+                  ? panelOpen
+                    ? "hidden lg:flex"
+                    : "hidden"
+                  : narrowOpen
+                    ? "flex"
+                    : "hidden"
+              )}
+              id={panelId}
+              onClick={
+                wide ? undefined : closeOnLink(() => setNarrowOpen(false))
+              }
+            >
+              {panel}
+            </div>
+          </aside>
+        ) : null}
       </div>
     </div>
   )
