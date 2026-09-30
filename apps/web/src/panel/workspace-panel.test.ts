@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace } from "@/lib/api/types"
 import { EMPTY_WORKSPACE } from "@/lib/attention"
-import { lineOf, WorkspacePanel } from "./workspace-panel"
+import { PanelAnnouncer, usePanel, WorkspacePanel } from "./workspace-panel"
 
 /**
  * Where each blank section's next step goes, as the app wires it. The
@@ -31,6 +31,9 @@ vi.mock("@tanstack/react-router", () => ({
       children
     ),
   useRouter: () => router,
+  useMatches: ({ select }: { select: (matches: unknown[]) => unknown }) =>
+    select([{ routeId: "/app/_conversation/" }]),
+  useParams: () => ({}),
 }))
 vi.mock("@/lib/workspace", () => ({ useLiveWorkspace: () => live }))
 vi.mock("@/lib/api/server", () => server)
@@ -50,7 +53,8 @@ const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
 let loader: {
   conversations: Conversation[]
   names: Record<string, string>
-  active: { id: string } | null
+  active: { id: string; name: string } | null
+  activity: []
 }
 let live: {
   workspace: Workspace | null
@@ -67,7 +71,8 @@ beforeEach(() => {
   loader = {
     conversations: [],
     names: {},
-    active: { id: "00000000-0000-4000-8000-000000000001" },
+    active: { id: "00000000-0000-4000-8000-000000000001", name: "Fixture" },
+    activity: [],
   }
   server.completeReminder.mockReset()
   server.askForChanges.mockReset()
@@ -83,9 +88,14 @@ afterEach(async () => {
   container.remove()
 })
 
+/** The panel as the frame mounts it, on Home. */
+function Frame() {
+  return createElement(WorkspacePanel, { panel: usePanel(live.workspace) })
+}
+
 async function render() {
   root = createRoot(container)
-  await act(async () => root.render(createElement(WorkspacePanel)))
+  await act(async () => root.render(createElement(Frame)))
 }
 
 const link = (name: string) =>
@@ -309,98 +319,48 @@ it("moves focus to the Activity tab when the last reminder is done", async () =>
 
   // The read after the write no longer lists it, so its tab goes too.
   live.workspace = { ...live.workspace, reminderNotes: [] }
-  await act(async () => root.render(createElement(WorkspacePanel)))
+  await act(async () => root.render(createElement(Frame)))
   expect(tab("Reminders")).toBeUndefined()
   expect(document.activeElement).toBe(tab("Activity"))
   expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
 })
 
-const build = (state: string, version: number | null) =>
-  ({
-    assignment_id: "00000000-0000-4000-8000-00000000000d",
-    goal: "Add Saturday hours",
-    state,
-    revision: version ? { version } : null,
-    created_at: "2026-09-30T09:00:00.000Z",
-  }) as unknown as Workspace["builds"][number]
+it("offers the next steps a live site has, and they do what they say", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 3,
+    host: "fixture.example.invalid",
+  }
+  await render()
+  const steps = container.querySelector('[data-slot="next-steps"]')
+  expect(
+    [...(steps?.querySelectorAll("a, button") ?? [])].map(
+      (element) => element.textContent
+    )
+  ).toEqual(["Request a change", "Visit your website (opens in a new tab)"])
+  await act(async () => buttonNamed("Request a change")?.click())
+  expect(router.navigate).toHaveBeenLastCalledWith({
+    to: "/app",
+    state: {
+      chat: expect.any(String),
+      compose: { mode: "site_change", key: expect.any(String) },
+    },
+  })
+})
 
-it("says in one line what is most pressing", () => {
-  const names = { "staff-sam": "Sam" }
-  const asked = (id: string | null) =>
-    ({ kind: "question", raisedById: id, raisedBy: "Reme" }) as never
-  expect(
-    lineOf(
-      {
-        ...EMPTY_WORKSPACE,
-        live: 2,
-        builds: [build("validating", 3)],
-        attention: [asked(null)],
-      },
-      names
+it("announces a new line on the same page, and not a build's next stage", async () => {
+  const panel = (lead: string, detail: string) =>
+    ({ line: { tone: "working", lead, detail } }) as never
+  root = createRoot(container)
+  const say = async (lead: string, detail: string) =>
+    act(async () =>
+      root.render(createElement(PanelAnnouncer, { panel: panel(lead, detail) }))
     )
-  ).toEqual({
-    tone: "working",
-    lead: "Building version 3,",
-    detail: "checking the site",
-  })
-  // A build waiting on the owner is not being worked on, and a review comes
-  // before a question.
-  expect(
-    lineOf(
-      {
-        ...EMPTY_WORKSPACE,
-        live: 2,
-        builds: [build("blocked_on_approval", 3)],
-        attention: [{ kind: "approval", version: 3 } as never, asked(null)],
-      },
-      names
-    )
-  ).toEqual({
-    tone: "live",
-    lead: "Version 3 is ready",
-    detail: "for your review",
-  })
-  expect(
-    lineOf(
-      {
-        ...EMPTY_WORKSPACE,
-        attention: [
-          { kind: "approval", version: 3 } as never,
-          { kind: "approval", version: 4 } as never,
-        ],
-      },
-      names
-    )
-  ).toEqual({
-    tone: "idle",
-    lead: "2 versions are ready",
-    detail: "for your review",
-  })
-  expect(
-    lineOf(
-      { ...EMPTY_WORKSPACE, live: 2, attention: [asked("staff-sam")] },
-      names
-    )
-  ).toEqual({ tone: "live", lead: "Sam", detail: "has a question for you" })
-  expect(
-    lineOf(
-      { ...EMPTY_WORKSPACE, live: 2, attention: [asked(null), asked(null)] },
-      names
-    )
-  ).toEqual({ tone: "live", lead: "2 questions", detail: "for you" })
-  expect(lineOf({ ...EMPTY_WORKSPACE, live: 1 }, names)).toEqual({
-    tone: "live",
-    lead: "Your website is live",
-    detail: "on version 1",
-  })
-  expect(lineOf({ ...EMPTY_WORKSPACE, open: true }, names)).toEqual({
-    tone: "idle",
-    lead: "Your first website",
-    detail: "is under way",
-  })
-  expect(lineOf(EMPTY_WORKSPACE, names)).toEqual({
-    tone: "idle",
-    lead: "Let's get your website started",
-  })
-  expect(lineOf(null, names).tone).toBe("idle")
+  const status = () => container.querySelector('[role="status"]')?.textContent
+  await say("Building version 4,", "reading your brief")
+  expect(status()).toBe("")
+  await say("Building version 4,", "checking the site")
+  expect(status()).toBe("")
+  await say("Version 4 is ready", "for your review")
+  expect(status()).toBe("Version 4 is ready for your review")
 })

@@ -6,13 +6,10 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
 import { cn } from "@workspace/ui/lib/utils"
+import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
-import {
-  currentBuild,
-  useLiveThumbnail,
-  useRequestChanges,
-} from "@/panel/workspace-panel"
+import { useLiveThumbnail, useRequestChanges } from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app/website")({
   component: WebsitePage,
