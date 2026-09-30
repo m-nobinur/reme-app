@@ -16,11 +16,11 @@ test("a question shows its own inputs, the name filled in, Skip only where allow
   const forms = asks(page).locator("form")
   await expect(forms).toHaveCount(2)
   await expect(page.getByLabel("Business name")).toHaveValue("Brightclean")
-  await expect(page.getByLabel("Hourly price, in pounds")).toHaveAttribute(
-    "type",
-    "number"
+  await expect(forms.nth(1).getByLabel("Tagline")).toHaveAttribute(
+    "maxlength",
+    "120"
   )
-  // Only pricing may be skipped.
+  // Only the tagline may be skipped.
   await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(
     1
   )

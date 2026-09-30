@@ -55,7 +55,7 @@
     "summary": "A closing band with a heading, a line and the site's main action.",
     "props": [],
     "constraints": [
-      "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact.",
+      "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact. An empty ctaLabel takes the label of the page it links to, which is the quote page when there is one.",
       "Last on a page, after everything else."
     ],
     "examples": ["<CtaBand />"],
@@ -125,30 +125,22 @@
     "source": "generated"
   },
   {
-    "component": "PriceCard",
-    "path": "src/components/PriceCard/PriceCard.astro",
-    "summary": "One priced service, its name and its price as the fact states it.",
-    "props": [
-      {
-        "name": "name",
-        "type": "string",
-        "required": true,
-        "description": "The service's name, read from a site field."
-      },
-      {
-        "name": "price",
-        "type": "string",
-        "required": true,
-        "description": "A pricing fact's field as the site config renders it."
-      }
+    "component": "QuoteForm",
+    "path": "src/components/QuoteForm/QuoteForm.astro",
+    "summary": "The quote request form, its fields read from quoteForm in the site config.",
+    "props": [],
+    "constraints": [
+      "Reads quoteForm and the site strings it names; tailor the request by editing quoteForm, never this file. Each field is name, type (text, email, tel, date, number, select or textarea), label, required, and optionally hint, options and autocomplete. label, hint and every option are keys of site, each with a composed field.",
+      "Keep name, email and a details textarea. Ask what the business needs to price the job, e.g. pickup, drop-off, date and passengers for a chauffeur firm, or the kind of matter for a law firm.",
+      "A select's options are usually service1Name to service3Name; a select with no options set renders as a text input.",
+      "Sends to quoteFormAction when set, else by email to site.email; renders nothing with neither. Leave quoteFormAction empty until the platform gives an endpoint.",
+      "On the quote page, after its Hero."
     ],
-    "constraints": ["Renders nothing unless both name and price are set."],
-    "examples": [
-      "<PriceCard name={site.standardCleanName} price={site.standardCleanHourly} />"
-    ],
+    "examples": ["<QuoteForm />"],
     "forbidden": [
-      "a price no pricing fact states",
-      "discounts, from-prices or ranges"
+      "a price, a range or a promise of how soon a reply comes",
+      "a field asking for payment or card details",
+      "a script or a third-party form service"
     ],
     "source": "generated"
   },
@@ -224,7 +216,7 @@
     "props": [],
     "constraints": [
       "Reads service1Name to service3Body itself; a card renders only when one of its two fields is set.",
-      "Prices stay in PriceCard, which renders the pricing fact."
+      "No prices anywhere. The site quotes on request, through the quote page."
     ],
     "examples": ["<ServiceCards />"],
     "forbidden": ["a price", "a service the facts give no sign of"],

@@ -28,7 +28,7 @@ test("reads say what they looked at, and open onto what they found", async ({
   await expect(workspace).toContainText("Version 3 is live")
   await expect(workspace).toContainText("Add Saturday hours, 9 to 1.")
   await expect(workspace).toContainText("Building")
-  await expect(workspace).toContainText("A question about hourly price")
+  await expect(workspace).toContainText("A question about service area")
   await expect(workspace).toContainText("Version 4 to review by")
   await expect(workspace).toContainText("Tagline")
 
@@ -55,7 +55,7 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     "Send answer",
     "Sending",
     "Weekday hours: 08:00 to 18:00",
-    "This answers your build's question: Hourly price for a standard clean.",
+    "This answers your build's question: Service area.",
     "Sent. Your build carries on.",
     "That question is no longer waiting on you.",
   ],

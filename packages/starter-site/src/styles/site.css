@@ -511,33 +511,6 @@ p {
   color: var(--muted-foreground);
 }
 
-/* Prices */
-
-.price-card {
-  display: inline-grid;
-  gap: var(--space-3xs);
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--brand-line);
-  border-radius: var(--radius-md);
-  background: var(--card);
-  color: var(--card-foreground);
-  box-shadow: var(--shadow-card);
-}
-
-.price-card .price-name {
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-}
-
-.price-card .price-value {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Contact details */
 
 .contact-details {
@@ -577,6 +550,95 @@ p {
 
 .contact-details dd a:hover {
   color: var(--brand-text);
+}
+
+/* Quote form */
+
+.quote-form {
+  display: grid;
+  gap: var(--space-lg);
+  max-width: 40rem;
+}
+
+.quote-form fieldset {
+  display: grid;
+  gap: var(--space-md);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.quote-form legend {
+  margin-block-end: var(--space-md);
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.quote-field {
+  display: grid;
+  gap: var(--space-3xs);
+}
+
+.quote-field label {
+  font-weight: 600;
+}
+
+.quote-optional {
+  margin-inline-start: var(--space-2xs);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.quote-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.quote-field :is(input, select, textarea) {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.quote-field textarea {
+  resize: vertical;
+}
+
+.quote-field :is(input, select, textarea):focus-visible,
+.quote-submit button:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 2px;
+}
+
+/* Only once the visitor has touched the field, so an empty form is calm. */
+.quote-field :is(input, select, textarea):user-invalid {
+  border-color: var(--destructive);
+}
+
+.quote-submit {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-xs);
+}
+
+.quote-submit button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.quote-submit p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 /* Call to action */

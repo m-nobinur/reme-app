@@ -5,7 +5,8 @@ props: []
 constraints:
   - Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or
     the body is set. The links come from the pages that exist and the phone
-    fact.
+    fact. An empty ctaLabel takes the label of the page it links to, which is
+    the quote page when there is one.
   - Last on a page, after everything else.
 examples:
   - "<CtaBand />"

@@ -11,7 +11,6 @@ export const FILLED: Record<string, string> = {
   email: "hello@brightclean.invalid",
   weekdayHours: "08:00 to 17:00",
   serviceArea: "Within 25 km of Fairhaven",
-  standardCleanHourly: "$35.00 an hour",
   openingHours: "Mo-Fr 08:00-17:00",
   areaServed: "Fairhaven",
   testimonial1Quote: "They have never missed a week.",

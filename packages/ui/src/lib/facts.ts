@@ -8,7 +8,6 @@ const LABEL: Record<FactValueKey, string> = {
   "business.email": "Email address",
   "hours.weekday": "Weekday hours",
   "service_area.radius": "Service area",
-  "pricing.standard_clean_hourly": "Hourly price for a standard clean",
   "business.tagline": "Tagline",
   "business.industry": "Industry",
   "business.offerings": "Products and services",

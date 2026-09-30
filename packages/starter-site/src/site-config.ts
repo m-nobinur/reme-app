@@ -37,8 +37,6 @@ const values = {
   weekdayHours: "",
   /** service_area.radius, as "Within 25 km of Fairhaven". */
   serviceArea: "",
-  /** pricing.standard_clean_hourly, as "$35.00 an hour". */
-  standardCleanHourly: "",
   /** hours.weekday for structured data, as "Mo-Fr 08:00-17:00". */
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
@@ -77,12 +75,18 @@ const values = {
   /** The home page's h1: a short slogan. Falls back to the business name. */
   heroHeading: "",
   tagline: "",
-  standardCleanName: "Standard clean",
   homeIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
   contactIntro: "",
   quoteIntro: "",
+  /**
+   * Where the quote form sends a request, once an endpoint exists. Empty
+   * sends it by email to site.email instead; with neither, no form renders.
+   */
+  quoteFormAction: "",
+  /** The subject line of a request sent by email. */
+  quoteEmailSubject: "Quote request",
   bookingIntro: "",
   valuePropsHeading: "Why choose us",
   valueProp1Title: "",
@@ -119,7 +123,8 @@ const values = {
   faq3Answer: "",
   ctaHeading: "",
   ctaBody: "",
-  ctaLabel: "Get in touch",
+  /** The band's button text. Empty uses the label of the page it links to. */
+  ctaLabel: "",
   skipLink: "Skip to content",
   primaryNavLabel: "Main",
   footerNavLabel: "Footer",
@@ -127,14 +132,29 @@ const values = {
   navServices: "Services",
   navServiceArea: "Service area",
   navContact: "Contact",
-  navQuote: "Get a quote",
+  navQuote: "Request a quote",
   navBooking: "Book a clean",
   servicesHeading: "Services",
   serviceAreaHeading: "Service area",
   contactHeading: "Contact",
-  quoteHeading: "Get a quote",
+  quoteHeading: "Request a quote",
   bookingHeading: "Book a clean",
-  priceHeading: "Prices",
+  quoteContactLegend: "Your details",
+  quoteRequestLegend: "Your request",
+  quoteNameLabel: "Your name",
+  quoteEmailLabel: "Email address",
+  quotePhoneLabel: "Phone number",
+  quoteServiceLabel: "What you need",
+  quoteLocationLabel: "Location",
+  quoteLocationHint: "A town, postcode or address",
+  quoteDateLabel: "Preferred date",
+  quoteDetailsLabel: "Details",
+  quoteDetailsHint: "Anything that helps us understand the request",
+  quoteSourceLabel: "How did you hear about us?",
+  quoteChoose: "Choose one",
+  quoteOptional: "optional",
+  quoteSubmit: "Send quote request",
+  quoteNextSteps: "We read every request and reply by email or phone.",
   phoneLabel: "Phone",
   emailLabel: "Email",
   weekdayHoursLabel: "Weekdays",
@@ -156,11 +176,6 @@ export const fields: Record<keyof typeof site, Field> = {
   serviceArea: {
     kind: "fact",
     fact_key: "service_area.radius",
-    required: true,
-  },
-  standardCleanHourly: {
-    kind: "fact",
-    fact_key: "pricing.standard_clean_hourly",
     required: true,
   },
   openingHours: { kind: "fact", fact_key: "hours.weekday", required: false },
@@ -213,12 +228,13 @@ export const fields: Record<keyof typeof site, Field> = {
   brandColor: composed,
   heroHeading: composed,
   tagline: composed,
-  standardCleanName: composed,
   homeIntro: composed,
   servicesIntro: composed,
   serviceAreaIntro: composed,
   contactIntro: composed,
   quoteIntro: composed,
+  quoteFormAction: composed,
+  quoteEmailSubject: composed,
   bookingIntro: composed,
   valuePropsHeading: composed,
   valueProp1Title: composed,
@@ -270,7 +286,22 @@ export const fields: Record<keyof typeof site, Field> = {
   contactHeading: composed,
   quoteHeading: composed,
   bookingHeading: composed,
-  priceHeading: composed,
+  quoteContactLegend: composed,
+  quoteRequestLegend: composed,
+  quoteNameLabel: composed,
+  quoteEmailLabel: composed,
+  quotePhoneLabel: composed,
+  quoteServiceLabel: composed,
+  quoteLocationLabel: composed,
+  quoteLocationHint: composed,
+  quoteDateLabel: composed,
+  quoteDetailsLabel: composed,
+  quoteDetailsHint: composed,
+  quoteSourceLabel: composed,
+  quoteChoose: composed,
+  quoteOptional: composed,
+  quoteSubmit: composed,
+  quoteNextSteps: composed,
   phoneLabel: composed,
   emailLabel: composed,
   weekdayHoursLabel: composed,
@@ -278,3 +309,98 @@ export const fields: Record<keyof typeof site, Field> = {
   notFoundBody: composed,
   homeLink: composed,
 }
+
+/** A key of `site`: every string the quote form shows is one. */
+type SiteKey = keyof typeof values
+
+/**
+ * One input of the quote form. `label`, `hint` and each of `options` name a
+ * `site` string, so the form's words live with the rest of the copy. `name`
+ * is what the request carries, lower case. A `select` whose options are all
+ * empty renders as a text input, so the service list can follow the
+ * services on offer.
+ */
+export type QuoteField = {
+  name: string
+  type: "text" | "email" | "tel" | "date" | "number" | "select" | "textarea"
+  label: SiteKey
+  required: boolean
+  hint?: SiteKey
+  options?: SiteKey[]
+  /** The browser's autofill token, e.g. `name`, `email`, `tel`. */
+  autocomplete?: string
+}
+
+/**
+ * The quote form, as fieldsets in order. Tailor it to the business: a
+ * chauffeur firm asks for pickup, drop-off, date and passengers; a law firm
+ * for the kind of matter. Each new label is a `site` string with a
+ * `composed` field, like every other. Never ask for payment details.
+ */
+export const quoteForm: { legend: SiteKey; fields: QuoteField[] }[] = [
+  {
+    legend: "quoteContactLegend",
+    fields: [
+      {
+        name: "name",
+        type: "text",
+        label: "quoteNameLabel",
+        required: true,
+        autocomplete: "name",
+      },
+      {
+        name: "email",
+        type: "email",
+        label: "quoteEmailLabel",
+        required: true,
+        autocomplete: "email",
+      },
+      {
+        name: "phone",
+        type: "tel",
+        label: "quotePhoneLabel",
+        required: false,
+        autocomplete: "tel",
+      },
+    ],
+  },
+  {
+    legend: "quoteRequestLegend",
+    fields: [
+      {
+        name: "service",
+        type: "select",
+        label: "quoteServiceLabel",
+        required: true,
+        options: ["service1Name", "service2Name", "service3Name"],
+      },
+      {
+        name: "location",
+        type: "text",
+        label: "quoteLocationLabel",
+        hint: "quoteLocationHint",
+        required: true,
+        autocomplete: "street-address",
+      },
+      {
+        name: "date",
+        type: "date",
+        label: "quoteDateLabel",
+        required: false,
+      },
+      {
+        name: "details",
+        type: "textarea",
+        label: "quoteDetailsLabel",
+        hint: "quoteDetailsHint",
+        required: true,
+      },
+      {
+        name: "source",
+        type: "text",
+        label: "quoteSourceLabel",
+        required: false,
+      },
+    ],
+  },
+]

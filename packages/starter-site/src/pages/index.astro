@@ -4,8 +4,6 @@ import CtaBand from "../components/CtaBand/CtaBand.astro"
 import Faq from "../components/Faq/Faq.astro"
 import Gallery from "../components/Gallery/Gallery.astro"
 import Hero from "../components/Hero/Hero.astro"
-import PriceCard from "../components/PriceCard/PriceCard.astro"
-import Section from "../components/Section/Section.astro"
 import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
 import Stats from "../components/Stats/Stats.astro"
 import Steps from "../components/Steps/Steps.astro"
@@ -27,12 +25,16 @@ import { localBusiness, webSite } from "../structured-data"
     heading={site.heroHeading || site.businessName}
     lede={site.tagline}
   >
-    {site.phone && <ActionLink href={`tel:${site.phone}`} label={site.phone} />}
     {
       primaryAction && (
+        <ActionLink href={primaryAction.href} label={primaryAction.label} />
+      )
+    }
+    {
+      site.phone && (
         <ActionLink
-          href={primaryAction.href}
-          label={primaryAction.label}
+          href={`tel:${site.phone}`}
+          label={site.phone}
           variant="secondary"
         />
       )
@@ -43,16 +45,6 @@ import { localBusiness, webSite } from "../structured-data"
   <ValueProps />
   <ServiceCards />
   <Steps />
-  {
-    site.standardCleanHourly && (
-      <Section heading={site.priceHeading}>
-        <PriceCard
-          name={site.standardCleanName}
-          price={site.standardCleanHourly}
-        />
-      </Section>
-    )
-  }
   <Testimonials />
   <Gallery />
   <Faq />

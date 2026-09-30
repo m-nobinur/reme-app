@@ -70,7 +70,7 @@ const COS_TOOLS_FIXTURE = {
   zone: "Europe/London",
   question: (requestId: string) =>
     requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
-      ? "Hourly price for a standard clean"
+      ? "Service area"
       : null,
 }
 
@@ -292,7 +292,7 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
         "business.phone",
         stated("business.phone", { e164: "+447700900123" })
       ),
-      askFact("pricing.standard_clean_hourly", {
+      askFact("business.tagline", {
         result: { answer: "skipped" },
         skippable: true,
       }),
@@ -316,7 +316,7 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
     status: WAITING,
   },
   {
-    content: [askFact("pricing.standard_clean_hourly", { skippable: true })],
+    content: [askFact("business.tagline", { skippable: true })],
     role: "assistant",
     status: WAITING,
   },
@@ -540,8 +540,8 @@ const WORKSPACE_READ = {
   questions: [
     {
       request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
-      field: "pricing.standard_clean_hourly",
-      why: "The prices page needs an hourly rate.",
+      field: "service_area.radius",
+      why: "The areas page needs how far you travel.",
       options: null,
       blocking: true,
     },
@@ -696,9 +696,9 @@ const RATED: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
-  ask("And the prices page?"),
+  ask("And the services page?"),
   {
-    content: [{ text: "It shows the hourly rate you gave.", type: "text" }],
+    content: [{ text: "It lists the services you gave.", type: "text" }],
     role: "assistant",
     status: DONE,
   },

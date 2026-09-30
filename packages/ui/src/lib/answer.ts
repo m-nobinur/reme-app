@@ -49,9 +49,6 @@ function toE164(raw: string): string {
 
 const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw))
 
-/** Pounds as typed to pence. `Math.round`, so 12.5 is 1250 and not 1249.99. */
-const pence = (raw: string) => Math.round(number(raw) * 100)
-
 /** Items typed one to a line or separated by commas, as a list. */
 const items = (raw: string) =>
   raw
@@ -65,8 +62,7 @@ const line = (name: string, label: string, maxLength: number) =>
 /**
  * The question and the inputs for each fact an owner types. Every
  * `AskableFactKey` has a row, so a key added to the contract without its
- * question and inputs here fails the build. Prices are pounds: the owner is a
- * UK sole trader.
+ * question and inputs here fails the build.
  */
 export const FACT_INPUTS = {
   "business.name": {
@@ -132,20 +128,6 @@ export const FACT_INPUTS = {
       },
     ],
   },
-  "pricing.standard_clean_hourly": {
-    ask: "What do you charge an hour for a standard clean?",
-    fields: [
-      {
-        name: "amount_minor",
-        label: "Hourly price, in pounds",
-        type: "number",
-        min: 0.01,
-        step: "0.01",
-        parse: pence,
-      },
-    ],
-    fixed: { currency: "GBP" },
-  },
   "business.tagline": {
     ask: "How would you sum up your business in one line?",
     fields: [
@@ -189,7 +171,6 @@ export const FACT_INPUTS = {
     /** How onboarding asks for it. */
     ask: string
     fields: readonly FactInput[]
-    fixed?: Record<string, unknown>
   }
 >
 
@@ -247,16 +228,13 @@ export function answerValue(
     }
     return { value: text }
   }
-  const { fields, ...rest } = FACT_INPUTS[spec.key]
-  const value = {
-    ...Object.fromEntries(
-      fields.map((input: FactInput) => {
-        const raw = read(input.name)
-        return [input.name, input.parse ? input.parse(raw) : raw.trim()]
-      })
-    ),
-    ...("fixed" in rest ? rest.fixed : {}),
-  }
+  const { fields } = FACT_INPUTS[spec.key]
+  const value = Object.fromEntries(
+    fields.map((input: FactInput) => {
+      const raw = read(input.name)
+      return [input.name, input.parse ? input.parse(raw) : raw.trim()]
+    })
+  )
   const parsed = FactValue.safeParse({ key: spec.key, value })
   if (parsed.success) return { value }
   const issue = parsed.error.issues[0]

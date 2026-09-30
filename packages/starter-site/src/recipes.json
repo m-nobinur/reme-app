@@ -15,8 +15,6 @@
             "ValueProps",
             "ServiceCards",
             "Steps",
-            "Section",
-            "PriceCard",
             "Testimonials",
             "Gallery",
             "Faq",
@@ -47,7 +45,6 @@
             "step2Body",
             "step3Title",
             "step3Body",
-            "standardCleanHourly",
             "testimonial1Quote",
             "testimonial1Author",
             "faq1Question",
@@ -64,14 +61,7 @@
           "name": "services",
           "page": "src/pages/services.astro",
           "purpose": "What the business does, in more words than the home page gives it.",
-          "components": [
-            "Hero",
-            "ServiceCards",
-            "Section",
-            "PriceCard",
-            "Steps",
-            "CtaBand"
-          ],
+          "components": ["Hero", "ServiceCards", "Section", "Steps", "CtaBand"],
           "fields": [
             "servicesHeading",
             "servicesIntro",
@@ -81,7 +71,6 @@
             "service2Body",
             "service3Name",
             "service3Body",
-            "standardCleanHourly",
             "step1Title",
             "step1Body"
           ]
@@ -111,6 +100,20 @@
             "email",
             "weekdayHours",
             "serviceArea"
+          ]
+        },
+        {
+          "name": "quote",
+          "page": "src/pages/quote.astro",
+          "purpose": "How a visitor asks for a quote: a short form, with the phone and email beside it.",
+          "components": ["Hero", "QuoteForm", "ContactDetails"],
+          "fields": [
+            "quoteHeading",
+            "quoteIntro",
+            "quoteSubmit",
+            "quoteNextSteps",
+            "phone",
+            "email"
           ]
         }
       ]

@@ -24,7 +24,7 @@ import { expect, it } from "vitest"
  */
 
 const ASK = {
-  key: "pricing.standard_clean_hourly",
+  key: "business.tagline",
   skippable: true,
   prefill: null,
 }
