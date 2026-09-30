@@ -207,8 +207,14 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(photoFile(PHOTO)).toBe(`uploads/${PHOTO.id}.jpg`)
     expect(rules).toContain(`/uploads/${PHOTO.id}.jpg ("Our van.jpg")`)
     expect(rules).toContain(
-      "the hero, a gallery, the about section or a service card"
+      "The best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt"
     )
+    expect(rules).toContain("site.photo1Src to site.photo3Src")
+    expect(rules).toContain(
+      "With up to four photos use every one, and never the same photo twice on a page"
+    )
+    expect(rules).toContain("Never stretch a photo")
+    expect(rules).toContain("Name any photo you left out, and why, in risks")
     expect(rules).toContain('never the file name and never "image"')
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
   })
