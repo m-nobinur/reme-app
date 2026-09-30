@@ -116,6 +116,22 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "false")
 })
 
+test("with nothing for the panel to say there is no card and no space kept", async ({
+  page,
+}) => {
+  for (const width of [WIDTHS.phone, WIDTHS.desktop]) {
+    await open(page, "WorkspaceShell without a panel", width)
+    await expect(panel(page)).toHaveCount(0)
+    const header = await page.locator("header").boundingBox()
+    const heading = await page
+      .getByRole("heading", { name: "Staff" })
+      .boundingBox()
+    if (!header || !heading) throw new Error("not laid out")
+    // The page's top padding only, with no line's height above it.
+    expect(heading.y - (header.y + header.height)).toBeLessThan(16)
+  }
+})
+
 test("the bell carries the unread count and opens the newest", async ({
   page,
 }) => {
