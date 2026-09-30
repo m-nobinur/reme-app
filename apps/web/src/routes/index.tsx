@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Reme answers every enquiry in your voice, prepares quotes from your prices and follows up until the customer decides. You approve everything that matters.",
+          "Reme answers every enquiry in your voice, gathers what each quote request needs and follows up until the customer decides. You approve everything that matters.",
       },
     ],
   }),
