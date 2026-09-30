@@ -20,7 +20,7 @@
     "dev": "turbo dev",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:ci": "turbo test --filter=!@workspace/ui",
+    "test:ci": "turbo test --filter=!@workspace/ui --concurrency=4",
     "e2e": "pnpm --filter e2e e2e",
     "e2e:golden": "pnpm --filter e2e golden",
     "test:tenancy": "pnpm --filter @workspace/db test:tenancy && pnpm --filter api test:tenancy",

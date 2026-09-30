@@ -73,11 +73,19 @@ export async function startOrg(
   user: ProbeUser,
   name: string
 ): Promise<{ org_id: string }> {
-  const org = await api(await sessionCookie(page), "/org", {
-    method: "POST",
-    headers: { "idempotency-key": `org:${user.id}` },
-    body: JSON.stringify({ name }),
-  })
+  const cookie = await sessionCookie(page)
+  const post = () =>
+    api(cookie, "/org", {
+      method: "POST",
+      headers: { "idempotency-key": `org:${user.id}` },
+      body: JSON.stringify({ name }),
+    })
+  // A transient 503 (WorkOS past the api's 3 s bound) is retried with the
+  // same key, as the app's own org-write retry does; anything else fails.
+  let org = await post()
+  for (let tries = 1; org.status === 503 && tries < 3; tries++) {
+    org = await post()
+  }
   expect(org.status, await org.clone().text()).toBeLessThan(300)
   await page.goto("/sign-out")
   await signIn(page, user)
