@@ -112,7 +112,8 @@ const BADGE =
  * a cookie; below `md` it is a sheet from the left. The panel is a rounded
  * card whose header is always one line of live activity (`panelLine`); open,
  * it grows with its content to half the viewport's height and scrolls past
- * that. From `lg` whether it is open is remembered; below `lg` it starts
+ * that. From `lg` that line sits in the top bar beside the bell, and the open
+ * card keeps the conversation clear of it. From `lg` whether it is open is remembered; below `lg` it starts
  * minimised, since there it covers the conversation. The rail and the panel
  * are slots, so this package still imports no router. `title` and `menu`
  * name the page in the top bar, and `notifications` is the link the bell at
@@ -266,7 +267,7 @@ function WorkspaceShell({
             <SidebarSimpleIcon aria-hidden />
           </Button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1 lg:pe-[22.5rem]">
             {renaming ? (
               <TitleEditor {...renaming} />
             ) : (
@@ -322,7 +323,12 @@ function WorkspaceShell({
         </header>
 
         <main
-          className="min-h-0 flex-1 overflow-y-auto"
+          // From lg the open panel keeps its own column clear, so it never
+          // covers the end of a message; minimised, it sits in the top bar.
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            wide && panelOpen && "lg:pe-[23.5rem]"
+          )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
           data-scroll-restoration-id="main"
@@ -333,14 +339,14 @@ function WorkspaceShell({
 
         <aside
           aria-label="Panel"
-          className="absolute top-13 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
+          className="absolute top-13 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.5 lg:right-13"
           data-state={expanded ? "open" : "closed"}
           id="workspace-panel"
         >
           <button
             aria-controls={panelId}
             aria-expanded={expanded}
-            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none lg:min-h-9"
             onClick={() => setPanel(!expanded)}
             type="button"
           >
