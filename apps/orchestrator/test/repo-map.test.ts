@@ -26,7 +26,7 @@ describe("the repository map", () => {
 
   it("says what each file exports, takes, uses and reads", () => {
     expect(map).toContain(
-      "src/site-config.ts (752 B): exports site {name, tagline, phone, email, weekdayHours, serviceArea, standardCleanHourly}"
+      "src/site-config.ts (747 B): exports site {name, tagline, phone, email, weekdayHours, serviceArea, offerings}"
     )
     expect(map).toContain(
       "src/layouts/Base.astro (935 B): props {title: string}; uses site; reads site.name, site.serviceArea"

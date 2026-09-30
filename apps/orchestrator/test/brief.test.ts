@@ -313,7 +313,7 @@ live("updateFacts", () => {
 
 /** ADR-033: the owner's omissions, as one record holding the whole set. */
 live("hideFacts", () => {
-  const PRICE = "pricing.standard_clean_hourly"
+  const AREA = "service_area.text"
 
   const hide = (orgId: string, idempotencyKey: string, factKeys: string[]) =>
     kit.withOrg({ orgId }, (db) =>
@@ -328,15 +328,15 @@ live("hideFacts", () => {
       db.select().from(events).where(sql`${events.type} = 'facts.updated'`)
     )
 
-  const priced = async () => {
+  const withArea = async () => {
     const orgId = await freshOrg(kit)
     await phone(orgId, "020 7946 0000")
     await kit.withOrg({ orgId }, (db) =>
       supersedeFact(db, {
         orgId,
-        key: PRICE,
-        factType: "pricing",
-        value: { currency: "USD", amount_minor: 3500 },
+        key: AREA,
+        factType: "service_area",
+        value: { text: "Fairhaven and nearby villages" },
         provenance: { source: "owner_stated", confidence: 1 },
       })
     )
@@ -344,14 +344,14 @@ live("hideFacts", () => {
   }
 
   it("writes the whole set as one owner-stated record, logged once", async () => {
-    const orgId = await priced()
-    expect(await hide(orgId, "hide-1", [PRICE])).toMatchObject({
+    const orgId = await withArea()
+    expect(await hide(orgId, "hide-1", [AREA])).toMatchObject({
       outcome: "written",
       replayed: false,
-      hidden: [PRICE],
+      hidden: [AREA],
     })
     expect(await held(orgId)).toMatchObject({
-      value: [PRICE],
+      value: [AREA],
       version: 1,
       factType: "site_display",
       provenanceSource: "owner_stated",
@@ -362,20 +362,20 @@ live("hideFacts", () => {
   })
 
   it("writes nothing when the set has not changed", async () => {
-    const orgId = await priced()
-    await hide(orgId, "hide-2", [PRICE])
-    expect(await hide(orgId, "hide-2-again", [PRICE, PRICE])).toMatchObject({
+    const orgId = await withArea()
+    await hide(orgId, "hide-2", [AREA])
+    expect(await hide(orgId, "hide-2-again", [AREA, AREA])).toMatchObject({
       outcome: "written",
       replayed: true,
-      hidden: [PRICE],
+      hidden: [AREA],
     })
     expect((await held(orgId))?.version).toBe(1)
     expect(await updates(orgId)).toHaveLength(1)
   })
 
   it("restores a fact with a shorter set and clears with an empty one", async () => {
-    const orgId = await priced()
-    await hide(orgId, "hide-3", [PRICE, "business.phone"])
+    const orgId = await withArea()
+    await hide(orgId, "hide-3", [AREA, "business.phone"])
     expect(await hide(orgId, "hide-4", ["business.phone"])).toMatchObject({
       hidden: ["business.phone"],
     })
@@ -390,8 +390,8 @@ live("hideFacts", () => {
   })
 
   it("refuses a key the org holds no fact for and writes nothing", async () => {
-    const orgId = await priced()
-    expect(await hide(orgId, "hide-7", [PRICE, "pricing.invented"])).toEqual({
+    const orgId = await withArea()
+    expect(await hide(orgId, "hide-7", [AREA, "pricing.invented"])).toEqual({
       outcome: "unknown_key",
       key: "pricing.invented",
     })

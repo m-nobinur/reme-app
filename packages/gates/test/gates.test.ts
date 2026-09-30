@@ -127,12 +127,9 @@ describe("the content gate", () => {
   // ADR-033: what the owner left off the site is one fact whose value is fact
   // keys and no value of its own, so it supports no claim and decides nothing.
   it("is unchanged by the record of what the owner left off the site", () => {
-    const facts = [
-      ...FACTS,
-      fact(HIDDEN_FACTS_KEY, ["pricing.standard_clean_hourly"]),
-    ]
-    const noPrice = pages(home("<p>Weekdays 08:00 to 17:00</p>"))
-    expect(checkContent(noPrice, facts).passed).toBe(true)
+    const facts = [...FACTS, fact(HIDDEN_FACTS_KEY, ["hours.weekday"])]
+    const noHours = pages(home("<p>$35 an hour</p>"))
+    expect(checkContent(noHours, facts).passed).toBe(true)
     expect(checkContent(pages(), facts)).toEqual(checkContent(pages(), FACTS))
   })
 

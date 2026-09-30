@@ -6,10 +6,10 @@ import { site } from "../site-config"
 <Base title={site.name || "Home"}>
   {site.name && <h1>{site.name}</h1>}
   {site.tagline && <p>{site.tagline}</p>}
-  {site.standardCleanHourly && (
+  {site.offerings && (
     <section>
-      <h2>Standard clean</h2>
-      <p>{site.standardCleanHourly}</p>
+      <h2>What we offer</h2>
+      <p>{site.offerings}</p>
     </section>
   )}
   {site.weekdayHours && (

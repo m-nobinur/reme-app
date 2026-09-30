@@ -17,6 +17,6 @@ export const site = {
   weekdayHours: "",
   /** service_area.radius, as "within 25 km of Fairhaven". */
   serviceArea: "",
-  /** pricing.standard_clean_hourly, as "$35 an hour". */
-  standardCleanHourly: "",
+  /** business.offerings, as "Regular cleans, deep cleans". */
+  offerings: "",
 }
