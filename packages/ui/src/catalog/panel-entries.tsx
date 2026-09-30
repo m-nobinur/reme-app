@@ -1,3 +1,4 @@
+import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import {
   type ApprovalTarget,
   AssignmentState,
@@ -8,6 +9,7 @@ import {
   ApprovalItem,
   ComingUp,
   LiveLine,
+  NextSteps,
   PanelBlank,
   PanelDigest,
   QuestionItem,
@@ -40,6 +42,7 @@ const noop = () => undefined
 const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in, pinned so the snapshot does not tick. */
 const NOW = Date.parse(STARTED) + 250_000
+const NOW_ISO = new Date(NOW).toISOString()
 const TYPICAL = { min: 115, max: 313 }
 const EXPIRES = "2026-10-04T09:00:00.000Z"
 const REVISION: ApprovalTarget = {
@@ -69,6 +72,28 @@ const nextStep = (href: string, label: string) => (
   >
     {label}
   </a>
+)
+
+/** A next step as `apps/web` draws it: an outline button, link or not. */
+const STEP = buttonVariants({ variant: "outline", size: "sm" })
+
+/** A live site's next steps, as the panel offers them on Home. */
+const liveSteps = (
+  <NextSteps>
+    <button className={STEP} key="change" type="button">
+      Request a change
+    </button>
+    <a
+      className={STEP}
+      href="#visit"
+      key="visit"
+      title="brightclean-demo.example.invalid"
+    >
+      Visit your website
+      <span className="sr-only"> (opens in a new tab)</span>
+      <ArrowSquareOutIcon aria-hidden className="text-muted-foreground" />
+    </a>
+  </NextSteps>
 )
 
 /** A read that takes a moment, so the retry's pending state shows. */
@@ -240,6 +265,104 @@ function SamplePanelLine() {
 }
 
 const panelCatalog: Entry[] = [
+  { name: "NextSteps", render: () => liveSteps },
+  {
+    name: "NextSteps getting started",
+    render: () => (
+      <NextSteps>
+        <a className={STEP} href="#getting-started" key="continue">
+          Continue getting started
+        </a>
+      </NextSteps>
+    ),
+  },
+  {
+    name: "NextSteps on the reminders page",
+    render: () => (
+      <NextSteps>
+        <a className={STEP} href="#remind" key="remind">
+          Set a reminder
+        </a>
+      </NextSteps>
+    ),
+  },
+  {
+    // The Activity tab on Home with nothing waiting: where things stand,
+    // what went live today, and what to do next.
+    name: "Panel caught up",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-6">
+        <PanelDigest
+          sentences={["All caught up. Your site is live on version 3."]}
+        />
+        <ComingUp
+          items={[{ id: "v3", text: "Published v3", at: STARTED }]}
+          title="Latest"
+        />
+        {liveSteps}
+      </div>
+    ),
+  },
+  {
+    // The Activity tab while a new business gets started.
+    name: "Panel getting started",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-6">
+        <PanelDigest
+          sentences={[
+            "Getting Brightclean ready for its first website.",
+            "2 details to go before Reme can build it.",
+          ]}
+        />
+        <PanelBlank
+          steps={[
+            { label: "Phone number", done: false },
+            { label: "Weekday hours", done: false },
+            { label: "Build your first version", done: false },
+          ]}
+        />
+        <NextSteps>
+          <a className={STEP} href="#getting-started" key="continue">
+            Continue getting started
+          </a>
+        </NextSteps>
+      </div>
+    ),
+  },
+  {
+    // A chat while a build runs: what Reme is doing, then the stepper.
+    name: "Panel in a chat while building",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-6">
+        <PanelDigest
+          sentences={[
+            "Reme is building version 4 while you chat.",
+            "Keep chatting. Nothing goes live until you approve it.",
+          ]}
+        />
+        {working("validating", {
+          build: {
+            goal: "Lead the hero with end of tenancy cleans",
+            state: "validating",
+            version: 4,
+            startedAt: STARTED,
+          },
+        })}
+      </div>
+    ),
+  },
+  {
+    name: "ComingUp latest",
+    render: () => (
+      <ComingUp
+        items={[
+          { id: "fail", text: "A build failed", at: NOW_ISO },
+          { id: "v3", text: "Published v3", at: STARTED },
+        ]}
+        title="Latest"
+      />
+    ),
+  },
   { name: "WorkingOn", render: () => working("implementing") },
   {
     name: "WorkingOn with a queue",
@@ -536,6 +659,18 @@ const panelCatalog: Entry[] = [
         steps={[
           { label: "Business name", done: true },
           { label: "Phone number", done: false },
+          { label: "Weekday hours", done: false },
+          { label: "Build your first version", done: false },
+        ]}
+      />
+    ),
+  },
+  {
+    // Under a headline that already says what to do: the steps alone.
+    name: "PanelBlank steps only",
+    render: () => (
+      <PanelBlank
+        steps={[
           { label: "Weekday hours", done: false },
           { label: "Build your first version", done: false },
         ]}
