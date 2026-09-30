@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test"
-import { open } from "./helpers"
+import { PALETTES } from "@workspace/contracts"
+import { axe, open } from "./helpers"
 
 /**
  * Onboarding's choice and photo cards: native groups the keyboard can walk,
@@ -48,6 +49,68 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(
     1
   )
+})
+
+/** The values of the options a card shows, Other left out. */
+const shownIds = (card: ReturnType<typeof pending>) =>
+  card
+    .getByRole("radio")
+    .evaluateAll((nodes) =>
+      nodes
+        .map((node) => (node as HTMLInputElement).value)
+        .filter((value) => value !== "__other__")
+    )
+
+test("a colour card shows four, brings in four others, and takes a picked colour", async ({
+  page,
+}) => {
+  await open(page, "AskChoice")
+  const card = pending(page).nth(2)
+  const first = await shownIds(card)
+  expect(first).toEqual(["ocean", "lagoon", "sunset", "damson"])
+  await card.getByText("Ocean", { exact: true }).click()
+  await card.getByRole("button", { name: "Show other colours" }).click()
+  const second = await shownIds(card)
+  expect(second).toHaveLength(4)
+  expect(second.filter((id) => first.includes(id))).toEqual([])
+  // The pick went with its card, and the new four are read out.
+  await expect(card.getByRole("radio", { checked: true })).toHaveCount(0)
+  await expect(card.locator("[aria-live=polite]")).toHaveText(/^Showing .+\.$/)
+  // The button keeps focus, so the next press is one key away.
+  await expect(
+    card.getByRole("button", { name: "Show other colours" })
+  ).toBeFocused()
+
+  await card.getByText("Your own colour").click()
+  const field = card.getByRole("textbox", { name: "Your own colour" })
+  const picker = card.getByLabel("Pick a colour")
+  const light = PALETTES[0]?.swatches[1] ?? ""
+  await field.fill(light.toUpperCase())
+  await expect(picker).toHaveValue(light)
+  await expect(card.getByText(/hard to read/)).toBeVisible()
+  const dark = PALETTES[2]?.brand ?? ""
+  await picker.fill(dark)
+  await expect(field).toHaveValue(dark)
+  await expect(card.getByText(/reads well/)).toBeVisible()
+  await field.fill("#12")
+  await card.getByRole("button", { name: "Continue" }).click()
+  await expect(card.getByRole("alert")).toHaveText(
+    "A colour code is # and six digits or letters from a to f."
+  )
+})
+
+test("the colour card's states pass axe in both themes and fit a phone", async ({
+  page,
+}) => {
+  for (const theme of ["light", "dark"]) {
+    await open(page, "ChoiceForm", 1024, theme)
+    await axe(page, `ChoiceForm ${theme}`)
+  }
+  await open(page, "ChoiceForm", 375)
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth
+  )
+  expect(overflow).toBe(false)
 })
 
 test("an answered choice reads back in the owner's words", async ({ page }) => {

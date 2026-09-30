@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
 import {
+  type AskChoiceInput,
   FONTS,
   INDUSTRIES,
   PALETTES,
@@ -18,6 +19,7 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
@@ -353,6 +355,8 @@ const askChoice = (
     preselected?: string[]
     other?: { label: string; placeholder: string } | null
     skippable?: boolean
+    initial?: string[]
+    color?: boolean
   } = {}
 ) => ({
   args: {
@@ -367,6 +371,8 @@ const askChoice = (
     preselected: extra.preselected ?? [],
     other: extra.other ?? null,
     skippable: extra.skippable ?? false,
+    ...(extra.initial ? { initial: extra.initial } : {}),
+    ...(extra.color ? { color: true } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -385,6 +391,15 @@ const PALETTE_OPTIONS = PALETTES.map((each) => ({
   ...each,
   visual: { kind: "swatches", colors: [...each.swatches] },
 }))
+/** The colour card as the api sends it: the whole pool, four first, a picker behind Other. */
+const COLOUR_CARD = {
+  other: {
+    label: "Your own colour",
+    placeholder: "A colour code, or describe your colours",
+  },
+  initial: ["ocean", "lagoon", "sunset", "damson"],
+  color: true,
+}
 const FONT_OPTIONS = FONTS.map((each) => ({
   ...each,
   visual: { kind: "font", family: each.family },
@@ -393,6 +408,40 @@ const TEMPLATE_OPTIONS = TEMPLATES.map((each) => ({
   ...each,
   visual: { kind: "template", id: each.id },
 }))
+
+/** The colour card on its own, in each state the owner can put it in. */
+const COLOUR_INPUT: AskChoiceInput = {
+  step: "palette",
+  options: PALETTES.map((each) => ({
+    id: each.id,
+    label: each.label,
+    hint: each.hint ?? null,
+    visual: { kind: "swatches", colors: each.swatches },
+  })),
+  multiple: false,
+  preselected: [],
+  skippable: false,
+  ...COLOUR_CARD,
+}
+const brandOf = (id: string) =>
+  PALETTES.find((each) => each.id === id)?.brand ?? ""
+const COLOUR_STATES: [string, Parameters<typeof ChoiceForm>[0]["start"]][] = [
+  ["Four first", undefined],
+  [
+    "After Show other colours",
+    { shown: ["harbour", "sage", "cardinal", "graphite"] },
+  ],
+  ["Own colour, picked", { other: brandOf("harbour") }],
+  [
+    "Own colour, too light for white text",
+    {
+      other:
+        PALETTES.find((each) => each.id === "sunset")?.swatches[1] ??
+        brandOf("sunset"),
+    },
+  ],
+  ["Own colour, in words", { other: "Navy and gold, like our vans" }],
+]
 
 const ASK_CHOICE_STATES: ThreadMessageLike[] = [
   {
@@ -433,9 +482,7 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
   {
     content: [
       question("Which colours feel like Brightclean?"),
-      askChoice("palette", PALETTE_OPTIONS, {
-        other: { label: "My own colours", placeholder: "Navy and gold" },
-      }),
+      askChoice("palette", PALETTE_OPTIONS, COLOUR_CARD),
     ],
     role: "assistant",
     status: WAITING,
@@ -1243,6 +1290,21 @@ const assistantCatalog = [
     name: "AskChoice",
     render: () => (
       <FixtureThread height="h-[140rem]" messages={ASK_CHOICE_STATES} />
+    ),
+  },
+  {
+    name: "ChoiceForm",
+    render: () => (
+      <div className="flex max-w-2xl flex-col gap-8">
+        {COLOUR_STATES.map(([title, start]) => (
+          <section className="flex flex-col gap-3" key={title}>
+            <h3 className="font-medium text-muted-foreground text-xs">
+              {title}
+            </h3>
+            <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+          </section>
+        ))}
+      </div>
     ),
   },
   // The upload card and the provider that gives it the app's upload.
