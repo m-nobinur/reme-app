@@ -101,8 +101,8 @@ import { missingFacts, readFacts } from "./workspace.ts"
  * an approval updates that row and never appends a second one.
  */
 
-/** The facts an owner may skip. Pricing only: the rest the site needs. */
-const SKIPPABLE: readonly FactValueKey[] = ["pricing.standard_clean_hourly"]
+/** The facts an owner may skip. The tagline only: the rest the site needs. */
+const SKIPPABLE: readonly FactValueKey[] = ["business.tagline"]
 
 /** The first build's goal, when the owner has not typed one. */
 export const ONBOARDING_GOAL = "Build my website from the details I gave you."
