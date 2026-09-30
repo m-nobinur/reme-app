@@ -32,7 +32,52 @@ it("offers the first build to an owner with no site", () => {
     status: "no site yet",
     live: false,
   })
-  expect(prompts(briefing)).toEqual(["Build my website"])
+  expect(prompts(briefing)).toEqual([
+    "Build my website",
+    "Let me tell you about my business",
+  ])
+})
+
+it("asks a new business for the facts Reme still needs, after the build", () => {
+  const briefing = briefingOf(
+    ORG,
+    workspace({
+      derivedReminders: [
+        {
+          rule: "facts_missing",
+          keys: ["business.phone", "hours.weekday"],
+        },
+      ],
+    })
+  )
+  expect(prompts(briefing)).toEqual([
+    "Build my website",
+    "Add my phone number and weekday hours",
+    "Let me tell you about my business",
+  ])
+})
+
+it("does not list every missing fact in one suggestion", () => {
+  const briefing = briefingOf(
+    ORG,
+    workspace({
+      derivedReminders: [
+        {
+          rule: "facts_missing",
+          keys: ["business.phone", "business.email", "hours.weekday"],
+        },
+      ],
+    })
+  )
+  expect(prompts(briefing)).toContain("Add my business details")
+})
+
+it("offers a live site's owner a look, a change and a reminder", () => {
+  expect(prompts(briefingOf(ORG, workspace({ live: 3 })))).toEqual([
+    "What is on my website now?",
+    "I want to change something on my website",
+    "Set a reminder for me",
+  ])
 })
 
 it("names who asked when one question waits on a live site", () => {
@@ -51,6 +96,8 @@ it("names who asked when one question waits on a live site", () => {
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
     "What is on my website now?",
+    "I want to change something on my website",
+    "Set a reminder for me",
   ])
 })
 
@@ -62,7 +109,7 @@ it("counts questions when there is more than one", () => {
   expect(briefing.line).toBe("v2 is live. 2 questions are waiting on you.")
 })
 
-it("puts an approval before a question, and keeps to three suggestions", () => {
+it("puts an approval before a question, and keeps to four suggestions", () => {
   const briefing = briefingOf(
     ORG,
     workspace({
@@ -79,6 +126,7 @@ it("puts an approval before a question, and keeps to three suggestions", () => {
     "What changed in version 4?",
     "What do you need from me?",
     "How is the build going?",
+    "What is on my website now?",
   ])
 })
 
@@ -218,6 +266,7 @@ it("says a finished version was never published", () => {
   expect(briefing.line).toBe(
     "v3 is live. Version 4 is ready but not published."
   )
+  expect(prompts(briefing)[0]).toBe("Why is version 4 not live yet?")
 })
 
 it("puts an unpublished version after reviews and questions", () => {

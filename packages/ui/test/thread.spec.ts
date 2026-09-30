@@ -98,6 +98,23 @@ test("the empty state opens on the briefing and what to ask", async ({
     "What do you need from me?",
     "What is on my website now?",
   ])
+  // One row each, under the composer, in a single column.
+  const composer = await page
+    .locator('[data-slot="aui_composer-shell"]')
+    .boundingBox()
+  const rows = await page
+    .locator(".aui-thread-welcome-suggestion")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect()
+        return { x: box.x, y: box.y }
+      })
+    )
+  expect(rows[0]?.y).toBeGreaterThan(composer?.y ?? 0)
+  for (const [index, row] of rows.entries()) {
+    expect(row.x).toBe(rows[0]?.x)
+    if (index > 0) expect(row.y).toBeGreaterThan(rows[index - 1]?.y ?? 0)
+  }
 })
 
 test("with nothing read, the empty state has no line", async ({ page }) => {
