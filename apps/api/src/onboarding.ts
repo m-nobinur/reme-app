@@ -13,6 +13,7 @@ import {
   INDUSTRIES,
   PAGES,
   PALETTES,
+  PaletteId,
   PRONOUNS,
   type RequestChangeOutput,
   TEMPLATES,
@@ -24,6 +25,7 @@ import {
 } from "@workspace/contracts"
 import type { Part, ToolPart } from "./chat.ts"
 import {
+  hash,
   manualEnd,
   notStarted,
   opener,
@@ -126,6 +128,7 @@ export function voiceOf(o: Onboarding): Voice {
     offering: factValue(o.facts, "business.offerings")?.items[0] ?? null,
     template: template?.custom ? null : label(TEMPLATES, template?.id),
     palette: label(PALETTES, palette?.id),
+    ownColour: palette?.brand ?? palette?.custom ?? null,
   }
 }
 
@@ -145,11 +148,45 @@ const other = (placeholder: string) => ({
   placeholder,
 })
 
+/**
+ * Palettes that look alike: blues, greens, warm, reds, purples, neutrals.
+ * The four shown first take one from each of four, so never four blues.
+ */
+const FAMILIES: readonly (readonly PaletteId[])[] = [
+  ["ocean", "classic_blue", "harbour"],
+  ["lagoon", "forest", "sage"],
+  ["sunset", "mocha"],
+  ["cardinal", "berry", "burgundy"],
+  ["midnight", "damson", "ultra_violet"],
+  ["graphite", "onyx"],
+]
+const family = (id: PaletteId) => FAMILIES.findIndex((f) => f.includes(id))
+
+/**
+ * The four palettes the card shows first: the pool in an order seeded by
+ * the org id, taking one per family. The same org sees the same four after
+ * a reload; another org likely sees another four.
+ */
+export function firstPalettes(org: string): PaletteId[] {
+  const seeded = [...PaletteId.options].sort(
+    (a, b) => hash(`${org}|palette|${a}`) - hash(`${org}|palette|${b}`)
+  )
+  const shown: PaletteId[] = []
+  for (const id of seeded) {
+    if (shown.length === 4) break
+    if (!shown.some((each) => family(each) === family(id))) shown.push(id)
+  }
+  return shown
+}
+
 /** The pages ticked when the card opens. */
 const DEFAULT_PAGES = ["home", "services", "about", "contact", "quote"]
 
 /** Each card's options, from the contracts' lists, so an answer is checked against the same ids. */
-const CHOICES: Record<ChoiceStep, () => Omit<AskChoiceInput, "step">> = {
+const CHOICES: Record<
+  ChoiceStep,
+  (o: Onboarding) => Omit<AskChoiceInput, "step">
+> = {
   industry: () => ({
     options: plain(INDUSTRIES),
     multiple: false,
@@ -203,7 +240,7 @@ const CHOICES: Record<ChoiceStep, () => Omit<AskChoiceInput, "step">> = {
     other: other("Describe the layout you have in mind"),
     skippable: false,
   }),
-  palette: () => ({
+  palette: (o) => ({
     options: PALETTES.map((p) => ({
       id: p.id,
       label: p.label,
@@ -212,8 +249,13 @@ const CHOICES: Record<ChoiceStep, () => Omit<AskChoiceInput, "step">> = {
     })),
     multiple: false,
     preselected: [],
-    other: other("Describe your colours, or name your brand colour"),
+    other: {
+      label: "Your own colour",
+      placeholder: "A colour code, or describe your colours",
+    },
     skippable: false,
+    initial: firstPalettes(o.orgId),
+    color: true,
   }),
   font: () => ({
     options: FONTS.map((f) => ({
@@ -264,10 +306,10 @@ const factCard = (o: Onboarding, key: FactValueKey, newId: () => string) => {
   )
 }
 
-const choiceCard = (step: ChoiceStep, newId: () => string) =>
+const choiceCard = (step: ChoiceStep, o: Onboarding, newId: () => string) =>
   call(
     "tool-ask_choice",
-    AskChoiceInput.parse({ step, ...CHOICES[step]() }),
+    AskChoiceInput.parse({ step, ...CHOICES[step](o) }),
     newId
   )
 
@@ -305,7 +347,7 @@ const askChoice = (
   done: (o) => !applies(o) || has(o, key),
   ask: (o, newId) => [
     text(question(step, voiceOf(o))),
-    choiceCard(step, newId),
+    choiceCard(step, o, newId),
   ],
 })
 
@@ -341,7 +383,7 @@ export const STEPS: readonly Step[] = [
     done: (o) => mode(o) !== "manual" || o.builder !== null,
     ask: (o, newId) => [
       text(question("manual_builder", voiceOf(o))),
-      choiceCard("manual_builder", newId),
+      choiceCard("manual_builder", o, newId),
     ],
   },
   askChoice("template", "site.template", building),
@@ -468,6 +510,19 @@ const LOOKS: [RegExp, TemplateId][] = [
 const closestTemplate = (words: string): TemplateId =>
   LOOKS.find(([pattern]) => pattern.test(words))?.[1] ?? "classic"
 
+/** The colour picker's answer. Anything else starting with `#` is a bad code, not words. */
+const HEX = /^#[0-9a-f]{6}$/i
+
+/**
+ * The palette a custom answer sets: a colour code is the brand colour,
+ * anything else the owner's words. A code that is not `#rrggbb` is refused.
+ */
+function ownPalette(words: string) {
+  const said = words.trim()
+  if (HEX.test(said)) return { id: "custom", brand: said.toLowerCase() }
+  return said.startsWith("#") ? null : { id: "custom", custom: words }
+}
+
 /**
  * The facts a choice sets, or null when the answer does not fit the card:
  * an id it did not offer, more than one where one is asked, the owner's
@@ -515,10 +570,7 @@ export function chosen(
         ...custom,
       })
     case "palette":
-      return fact(
-        "site.palette",
-        words === null ? { id } : { id: "custom", ...custom }
-      )
+      return fact("site.palette", words === null ? { id } : ownPalette(words))
     case "font":
       return fact(
         "site.font",

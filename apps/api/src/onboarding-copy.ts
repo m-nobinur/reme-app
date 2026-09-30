@@ -25,10 +25,12 @@ export type Voice = {
   /** The preset labels the owner picked, or null for their own words. */
   template: string | null
   palette: string | null
+  /** The owner's own colour when they chose no preset: a colour code or their words. */
+  ownColour: string | null
 }
 
 /** FNV-1a over UTF-16 units: stable across isolates and deploys. */
-function hash(text: string): number {
+export function hash(text: string): number {
   let h = 0x811c9dc5
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i)
@@ -226,14 +228,24 @@ ${ask}`,
       : `Thanks, I'll keep your notes in mind. Which colours feel right for ${v.business}?`,
     `${v.template ? "Good pick" : "Noted"}. Now for colour. Which of these palettes fits ${v.business}?`,
   ],
-  font: () => [
-    "And which style of lettering suits your brand?",
-    "Now the lettering. Which of these feels most like you?",
-  ],
+  font: (v) =>
+    [
+      "And which style of lettering suits your brand?",
+      "Now the lettering. Which of these feels most like you?",
+    ].map((ask) => `${colourNoted(v)}${ask}`),
   pages: () => [
     "Nearly there. Which pages should the site have? I've ticked the ones most businesses start with.",
     "Last design question. Which pages do you want? The usual ones are already ticked.",
   ],
+}
+
+/** The palette the owner just chose, said back before the next question. */
+function colourNoted(v: Voice): string {
+  if (v.palette) return `${v.palette} it is. `
+  if (!v.ownColour) return ""
+  return v.ownColour.startsWith("#")
+    ? `I'll build the colours around ${v.ownColour}. `
+    : `I'll pick colours to match "${v.ownColour}". `
 }
 
 /** The step's question, with the phase transition for a step that opens a phase. */

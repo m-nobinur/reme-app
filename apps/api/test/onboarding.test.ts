@@ -2,6 +2,8 @@ import {
   AskChoiceInput,
   type FactValue,
   INDUSTRIES,
+  PALETTES,
+  PaletteId,
   TONES,
   type ToneId,
 } from "@workspace/contracts"
@@ -12,6 +14,7 @@ import {
   built,
   cardAnswer,
   chosen,
+  firstPalettes,
   ONBOARDING_GOAL,
   type Onboarding,
   onboardingStep,
@@ -373,6 +376,62 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("offers the whole pool, four first, from four families, the same four on every call", () => {
+    const card = cardFor("palette")
+    const input = AskChoiceInput.parse(card.input)
+    expect(input.options.map((o) => o.id)).toEqual(PaletteId.options)
+    expect(input.color).toBe(true)
+    expect(input.initial).toHaveLength(4)
+    expect(input.initial).toEqual(firstPalettes(ORG))
+    expect(AskChoiceInput.parse(cardFor("palette").input).initial).toEqual(
+      input.initial
+    )
+    const firsts = new Set(ORGS.map((org) => firstPalettes(org).join()))
+    expect(firsts.size).toBeGreaterThan(10)
+    // One per family: never two of the three blues together.
+    const blues = ["ocean", "classic_blue", "harbour"]
+    for (const org of ORGS) {
+      const shown = firstPalettes(org)
+      expect(new Set(shown).size).toBe(4)
+      expect(shown.filter((id) => blues.includes(id)).length).toBeLessThan(2)
+    }
+    // Every other choice card shows all its options.
+    expect(AskChoiceInput.parse(cardFor("font").input).initial).toBeUndefined()
+  })
+
+  it("takes a picked colour as the brand, words as guidance, and refuses a bad code", () => {
+    const card = cardFor("palette")
+    const own = (other: string) =>
+      cardAnswer(card, { answer: "chosen", ids: [], other }, [])
+    const brand = PALETTES[3]?.brand ?? ""
+    expect(own(brand.toUpperCase())).toEqual({
+      kind: "facts",
+      facts: [{ key: "site.palette", value: { id: "custom", brand } }],
+    })
+    expect(own("Navy and gold")).toMatchObject({
+      facts: [{ value: { id: "custom", custom: "Navy and gold" } }],
+    })
+    expect(own(brand.slice(0, 5))).toBeNull()
+    expect(own(`${brand}0`)).toBeNull()
+    expect(
+      cardAnswer(card, { answer: "chosen", ids: ["berry"], other: null }, [])
+    ).toMatchObject({ facts: [{ value: { id: "berry" } }] })
+  })
+
+  it("names the chosen colours before the lettering question", () => {
+    const brand = PALETTES[0]?.brand ?? ""
+    expect(question("font", voice())).toMatch(/^Ocean it is\. /)
+    expect(
+      question("font", voice({ palette: null, ownColour: brand }))
+    ).toContain(`around ${brand}.`)
+    expect(
+      question("font", voice({ palette: null, ownColour: "Navy and gold" }))
+    ).toContain('match "Navy and gold".')
+    expect(question("font", voice({ palette: null, ownColour: null }))).toMatch(
+      /^(And|Now)/
+    )
+  })
+
   it("always adds the fixed pages, in the list's order", () => {
     expect(
       cardAnswer(
@@ -624,6 +683,7 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   offering: "Regular cleaning",
   template: "Classic",
   palette: "Ocean",
+  ownColour: null,
   ...over,
 })
 
