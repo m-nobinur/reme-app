@@ -46,7 +46,7 @@ function ChooseOrganisation() {
       }
       footer={
         <Link
-          className="font-medium text-foreground underline underline-offset-4"
+          className="font-medium text-primary hover:underline"
           to="/sign-in"
         >
           Use a different account

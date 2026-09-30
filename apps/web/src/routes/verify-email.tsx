@@ -57,7 +57,7 @@ function VerifyEmail() {
       }
       footer={
         <Link
-          className="font-medium text-foreground underline underline-offset-4"
+          className="font-medium text-primary hover:underline"
           to="/sign-in"
         >
           Use a different account
@@ -90,12 +90,7 @@ function VerifyEmail() {
           <Alert variant="error">{resendFailure.message}</Alert>
         ) : null}
 
-        <Field
-          error={codeError}
-          hint="It is in the email we just sent, and it expires shortly. Codes are digits only."
-          id="code"
-          label={`${CODE_LENGTH}-digit code`}
-        >
+        <Field error={codeError} id="code" label={`${CODE_LENGTH}-digit code`}>
           {(wiring) => (
             <CodeInput
               {...wiring}

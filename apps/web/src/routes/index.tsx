@@ -4,23 +4,22 @@ import {
   ClosingCta,
   Control,
   Faq,
+  Features,
   Hero,
   SiteFooter,
   SiteHeader,
   Steps,
-  Team,
-  Work,
 } from "@workspace/ui/components/landing"
 import { Logo } from "@workspace/ui/components/logo"
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Reme · An AI assistant for small service businesses" },
+      { title: "Reme · The AI assistant for cleaning businesses" },
       {
         name: "description",
         content:
-          "Reme answers enquiries, chases quotes and builds your website. Anything involving money or a public promise waits for your approval.",
+          "Reme answers every enquiry in your voice, prepares quotes from your prices and follows up until the customer decides. You approve everything that matters.",
       },
     ],
   }),
@@ -28,11 +27,10 @@ export const Route = createFileRoute("/")({
 })
 
 const NAV = [
-  { href: "#work", label: "What it does" },
+  { href: "#features", label: "Features" },
   { href: "#how", label: "How it works" },
-  { href: "#team", label: "Your team" },
   { href: "#control", label: "Control" },
-  { href: "#questions", label: "Questions" },
+  { href: "#questions", label: "FAQ" },
 ]
 
 const brand = (
@@ -42,14 +40,21 @@ const brand = (
 )
 
 const signUp = (
-  <Link className={buttonVariants({ size: "lg" })} to="/sign-up">
-    Create your account
+  <Link
+    className={buttonVariants({ size: "lg", className: "h-12 px-6" })}
+    to="/sign-up"
+  >
+    Get started
   </Link>
 )
 
 const signIn = (
   <Link
-    className={buttonVariants({ size: "lg", variant: "outline" })}
+    className={buttonVariants({
+      size: "lg",
+      variant: "outline",
+      className: "h-12 px-6",
+    })}
     to="/sign-in"
   >
     Sign in
@@ -86,9 +91,8 @@ function Landing() {
             </>
           }
         />
-        <Work />
+        <Features />
         <Steps />
-        <Team />
         <Control />
         <Faq />
         <ClosingCta actions={signUp} />

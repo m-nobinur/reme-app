@@ -33,7 +33,10 @@ function SubmitButton({
       aria-busy={pending || undefined}
       aria-disabled={pending || undefined}
       size="lg"
-      className={cn("w-full aria-disabled:opacity-60", className)}
+      className={cn(
+        "h-11 w-full rounded-xl aria-disabled:opacity-60",
+        className
+      )}
       onClick={(event) => {
         if (pending) {
           event.preventDefault()

@@ -33,6 +33,10 @@ export const Route = createRootRoute({
         rel: "stylesheet",
         href: appCss,
       },
+      // The .ico stays for browsers and crawlers that ask for it by name.
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
   }),
   shellComponent: RootDocument,

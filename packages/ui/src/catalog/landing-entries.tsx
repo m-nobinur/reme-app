@@ -4,15 +4,14 @@ import {
   ClosingCta,
   Control,
   Faq,
+  Features,
   Hero,
   SiteFooter,
   SiteHeader,
   Steps,
-  Team,
-  Work,
 } from "@workspace/ui/components/landing"
 import { Logo } from "@workspace/ui/components/logo"
-import { StaffTree } from "@workspace/ui/components/staff-tree"
+import { MorningSummary } from "@workspace/ui/components/morning-summary"
 import type { CatalogEntry } from "./entries"
 
 const cta = <Button size="lg">Create your account</Button>
@@ -24,18 +23,8 @@ const landingCatalog: CatalogEntry[] = [
     render: () => <AuthAside className="min-h-[32rem]" />,
   },
   {
-    name: "StaffTree",
-    render: () => (
-      <StaffTree
-        className="max-w-xl [--ground:var(--background)] [--on:var(--primary)]"
-        lead={{ name: "Chief of Staff", role: "Answers you, delegates" }}
-        reports={[
-          { name: "Developer", role: "Builds your website" },
-          { name: "Client Services", role: "Talks to customers" },
-          { name: "Growth", role: "Hire when ready", open: true },
-        ]}
-      />
-    ),
+    name: "MorningSummary",
+    render: () => <MorningSummary className="max-w-md" />,
   },
   {
     name: "SiteHeader",
@@ -44,16 +33,15 @@ const landingCatalog: CatalogEntry[] = [
         actions={<Button variant="ghost">Sign in</Button>}
         brand={<Logo />}
         nav={[
-          { href: "#work", label: "What it does" },
+          { href: "#features", label: "Features" },
           { href: "#how", label: "How it works" },
         ]}
       />
     ),
   },
   { name: "Hero", render: () => <Hero actions={cta} /> },
-  { name: "Work", render: () => <Work /> },
+  { name: "Features", render: () => <Features /> },
   { name: "Steps", render: () => <Steps /> },
-  { name: "Team", render: () => <Team /> },
   { name: "Control", render: () => <Control /> },
   { name: "Faq", render: () => <Faq /> },
   { name: "ClosingCta", render: () => <ClosingCta actions={cta} /> },

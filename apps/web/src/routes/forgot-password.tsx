@@ -1,3 +1,4 @@
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -32,11 +33,11 @@ function ForgotPassword() {
       description={
         sent
           ? undefined
-          : "We will email you a link to set a new one. The link is good for fifteen minutes and works once."
+          : "Enter your email and we will send you a link to set a new one."
       }
       footer={
         <Link
-          className="font-medium text-foreground underline underline-offset-4"
+          className="font-medium text-primary hover:underline"
           to="/sign-in"
         >
           Back to sign in
@@ -71,12 +72,12 @@ function ForgotPassword() {
           <Field
             autoComplete="email"
             autoFocus
-            hint="The address you sign in with."
+            icon={EnvelopeSimpleIcon}
             id="email"
             inputMode="email"
             label="Email"
             name="email"
-            placeholder="name@yourbusiness.com"
+            placeholder="Enter your email"
             required
             type="email"
           />
