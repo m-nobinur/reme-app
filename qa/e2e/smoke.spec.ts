@@ -208,6 +208,21 @@ test("every chat request is sent to act, with no mode to pick", async ({
   await expect(page.getByRole("button", { name: /^Mode/ })).toHaveCount(0)
 })
 
+test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
+  await visit(page, "/app/staff")
+  const sent = page
+    .waitForRequest((request) => request.url().endsWith("/api/chat"))
+    .then((request) => JSON.stringify(request.postDataJSON()))
+  await page.getByRole("button", { name: "Help" }).click()
+  // An owner with no organisation has nothing to get started on.
+  await expect(
+    page.getByRole("menuitem", { name: "Getting started" })
+  ).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Ask Reme for help" }).click()
+  expect(await sent).toContain("What can you help me with?")
+  await expect(page.getByText(/^What can you help me with\?/)).toBeVisible()
+})
+
 test("the top bar names a new chat and a stored one truthfully", async ({
   page,
 }) => {

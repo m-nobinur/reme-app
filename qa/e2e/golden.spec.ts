@@ -374,12 +374,13 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   })
 
   await step("blank state: see notifications", async () => {
-    // The bell at the top right opens the notifications page, where v1's
-    // publish is listed.
+    // The bell at the top right opens its menu, whose last entry is the
+    // notifications page, where v1's publish is listed.
     await page
       .getByRole("banner")
-      .getByRole("link", { name: /^Notifications/ })
+      .getByRole("button", { name: /^Notifications/ })
       .click()
+    await page.getByRole("menuitem", { name: "View all notifications" }).click()
     await expect(page).toHaveURL(/\/app\/notifications$/)
     await expect(
       page.getByRole("heading", { name: "Notifications", level: 1 })

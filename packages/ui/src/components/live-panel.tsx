@@ -322,7 +322,8 @@ function WorkingOn({
 /**
  * Questions and approvals, one per list row, answered in place. `status`
  * is the last thing the owner did, announced politely; `error` says the
- * list could not be read and is shown above whatever was read before.
+ * list could not be read and is shown above whatever was read before. With
+ * nothing in it and nothing to say, it renders nothing.
  */
 function WaitingOnYou({
   children,
@@ -337,6 +338,15 @@ function WaitingOnYou({
   onRetry?: () => Promise<void>
 }) {
   const items = Children.toArray(children).filter(isValidElement)
+  // Only there when something waits: with nothing, the last thing the owner
+  // did stays said, and there is no heading over an empty list.
+  if (!items.length && !error) {
+    return status ? (
+      <p className="text-sm" role="status">
+        {status}
+      </p>
+    ) : null
+  }
   return (
     <PanelSection count={items.length} title="Waiting on you">
       <p className="text-sm empty:hidden" role="status">
@@ -349,12 +359,7 @@ function WaitingOnYou({
             <li key={item.key}>{item}</li>
           ))}
         </ul>
-      ) : error ? null : (
-        <p className={META}>
-          Nothing needs you right now. Questions and approvals from your team
-          land here.
-        </p>
-      )}
+      ) : null}
       {!items.length && error && onRetry ? <Retry onRetry={onRetry} /> : null}
     </PanelSection>
   )
@@ -999,6 +1004,29 @@ function YourWebsite({
   )
 }
 
+/* Today ---------------------------------------------------------------- */
+
+/**
+ * The panel's opening sentences: what today holds for the owner, written by
+ * the app from the workspace. The first leads and the rest are quieter. No
+ * live region: it changes with every read, and the sections below announce
+ * what the owner did.
+ */
+function PanelDigest({ sentences }: { sentences: string[] }) {
+  const [lead, ...rest] = sentences
+  if (!lead) return null
+  return (
+    <div className="flex flex-col gap-1" data-slot="panel-digest">
+      <p className="text-sm">{lead}</p>
+      {rest.map((sentence) => (
+        <p className={META} key={sentence}>
+          {sentence}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 /* The minimised panel ---------------------------------------------------- */
 
 /**
@@ -1094,6 +1122,7 @@ export {
   ComingUp,
   LiveLine,
   PanelBlank,
+  PanelDigest,
   QuestionItem,
   ReminderList,
   ReminderNote,

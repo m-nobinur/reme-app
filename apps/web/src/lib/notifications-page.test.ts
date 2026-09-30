@@ -7,6 +7,7 @@ import { Route } from "@/routes/app/notifications"
 import type { AttentionItem, Workspace } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
 import { seenCookie } from "./notifications"
+import { anchorOf } from "./reminders"
 
 /**
  * The notifications page as wired: which cookie it writes, when, and where
@@ -30,7 +31,9 @@ vi.mock("@tanstack/react-router", () => ({
       "a",
       {
         "data-to": to,
-        "data-state": JSON.stringify(state ?? null),
+        "data-state": JSON.stringify(
+          (typeof state === "function" ? state({}) : state) ?? null
+        ),
         "data-hash": hash,
       },
       children
@@ -137,15 +140,16 @@ it("marks only the organisation on screen as seen", async () => {
   expect(cookies()[seenCookie(ORG_B)]).toBeUndefined()
 })
 
-it("opens the panel to answer a question, with nothing about it in the address", async () => {
+it("opens the panel on the question, with nothing about it in the address", async () => {
   await render()
   const answer = [...container.querySelectorAll("a")].find(
     (anchor) => anchor.textContent === "Answer in the panel"
   )
   expect(answer?.dataset.to).toBe("/app")
   expect(answer?.dataset.hash).toBeUndefined()
-  expect(JSON.parse(answer?.dataset.state ?? "null")).toEqual({ panel: true })
-  expect(answer?.outerHTML).not.toContain(QUESTION)
+  expect(JSON.parse(answer?.dataset.state ?? "null")).toEqual({
+    panel: { key: expect.any(String), focus: anchorOf.question(QUESTION) },
+  })
 })
 
 for (const [width, wide] of [
@@ -163,7 +167,7 @@ for (const [width, wide] of [
       root.render(
         createElement(WorkspaceShell, {
           defaultPanelOpen: false,
-          openPanel: true,
+          openPanel: { key: "press" },
           panel: "Waiting on you",
           panelLine: "2 waiting on you",
           rail: null,

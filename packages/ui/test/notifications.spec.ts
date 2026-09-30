@@ -22,7 +22,6 @@ const ENTRIES = [
   "NavCount",
   "NavCount none",
   "NavCount capped",
-  "WaitingOnYou empty",
   "WaitingOnYou error",
   "PanelBlank",
   "PanelBlank ready to build",

@@ -112,6 +112,19 @@ it('reads the workspace again on "Try again"', async () => {
   expect(refresh).toHaveBeenCalledOnce()
 })
 
+it("opens with where things stand, and no waiting list when nothing waits", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "fixture.example.invalid",
+  }
+  await render()
+  const digest = container.querySelector('[data-slot="panel-digest"]')
+  expect(digest?.textContent).toContain("You're all caught up.")
+  expect(digest?.textContent).toContain("Your website is live on version 2.")
+  expect(container.textContent).not.toContain("Waiting on you")
+})
+
 const note = (id: string, title: string, due_at: string | null): Reminder => ({
   id,
   title,
@@ -256,7 +269,6 @@ it("moves focus to the Activity tab when the last reminder is done", async () =>
   expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
 })
 
-const ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Brightclean" }
 const build = (state: string, version: number | null) =>
   ({
     assignment_id: "00000000-0000-4000-8000-00000000000d",
@@ -267,50 +279,82 @@ const build = (state: string, version: number | null) =>
   }) as unknown as Workspace["builds"][number]
 
 it("says in one line what is most pressing", () => {
-  const org = ORG as unknown as Parameters<typeof lineOf>[1]
+  const names = { "staff-sam": "Sam" }
+  const asked = (id: string | null) =>
+    ({ kind: "question", raisedById: id, raisedBy: "Reme" }) as never
   expect(
     lineOf(
       {
         ...EMPTY_WORKSPACE,
         live: 2,
         builds: [build("validating", 3)],
-        attention: [{ kind: "question" } as never],
+        attention: [asked(null)],
       },
-      org
+      names
     )
   ).toEqual({
     tone: "working",
     lead: "Building version 3,",
     detail: "checking the site",
   })
-  // A build waiting on the owner is not being worked on.
+  // A build waiting on the owner is not being worked on, and a review comes
+  // before a question.
   expect(
     lineOf(
       {
         ...EMPTY_WORKSPACE,
         live: 2,
         builds: [build("blocked_on_approval", 3)],
+        attention: [{ kind: "approval", version: 3 } as never, asked(null)],
+      },
+      names
+    )
+  ).toEqual({
+    tone: "live",
+    lead: "Version 3 is ready",
+    detail: "for your review",
+  })
+  expect(
+    lineOf(
+      {
+        ...EMPTY_WORKSPACE,
         attention: [
-          { kind: "approval" } as never,
-          { kind: "question" } as never,
+          { kind: "approval", version: 3 } as never,
+          { kind: "approval", version: 4 } as never,
         ],
       },
-      org
+      names
     )
-  ).toEqual({ tone: "live", lead: "2 things", detail: "waiting on you" })
-  expect(lineOf({ ...EMPTY_WORKSPACE, live: 1 }, org)).toEqual({
+  ).toEqual({
+    tone: "idle",
+    lead: "2 versions are ready",
+    detail: "for your review",
+  })
+  expect(
+    lineOf(
+      { ...EMPTY_WORKSPACE, live: 2, attention: [asked("staff-sam")] },
+      names
+    )
+  ).toEqual({ tone: "live", lead: "Sam", detail: "has a question for you" })
+  expect(
+    lineOf(
+      { ...EMPTY_WORKSPACE, live: 2, attention: [asked(null), asked(null)] },
+      names
+    )
+  ).toEqual({ tone: "live", lead: "2 questions", detail: "for you" })
+  expect(lineOf({ ...EMPTY_WORKSPACE, live: 1 }, names)).toEqual({
     tone: "live",
-    lead: "Brightclean,",
-    detail: "site live on v1",
+    lead: "Your website is live",
+    detail: "on version 1",
   })
-  expect(lineOf(EMPTY_WORKSPACE, org)).toEqual({
+  expect(lineOf({ ...EMPTY_WORKSPACE, open: true }, names)).toEqual({
     tone: "idle",
-    lead: "Brightclean,",
-    detail: "no site yet",
+    lead: "Your first website",
+    detail: "is under way",
   })
-  expect(lineOf(EMPTY_WORKSPACE, null)).toEqual({
+  expect(lineOf(EMPTY_WORKSPACE, names)).toEqual({
     tone: "idle",
-    lead: "Nothing published yet",
+    lead: "Let's get your website started",
   })
-  expect(lineOf(null, org).tone).toBe("idle")
+  expect(lineOf(null, names).tone).toBe("idle")
 })

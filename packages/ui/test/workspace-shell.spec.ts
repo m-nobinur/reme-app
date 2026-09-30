@@ -22,6 +22,11 @@ const panelToggle = (page: Page) => panel(page).getByRole("button").first()
 async function openSheet(page: Page, toggle: ReturnType<typeof railToggle>) {
   await toggle.click()
   await expect(sheet(page)).toBeVisible()
+  await settle(page)
+}
+
+/** Waits for every entry transition to end, so a scan sees final colours. */
+async function settle(page: Page) {
   // Only animations that end: the panel's running step pulses for as long as
   // the build runs, and waiting on it would wait forever. A transition cut
   // short rejects and another starts in its place, so this waits until none
@@ -111,12 +116,44 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "false")
 })
 
-test("the bell carries the unread count", async ({ page }) => {
+test("the bell carries the unread count and opens the newest", async ({
+  page,
+}) => {
   await open(page, "WorkspaceShell", WIDTHS.phone)
-  await expect(
-    page.getByRole("link", { name: "Notifications, 3 unread" })
-  ).toBeVisible()
+  const bell = page.getByRole("button", { name: "Notifications, 3 unread" })
+  await expect(bell).toBeVisible()
   await expect(page.locator('[data-slot="unread-count"]')).toHaveText("3")
+  await bell.click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitem")).toHaveCount(5)
+  await settle(page)
+  await expect(
+    menu.getByRole("menuitem", { name: "View all notifications" })
+  ).toHaveAttribute("href", "#notifications")
+  await axe(page, "bell menu")
+  await page.keyboard.press("Escape")
+  await expect(menu).toHaveCount(0)
+  await expect(bell).toBeFocused()
+})
+
+test("the panel sits under the bell, clear of the page from lg", async ({
+  page,
+}) => {
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
+  const bell = await page
+    .locator('[data-slot="notification-bell"]')
+    .boundingBox()
+  const card = await panel(page).boundingBox()
+  const page_ = await page.locator('[data-slot="workspace-page"]').boundingBox()
+  if (!bell || !card || !page_) throw new Error("not laid out")
+  expect(card.y).toBeGreaterThanOrEqual(bell.y + bell.height)
+  expect(card.x + card.width).toBeGreaterThanOrEqual(bell.x + bell.width - 1)
+  expect(page_.x + page_.width).toBeLessThanOrEqual(card.x)
+
+  // Minimised, the page keeps its column: the card only gets shorter.
+  await panelToggle(page).click()
+  const after = await page.locator('[data-slot="workspace-page"]').boundingBox()
+  expect(after?.width).toBe(page_.width)
 })
 
 test("the rail sheet on a phone traps focus and returns it on close", async ({
@@ -136,7 +173,7 @@ test("the rail sheet on a phone traps focus and returns it on close", async ({
 test("a link in a sheet closes it", async ({ page }) => {
   await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
-  await sheet(page).getByRole("link", { name: "Approvals" }).click()
+  await sheet(page).getByRole("link", { name: "Weekend prices" }).click()
   await expect(sheet(page)).toHaveCount(0)
 })
 
@@ -198,10 +235,10 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
   // Dispatched rather than clicked: a real modified click opens a new tab,
   // which is the browser's business and not what this asserts.
   await sheet(page)
-    .getByRole("link", { name: "Approvals" })
+    .getByRole("link", { name: "Weekend prices" })
     .dispatchEvent("click", { button: 0, metaKey: true, bubbles: true })
   await sheet(page)
-    .getByRole("link", { name: "Approvals" })
+    .getByRole("link", { name: "Weekend prices" })
     .dispatchEvent("click", { button: 1, bubbles: true })
   await expect(sheet(page)).toBeVisible()
 })

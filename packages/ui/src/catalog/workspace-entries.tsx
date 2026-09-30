@@ -32,6 +32,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { type ReactNode, useState } from "react"
+import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
 
 /**
@@ -95,11 +96,10 @@ function Rail() {
         <NotePencilIcon aria-hidden />
         New chat
       </a>
-      <AppNav aria-label="Main">
+      <AppNav aria-label="Chats">
         <li>
-          <a className={navLinkClass} href="#approvals">
-            <CheckCircleIcon aria-hidden />
-            Approvals
+          <a className={navLinkClass} href="#weekend-prices">
+            <span className="truncate">Weekend prices</span>
           </a>
         </li>
       </AppNav>
@@ -118,11 +118,10 @@ function ShellSample() {
   return (
     <WorkspaceShell
       className="h-[40rem] border border-border"
-      notifications={<a href="#notifications" />}
+      notifications={<BellSample unread={3} />}
       panel={<SamplePanel />}
       panelLine={<SamplePanelLine />}
       rail={<Rail />}
-      unread={3}
     >
       <WorkspacePage>
         <h1 className="mb-6 font-semibold text-2xl">Approvals</h1>

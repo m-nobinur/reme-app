@@ -1,7 +1,6 @@
 import {
   ArrowUpRightIcon,
   BuildingsIcon,
-  CheckCircleIcon,
   FileTextIcon,
   FlowArrowIcon,
   GearSixIcon,
@@ -34,6 +33,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
+import {
+  type NotificationEntry,
+  NotificationMenu,
+} from "@workspace/ui/components/notification-list"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import {
   ConversationMenu,
@@ -41,7 +44,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   getWorkspaceFrame,
   pollWorkspace,
@@ -55,8 +58,14 @@ import {
   titleToEdit,
   useMenuState,
 } from "@/lib/conversation-actions"
-import { notificationsOf, unreadCount } from "@/lib/notifications"
+import {
+  laterSeen,
+  markSeen,
+  notificationsOf,
+  unreadCount,
+} from "@/lib/notifications"
 import { onboardingFor } from "@/lib/onboarding"
+import { anchorOf } from "@/lib/reminders"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import { WorkspacePanel, WorkspacePanelLine } from "@/panel/workspace-panel"
@@ -106,6 +115,16 @@ const initialsOf = (name: string) =>
     .map((word) => word[0]?.toUpperCase())
     .join("")
 
+/**
+ * What "Ask Reme for help" sends as the first message of a new chat: short,
+ * so it reads as the owner's own question in the thread.
+ */
+const HELP_PROMPT =
+  "What can you help me with? Suggest a few things you could do for my business right now."
+
+/** How many notifications the bell's menu lists before "View all". */
+const MENU_ITEMS = 6
+
 /** The panel's poll, through the server, with the tag it last saw. */
 const readWorkspace = async (etag: string | null): Promise<WorkspacePoll> => {
   const poll = await pollWorkspace({ data: { etag } })
@@ -132,15 +151,27 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  const notifications = notificationsOf(
+    live.workspace?.attention ?? [],
+    activity ?? []
+  )
+  // Seen from the bell's menu here, ahead of the frame read that picks up
+  // the cookie it wrote.
+  const [seenHere, setSeenHere] = useState<string | null>(null)
+  const seen = laterSeen(seenAt, seenHere)
   // Nothing is unread on the page that lists it, even before the next
   // frame read picks up the cookie that page wrote.
   const reading = useMatchRoute()({ to: "/app/notifications" })
-  const unread = reading
-    ? 0
-    : unreadCount(
-        notificationsOf(live.workspace?.attention ?? [], activity ?? []),
-        seenAt
-      )
+  const unread = reading ? 0 : unreadCount(notifications, seen)
+  // Closing the menu marks what it showed as seen. Not while a read failed:
+  // an item it would have shown would be marked read unseen.
+  const newest = notifications[0]?.raisedAt
+  const markMenuSeen = (open: boolean) => {
+    if (open || !active || !newest || !live.workspace || activity === null)
+      return
+    markSeen(active.id, newest)
+    setSeenHere(newest)
+  }
   // The conversation route's own title, or undefined on every other page.
   const conversation = useMatches({
     select: (matches) =>
@@ -149,9 +180,8 @@ function AppLayout() {
   })
   const { id } = useParams({ strict: false })
   const stored = conversations?.find((each) => each.id === id)
-  const onboarding = conversations?.find(
-    (each) => each.kind === "onboarding" && !each.archived_at
-  )
+  // Getting started stays in the help menu until the first build.
+  const onboarding = onboardingFor(live.workspace, conversations)
   const router = useRouter()
   // A signup whose organisation was not written: write it now, then read
   // every loader again under the session that carries it. Once per page
@@ -164,7 +194,32 @@ function AppLayout() {
     )
   }, [orgPending, router])
   const navigate = useNavigate()
-  const openPanel = useLocation({ select: (at) => at.state.panel === true })
+  // A link here asked for the panel, or the bell's menu did.
+  const arrived = useLocation({ select: (at) => at.state.panel })
+  const [press, setPress] = useState(arrived)
+  useEffect(() => {
+    if (arrived) setPress(arrived)
+  }, [arrived])
+  const entries = notifications.slice(0, MENU_ITEMS).map(
+    (item): NotificationEntry => ({
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      at: item.raisedAt,
+      unread: seen === null || Date.parse(item.raisedAt) > Date.parse(seen),
+      // Questions and approvals are answered in the panel, where they wait;
+      // reports and alerts are read in full on the notifications page.
+      ...(item.kind === "approval" || item.kind === "question"
+        ? {
+            onSelect: () =>
+              setPress({
+                key: crypto.randomUUID(),
+                focus: anchorOf[item.kind](item.id),
+              }),
+          }
+        : { link: <Link to="/app/notifications" /> }),
+    })
+  )
   const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
   const archive = async (target: Conversation) => {
     setFailed(null)
@@ -189,7 +244,7 @@ function AppLayout() {
       <WorkspaceShell
         defaultPanelOpen={panelOpen}
         defaultRailOpen={railOpen}
-        openPanel={openPanel}
+        openPanel={press}
         menu={
           conversation ? (
             <ConversationMenu
@@ -208,11 +263,17 @@ function AppLayout() {
             />
           ) : undefined
         }
-        notifications={<Link to="/app/notifications" />}
+        notifications={
+          <NotificationMenu
+            items={entries}
+            onOpenChange={markMenuSeen}
+            unread={unread}
+            viewAll={<Link to="/app/notifications" />}
+          />
+        }
         panel={<WorkspacePanel />}
         panelLine={<WorkspacePanelLine />}
         title={stored ? conversationTitle(stored) : conversation}
-        unread={unread}
         titleError={
           stored && failed === stored.id
             ? "That did not archive. Try again."
@@ -273,14 +334,6 @@ function AppLayout() {
                   ))}
               </AppNav>
             ) : null}
-            <AppNav aria-label="Main">
-              <li>
-                <Link className={navLinkClass} to="/app/approvals">
-                  <CheckCircleIcon aria-hidden />
-                  Approvals
-                </Link>
-              </li>
-            </AppNav>
             <div className="mt-auto flex items-center gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -353,7 +406,7 @@ function AppLayout() {
                   {onboarding ? (
                     <DropdownMenuLinkItem
                       render={
-                        <Link params={{ id: onboarding.id }} to="/app/c/$id" />
+                        <Link params={{ id: onboarding }} to="/app/c/$id" />
                       }
                     >
                       <SparkleIcon aria-hidden />
@@ -363,7 +416,10 @@ function AppLayout() {
                   <DropdownMenuLinkItem
                     render={
                       <Link
-                        state={() => ({ chat: crypto.randomUUID() })}
+                        state={() => ({
+                          chat: crypto.randomUUID(),
+                          ask: HELP_PROMPT,
+                        })}
                         to="/app"
                       />
                     }

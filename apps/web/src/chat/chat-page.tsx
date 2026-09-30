@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import { briefingOf } from "@/lib/briefing"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
-import { missingConversations, startsNewChat } from "./history"
+import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
 
 const frame = getRouteApi("/app")
@@ -79,13 +79,21 @@ export function ChatPage() {
   })
 
   // "New chat" on /app itself: the address is the same, the state is new.
+  // A press that carries a question sends it as the chat's first message,
+  // once per press, so going back to it does not ask again.
   const fresh = useLocation({ select: (location) => location.state.chat })
+  const ask = useLocation({ select: (location) => location.state.ask })
   const seen = useRef(fresh)
   useEffect(() => {
     const press = startsNewChat(seen.current, fresh)
     seen.current = fresh
-    if (press) void runtime.threads.switchToNewThread()
-  }, [fresh, runtime])
+    const send = ask && fresh && !asked.has(fresh) ? ask : undefined
+    if (send && fresh) asked.add(fresh)
+    void (async () => {
+      if (press) await runtime.threads.switchToNewThread()
+      if (send) runtime.thread.append(send)
+    })()
+  }, [fresh, ask, runtime])
 
   const missing = useSyncExternalStore(
     missingConversations.subscribe,

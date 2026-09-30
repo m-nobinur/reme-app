@@ -129,6 +129,9 @@ export const startsNewChat = (
   next: string | undefined
 ) => next !== undefined && next !== previous
 
+/** The "New chat" presses whose question has been sent, by their state. */
+export const asked = new Set<string>()
+
 /**
  * Conversations the owner opened by address and cannot have: another
  * account's, or an id that was never stored. The chat shows an empty state

@@ -1,6 +1,5 @@
 import {
   ArchiveIcon,
-  BellIcon,
   CaretDownIcon,
   DotsThreeIcon,
   ListIcon,
@@ -8,8 +7,7 @@ import {
   PencilSimpleIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
-import { countLabel } from "@workspace/ui/components/app-shell"
-import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,12 +22,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
+import {
+  PANEL_COOKIE,
+  type PanelPress,
+  RAIL_COOKIE,
+} from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
-  cloneElement,
   type FormEvent,
   type MouseEvent,
   type ReactElement,
@@ -100,34 +101,28 @@ const useWide = () =>
     () => true
   )
 
-/** A count drawn on a toggle's corner. */
-const BADGE =
-  "absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-medium text-[0.8125rem] text-primary-foreground tabular-nums leading-none"
-
 /**
  * The owner workspace: a 15rem rail, the conversation, and the live panel
- * floating over the conversation's top right corner.
+ * floating at the top right, under the notifications bell.
  *
  * From `md` the rail collapses with the toggle at the top left, remembered in
  * a cookie; below `md` it is a sheet from the left. The panel is a rounded
  * card whose header is always one line of live activity (`panelLine`); open,
  * it grows with its content to half the viewport's height and scrolls past
- * that. From `lg` that line sits in the top bar beside the bell, and the open
- * card keeps the conversation clear of it. From `lg` whether it is open is remembered; below `lg` it starts
- * minimised, since there it covers the conversation. The rail and the panel
- * are slots, so this package still imports no router. `title` and `menu`
- * name the page in the top bar, and `notifications` is the link the bell at
- * the top right renders as, with `unread` drawn on it.
+ * that. From `lg` the conversation keeps a column clear for it, so the two
+ * never overlap, and whether it is open is remembered; below `lg` it starts
+ * minimised, since there it covers the conversation. The rail, the panel and
+ * the bell are slots, so this package still imports no router. `title` and
+ * `menu` name the page in the top bar, and `notifications` sits at its right.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelLine,
-  unread = 0,
   notifications,
   defaultRailOpen = true,
   defaultPanelOpen = true,
-  openPanel = false,
+  openPanel,
   title,
   menu,
   renaming,
@@ -147,17 +142,15 @@ function WorkspaceShell({
   renaming?: Renaming | undefined
   /** Why the last action on the title failed, such as an archive. */
   titleError?: string | undefined
-  /** How many notifications are unread; the bell shows it. */
-  unread?: number
-  /** The link element the bell renders as, from the app's router. */
-  notifications?: ReactElement<ComponentProps<"a">> | undefined
+  /** The bell and its menu, at the top right. */
+  notifications?: ReactNode
   defaultRailOpen?: boolean
   defaultPanelOpen?: boolean
   /**
-   * The owner followed a link to the panel: it opens when this turns true,
-   * even if they had minimised it.
+   * The owner asked for the panel, by a link or from the bell: it opens when
+   * the key changes, even if they had minimised it.
    */
-  openPanel?: boolean
+  openPanel?: PanelPress | undefined
   children: ReactNode
   className?: string
 }) {
@@ -189,10 +182,25 @@ function WorkspaceShell({
     }
   }, [])
 
-  // Sent here to the panel: open it, whatever the width.
+  // Sent here to the panel: open it, whatever the width, then move focus to
+  // what the owner came for once it shows.
+  const focusTarget = useRef<string | undefined>(undefined)
+  const pressKey = openPanel?.key
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key is the trigger; the target is read with it.
   useEffect(() => {
-    if (openPanel) setPanel(true)
-  }, [openPanel, setPanel])
+    if (!pressKey) return
+    focusTarget.current = openPanel?.focus
+    setPanel(true)
+  }, [pressKey, setPanel])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new press with the panel already open has to focus too.
+  useEffect(() => {
+    const target = focusTarget.current
+    if (!expanded || !target) return
+    focusTarget.current = undefined
+    const element = document.getElementById(target)
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ block: "nearest" })
+  }, [expanded, pressKey])
 
   return (
     <div
@@ -267,7 +275,7 @@ function WorkspaceShell({
             <SidebarSimpleIcon aria-hidden />
           </Button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1 lg:pe-[22.5rem]">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1">
             {renaming ? (
               <TitleEditor {...renaming} />
             ) : (
@@ -293,43 +301,14 @@ function WorkspaceShell({
             )}
           </div>
 
-          {notifications
-            ? cloneElement(notifications, {
-                "aria-label":
-                  unread > 0
-                    ? `Notifications, ${unread} unread`
-                    : "Notifications",
-                className: buttonVariants({
-                  variant: "ghost",
-                  size: "icon",
-                  className: "relative",
-                }),
-                children: (
-                  <>
-                    <BellIcon aria-hidden />
-                    {unread > 0 ? (
-                      <span
-                        aria-hidden
-                        className={BADGE}
-                        data-slot="unread-count"
-                      >
-                        {countLabel(unread)}
-                      </span>
-                    ) : null}
-                  </>
-                ),
-              })
-            : null}
+          {notifications}
         </header>
 
         <main
-          // From lg the open panel keeps its own column clear, so it never
-          // covers the end of a message; minimised, it sits in the top bar.
-          // Below lg its line sits under the bar, so the page starts below it.
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto max-lg:pt-13",
-            wide && panelOpen && "lg:pe-[23.5rem]"
-          )}
+          // From lg the panel has its own column, so it never covers the end
+          // of a message and the conversation centres in what is left. Below
+          // lg its line sits under the bar, so the page starts below it.
+          className="min-h-0 flex-1 overflow-y-auto max-lg:pt-13 lg:pe-[23.5rem]"
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
           data-scroll-restoration-id="main"
@@ -340,14 +319,14 @@ function WorkspaceShell({
 
         <aside
           aria-label="Panel"
-          className="absolute top-13 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.5 lg:right-13"
+          className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
           data-state={expanded ? "open" : "closed"}
           id="workspace-panel"
         >
           <button
             aria-controls={panelId}
             aria-expanded={expanded}
-            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none lg:min-h-9"
+            className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
             onClick={() => setPanel(!expanded)}
             type="button"
           >

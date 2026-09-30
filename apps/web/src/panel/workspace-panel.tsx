@@ -11,6 +11,7 @@ import {
   ComingUp,
   LiveLine,
   PanelBlank,
+  PanelDigest,
   type Preview,
   QuestionItem,
   ReminderList,
@@ -45,14 +46,9 @@ import {
   decideApproval,
   getPreview,
 } from "@/lib/api/server"
-import type {
-  AttentionItem,
-  OrgSummary,
-  Workspace,
-  WriteOutcome,
-} from "@/lib/api/types"
+import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
-import { briefingOf } from "@/lib/briefing"
+import { askerOf, digestOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { onboardingFor } from "@/lib/onboarding"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
@@ -124,8 +120,7 @@ function useWrite<Name extends string>(refresh: Refresh, announce?: Announce) {
 
 /** Who raised an item: the frame's directory knows; a poll names no one. */
 function useAsker(item: AttentionItem): string {
-  const { names } = frame.useLoaderData()
-  return (item.raisedById && names[item.raisedById]) || item.raisedBy
+  return askerOf(item, frame.useLoaderData().names)
 }
 
 function Answerable({
@@ -464,6 +459,8 @@ type Tab = "activity" | "reminders" | "website"
 
 export function WorkspacePanel() {
   const { workspace, failed, refresh } = useLiveWorkspace()
+  const { names } = frame.useLoaderData()
+  const zone = useBrowserZone()
   const [status, setStatus] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>("activity")
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
@@ -501,13 +498,16 @@ export function WorkspacePanel() {
       action={<FirstStep workspace={workspace} />}
       description={
         workspace.missingFacts.length
-          ? "Tell Reme about your business in the chat, then ask it to build your website."
-          : "Ask Reme in the chat to build your website."
+          ? "Reme builds your website from what you tell it about your business. Share the details below in the chat to get started."
+          : "Reme builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
       }
       steps={firstSteps(workspace)}
     />
   ) : (
     <>
+      <PanelDigest
+        sentences={digestOf(workspace, names, zone ? new Date() : null)}
+      />
       {current ? (
         <div
           className={TARGET}
@@ -584,13 +584,13 @@ export function WorkspacePanel() {
 
 /**
  * What the panel's one line says, most pressing first: the build being
- * worked on, then what waits on the owner, then where the site stands. The
- * dot follows the site: pulsing while a build works, the accent while a
+ * worked on, then a review, then a question, then where the site stands.
+ * The dot follows the site: pulsing while a build works, the accent while a
  * version is live.
  */
 export function lineOf(
   workspace: Workspace | null,
-  org: OrgSummary | null
+  names: Record<string, string>
 ): ComponentProps<typeof LiveLine> {
   if (!workspace) return { tone: "idle", lead: "This panel did not load" }
   const tone = workspace.live ? "live" : "idle"
@@ -607,23 +607,48 @@ export function lineOf(
       detail: BUILD_STAGES[build.state].note.toLowerCase().slice(0, -1),
     }
   }
-  const waiting = workspace.attention.length
-  if (waiting) {
+  const approvals = workspace.attention.flatMap((item) =>
+    item.kind === "approval" ? [item] : []
+  )
+  const [approval] = approvals
+  if (approval) {
     return {
       tone,
-      lead: `${waiting} ${waiting === 1 ? "thing" : "things"}`,
-      detail: "waiting on you",
+      lead:
+        approvals.length === 1
+          ? `Version ${approval.version} is ready`
+          : `${approvals.length} versions are ready`,
+      detail: "for your review",
     }
   }
-  const context = briefingOf(org, workspace).context
-  return context
-    ? { tone, lead: `${context.name},`, detail: context.status }
-    : { tone, lead: "Nothing published yet" }
+  const questions = workspace.attention.flatMap((item) =>
+    item.kind === "question" ? [item] : []
+  )
+  const [question] = questions
+  if (question) {
+    return questions.length === 1
+      ? {
+          tone,
+          lead: askerOf(question, names),
+          detail: "has a question for you",
+        }
+      : { tone, lead: `${questions.length} questions`, detail: "for you" }
+  }
+  if (workspace.live) {
+    return {
+      tone,
+      lead: "Your website is live",
+      detail: `on version ${workspace.live}`,
+    }
+  }
+  return workspace.open
+    ? { tone, lead: "Your first website", detail: "is under way" }
+    : { tone, lead: "Let's get your website started" }
 }
 
 /** The panel in one line, for the shell's header and its minimised state. */
 export function WorkspacePanelLine() {
   const { workspace } = useLiveWorkspace()
-  const { active } = frame.useLoaderData()
-  return <LiveLine {...lineOf(workspace, active)} />
+  const { names } = frame.useLoaderData()
+  return <LiveLine {...lineOf(workspace, names)} />
 }

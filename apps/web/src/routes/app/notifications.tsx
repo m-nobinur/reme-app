@@ -7,12 +7,8 @@ import {
 } from "@workspace/ui/components/notification-list"
 import { useEffect } from "react"
 import type { AttentionItem } from "@/lib/api/types"
-import {
-  notificationsOf,
-  SEEN_COOKIE_MAX_AGE,
-  seenCookie,
-  unreadCount,
-} from "@/lib/notifications"
+import { markSeen, notificationsOf, unreadCount } from "@/lib/notifications"
+import { anchorOf } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
@@ -30,21 +26,22 @@ const frame = getRouteApi("/app")
 
 const ACTION = buttonVariants({ variant: "outline", size: "sm" })
 
-/** Where an item is acted on. Reports and alerts are there to read. */
+/**
+ * Where an item is acted on: questions and approvals in the panel, which
+ * opens on the item. Reports and alerts are there to read.
+ */
 function actionOf(item: AttentionItem) {
-  if (item.kind === "approval") {
+  if (item.kind === "approval" || item.kind === "question") {
+    const focus = anchorOf[item.kind](item.id)
     return (
-      <Link className={ACTION} to="/app/approvals">
-        Review version {item.version}
-      </Link>
-    )
-  }
-  if (item.kind === "question") {
-    // The panel lists questions first and answers them in place, so opening
-    // it is enough: nothing about the question goes in the address.
-    return (
-      <Link className={ACTION} state={{ panel: true }} to="/app">
-        Answer in the panel
+      <Link
+        className={ACTION}
+        state={() => ({ panel: { key: crypto.randomUUID(), focus } })}
+        to="/app"
+      >
+        {item.kind === "approval"
+          ? `Review version ${item.version}`
+          : "Answer in the panel"}
       </Link>
     )
   }
@@ -84,8 +81,7 @@ function Notifications() {
   // failed: an item it would have shown would be marked read unseen.
   useEffect(() => {
     if (!orgId || error !== null || !newest || unread === 0) return
-    // biome-ignore lint/suspicious/noDocumentCookie: the frame loader reads it on the next request, which the Cookie Store API cannot promise in every browser this app supports.
-    document.cookie = `${seenCookie(orgId)}=${newest}; path=/; max-age=${SEEN_COOKIE_MAX_AGE}; samesite=lax`
+    markSeen(orgId, newest)
   }, [orgId, error, newest, unread])
 
   return (
