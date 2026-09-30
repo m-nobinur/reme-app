@@ -4,6 +4,7 @@ import { ConversationMessage } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
+  HexColour,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -100,10 +101,7 @@ export const ChoiceStep = z.enum([
 const ChoiceVisual = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("swatches"),
-    colors: z
-      .array(z.string().regex(/^#[0-9a-f]{6}$/))
-      .min(1)
-      .max(4),
+    colors: z.array(HexColour).min(1).max(4),
   }),
   z.strictObject({ kind: z.literal("font"), family: Text(80) }),
   z.strictObject({ kind: z.literal("template"), id: Text(20) }),
@@ -115,26 +113,48 @@ const ChoiceVisual = z.discriminatedUnion("kind", [
  * null when the list is closed. The question itself is the text part before
  * the card, written by the api.
  */
-export const AskChoiceInput = z.strictObject({
-  step: ChoiceStep,
-  options: z
-    .array(
-      z.strictObject({
-        id: Text(40),
-        label: Text(80),
-        hint: Text(120).nullable(),
-        visual: ChoiceVisual.nullable(),
-      })
-    )
-    .min(2)
-    .max(16),
-  /** Whether more than one may be picked. */
-  multiple: z.boolean(),
-  /** Options ticked when the card opens. */
-  preselected: z.array(Text(40)).max(16),
-  other: z.strictObject({ label: Text(60), placeholder: Text(120) }).nullable(),
-  skippable: z.boolean(),
-})
+export const AskChoiceInput = z
+  .strictObject({
+    step: ChoiceStep,
+    options: z
+      .array(
+        z.strictObject({
+          id: Text(40),
+          label: Text(80),
+          hint: Text(120).nullable(),
+          visual: ChoiceVisual.nullable(),
+        })
+      )
+      .min(2)
+      .max(24),
+    /** Whether more than one may be picked. */
+    multiple: z.boolean(),
+    /** Options ticked when the card opens. */
+    preselected: z.array(Text(40)).max(16),
+    other: z
+      .strictObject({ label: Text(60), placeholder: Text(120) })
+      .nullable(),
+    skippable: z.boolean(),
+    /**
+     * The options the card shows first, when the list is long. The owner
+     * reaches the rest with a Show others button, as many at a time.
+     * Absent, the card shows every option.
+     */
+    initial: z.array(Text(40)).min(3).max(4).optional(),
+    /** Whether Other offers a colour picker, whose answer is a `#rrggbb` in `other`. */
+    color: z.boolean().optional(),
+  })
+  .refine(
+    (card) =>
+      (card.initial ?? []).every((id) =>
+        card.options.some((option) => option.id === id)
+      ),
+    { path: ["initial"], message: "initial names only offered ids" }
+  )
+  .refine((card) => !card.color || card.other !== null, {
+    path: ["color"],
+    message: "a colour picker needs Other",
+  })
 
 /**
  * `ask_choice`'s output. The api refuses an id that is not in the call's

@@ -138,6 +138,13 @@ const SHAPES: [FactValue, string, string][] = [
   ],
 ]
 
+it("shows the owner's own words or colour, not the word custom", () => {
+  expect(
+    factText("site.palette", { id: "custom", custom: "Navy and gold" })
+  ).toBe("Navy and gold")
+  expect(factText("site.palette", { id: "custom", brand: "x" })).toBe("x")
+})
+
 it("has a sample for every FactValue branch", () => {
   expect(SHAPES.map(([fact]) => fact.key)).toEqual(
     FactValue.options.map((option) => option.shape.key.value)

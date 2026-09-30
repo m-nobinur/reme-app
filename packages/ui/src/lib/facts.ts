@@ -54,6 +54,8 @@ export function factText(key: string, raw: unknown): string {
     "e164",
     "address",
     "text",
+    "custom",
+    "brand",
     "id",
     "mode",
   ]) {

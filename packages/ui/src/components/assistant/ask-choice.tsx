@@ -1,5 +1,9 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import { CheckCircleIcon } from "@phosphor-icons/react"
+import {
+  CheckCircleIcon,
+  EyedropperIcon,
+  ShuffleIcon,
+} from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -7,6 +11,13 @@ import {
   useFocusWhenIdle,
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
+import {
+  AA,
+  hexColour,
+  nextShown,
+  textOn,
+  whiteContrast,
+} from "@workspace/ui/lib/colour"
 import { askChoiceView, choiceText } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { type FormEvent, useId, useRef, useState } from "react"
@@ -17,8 +28,10 @@ import { type FormEvent, useId, useRef, useState } from "react"
  * template, colours, type and pages. The question is the text part above;
  * the card is the options, as native radios or checkboxes so the arrow keys
  * and the screen reader know the group. Colour, type and template options
- * show what they are, drawn from the option's own data. Nothing is sent
- * until the owner presses Continue.
+ * show what they are, drawn from the option's own data. A long list shows
+ * the call's `initial` few and brings in others on Show others; a colour
+ * card's Other is a colour picker. Nothing is sent until the owner presses
+ * Continue.
  */
 
 type Option = AskChoiceInput["options"][number]
@@ -246,18 +259,330 @@ function Visual({ visual }: { visual: Option["visual"] }) {
   )
 }
 
+/**
+ * The Other of a colour card: the native picker and a text field that
+ * share one value. The field takes a colour code, which the picker follows,
+ * or words, which go as they are. A code gets a sample button and, when
+ * white text would not read on it, a note saying so.
+ */
+function ColourField({
+  label,
+  placeholder,
+  value,
+  fallback,
+  invalid,
+  onChange,
+}: {
+  label: string
+  placeholder: string
+  value: string
+  /** What the picker shows before the owner gives a code. */
+  fallback: string
+  invalid: boolean
+  onChange: (value: string) => void
+}) {
+  const id = useId()
+  const hex = hexColour(value)
+  const contrast = hex ? whiteContrast(hex) : null
+  return (
+    <div className="flex max-w-md flex-col gap-2">
+      <label className="font-medium text-sm" htmlFor={`${id}-text`}>
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          aria-label="Pick a colour"
+          className="size-9 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
+          onChange={(event) => onChange(event.currentTarget.value)}
+          type="color"
+          value={hex ?? fallback}
+        />
+        <Input
+          aria-describedby={hex ? `${id}-note` : undefined}
+          aria-invalid={invalid || undefined}
+          autoComplete="off"
+          id={`${id}-text`}
+          maxLength={200}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          value={value}
+        />
+      </div>
+      {hex && contrast !== null ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span
+            aria-hidden
+            className="inline-flex h-8 items-center rounded-full border border-foreground/10 px-3 font-medium text-xs"
+            // The owner's colour and the text that reads on it: data, not literals.
+            style={{ backgroundColor: hex, color: textOn(hex) }}
+          >
+            Request a quote
+          </span>
+          <p
+            className={cn(
+              "text-xs",
+              contrast < AA ? "text-foreground" : "text-muted-foreground"
+            )}
+            id={`${id}-note`}
+          >
+            {contrast < AA
+              ? `White text is hard to read on this colour (${contrast.toFixed(1)}:1, ${AA}:1 needed). Your site will use a darker shade of it for text.`
+              : `White text reads well on this colour (${contrast.toFixed(1)}:1).`}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Where a card starts, when it does not start fresh: the options shown and
+ * the owner's own answer already open. The catalog draws the colour card's
+ * states with it.
+ */
+type Start = { shown?: string[]; other?: string }
+
+/**
+ * The open card: the options as a native group, Other and its field, and
+ * Continue. `onAnswer` gets the answer `AskChoiceOutput` takes.
+ */
+function ChoiceForm({
+  input,
+  onAnswer,
+  start,
+}: {
+  input: AskChoiceInput
+  onAnswer: (
+    answer:
+      | { answer: "chosen"; ids: string[]; other: string | null }
+      | { answer: "skipped" }
+  ) => void
+  start?: Start
+}) {
+  const id = useId()
+  const [picked, setPicked] = useState<string[]>(() =>
+    start?.other !== undefined ? [OTHER] : input.preselected
+  )
+  const [other, setOther] = useState(start?.other ?? "")
+  const [invalid, setInvalid] = useState<string | null>(null)
+  const [shown, setShown] = useState(() => start?.shown ?? input.initial)
+  const [seen, setSeen] = useState(() => shown ?? [])
+  const [announced, setAnnounced] = useState("")
+
+  const multiple = input.multiple
+  const color = input.color === true && input.other !== null
+  const options = shown
+    ? shown.flatMap((each) => input.options.find((o) => o.id === each) ?? [])
+    : input.options
+  const pictured = input.options.some((o) => o.visual)
+  const hinted = input.options.some((o) => o.hint)
+  const layout =
+    pictured || hinted
+      ? cn(
+          "grid gap-2",
+          input.options.some((o) => o.visual?.kind === "template")
+            ? "grid-cols-1 sm:grid-cols-3"
+            : shown
+              ? "grid-cols-2 sm:grid-cols-5"
+              : "grid-cols-2 sm:grid-cols-3"
+        )
+      : "flex flex-wrap gap-2"
+  const otherPicked = picked.includes(OTHER)
+
+  const toggle = (value: string, on: boolean) => {
+    setInvalid(null)
+    setPicked((now) =>
+      multiple
+        ? on
+          ? [...now, value]
+          : now.filter((each) => each !== value)
+        : on
+          ? [value]
+          : now
+    )
+  }
+
+  const showOthers = () => {
+    if (!shown) return
+    const next = nextShown(
+      input.options.map((o) => o.id),
+      shown,
+      seen
+    )
+    setShown(next.shown)
+    setSeen(next.seen)
+    setPicked((now) =>
+      now.filter((each) => each === OTHER || next.shown.includes(each))
+    )
+    const labels = next.shown.map(
+      (each) => input.options.find((o) => o.id === each)?.label ?? each
+    )
+    setAnnounced(
+      `Showing ${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}.`
+    )
+  }
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const typed = otherPicked ? other.trim() : ""
+    const words = color ? (hexColour(typed) ?? typed) : typed
+    const ids = picked.filter((each) => each !== OTHER)
+    if (otherPicked && !words) {
+      setInvalid(
+        color
+          ? "Pick a colour or describe it first."
+          : "Write your answer first."
+      )
+      return
+    }
+    if (color && words.startsWith("#") && !hexColour(words)) {
+      setInvalid("A colour code is # and six digits or letters from a to f.")
+      return
+    }
+    if (ids.length === 0 && !words) {
+      setInvalid(multiple ? "Pick at least one." : "Pick one first.")
+      return
+    }
+    onAnswer({ answer: "chosen", ids, other: words || null })
+  }
+
+  const option = (value: string, label: string, rest?: Option) => {
+    const checked = picked.includes(value)
+    return (
+      <label
+        className={cn(
+          "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150",
+          "hover:border-primary/50 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+          "has-[:checked]:border-primary has-[:checked]:bg-primary/5",
+          pictured || hinted
+            ? "flex-col gap-2 rounded-2xl p-3"
+            : "min-h-9 items-center rounded-full px-4 text-sm",
+          value === OTHER && color && "border-dashed"
+        )}
+        key={value}
+      >
+        <input
+          checked={checked}
+          className="sr-only"
+          name={`${id}-choice`}
+          onChange={(event) => toggle(value, event.currentTarget.checked)}
+          type={multiple ? "checkbox" : "radio"}
+          value={value}
+        />
+        {rest?.visual ? <Visual visual={rest.visual} /> : null}
+        {value === OTHER && color ? (
+          <EyedropperIcon
+            aria-hidden
+            className="size-6 text-muted-foreground"
+          />
+        ) : null}
+        <span
+          className={cn(
+            "flex items-center gap-1.5",
+            (pictured || hinted) && "font-medium text-sm"
+          )}
+        >
+          {label}
+          {checked && (pictured || hinted) ? (
+            <CheckCircleIcon
+              aria-hidden
+              className="ml-auto size-4 shrink-0 text-primary"
+              weight="fill"
+            />
+          ) : null}
+        </span>
+        {rest?.hint ? (
+          <span className="text-muted-foreground text-xs">{rest.hint}</span>
+        ) : null}
+      </label>
+    )
+  }
+
+  return (
+    <form className="flex flex-col gap-3" noValidate onSubmit={submit}>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-muted-foreground text-xs">
+          {multiple ? "Pick any that fit" : "Pick one"}
+        </legend>
+        <div className={layout}>
+          {options.map((each) => option(each.id, each.label, each))}
+          {input.other ? option(OTHER, input.other.label) : null}
+        </div>
+      </fieldset>
+      {shown && shown.length < input.options.length ? (
+        <div>
+          <Button onClick={showOthers} size="sm" type="button" variant="ghost">
+            <ShuffleIcon aria-hidden />
+            {color ? "Show other colours" : "Show other options"}
+          </Button>
+          <p aria-live="polite" className="sr-only">
+            {announced}
+          </p>
+        </div>
+      ) : null}
+      {input.other && otherPicked ? (
+        color ? (
+          <ColourField
+            fallback={
+              (input.options[0]?.visual?.kind === "swatches"
+                ? input.options[0].visual.colors[0]
+                : undefined) ?? ""
+            }
+            invalid={invalid !== null}
+            label={input.other.label}
+            onChange={(value) => {
+              setInvalid(null)
+              setOther(value)
+            }}
+            placeholder={input.other.placeholder}
+            value={other}
+          />
+        ) : (
+          <Input
+            aria-invalid={invalid !== null || undefined}
+            aria-label={input.other.label}
+            className="max-w-md"
+            maxLength={200}
+            onChange={(event) => {
+              setInvalid(null)
+              setOther(event.currentTarget.value)
+            }}
+            placeholder={input.other.placeholder}
+            value={other}
+          />
+        )
+      ) : null}
+      {invalid ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {invalid}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" type="submit">
+          Continue
+        </Button>
+        {input.skippable ? (
+          <Button
+            onClick={() => onAnswer({ answer: "skipped" })}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Skip for now
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  )
+}
+
 const AskChoice: ToolCallMessagePartComponent = (props) => {
   const view = askChoiceView(props)
-  const id = useId()
   const waiting = view.state === "pending"
   const running = useRevealWaiting(waiting)
-  const formRef = useRef<HTMLFormElement>(null)
-  useFocusWhenIdle(waiting, running, formRef)
-  const [picked, setPicked] = useState<string[]>(() =>
-    view.state === "pending" ? view.input.preselected : []
-  )
-  const [other, setOther] = useState("")
-  const [invalid, setInvalid] = useState<string | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  useFocusWhenIdle(waiting, running, cardRef)
 
   if (view.state !== "pending") {
     return (
@@ -292,149 +617,16 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
     )
   }
 
-  const { input } = view
-  const multiple = input.multiple
-  const pictured = input.options.some((o) => o.visual)
-  const hinted = input.options.some((o) => o.hint)
-  const layout =
-    pictured || hinted
-      ? cn(
-          "grid gap-2",
-          input.options.some((o) => o.visual?.kind === "template")
-            ? "grid-cols-1 sm:grid-cols-3"
-            : "grid-cols-2 sm:grid-cols-3"
-        )
-      : "flex flex-wrap gap-2"
-  const otherPicked = picked.includes(OTHER)
-
-  const toggle = (value: string, on: boolean) => {
-    setInvalid(null)
-    setPicked((now) =>
-      multiple
-        ? on
-          ? [...now, value]
-          : now.filter((each) => each !== value)
-        : on
-          ? [value]
-          : now
-    )
-  }
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const words = otherPicked ? other.trim() : ""
-    const ids = picked.filter((each) => each !== OTHER)
-    if (otherPicked && !words) {
-      setInvalid("Write your answer first.")
-      return
-    }
-    if (ids.length === 0 && !words) {
-      setInvalid(multiple ? "Pick at least one." : "Pick one first.")
-      return
-    }
-    props.addResult({ answer: "chosen", ids, other: words || null })
-  }
-
-  const option = (value: string, label: string, rest?: Option) => {
-    const checked = picked.includes(value)
-    return (
-      <label
-        className={cn(
-          "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150",
-          "hover:border-primary/50 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
-          "has-[:checked]:border-primary has-[:checked]:bg-primary/5",
-          pictured || hinted
-            ? "flex-col gap-2 rounded-2xl p-3"
-            : "min-h-9 items-center rounded-full px-4 text-sm"
-        )}
-        key={value}
-      >
-        <input
-          checked={checked}
-          className="sr-only"
-          name={`${id}-choice`}
-          onChange={(event) => toggle(value, event.currentTarget.checked)}
-          type={multiple ? "checkbox" : "radio"}
-          value={value}
-        />
-        {rest?.visual ? <Visual visual={rest.visual} /> : null}
-        <span
-          className={cn(
-            "flex items-center gap-1.5",
-            (pictured || hinted) && "font-medium text-sm"
-          )}
-        >
-          {label}
-          {checked && (pictured || hinted) ? (
-            <CheckCircleIcon
-              aria-hidden
-              className="ml-auto size-4 shrink-0 text-primary"
-              weight="fill"
-            />
-          ) : null}
-        </span>
-        {rest?.hint ? (
-          <span className="text-muted-foreground text-xs">{rest.hint}</span>
-        ) : null}
-      </label>
-    )
-  }
-
   return (
-    <div className="my-3 flex max-w-2xl flex-col gap-2" data-slot="ask-choice">
-      <form
-        className="flex flex-col gap-3"
-        noValidate
-        onSubmit={submit}
-        ref={formRef}
-      >
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-muted-foreground text-xs">
-            {multiple ? "Pick any that fit" : "Pick one"}
-          </legend>
-          <div className={layout}>
-            {input.options.map((each) => option(each.id, each.label, each))}
-            {input.other ? option(OTHER, input.other.label) : null}
-          </div>
-        </fieldset>
-        {input.other && otherPicked ? (
-          <Input
-            aria-invalid={invalid !== null || undefined}
-            aria-label={input.other.label}
-            className="max-w-md"
-            maxLength={200}
-            onChange={(event) => {
-              setInvalid(null)
-              setOther(event.currentTarget.value)
-            }}
-            placeholder={input.other.placeholder}
-            value={other}
-          />
-        ) : null}
-        {invalid ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {invalid}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" type="submit">
-            Continue
-          </Button>
-          {input.skippable ? (
-            <Button
-              onClick={() => props.addResult({ answer: "skipped" })}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Skip for now
-            </Button>
-          ) : null}
-        </div>
-      </form>
+    <div
+      className="my-3 flex max-w-2xl flex-col gap-2"
+      data-slot="ask-choice"
+      ref={cardRef}
+    >
+      <ChoiceForm input={view.input} onAnswer={props.addResult} />
     </div>
   )
 }
 AskChoice.displayName = "AskChoice"
 
-export { AskChoice }
+export { AskChoice, ChoiceForm }

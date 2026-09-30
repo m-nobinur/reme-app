@@ -1,32 +1,114 @@
 {
   "ocean": {
     "label": "Ocean",
-    "hint": "Calm blue",
-    "brand": "#0b5fa5",
-    "swatches": ["#0b5fa5", "#d6e8f7", "#f4f8fc"]
+    "hint": "Clear, trusted blue",
+    "brand": "#0369a1",
+    "swatches": ["#0369a1", "#e0f2fe", "#f0f9ff"],
+    "source": "Tailwind CSS default palette, sky 700, 100 and 50"
+  },
+  "classic_blue": {
+    "label": "Classic blue",
+    "hint": "Steady mid blue",
+    "brand": "#0f4c81",
+    "swatches": ["#0f4c81", "#dbe4ec", "#f5f8fa"],
+    "source": "Pantone Colour of the Year 2020, Classic Blue 19-4052; tint and surface mixed with white"
+  },
+  "harbour": {
+    "label": "Harbour",
+    "hint": "Deep, authoritative navy",
+    "brand": "#1b2a4a",
+    "swatches": ["#1b2a4a", "#dddfe4", "#f6f6f8"],
+    "source": "Hue Blender, best colour combinations for websites: the navy of Mustard + Navy + White; tint and surface mixed with white"
+  },
+  "lagoon": {
+    "label": "Lagoon",
+    "hint": "Fresh, calm teal",
+    "brand": "#0f766e",
+    "swatches": ["#0f766e", "#ccfbf1", "#f0fdfa"],
+    "source": "Tailwind CSS default palette, teal 700, 100 and 50"
   },
   "forest": {
     "label": "Forest",
     "hint": "Deep green",
-    "brand": "#1f6b4a",
-    "swatches": ["#1f6b4a", "#d5ece0", "#f3f9f5"]
+    "brand": "#1b4332",
+    "swatches": ["#1b4332", "#dde3e0", "#f6f7f7"],
+    "source": "Hue Blender, best colour combinations for websites: Forest Green + Sand; tint and surface mixed with white"
+  },
+  "sage": {
+    "label": "Sage",
+    "hint": "Soft, quiet green",
+    "brand": "#54705c",
+    "swatches": ["#54705c", "#e5eae7", "#f8f9f8"],
+    "source": "Dan Gilroy, best colours for law firm websites: muted green; tint and surface mixed with white"
   },
   "sunset": {
     "label": "Sunset",
     "hint": "Warm orange",
-    "brand": "#b7410e",
-    "swatches": ["#b7410e", "#f8dccb", "#fcf6f2"]
+    "brand": "#c2410c",
+    "swatches": ["#c2410c", "#ffedd5", "#fff7ed"],
+    "source": "Tailwind CSS default palette, orange 700, 100 and 50"
+  },
+  "mocha": {
+    "label": "Mocha",
+    "hint": "Warm coffee brown",
+    "brand": "#946c5a",
+    "swatches": ["#946c5a", "#efe9e6", "#fbf9f8"],
+    "source": "Pantone Colour of the Year 2025, Mocha Mousse 17-1230, darkened from its published value to reach 4.5:1 on white; tint and surface mixed with white"
+  },
+  "cardinal": {
+    "label": "Cardinal",
+    "hint": "Strong, confident red",
+    "brand": "#b3262d",
+    "swatches": ["#b3262d", "#f4dee0", "#fcf6f7"],
+    "source": "Dan Gilroy, best colours for law firm websites: vermilion; tint and surface mixed with white"
+  },
+  "berry": {
+    "label": "Berry",
+    "hint": "Vivid magenta",
+    "brand": "#bb2649",
+    "swatches": ["#bb2649", "#f5dee4", "#fcf6f8"],
+    "source": "Pantone Colour of the Year 2023, Viva Magenta 18-1750; tint and surface mixed with white"
+  },
+  "burgundy": {
+    "label": "Burgundy",
+    "hint": "Rich wine red",
+    "brand": "#722f37",
+    "swatches": ["#722f37", "#eae0e1", "#f9f7f7"],
+    "source": "Hue Blender, best colour combinations for websites: Rich Burgundy + Ivory; tint and surface mixed with white"
   },
   "midnight": {
     "label": "Midnight",
     "hint": "Rich indigo",
     "brand": "#3730a3",
-    "swatches": ["#3730a3", "#dcdaf5", "#f6f5fc"]
+    "swatches": ["#3730a3", "#e0e7ff", "#eef2ff"],
+    "source": "Tailwind CSS default palette, indigo 800, 100 and 50"
+  },
+  "damson": {
+    "label": "Damson",
+    "hint": "Soft plum purple",
+    "brand": "#953ea3",
+    "swatches": ["#953ea3", "#fbebfb", "#fbf7fb"],
+    "source": "Radix Colors, plum steps 11 and 3; surface mixed with white"
+  },
+  "ultra_violet": {
+    "label": "Ultra violet",
+    "hint": "Muted lavender purple",
+    "brand": "#5f4b8b",
+    "swatches": ["#5f4b8b", "#e7e4ee", "#f9f8fa"],
+    "source": "Pantone Colour of the Year 2018, Ultra Violet 18-3838; tint and surface mixed with white"
   },
   "graphite": {
     "label": "Graphite",
-    "hint": "Quiet grey",
-    "brand": "#374151",
-    "swatches": ["#374151", "#dde1e7", "#f5f6f8"]
+    "hint": "Cool slate grey",
+    "brand": "#475569",
+    "swatches": ["#475569", "#f1f5f9", "#f8fafc"],
+    "source": "Tailwind CSS default palette, slate 600, 100 and 50"
+  },
+  "onyx": {
+    "label": "Onyx",
+    "hint": "Near black, understated",
+    "brand": "#1c1917",
+    "swatches": ["#1c1917", "#dddddc", "#f6f6f6"],
+    "source": "Tailwind CSS default palette, stone 900; tint and surface mixed with white"
   }
 }
