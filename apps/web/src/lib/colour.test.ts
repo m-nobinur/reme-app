@@ -45,7 +45,7 @@ const seeded = () => {
 }
 
 it("shows every option once before any repeats, and never the same four twice running", () => {
-  const ids = PALETTES.map((p) => p.id)
+  const ids: string[] = PALETTES.map((p) => p.id)
   const random = seeded()
   let shown = ids.slice(0, 4)
   let seen = [...shown]
