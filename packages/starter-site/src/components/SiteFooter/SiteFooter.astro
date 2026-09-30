@@ -16,7 +16,13 @@ const hasContact = Boolean(
   (site.businessName || hasContact || navLinks.length > 0) && (
     <footer class="site-footer">
       <div class="wrap footer-grid">
-        {site.businessName && <p class="site-name">{site.businessName}</p>}
+        {site.logo && site.logoAlt ? (
+          <p class="site-name">
+            <img class="site-logo" src={site.logo} alt={site.logoAlt} />
+          </p>
+        ) : (
+          site.businessName && <p class="site-name">{site.businessName}</p>
+        )}
         <ContactDetails />
         {navLinks.length > 0 && (
           <nav aria-label={site.footerNavLabel}>

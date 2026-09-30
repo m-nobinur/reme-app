@@ -244,7 +244,8 @@
     "props": [],
     "constraints": [
       "The Base layout renders it on every page.",
-      "Every part comes from a field and vanishes when that field is empty."
+      "Every part comes from a field and vanishes when that field is empty.",
+      "Shows the owner's logo in place of the business name when site.logo and site.logoAlt are both set, as the header does."
     ],
     "examples": ["<SiteFooter />"],
     "forbidden": ["using it in a page"],
@@ -257,7 +258,8 @@
     "props": [],
     "constraints": [
       "The Base layout renders it on every page.",
-      "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set."
+      "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set.",
+      "The owner's logo (site.logo with site.logoAlt) replaces the business name at a fixed height; with no logo the name shows as text."
     ],
     "examples": ["<SiteHeader />"],
     "forbidden": ["using it in a page", "a hard-coded navigation link"],

@@ -5,6 +5,8 @@ props: []
 constraints:
   - The Base layout renders it on every page.
   - Every part comes from a field and vanishes when that field is empty.
+  - Shows the owner's logo in place of the business name when site.logo and
+    site.logoAlt are both set, as the header does.
 examples:
   - "<SiteFooter />"
 forbidden:

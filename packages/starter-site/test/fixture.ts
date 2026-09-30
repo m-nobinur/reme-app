@@ -31,6 +31,8 @@ export const FILLED: Record<string, string> = {
   photo2Alt: "A hallway floor after a clean",
   photo3Src: "/photos/three.jpg",
   photo3Alt: "A bathroom mirror after a clean",
+  logo: "/uploads/logo.png",
+  logoAlt: "BrightClean",
   heroImage: "/uploads/hero.jpg",
   heroImageAlt: "A living room after a weekly clean",
   heroHeading: "A home you come back to",

@@ -95,6 +95,10 @@ const values = {
    * soft_rounded. Empty or anything else keeps the default pairing.
    */
   font: "",
+  /** media.uploads, the path of the owner's logo, as "/uploads/<id>.png". Empty shows the business name as text. */
+  logo: "",
+  /** The logo's alt text: the business name as the logo shows it. */
+  logoAlt: "",
   /**
    * media.uploads, the path of the owner's photo the home page's hero shows,
    * as "/uploads/<id>.jpg". Empty keeps the hero's drawn panel.
@@ -270,6 +274,8 @@ export const fields: Record<keyof typeof site, Field> = {
   brandColor: composed,
   template: composed,
   font: composed,
+  logo: { kind: "fact", fact_key: "media.uploads", required: false },
+  logoAlt: composed,
   heroImage: { kind: "fact", fact_key: "media.uploads", required: false },
   heroImageAlt: composed,
   heroHeading: composed,

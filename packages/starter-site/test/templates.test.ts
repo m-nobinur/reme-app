@@ -54,7 +54,7 @@ beforeAll(async () => {
     build({
       site: { ...FILLED, template: "bold", brandColor: MIDNIGHT, ...ONE_PHOTO },
     }),
-    build({ site: { ...FILLED, heroImage: "" } }),
+    build({ site: { ...FILLED, heroImage: "", logo: "" } }),
   ])
   Object.assign(built, { classic, modern, bold, panel })
 }, 120_000)
@@ -113,6 +113,23 @@ describe("a template", () => {
     expect(classes(home("panel"))).not.toContain("hero-image")
   })
 
+  test("shows the owner's logo in place of the name, and the name as text without one", () => {
+    const logos = (page: Page) =>
+      page.elements.filter((el) =>
+        (el.attrs.class ?? "").split(" ").includes("site-logo")
+      )
+    for (const name of ["classic", "modern", "bold"]) {
+      const found = logos(home(name))
+      expect(found, name).toHaveLength(2)
+      for (const img of found) {
+        expect(img.attrs.src, name).toBe(FILLED.logo)
+        expect(img.attrs.alt, name).toBe(FILLED.logoAlt)
+      }
+    }
+    expect(logos(home("panel"))).toEqual([])
+    expect(home("panel").texts).toContain(FILLED.businessName)
+  })
+
   test("shows one photo as a single figure and more as a grid of tiles", () => {
     expect(classes(home("bold"))).toContain("gallery-single")
     expect(classes(home("bold"))).not.toContain("gallery-grid")
@@ -135,6 +152,10 @@ describe("a template", () => {
       expect(rule, selector).toMatch(/aspect-ratio: \d+ \/ \d+/)
     }
     expect(css).not.toMatch(/gallery-grid \{[^}]*auto-fit/)
+    // A logo keeps its own shape, at a fixed height.
+    expect(css).toMatch(
+      /\n\.site-logo \{[^}]*height: 2\.5rem;[^}]*object-fit: contain;/
+    )
   })
 
   test("shows the industry above the heading", () => {

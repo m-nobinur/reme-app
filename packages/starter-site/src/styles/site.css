@@ -154,6 +154,19 @@ p {
   text-decoration: none;
 }
 
+/* The owner's logo, at a fixed height whatever its file's size. */
+.site-logo {
+  display: block;
+  width: auto;
+  height: 2.5rem;
+  max-width: 12rem;
+  object-fit: contain;
+}
+
+.site-footer .site-logo {
+  height: 2rem;
+}
+
 .site-header nav {
   margin-inline-start: auto;
 }
@@ -909,6 +922,13 @@ main > .cta-band:last-child {
 [data-template="bold"]
   :is(.site-header .site-name, .site-header nav a, .hero .lede) {
   color: var(--background);
+}
+
+/* A logo drawn for a light page stays legible on the dark block. */
+[data-template="bold"] .site-header .site-logo {
+  padding: var(--space-3xs);
+  border-radius: var(--radius-md);
+  background: var(--background);
 }
 
 [data-template="bold"] .hero .eyebrow {
