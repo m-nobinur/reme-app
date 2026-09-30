@@ -78,6 +78,8 @@ export async function build(
     child.on("close", (code) => resolve({ code, output }))
   })
   if (result.code !== 0) {
+    // A build expected to fail runs every time, so it leaves nothing behind.
+    rmSync(dir, { recursive: true, force: true })
     throw new Error(`astro build failed in ${dir}\n${result.output}`)
   }
   return { dir, dist: join(dir, "dist") }
