@@ -189,9 +189,27 @@ export interface components {
                 key: "site.palette"
                 value: {
                   id:
-                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | (
+                        | "ocean"
+                        | "classic_blue"
+                        | "harbour"
+                        | "lagoon"
+                        | "forest"
+                        | "sage"
+                        | "sunset"
+                        | "mocha"
+                        | "cardinal"
+                        | "berry"
+                        | "burgundy"
+                        | "midnight"
+                        | "damson"
+                        | "ultra_violet"
+                        | "graphite"
+                        | "onyx"
+                      )
                     | "custom"
                   custom?: string
+                  brand?: string
                 }
               }
             | {
@@ -403,6 +421,8 @@ export interface components {
         placeholder: string
       } | null
       skippable: boolean
+      initial?: string[]
+      color?: boolean
     }
     AskChoiceOutput:
       | {
@@ -582,9 +602,27 @@ export interface components {
           skippable: boolean
           prefill: {
             id:
-              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | (
+                  | "ocean"
+                  | "classic_blue"
+                  | "harbour"
+                  | "lagoon"
+                  | "forest"
+                  | "sage"
+                  | "sunset"
+                  | "mocha"
+                  | "cardinal"
+                  | "berry"
+                  | "burgundy"
+                  | "midnight"
+                  | "damson"
+                  | "ultra_violet"
+                  | "graphite"
+                  | "onyx"
+                )
               | "custom"
             custom?: string
+            brand?: string
           } | null
         }
       | {
@@ -784,9 +822,27 @@ export interface components {
                 key: "site.palette"
                 value: {
                   id:
-                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | (
+                        | "ocean"
+                        | "classic_blue"
+                        | "harbour"
+                        | "lagoon"
+                        | "forest"
+                        | "sage"
+                        | "sunset"
+                        | "mocha"
+                        | "cardinal"
+                        | "berry"
+                        | "burgundy"
+                        | "midnight"
+                        | "damson"
+                        | "ultra_violet"
+                        | "graphite"
+                        | "onyx"
+                      )
                     | "custom"
                   custom?: string
+                  brand?: string
                 }
               }
             | {
@@ -1250,13 +1306,25 @@ export interface components {
                                     id:
                                       | (
                                           | "ocean"
+                                          | "classic_blue"
+                                          | "harbour"
+                                          | "lagoon"
                                           | "forest"
+                                          | "sage"
                                           | "sunset"
+                                          | "mocha"
+                                          | "cardinal"
+                                          | "berry"
+                                          | "burgundy"
                                           | "midnight"
+                                          | "damson"
+                                          | "ultra_violet"
                                           | "graphite"
+                                          | "onyx"
                                         )
                                       | "custom"
                                     custom?: string
+                                    brand?: string
                                   }
                                 }
                               | {
@@ -1654,9 +1722,27 @@ export interface components {
             key: "site.palette"
             value: {
               id:
-                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | (
+                    | "ocean"
+                    | "classic_blue"
+                    | "harbour"
+                    | "lagoon"
+                    | "forest"
+                    | "sage"
+                    | "sunset"
+                    | "mocha"
+                    | "cardinal"
+                    | "berry"
+                    | "burgundy"
+                    | "midnight"
+                    | "damson"
+                    | "ultra_violet"
+                    | "graphite"
+                    | "onyx"
+                  )
                 | "custom"
               custom?: string
+              brand?: string
             }
           }
         | {
@@ -1986,13 +2072,25 @@ export interface components {
                     id:
                       | (
                           | "ocean"
+                          | "classic_blue"
+                          | "harbour"
+                          | "lagoon"
                           | "forest"
+                          | "sage"
                           | "sunset"
+                          | "mocha"
+                          | "cardinal"
+                          | "berry"
+                          | "burgundy"
                           | "midnight"
+                          | "damson"
+                          | "ultra_violet"
                           | "graphite"
+                          | "onyx"
                         )
                       | "custom"
                     custom?: string
+                    brand?: string
                   }
                 }
               | {
@@ -2746,9 +2844,27 @@ export interface components {
           key: "site.palette"
           value: {
             id:
-              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | (
+                  | "ocean"
+                  | "classic_blue"
+                  | "harbour"
+                  | "lagoon"
+                  | "forest"
+                  | "sage"
+                  | "sunset"
+                  | "mocha"
+                  | "cardinal"
+                  | "berry"
+                  | "burgundy"
+                  | "midnight"
+                  | "damson"
+                  | "ultra_violet"
+                  | "graphite"
+                  | "onyx"
+                )
               | "custom"
             custom?: string
+            brand?: string
           }
         }
       | {
@@ -3232,9 +3348,27 @@ export interface components {
             key: "site.palette"
             value: {
               id:
-                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | (
+                    | "ocean"
+                    | "classic_blue"
+                    | "harbour"
+                    | "lagoon"
+                    | "forest"
+                    | "sage"
+                    | "sunset"
+                    | "mocha"
+                    | "cardinal"
+                    | "berry"
+                    | "burgundy"
+                    | "midnight"
+                    | "damson"
+                    | "ultra_violet"
+                    | "graphite"
+                    | "onyx"
+                  )
                 | "custom"
               custom?: string
+              brand?: string
             }
           }
         | {

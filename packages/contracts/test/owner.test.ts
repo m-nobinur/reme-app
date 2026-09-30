@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { PALETTES } from "../src/onboarding.ts"
 import {
   ActivityFeed,
   AttentionItem,
@@ -181,6 +182,36 @@ describe("FactValue", () => {
   // JSON Schema cannot compare two properties, so only Zod holds this rule.
   // Every writer (api, orchestrator, web) parses with Zod.
   const HOURS = "hours.weekday"
+  it("holds a palette to a preset alone, or custom with words or a colour", () => {
+    const PALETTE = "site.palette"
+    const brand = PALETTES[0]?.brand
+    for (const value of [
+      { id: "custom", custom: "Navy and gold" },
+      { id: "custom", brand },
+      { id: "custom", custom: "Like the sea", brand },
+    ]) {
+      expect(verdict("FactValue", FactValue, { key: PALETTE, value })).toEqual(
+        ACCEPTED
+      )
+    }
+    for (const value of [
+      { id: "custom" },
+      { id: "ocean", brand },
+      { id: "ocean", custom: "but darker" },
+    ]) {
+      expect(verdict("FactValue", FactValue, { key: PALETTE, value })).toEqual({
+        zod: false,
+        json: true,
+      })
+    }
+    expect(
+      verdict("FactValue", FactValue, {
+        key: PALETTE,
+        value: { id: "custom", brand: brand?.slice(1) },
+      })
+    ).toEqual(REFUSED)
+  })
+
   it("refuses hours that close before or as they open, or past midnight", () => {
     for (const value of [
       { open: "17:30", close: "08:00" },
@@ -514,10 +545,14 @@ describe("WorkspaceStatus reminders", () => {
 
 describe("the onboarding presets", () => {
   it("has a palette entry for every palette id and nothing else", async () => {
-    const { PALETTES, PaletteId } = await import("../src/onboarding.ts")
+    const { PaletteId } = await import("../src/onboarding.ts")
     expect(PALETTES.map((p) => p.id)).toEqual(PaletteId.options)
     for (const palette of PALETTES) {
       expect(palette.swatches[0]).toBe(palette.brand)
+      expect(palette.swatches).toHaveLength(3)
+      expect(palette.source).not.toBe("")
     }
+    // No two presets share a brand colour.
+    expect(new Set(PALETTES.map((p) => p.brand)).size).toBe(PALETTES.length)
   })
 })

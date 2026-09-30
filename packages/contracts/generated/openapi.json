@@ -599,10 +599,21 @@
                                 "type": "string",
                                 "enum": [
                                   "ocean",
+                                  "classic_blue",
+                                  "harbour",
+                                  "lagoon",
                                   "forest",
+                                  "sage",
                                   "sunset",
+                                  "mocha",
+                                  "cardinal",
+                                  "berry",
+                                  "burgundy",
                                   "midnight",
-                                  "graphite"
+                                  "damson",
+                                  "ultra_violet",
+                                  "graphite",
+                                  "onyx"
                                 ]
                               },
                               {
@@ -616,6 +627,10 @@
                             "minLength": 1,
                             "maxLength": 200,
                             "pattern": "\\S"
+                          },
+                          "brand": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
                           }
                         },
                         "required": ["id"],
@@ -1167,7 +1182,7 @@
           },
           "options": {
             "minItems": 2,
-            "maxItems": 16,
+            "maxItems": 24,
             "type": "array",
             "items": {
               "type": "object",
@@ -1307,6 +1322,20 @@
             ]
           },
           "skippable": {
+            "type": "boolean"
+          },
+          "initial": {
+            "minItems": 3,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "\\S"
+            }
+          },
+          "color": {
             "type": "boolean"
           }
         },
@@ -2004,10 +2033,21 @@
                             "type": "string",
                             "enum": [
                               "ocean",
+                              "classic_blue",
+                              "harbour",
+                              "lagoon",
                               "forest",
+                              "sage",
                               "sunset",
+                              "mocha",
+                              "cardinal",
+                              "berry",
+                              "burgundy",
                               "midnight",
-                              "graphite"
+                              "damson",
+                              "ultra_violet",
+                              "graphite",
+                              "onyx"
                             ]
                           },
                           {
@@ -2021,6 +2061,10 @@
                         "minLength": 1,
                         "maxLength": 200,
                         "pattern": "\\S"
+                      },
+                      "brand": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
                       }
                     },
                     "required": ["id"],
@@ -2674,10 +2718,21 @@
                                 "type": "string",
                                 "enum": [
                                   "ocean",
+                                  "classic_blue",
+                                  "harbour",
+                                  "lagoon",
                                   "forest",
+                                  "sage",
                                   "sunset",
+                                  "mocha",
+                                  "cardinal",
+                                  "berry",
+                                  "burgundy",
                                   "midnight",
-                                  "graphite"
+                                  "damson",
+                                  "ultra_violet",
+                                  "graphite",
+                                  "onyx"
                                 ]
                               },
                               {
@@ -2691,6 +2746,10 @@
                             "minLength": 1,
                             "maxLength": 200,
                             "pattern": "\\S"
+                          },
+                          "brand": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
                           }
                         },
                         "required": ["id"],
@@ -4241,10 +4300,21 @@
                                                           "type": "string",
                                                           "enum": [
                                                             "ocean",
+                                                            "classic_blue",
+                                                            "harbour",
+                                                            "lagoon",
                                                             "forest",
+                                                            "sage",
                                                             "sunset",
+                                                            "mocha",
+                                                            "cardinal",
+                                                            "berry",
+                                                            "burgundy",
                                                             "midnight",
-                                                            "graphite"
+                                                            "damson",
+                                                            "ultra_violet",
+                                                            "graphite",
+                                                            "onyx"
                                                           ]
                                                         },
                                                         {
@@ -4258,6 +4328,10 @@
                                                       "minLength": 1,
                                                       "maxLength": 200,
                                                       "pattern": "\\S"
+                                                    },
+                                                    "brand": {
+                                                      "type": "string",
+                                                      "pattern": "^#[0-9a-f]{6}$"
                                                     }
                                                   },
                                                   "required": ["id"],
@@ -5679,10 +5753,21 @@
                               "type": "string",
                               "enum": [
                                 "ocean",
+                                "classic_blue",
+                                "harbour",
+                                "lagoon",
                                 "forest",
+                                "sage",
                                 "sunset",
+                                "mocha",
+                                "cardinal",
+                                "berry",
+                                "burgundy",
                                 "midnight",
-                                "graphite"
+                                "damson",
+                                "ultra_violet",
+                                "graphite",
+                                "onyx"
                               ]
                             },
                             {
@@ -5696,6 +5781,10 @@
                           "minLength": 1,
                           "maxLength": 200,
                           "pattern": "\\S"
+                        },
+                        "brand": {
+                          "type": "string",
+                          "pattern": "^#[0-9a-f]{6}$"
                         }
                       },
                       "required": ["id"],
@@ -6735,10 +6824,21 @@
                                       "type": "string",
                                       "enum": [
                                         "ocean",
+                                        "classic_blue",
+                                        "harbour",
+                                        "lagoon",
                                         "forest",
+                                        "sage",
                                         "sunset",
+                                        "mocha",
+                                        "cardinal",
+                                        "berry",
+                                        "burgundy",
                                         "midnight",
-                                        "graphite"
+                                        "damson",
+                                        "ultra_violet",
+                                        "graphite",
+                                        "onyx"
                                       ]
                                     },
                                     {
@@ -6752,6 +6852,10 @@
                                   "minLength": 1,
                                   "maxLength": 200,
                                   "pattern": "\\S"
+                                },
+                                "brand": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
                                 }
                               },
                               "required": ["id"],
@@ -9275,10 +9379,21 @@
                         "type": "string",
                         "enum": [
                           "ocean",
+                          "classic_blue",
+                          "harbour",
+                          "lagoon",
                           "forest",
+                          "sage",
                           "sunset",
+                          "mocha",
+                          "cardinal",
+                          "berry",
+                          "burgundy",
                           "midnight",
-                          "graphite"
+                          "damson",
+                          "ultra_violet",
+                          "graphite",
+                          "onyx"
                         ]
                       },
                       {
@@ -9292,6 +9407,10 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "pattern": "\\S"
+                  },
+                  "brand": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-f]{6}$"
                   }
                 },
                 "required": ["id"],
@@ -10873,10 +10992,21 @@
                               "type": "string",
                               "enum": [
                                 "ocean",
+                                "classic_blue",
+                                "harbour",
+                                "lagoon",
                                 "forest",
+                                "sage",
                                 "sunset",
+                                "mocha",
+                                "cardinal",
+                                "berry",
+                                "burgundy",
                                 "midnight",
-                                "graphite"
+                                "damson",
+                                "ultra_violet",
+                                "graphite",
+                                "onyx"
                               ]
                             },
                             {
@@ -10890,6 +11020,10 @@
                           "minLength": 1,
                           "maxLength": 200,
                           "pattern": "\\S"
+                        },
+                        "brand": {
+                          "type": "string",
+                          "pattern": "^#[0-9a-f]{6}$"
                         }
                       },
                       "required": ["id"],

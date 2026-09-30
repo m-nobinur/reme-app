@@ -16,6 +16,8 @@ type Preset<Id extends string> = { id: Id; label: string; hint?: string }
 type PaletteSpec = Omit<Preset<string>, "id"> & {
   brand: string
   swatches: string[]
+  /** Where the colours come from, for whoever edits the list next. */
+  source: string
 }
 
 const ids = <T extends readonly { id: string }[]>(list: T) =>
@@ -70,17 +72,33 @@ export const TEMPLATES = [
 ] as const satisfies readonly Preset<string>[]
 export const TemplateId = z.enum(ids(TEMPLATES))
 
+/** A colour as `#rrggbb`, lower case: what the starter site's theme takes. */
+export const HexColour = z.string().regex(/^#[0-9a-f]{6}$/)
+
 /**
  * `brand` is the colour the site derives the rest from; `swatches` is what
- * the owner sees. The values are in `palettes.json`: colour literals are
- * data here, and the lint rule that keeps them out of code reads only code.
+ * the owner sees, the brand, a tint and a surface. Every brand carries white
+ * text at WCAG AA and reads at AA as text on white. The values are in
+ * `palettes.json`: colour literals are data here, and the lint rule that
+ * keeps them out of code reads only code.
  */
 export const PaletteId = z.enum([
   "ocean",
+  "classic_blue",
+  "harbour",
+  "lagoon",
   "forest",
+  "sage",
   "sunset",
+  "mocha",
+  "cardinal",
+  "berry",
+  "burgundy",
   "midnight",
+  "damson",
+  "ultra_violet",
   "graphite",
+  "onyx",
 ])
 export const PALETTES = PaletteId.options.map((id) => ({
   id,
@@ -162,7 +180,15 @@ export const choiceFacts = {
   tone: { id: ToneId },
   buildMode: { mode: z.enum(["assistant", "manual"]) },
   template: { id: TemplateId, custom: Text(200).optional() },
-  palette: { id: orCustom(PaletteId), custom: Text(200).optional() },
+  /**
+   * A preset, or `custom` with the owner's words, the colour they picked as
+   * `brand`, or both. `owner.ts` checks the pairing.
+   */
+  palette: {
+    id: orCustom(PaletteId),
+    custom: Text(200).optional(),
+    brand: HexColour.optional(),
+  },
   font: { id: orCustom(FontId), custom: Text(200).optional() },
   pages: {
     ids: z.array(PageId).min(1).max(PAGES.length),

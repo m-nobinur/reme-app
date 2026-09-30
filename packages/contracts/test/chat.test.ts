@@ -324,6 +324,21 @@ describe("the onboarding cards", () => {
         ],
       },
     ],
+    [
+      "a long list shown a few at a time, with a colour picker",
+      {
+        ...choice,
+        options: PALETTES.map((p) => ({
+          id: p.id,
+          label: p.label,
+          hint: p.hint,
+          visual: { kind: "swatches", colors: p.swatches },
+        })),
+        initial: PALETTES.slice(2, 6).map((p) => p.id),
+        other: { label: "Your own colour", placeholder: "Describe it" },
+        color: true,
+      },
+    ],
   ])("accepts %s", (_name, input) => {
     expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(ACCEPTED)
   })
@@ -348,6 +363,28 @@ describe("the onboarding cards", () => {
     ],
   ])("refuses %s", (_name, input) => {
     expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(REFUSED)
+  })
+
+  // JSON Schema cannot check one field against another, so only Zod holds these.
+  it.each([
+    [
+      "an initial id it does not offer",
+      { ...choice, initial: ["friendly", "casual", "gone"] },
+    ],
+    ["a colour picker with no Other", { ...choice, color: true }],
+  ])("refuses %s in Zod", (_name, input) => {
+    expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual({
+      zod: false,
+      json: true,
+    })
+  })
+
+  it("refuses fewer than three or more than four shown first", () => {
+    for (const initial of [["friendly"], ["a", "b", "c", "d", "e"]]) {
+      expect(
+        verdict("AskChoiceInput", AskChoiceInput, { ...choice, initial })
+      ).toEqual(REFUSED)
+    }
   })
 
   it.each([

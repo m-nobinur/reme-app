@@ -77,7 +77,15 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("owner.preferred_name", { name: Text(60) }),
   fact("site.build_mode", choiceFacts.buildMode),
   fact("site.template", choiceFacts.template),
-  fact("site.palette", choiceFacts.palette),
+  fact("site.palette", choiceFacts.palette, (v) =>
+    v.refine(
+      (p) =>
+        p.id === "custom"
+          ? p.custom !== undefined || p.brand !== undefined
+          : p.custom === undefined && p.brand === undefined,
+      "a preset stands alone; custom needs the owner's words or a brand colour"
+    )
+  ),
   fact("site.font", choiceFacts.font),
   fact("site.pages", choiceFacts.pages),
   fact("media.uploads", choiceFacts.uploads),
