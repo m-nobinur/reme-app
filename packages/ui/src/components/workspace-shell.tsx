@@ -325,8 +325,9 @@ function WorkspaceShell({
         <main
           // From lg the open panel keeps its own column clear, so it never
           // covers the end of a message; minimised, it sits in the top bar.
+          // Below lg its line sits under the bar, so the page starts below it.
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
+            "min-h-0 flex-1 overflow-y-auto max-lg:pt-13",
             wide && panelOpen && "lg:pe-[23.5rem]"
           )}
           // The page scrolls here, not the window: the router resets and
