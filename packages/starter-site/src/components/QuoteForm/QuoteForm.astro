@@ -32,7 +32,10 @@ const groups = quoteForm
           hint: field.hint ? site[field.hint] : "",
           options,
           // A list with nothing in it is a question the visitor answers in words.
-          type: field.type === "select" && options.length === 0 ? "text" : field.type,
+          type:
+            field.type === "select" && options.length === 0
+              ? "text"
+              : field.type,
         }
       }),
   }))

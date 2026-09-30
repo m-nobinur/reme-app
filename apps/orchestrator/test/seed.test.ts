@@ -13,7 +13,7 @@ const tracked = (dir: string) =>
     .split("\n")
 
 /** Pages the starter ships that a first build does not seed (ruling 4). */
-const HELD_BACK = ["src/pages/quote.astro", "src/pages/booking.astro"]
+const HELD_BACK = ["src/pages/booking.astro"]
 
 describe("the seed", () => {
   it("is the starter-site package's config and src, less the held-back pages", () => {
@@ -40,13 +40,12 @@ describe("the seed", () => {
   })
 
   it("parses the starter's fields, the required facts first", () => {
-    expect(Object.keys(SEED_FIELDS).slice(0, 6)).toEqual([
+    expect(Object.keys(SEED_FIELDS).slice(0, 5)).toEqual([
       "businessName",
       "phone",
       "email",
       "weekdayHours",
       "serviceArea",
-      "standardCleanHourly",
     ])
   })
 

@@ -47,19 +47,17 @@ describe("the Developer's site rules", () => {
   it("asks for every required fact when the owner hid nothing", () => {
     const rules = text(false)
     expect(rules).toContain(
-      "The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius, pricing.standard_clean_hourly."
+      "The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius."
     )
     expect(rules).not.toContain("not appear on the site")
   })
 
   it("stops asking for a fact the owner left off, and says it is hidden", () => {
-    const rules = text(false, [hidden(["pricing.standard_clean_hourly"])])
+    const rules = text(false, [hidden(["service_area.radius"])])
     expect(rules).toContain(
-      "The site needs business.name, business.phone, business.email, hours.weekday, service_area.radius."
+      "The site needs business.name, business.phone, business.email, hours.weekday."
     )
-    expect(rules).toContain(
-      "not appear on the site: pricing.standard_clean_hourly."
-    )
+    expect(rules).toContain("not appear on the site: service_area.radius.")
   })
 
   it("sends a requested claim no fact supports to ask_chief", () => {
