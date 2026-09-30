@@ -25,5 +25,5 @@ export function fontTheme(value: string): string {
   const id = value.trim()
   const family = Object.hasOwn(FONTS, id) ? FONTS[id] : undefined
   if (!family) return ""
-  return `:root{--font-sans:${family};--font-display:${family}}`
+  return `html:root{--font-sans:${family};--font-display:${family}}`
 }
