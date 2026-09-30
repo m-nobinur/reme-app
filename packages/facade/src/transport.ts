@@ -1,12 +1,12 @@
 import type {
   Api,
   AssistantMessageEventStream,
-  Context,
   Model,
   ModelAuth,
   Provider,
   ProviderStreams,
   StreamOptions,
+  TranscriptContext,
 } from "@earendil-works/pi-ai"
 import {
   createAssistantMessageEventStream,
@@ -183,11 +183,11 @@ function billed(api: ProviderStreams): ProviderStreams {
     <O extends StreamOptions>(
       call: (
         model: Model<Api>,
-        context: Context,
+        context: TranscriptContext,
         options?: O
       ) => AssistantMessageEventStream
     ) =>
-    (model: Model<Api>, context: Context, options?: O) => {
+    (model: Model<Api>, context: TranscriptContext, options?: O) => {
       let bill: { id: unknown; cost: number } | undefined
       const inner = call(model, context, {
         ...(options as O),

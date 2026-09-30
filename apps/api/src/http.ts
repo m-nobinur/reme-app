@@ -118,7 +118,7 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /**
  * The keys a provider's own data travels under on a chunk or a part in ai
- * 7.0.83. The provider puts the model's reasoning there (OpenRouter's
+ * 7.0.123. The provider puts the model's reasoning there (OpenRouter's
  * `reasoning_details`), so none of it reaches the owner or a stored row; the
  * Chief of Staff's log keeps it, since the provider needs it sent back.
  */

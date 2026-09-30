@@ -64,7 +64,7 @@ const facts = {
 describe("AttentionItem", () => {
   it("has a case here for exactly the four kinds of §7.3", () => {
     const kinds = AttentionItem.options.map((o) => o.shape.kind.value)
-    expect(kinds.sort()).toEqual(Object.keys(attention).sort())
+    expect(new Set(kinds)).toEqual(new Set(Object.keys(attention)))
   })
 
   it.each(Object.entries(attention))("accepts a %s", (_kind, item) => {
@@ -95,7 +95,7 @@ describe("AttentionItem", () => {
 describe("FactValue", () => {
   it("has a case here for every key it knows, and only those", () => {
     const keys = FactValue.options.map((o) => o.shape.key.value)
-    expect(keys.sort()).toEqual(Object.keys(facts).sort())
+    expect(new Set(keys)).toEqual(new Set(Object.keys(facts)))
   })
 
   it.each(Object.entries(facts))("accepts %s", (key, value) => {
@@ -419,7 +419,7 @@ describe("DerivedReminder", () => {
 
   it("has a case here for exactly the four rules", () => {
     const rules = DerivedReminder.options.map((o) => o.shape.rule.value)
-    expect(rules.sort()).toEqual(Object.keys(byRule).sort())
+    expect(new Set(rules)).toEqual(new Set(Object.keys(byRule)))
   })
 
   it.each(derived.map((d) => [d.rule, d]))("accepts %s", (_rule, item) => {

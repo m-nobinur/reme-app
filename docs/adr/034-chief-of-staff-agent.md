@@ -32,22 +32,22 @@ A model can take over from the script, but four things in the shipped code stand
    idle-in-transaction timeout is set, and the script's approval holds the conversation's row lock
    across the bridge call.
 
-Every `ai` behaviour this ADR relies on was read in the installed 7.0.83, and the file and line are
+Every `ai` behaviour this ADR relies on was read in the installed 7.0.123, and the file and line are
 given where it matters.
 
 ## Decision
 
 ### The agent
 
-`apps/api/src/cos/agent.ts` is a `ToolLoopAgent` from `ai` 7.0.83, pinned exactly.
+`apps/api/src/cos/agent.ts` is a `ToolLoopAgent` from `ai` 7.0.123, pinned exactly.
 
 - The agent is built per turn, and its tools close over the turn's org, user, session and
-  conversation ids. There is no `callOptionsSchema`, `prepareCall` or `runtimeContext`: in 7.0.83 a
+  conversation ids. There is no `callOptionsSchema`, `prepareCall` or `runtimeContext`: in 7.0.123 a
   tool's `execute` gets `toolsContext`, not `runtimeContext`. The mode sets `activeTools`, and
   `deriveCosMessages` places the context message. The ids never enter instructions, messages or a
   tool input, so the model has no way to name another tenant.
 - Ask mode gets the read tools only. Act gets all of them.
-- `toolApproval` is set on the agent as a map keyed by tool name, as `index.d.ts:3071` and `:5056`
+- `toolApproval` is set on the agent as a map keyed by tool name, as `index.d.ts:3309` and `:5355`
   define it. The tool-level `needsApproval` is not used.
 - `stopWhen: isStepCount(6)`, plus the budget stop in "Caps and cost", and a per-step
   `maxOutputTokens` of 3,100.
@@ -544,7 +544,7 @@ The api pipes them through its own transform, which buffers until the first cont
 holds `finish` until the second transaction commits. It hands the result to
 `createUIMessageStreamResponse` with a `consumeSseStream` that passes its branch to
 `ctx.waitUntil` and reads it to the end. That function tees the SSE stream there
-(`dist/index.js:6561` in 7.0.83), and a tee cancels its source only when both branches cancel. So a
+(`dist/index.js:6102` in 7.0.123), and a tee cancels its source only when both branches cancel. So a
 closed tab cancels the response's branch while the waitUntil branch keeps reading, and the model
 run goes on to its `onFinish`. The agent's `abortSignal` is never the request's signal. The 30 s
 grace after a disconnect still applies, as "Abandonment" says.
@@ -635,7 +635,7 @@ Rejected:
 - **Letting the SDK execute approved calls.** The derivation cannot produce its two-message form,
   so every approval would fail the hash check.
 - **`callOptionsSchema` with `runtimeContext`.** A tool's `execute` does not receive
-  `runtimeContext` in 7.0.83, so the tools would have no ids.
+  `runtimeContext` in 7.0.123, so the tools would have no ids.
 - **Streaming reasoning to the owner.** It would put unchecked text where R8 forbids it.
 
 ## Amendment, 2026-09-29: feedback, titles, tool errors and the limits

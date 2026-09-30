@@ -16,13 +16,13 @@
   "dependencies": {
     "@workspace/config": "workspace:*",
     "@workspace/contracts": "workspace:*",
-    "drizzle-orm": "0.45.2",
+    "drizzle-orm": "0.45.3",
     "postgres": "3.4.9",
     "ulid": "3.0.2"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "typescript": "^6",
     "vitest": "^4.1.11"
   },

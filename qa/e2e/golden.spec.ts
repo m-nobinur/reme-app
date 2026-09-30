@@ -478,7 +478,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(workspace.missing_facts).toEqual([])
 
     const { facts } = await readJson<{ facts: { key: string }[] }>("/facts")
-    expect(facts.map((fact) => fact.key).sort()).toEqual(
+    expect(facts.map((fact) => fact.key)).toEqual(
       expect.arrayContaining([
         "business.email",
         "business.name",
@@ -495,8 +495,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(
       items
         .filter((item) => item.kind === "report" && item.what === "published")
-        .map((item) => item.revision?.version)
-        .sort()
+        .map((item) => item.revision?.version ?? 0)
+        .sort((a, b) => a - b)
     ).toEqual([1, 2])
 
     const { staff } = await readJson<{ staff: unknown[] }>("/staff")

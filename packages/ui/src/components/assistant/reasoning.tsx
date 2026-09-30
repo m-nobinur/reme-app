@@ -241,7 +241,6 @@ function ReasoningText({
     if (!isPreview) return
     const scrollEl = scrollRef.current
     const contentEl = contentRef.current
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: Biome reads RefObject.current as non-nullable here; tsc does not, and tsc is right.
     if (!scrollEl || !contentEl) return
 
     let pinned = true

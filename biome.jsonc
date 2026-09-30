@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   // Colour tokens, not colour values. Biome has no rule for it, so the check is a
   // GritQL plugin; loading it here is what puts it in `pnpm lint`, `biome ci` and

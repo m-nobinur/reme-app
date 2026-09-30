@@ -34,14 +34,14 @@
     "format": "biome format --write"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.10",
+    "@biomejs/biome": "2.5.13",
     "@workspace/config": "workspace:*",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",
     "@workspace/gates": "workspace:*",
     "postgres": "3.4.9",
-    "turbo": "^2.9.18",
+    "turbo": "^2.11.5",
     "typescript": "^6",
     "zod": "4.6.5"
   },
