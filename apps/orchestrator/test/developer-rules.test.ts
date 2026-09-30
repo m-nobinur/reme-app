@@ -207,9 +207,12 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(photoFile(PHOTO)).toBe(`uploads/${PHOTO.id}.jpg`)
     expect(rules).toContain(`/uploads/${PHOTO.id}.jpg ("Our van.jpg")`)
     expect(rules).toContain(
-      "The best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt"
+      "Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt"
     )
     expect(rules).toContain("site.photo1Src to site.photo3Src")
+    expect(rules).toContain(
+      "A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery"
+    )
     expect(rules).toContain(
       "With up to four photos use every one, and never the same photo twice on a page"
     )
