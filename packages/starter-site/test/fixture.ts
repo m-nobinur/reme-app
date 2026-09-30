@@ -64,3 +64,61 @@ export const FILLED: Record<string, string> = {
   ctaHeading: "Ready for a clean home?",
   ctaBody: "Tell us about the home and we take it from there.",
 }
+
+/**
+ * A chauffeur firm's own questions, as the owner might approve them in
+ * onboarding: every kind of input the form renders, so a build with it shows
+ * the form following the data rather than the starter's defaults.
+ */
+export const LIMOUSINE_FORM = {
+  fields: [
+    {
+      key: "pickup",
+      label: "Pick-up address",
+      type: "text",
+      required: true,
+      hint: "Street and town",
+      options: null,
+    },
+    {
+      key: "dropoff",
+      label: "Drop-off address",
+      type: "text",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "pickup_date",
+      label: "Date of the journey",
+      type: "date",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "passengers",
+      label: "Passengers",
+      type: "number",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "occasion",
+      label: "Occasion",
+      type: "select",
+      required: false,
+      hint: null,
+      options: ["Wedding", "Airport transfer", "Night out", "Business"],
+    },
+    {
+      key: "notes",
+      label: "Anything else",
+      type: "textarea",
+      required: false,
+      hint: "Luggage, child seats or stops on the way",
+      options: null,
+    },
+  ],
+}

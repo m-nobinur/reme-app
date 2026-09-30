@@ -165,17 +165,14 @@ const values = {
   quoteHeading: "Request a quote",
   bookingHeading: "Make a booking",
   quoteContactLegend: "Your details",
+  /**
+   * The legend over the owner's own questions. The questions are in
+   * src/quote-form.json, which the platform writes and nobody edits.
+   */
   quoteRequestLegend: "Your request",
   quoteNameLabel: "Your name",
   quoteEmailLabel: "Email address",
   quotePhoneLabel: "Phone number",
-  quoteServiceLabel: "What you need",
-  quoteLocationLabel: "Location",
-  quoteLocationHint: "A town, postcode or address",
-  quoteDateLabel: "Preferred date",
-  quoteDetailsLabel: "Details",
-  quoteDetailsHint: "Anything that helps us understand the request",
-  quoteSourceLabel: "How did you hear about us?",
   quoteChoose: "Choose one",
   quoteOptional: "optional",
   quoteSubmit: "Send quote request",
@@ -330,13 +327,6 @@ export const fields: Record<keyof typeof site, Field> = {
   quoteNameLabel: composed,
   quoteEmailLabel: composed,
   quotePhoneLabel: composed,
-  quoteServiceLabel: composed,
-  quoteLocationLabel: composed,
-  quoteLocationHint: composed,
-  quoteDateLabel: composed,
-  quoteDetailsLabel: composed,
-  quoteDetailsHint: composed,
-  quoteSourceLabel: composed,
   quoteChoose: composed,
   quoteOptional: composed,
   quoteSubmit: composed,
@@ -348,98 +338,3 @@ export const fields: Record<keyof typeof site, Field> = {
   notFoundBody: composed,
   homeLink: composed,
 }
-
-/** A key of `site`: every string the quote form shows is one. */
-type SiteKey = keyof typeof values
-
-/**
- * One input of the quote form. `label`, `hint` and each of `options` name a
- * `site` string, so the form's words live with the rest of the copy. `name`
- * is what the request carries, lower case. A `select` whose options are all
- * empty renders as a text input, so the service list can follow the
- * services on offer.
- */
-export type QuoteField = {
-  name: string
-  type: "text" | "email" | "tel" | "date" | "number" | "select" | "textarea"
-  label: SiteKey
-  required: boolean
-  hint?: SiteKey
-  options?: SiteKey[]
-  /** The browser's autofill token, e.g. `name`, `email`, `tel`. */
-  autocomplete?: string
-}
-
-/**
- * The quote form, as fieldsets in order. Tailor it to the business: a
- * chauffeur firm asks for pickup, drop-off, date and passengers; a law firm
- * for the kind of matter. Each new label is a `site` string with a
- * `composed` field, like every other. Never ask for payment details.
- */
-export const quoteForm: { legend: SiteKey; fields: QuoteField[] }[] = [
-  {
-    legend: "quoteContactLegend",
-    fields: [
-      {
-        name: "name",
-        type: "text",
-        label: "quoteNameLabel",
-        required: true,
-        autocomplete: "name",
-      },
-      {
-        name: "email",
-        type: "email",
-        label: "quoteEmailLabel",
-        required: true,
-        autocomplete: "email",
-      },
-      {
-        name: "phone",
-        type: "tel",
-        label: "quotePhoneLabel",
-        required: false,
-        autocomplete: "tel",
-      },
-    ],
-  },
-  {
-    legend: "quoteRequestLegend",
-    fields: [
-      {
-        name: "service",
-        type: "select",
-        label: "quoteServiceLabel",
-        required: true,
-        options: ["service1Name", "service2Name", "service3Name"],
-      },
-      {
-        name: "location",
-        type: "text",
-        label: "quoteLocationLabel",
-        hint: "quoteLocationHint",
-        required: true,
-        autocomplete: "street-address",
-      },
-      {
-        name: "date",
-        type: "date",
-        label: "quoteDateLabel",
-        required: false,
-      },
-      {
-        name: "details",
-        type: "textarea",
-        label: "quoteDetailsLabel",
-        hint: "quoteDetailsHint",
-        required: true,
-      },
-      {
-        name: "source",
-        type: "text",
-        label: "quoteSourceLabel",
-        required: false,
-      },
-    ],
-  },
-]

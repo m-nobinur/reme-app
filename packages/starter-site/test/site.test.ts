@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { fields, quoteForm, site } from "../src/site-config"
+import { QUOTE_FIELD_TYPES, quoteFields } from "../src/quote-form"
+import { fields, site } from "../src/site-config"
 import {
   type Built,
   build,
@@ -40,6 +41,19 @@ import Base from "../layouts/Base.astro"
 const MARKED = Object.fromEntries(
   Object.keys(site).map((key) => [key, `«${key}»`])
 )
+// The quote form's own questions are data too, the file the platform writes
+// from the owner's approved list: marked the same way, one question of every
+// type, so a word the form's template adds around them is caught as well.
+const MARKED_FORM = {
+  fields: QUOTE_FIELD_TYPES.map((type, i) => ({
+    key: `q_${type}`,
+    label: `«q${i}label»`,
+    type,
+    required: i % 2 === 0,
+    hint: `«q${i}hint»`,
+    options: type === "select" ? [`«q${i}a»`, `«q${i}b»`] : null,
+  })),
+}
 
 let filled: Built | undefined
 let planted: Built | undefined
@@ -53,7 +67,7 @@ beforeAll(async () => {
       pages: { "planted.astro": PLANTED },
       remove: ["quote.astro", "booking.astro"],
     }),
-    build({ site: MARKED }),
+    build({ site: MARKED, quoteForm: MARKED_FORM }),
   ])
 }, 120_000)
 
@@ -205,35 +219,63 @@ describe("the quote form", () => {
     return found
   }
 
-  test("renders every configured field with its label, hint and required flag", () => {
+  test("asks for the contact details, then every question in quote-form.json", () => {
     const { elements, texts } = page()
-    for (const field of quoteForm.flatMap((group) => group.fields)) {
-      const id = `quote-${field.name}`
-      const control = elements.find((el) => el.attrs.id === id)
-      expect(control, id).toBeDefined()
-      expect(control?.attrs.name, id).toBe(field.name)
-      expect("required" in (control?.attrs ?? {}), id).toBe(field.required)
+    const expected = [
+      {
+        id: "quote-name",
+        name: "name",
+        label: FILLED.quoteNameLabel,
+        required: true,
+        hint: null,
+      },
+      {
+        id: "quote-email",
+        name: "email",
+        label: FILLED.quoteEmailLabel,
+        required: true,
+        hint: null,
+      },
+      {
+        id: "quote-phone",
+        name: "phone",
+        label: FILLED.quotePhoneLabel,
+        required: false,
+        hint: null,
+      },
+      ...quoteFields.map((field) => ({
+        id: `quote-q-${field.key}`,
+        name: field.key,
+        label: field.label,
+        required: field.required,
+        hint: field.hint,
+      })),
+    ]
+    for (const field of expected) {
+      const control = elements.find((el) => el.attrs.id === field.id)
+      expect(control, field.id).toBeDefined()
+      expect(control?.attrs.name, field.id).toBe(field.name)
+      expect("required" in (control?.attrs ?? {}), field.id).toBe(
+        field.required
+      )
       expect(
-        elements.some((el) => el.tag === "label" && el.attrs.for === id),
-        id
+        elements.some((el) => el.tag === "label" && el.attrs.for === field.id),
+        field.id
       ).toBe(true)
-      expect(texts, id).toContain(FILLED[field.label])
+      expect(texts, field.id).toContain(field.label)
       if (field.hint) {
-        expect(control?.attrs["aria-describedby"], id).toBe(`${id}-hint`)
-        expect(texts, id).toContain(FILLED[field.hint])
+        expect(control?.attrs["aria-describedby"], field.id).toBe(
+          `${field.id}-hint`
+        )
+        expect(texts, field.id).toContain(field.hint)
       }
     }
-    for (const group of quoteForm) {
-      expect(texts).toContain(FILLED[group.legend])
-    }
+    expect(texts).toContain(FILLED.quoteContactLegend)
+    expect(texts).toContain(FILLED.quoteRequestLegend)
   })
 
-  test("offers the services as the choices, and sends by email until there is an endpoint", () => {
-    const { elements, texts } = page()
-    expect(texts).toEqual(
-      expect.arrayContaining(["Weekly clean", "Deep clean", "End of tenancy"])
-    )
-    const form = elements.find((el) => el.tag === "form")
+  test("sends by email until there is an endpoint", () => {
+    const form = page().elements.find((el) => el.tag === "form")
     expect(form?.attrs.action).toBe(
       "mailto:hello@brightclean.invalid?subject=Quote%20request"
     )
