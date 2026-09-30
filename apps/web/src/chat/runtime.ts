@@ -13,7 +13,15 @@ import { useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
-import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
+import {
+  cancelOvertaken,
+  chatFetch,
+  quoteChanges,
+  sendsOn,
+  textOf,
+  turnBody,
+  unsentChanges,
+} from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -24,6 +32,19 @@ import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
  * disagreed with what the owner had just seen. `cancelOvertaken` cancels what
  * `apps/api` cancels and nothing else.
  */
+
+/** The words of a message the composer sends. */
+function typedText(message: unknown): string {
+  if (!message || typeof message !== "object") return ""
+  if ("text" in message && typeof message.text === "string") return message.text
+  const parts =
+    "parts" in message && Array.isArray(message.parts) ? message.parts : []
+  return parts
+    .flatMap((part: { type?: string; text?: string }) =>
+      part.type === "text" && part.text ? [part.text] : []
+    )
+    .join("\n")
+}
 
 export function useConversationRuntime({
   onFinish,
@@ -86,6 +107,9 @@ export function useConversationRuntime({
         if (last?.role === "user" && !stored.some((m) => m.id === last.id)) {
           runtime.thread.composer.setText(textOf(last))
         }
+        // A change to a proposed quote form was typed too.
+        const changes = unsentChanges(last)
+        if (changes) runtime.thread.composer.setText(changes)
       })
       .catch(() => undefined)
   }
@@ -122,8 +146,11 @@ export function useConversationRuntime({
     {
       ...chat,
       sendMessage: (message, options) => {
-        chat.setMessages(cancelOvertaken)
         const carried = intent?.current
+        // Typed while a proposed quote form waits: the words answer it.
+        const changes = quoteChanges(chat.messages, typedText(message), carried)
+        if (changes) return Promise.resolve(chat.addToolOutput(changes))
+        chat.setMessages(cancelOvertaken)
         if (!carried) return chat.sendMessage(message, options)
         onIntentSent?.()
         return chat.sendMessage(message, {

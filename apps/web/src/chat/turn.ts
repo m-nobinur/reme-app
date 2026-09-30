@@ -3,6 +3,7 @@ import {
   type ChatRequest,
   type ChatResult,
   ErrorEnvelope,
+  ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
@@ -60,7 +61,8 @@ export function chatTurn(
 
 /**
  * What the owner resolved in the last step: an answer to an onboarding card
- * (`ask_fact`, `ask_choice`, `ask_upload`), and a yes or no on any call. A call the server ran itself, such as a read, is
+ * (`ask_fact`, `ask_choice`, `ask_upload`, `review_quote_form`), and a yes
+ * or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
  */
 function ownerResults(last: ChatMessage | undefined): ChatResult[] {
@@ -75,7 +77,8 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
     if (
       (part.type === "tool-ask_fact" ||
         part.type === "tool-ask_choice" ||
-        part.type === "tool-ask_upload") &&
+        part.type === "tool-ask_upload" ||
+        part.type === "tool-review_quote_form") &&
       part.state === "output-available"
     ) {
       return [
@@ -143,6 +146,60 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
     return [cancelled]
   })
   return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
+}
+
+/**
+ * A typed message while a proposed quote form waits is the owner's change to
+ * it: the call it answers, as `{ answer: "changes", text }`, so the words
+ * resolve the card rather than cancel it and the assistant reads them as
+ * what to change. Null when no form waits, when the message carries a mode
+ * of its own (a website change is not about the form), or when the words
+ * do not fit an answer; such a message goes out as itself and overtakes the
+ * card, as any typed message does.
+ */
+export function quoteChanges(
+  messages: ChatMessage[],
+  text: string,
+  intent?: ChatRequest["intent"]
+): {
+  tool: "review_quote_form"
+  toolCallId: string
+  output: ReviewQuoteFormOutput
+} | null {
+  const last = messages.at(-1)
+  if (intent || last?.role !== "assistant") return null
+  const waiting = last.parts.find(
+    (part) =>
+      part.type === "tool-review_quote_form" && part.state === "input-available"
+  )
+  const output = ReviewQuoteFormOutput.safeParse({
+    answer: "changes",
+    text: text.trim(),
+  })
+  if (!waiting || !isToolUIPart(waiting) || !output.success) return null
+  return {
+    tool: "review_quote_form",
+    toolCallId: waiting.toolCallId,
+    output: output.data,
+  }
+}
+
+/**
+ * The words of a change to a proposed quote form in a turn that failed, so
+ * they go back into the composer the way a failed typed message does.
+ */
+export function unsentChanges(message: ChatMessage | undefined): string | null {
+  if (message?.role !== "assistant") return null
+  for (const part of message.parts) {
+    if (
+      part.type === "tool-review_quote_form" &&
+      part.state === "output-available" &&
+      part.output.answer === "changes"
+    ) {
+      return part.output.text
+    }
+  }
+  return null
 }
 
 /**

@@ -6,6 +6,8 @@ import type {
   AskUploadInput,
   AskUploadOutput,
   COS_TOOLS,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
 } from "@workspace/contracts"
 import type { UIDataTypes, UIMessage } from "ai"
 import type { z } from "zod"
@@ -17,7 +19,7 @@ type Typed<T extends { input: z.ZodType; output: z.ZodType }> = {
 
 /**
  * Every tool a conversation can hold, typed from its contract: the Chief of
- * Staff's `COS_TOOLS`, and the onboarding script's three cards.
+ * Staff's `COS_TOOLS`, and the onboarding cards.
  */
 export type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
@@ -25,6 +27,10 @@ export type ChatTools = {
   ask_fact: { input: AskFactInput; output: AskFactOutput }
   ask_choice: { input: AskChoiceInput; output: AskChoiceOutput }
   ask_upload: { input: AskUploadInput; output: AskUploadOutput }
+  review_quote_form: {
+    input: ReviewQuoteFormInput
+    output: ReviewQuoteFormOutput
+  }
 }
 
 /**
