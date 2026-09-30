@@ -28,12 +28,14 @@ export type ChatTools = {
 }
 
 /**
- * What a message's metadata carries: its stored date, and the owner's thumb
- * where assistant-ui reads a submitted one.
+ * What a message's metadata carries: its stored date, the owner's thumb
+ * where assistant-ui reads a submitted one, and, on a message sent here,
+ * whether it is the owner's reply to a card rather than a typed message.
  */
 export type ChatMetadata = {
   custom?: { createdAt?: string }
   submittedFeedback?: { type: "positive" | "negative" }
+  reply?: true
 }
 
 /** A message as the chat holds it, with its tool parts typed. */

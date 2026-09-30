@@ -11,6 +11,9 @@ import {
   chatFetch,
   chatTurn,
   NO_BUSINESS,
+  replyText,
+  replyTo,
+  SKIPPED,
   sendsOn,
   turnBody,
 } from "./turn"
@@ -183,7 +186,8 @@ it("a choice or an upload sends the call it resolves, as the contract reads it",
     ],
   ] as const) {
     const messages = [assistant(part)]
-    expect(sendsOn({ messages })).toBe(true)
+    // The owner's reply sends it, never the SDK on its own.
+    expect(sendsOn({ messages })).toBe(false)
     expect(
       ChatRequest.parse(chatTurn(CONVERSATION, "act", messages)).turn
     ).toEqual({
@@ -198,6 +202,88 @@ it("a choice or an upload sends the call it resolves, as the contract reads it",
       ],
     })
   }
+})
+
+it("an answered card reads back as the owner's words", () => {
+  expect(replyText(ask("output-available", { output: STATED }))).toBe(
+    "Probe Cleaning"
+  )
+  expect(
+    replyText(
+      choice("output-available", {
+        output: { answer: "chosen", ids: ["casual"], other: "Warm" },
+      })
+    )
+  ).toBe("Casual, Warm")
+  expect(
+    replyText(
+      photos("output-available", {
+        output: { answer: "uploaded", assets: [ASSET] },
+      })
+    )
+  ).toBe("Uploaded van.jpg")
+  expect(
+    replyText(
+      photos("output-available", {
+        output: { answer: "uploaded", assets: [ASSET, ASSET] },
+      })
+    )
+  ).toBe("Uploaded 2 photos")
+  for (const card of [ask, choice, photos]) {
+    expect(
+      replyText(card("output-available", { output: { answer: "skipped" } }))
+    ).toBe(SKIPPED)
+  }
+  // Only an answer is a reply: not a card still open, cancelled or a change.
+  expect(replyText(ask("input-available"))).toBeNull()
+  expect(replyText(ask("output-error", { errorText: CANCELLED }))).toBeNull()
+  expect(
+    replyText(change("output-available", { output: { outcome: "refused" } }))
+  ).toBeNull()
+})
+
+it("an answer to a card becomes the owner's reply, sent with the card's answers", () => {
+  const open = [assistant(ask("input-available"))]
+  const reply = replyTo(open, { toolCallId: "call_name", output: STATED })
+  expect(reply).toEqual({
+    role: "user",
+    parts: [{ type: "text", text: "Probe Cleaning" }],
+    metadata: { reply: true },
+  })
+  const sent = [
+    assistant(ask("output-available", { output: STATED })),
+    { ...(reply as ChatMessage), id: "msg_reply" },
+  ]
+  expect(ChatRequest.parse(chatTurn(CONVERSATION, "act", sent)).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [{ kind: "answer", tool_call_id: "call_name", output: STATED }],
+    reply: { message_id: "msg_reply", text: "Probe Cleaning" },
+  })
+})
+
+it("no reply while another call in the step waits, for an error, or for a change", () => {
+  const two = [assistant(ask("input-available"), choice("input-available"))]
+  expect(replyTo(two, { toolCallId: "call_name", output: STATED })).toBeNull()
+  expect(
+    replyTo([assistant(ask("input-available"))], {
+      toolCallId: "call_name",
+      state: "output-error",
+    })
+  ).toBeNull()
+  expect(
+    replyTo([assistant(change("input-available"))], {
+      toolCallId: "call_change",
+      output: { outcome: "refused" },
+    })
+  ).toBeNull()
+  // A card in an earlier step is not the one waiting.
+  expect(
+    replyTo([assistant(ask("input-available"), { type: "step-start" }, read)], {
+      toolCallId: "call_name",
+      output: STATED,
+    })
+  ).toBeNull()
 })
 
 it("a typed reply overtakes an open choice or upload card, as the api stores it", () => {
@@ -373,12 +459,12 @@ it("a not now stays not now when the owner types next", () => {
   expect(cancelOvertaken(denied)).toBe(denied)
 })
 
-it("sends on after an answer or an approval, and not after the last stored step", () => {
+it("sends on after an approval, and not after an answer or the last stored step", () => {
   expect(
     sendsOn({
       messages: [assistant(ask("output-available", { output: STATED }))],
     })
-  ).toBe(true)
+  ).toBe(false)
   expect(
     sendsOn({
       messages: [

@@ -5,7 +5,8 @@ import {
   ErrorEnvelope,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
-import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
+import { factText } from "@workspace/ui/lib/facts"
+import { choiceText, SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
   isToolUIPart,
@@ -37,6 +38,25 @@ export function chatTurn(
   // reminder card names the same zone, from the same source.
   const time_zone = browserZone()
   const last = messages.at(-1)
+  // The owner's reply to a card goes with the answers of the message before it.
+  if (last?.role === "user" && last.metadata?.reply) {
+    const card = messages.at(-2)
+    const results = ownerResults(card)
+    if (!card || results.length === 0) {
+      throw new Error("There is nothing new in this conversation to send.")
+    }
+    return {
+      conversation_id: conversationId,
+      mode,
+      time_zone,
+      turn: {
+        kind: "results",
+        message_id: card.id,
+        results,
+        reply: { message_id: last.id, text: textOf(last) },
+      },
+    }
+  }
   if (last?.role === "user") {
     return {
       conversation_id: conversationId,
@@ -146,14 +166,94 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
 }
 
 /**
- * Sends once the owner has answered every call in the last step that waits
+ * Sends once the owner has decided every call in the last step that waits
  * on them, all in one turn. A step whose calls the server finished itself,
- * such as a read at the step limit, sends nothing.
+ * such as a read at the step limit, sends nothing, and neither does an
+ * answer to an onboarding card: `replyTo` sends that as the owner's reply.
  */
-export const sendsOn = ({ messages }: { messages: ChatMessage[] }) =>
-  ownerResults(messages.at(-1)).length > 0 &&
-  (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
-    lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
+export const sendsOn = ({ messages }: { messages: ChatMessage[] }) => {
+  const results = ownerResults(messages.at(-1))
+  return (
+    results.length > 0 &&
+    results.every((result) => result.kind === "approval") &&
+    (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
+      lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
+  )
+}
+
+const CARDS = ["tool-ask_fact", "tool-ask_choice", "tool-ask_upload"]
+
+/** Skipping a card, in the words of the card's own button. */
+export const SKIPPED = "Skip for now"
+
+/** An answered card as the owner's words: what they wrote, picked or sent. */
+export function replyText(part: ChatMessage["parts"][number]): string | null {
+  if (!isToolUIPart(part) || part.state !== "output-available") return null
+  if (part.type === "tool-ask_fact") {
+    return part.output.answer === "stated"
+      ? factText(part.output.fact.key, part.output.fact.value)
+      : SKIPPED
+  }
+  if (part.type === "tool-ask_choice") {
+    return part.output.answer === "chosen"
+      ? choiceText(part.input, part.output)
+      : SKIPPED
+  }
+  if (part.type === "tool-ask_upload") {
+    if (part.output.answer === "skipped") return SKIPPED
+    const [only, ...more] = part.output.assets
+    return more.length === 0 && only
+      ? `Uploaded ${only.name}`
+      : `Uploaded ${part.output.assets.length} photos`
+  }
+  return null
+}
+
+/**
+ * The owner's reply for an answer just given to a card in the last step,
+ * once no other call in that step waits on them: the answers, in their
+ * words, as a message of theirs. Null for any other output.
+ */
+export function replyTo(
+  messages: ChatMessage[],
+  given: { toolCallId: string; state?: string; output?: unknown }
+): Omit<ChatMessage, "id"> | null {
+  const last = messages.at(-1)
+  if (last?.role !== "assistant" || given.state === "output-error") return null
+  const parts = last.parts.map((part) =>
+    isToolUIPart(part) && part.toolCallId === given.toolCallId
+      ? ({
+          ...part,
+          state: "output-available",
+          output: given.output,
+        } as typeof part)
+      : part
+  )
+  const step = parts.slice(
+    parts.map((part) => part.type).lastIndexOf("step-start") + 1
+  )
+  const answered = step.find(
+    (part) => isToolUIPart(part) && part.toolCallId === given.toolCallId
+  )
+  if (!answered || !CARDS.includes(answered.type)) return null
+  if (
+    step.some(
+      (part) =>
+        isToolUIPart(part) &&
+        (part.state === "input-streaming" ||
+          part.state === "input-available" ||
+          part.state === "approval-requested")
+    )
+  ) {
+    return null
+  }
+  const text = step.flatMap((part) => replyText(part) ?? []).join("\n")
+  return {
+    role: "user",
+    parts: [{ type: "text", text }],
+    metadata: { reply: true },
+  }
+}
 
 /**
  * The transport's request body, which is the turn. It records the message

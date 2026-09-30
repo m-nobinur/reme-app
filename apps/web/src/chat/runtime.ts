@@ -13,7 +13,14 @@ import { useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
-import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
+import {
+  cancelOvertaken,
+  chatFetch,
+  replyTo,
+  sendsOn,
+  textOf,
+  turnBody,
+} from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -83,7 +90,12 @@ export function useConversationRuntime({
       .then((rows) => {
         const stored = rows.map(toUIMessage)
         chat.setMessages(stored)
-        if (last?.role === "user" && !stored.some((m) => m.id === last.id)) {
+        // A reply to a card goes with it: the card is open again instead.
+        if (
+          last?.role === "user" &&
+          !last.metadata?.reply &&
+          !stored.some((m) => m.id === last.id)
+        ) {
           runtime.thread.composer.setText(textOf(last))
         }
       })
@@ -121,6 +133,13 @@ export function useConversationRuntime({
   const runtime = useAISDKRuntime(
     {
       ...chat,
+      // An answer to an onboarding card goes out as the owner's reply, so
+      // the answer reads as theirs and the next step is a message of its own.
+      addToolOutput: async (given) => {
+        const reply = replyTo(chat.messages, given)
+        await chat.addToolOutput(given)
+        if (reply) await chat.sendMessage(reply)
+      },
       sendMessage: (message, options) => {
         chat.setMessages(cancelOvertaken)
         const carried = intent?.current
