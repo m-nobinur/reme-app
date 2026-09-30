@@ -208,6 +208,25 @@ test("every chat request is sent to act, with no mode to pick", async ({
   await expect(page.getByRole("button", { name: /^Mode/ })).toHaveCount(0)
 })
 
+test("the top bar holds new chat, the history and the bell", async ({
+  page,
+}) => {
+  await visit(page, "/app/staff")
+  const bar = page.getByRole("banner")
+  await expect(bar.getByRole("link", { name: "New chat" })).toBeVisible()
+  await bar.getByRole("button", { name: "History" }).click()
+  await expect(
+    page.getByPlaceholder("Search your conversations…")
+  ).toBeVisible()
+  await page.keyboard.press("Escape")
+  // The rail keeps only the organisation, help, theme and profile.
+  await expect(
+    page
+      .getByRole("complementary", { name: "Workspace" })
+      .getByRole("link", { name: "New chat" })
+  ).toHaveCount(0)
+})
+
 test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
   await visit(page, "/app/staff")
   const sent = page

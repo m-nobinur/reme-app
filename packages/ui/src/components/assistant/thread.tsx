@@ -722,19 +722,16 @@ const DeliveryTick: FC = () => {
     <span data-slot="aui_user-message-delivery" data-state={delivery}>
       <Icon
         aria-hidden
-        className={cn("size-3.5", delivery === "seen" && "text-primary")}
+        className={cn("size-3", delivery === "seen" && "text-primary")}
       />
       <span className="sr-only">{label}</span>
     </span>
   )
 }
 
-// The spacer holds room for the time and tick on the text's last line, and
-// wraps to a line of its own when the line is full, as a messaging app does.
 const UserText: FC = () => (
   <p className="whitespace-pre-line">
     <MessagePartPrimitive.Text />
-    <span aria-hidden className="inline-block w-18" />
   </p>
 )
 
@@ -750,14 +747,14 @@ const UserMessage: FC = () => {
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
           <MessagePrimitive.Parts components={USER_PARTS} />
-          <span
-            data-slot="aui_user-message-meta"
-            className="absolute end-3.5 bottom-1.5 flex items-center gap-1 text-muted-foreground"
-          >
-            <MessageTime />
-            <DeliveryTick />
-          </span>
         </div>
+        <span
+          data-slot="aui_user-message-meta"
+          className="me-2 mt-1 flex items-center justify-end gap-1 text-muted-foreground"
+        >
+          <MessageTime />
+          <DeliveryTick />
+        </span>
       </div>
     </MessagePrimitive.Root>
   )

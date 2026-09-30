@@ -8,8 +8,8 @@ import {
   SignOutIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
-import { AppNav, navLinkClass } from "@workspace/ui/components/app-shell"
-import { Button } from "@workspace/ui/components/button"
+import { railItemClass } from "@workspace/ui/components/app-shell"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,17 +20,23 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import {
+  type HistoryEntry,
+  HistoryMenu,
+} from "@workspace/ui/components/history-menu"
+import {
   Sheet,
   SheetContent,
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
+import { Hint } from "@workspace/ui/components/tooltip"
 import {
   ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { cn } from "@workspace/ui/lib/utils"
 import { type ReactNode, useState } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
@@ -54,24 +60,29 @@ const PROFILE_NAV = [
 function AccountMenu() {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            className="min-w-0 flex-1 justify-start gap-2 px-1.5"
-            size="sm"
-            variant="ghost"
-          />
-        }
-      >
-        <span
-          aria-hidden
-          className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+      <Hint label="Sam Fixture" side="right">
+        <DropdownMenuTrigger
+          render={
+            <button
+              aria-label="Profile, Sam Fixture"
+              className={railItemClass}
+              type="button"
+            />
+          }
         >
-          SF
-        </span>
-        <span className="truncate">Sam Fixture</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" side="top">
+          <span
+            aria-hidden
+            className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+            data-slot="mark"
+          >
+            SF
+          </span>
+          <span className="truncate" data-slot="rail-label">
+            Sam Fixture
+          </span>
+        </DropdownMenuTrigger>
+      </Hint>
+      <DropdownMenuContent align="end" className="w-56" side="right">
         {PROFILE_NAV.map((item) => (
           <DropdownMenuLinkItem href={item.href} key={item.href}>
             <item.icon aria-hidden />
@@ -88,28 +99,69 @@ function AccountMenu() {
   )
 }
 
+/** The compact rail: the organisation at the top, help, theme and profile below. */
 function Rail() {
   return (
     <>
-      <p className="truncate px-2 font-medium text-sm">Brightclean</p>
-      <a aria-current="page" className={navLinkClass} href="#new">
-        <NotePencilIcon aria-hidden />
-        New chat
-      </a>
-      <AppNav aria-label="Chats">
-        <li>
-          <a className={navLinkClass} href="#weekend-prices">
-            <span className="truncate">Weekend prices</span>
-          </a>
-        </li>
-      </AppNav>
-      <div className="mt-auto flex items-center gap-1">
+      <Hint label="Brightclean" side="right">
+        <a className={railItemClass} href="#business">
+          <span
+            aria-hidden
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground font-semibold text-[0.6875rem] text-background"
+            data-slot="mark"
+          >
+            B
+          </span>
+          <span className="truncate font-medium" data-slot="rail-label">
+            Brightclean
+          </span>
+        </a>
+      </Hint>
+      <div className="mt-auto flex flex-col gap-1">
+        <Hint label="Help" side="right">
+          <button aria-label="Help" className={railItemClass} type="button">
+            <QuestionIcon aria-hidden />
+            <span data-slot="rail-label">Help</span>
+          </button>
+        </Hint>
+        <Hint label="Switch theme" side="right">
+          <ThemeToggle
+            className={cn(railItemClass, "justify-start")}
+            size={null}
+          />
+        </Hint>
         <AccountMenu />
-        <Button aria-label="Help" size="icon-sm" variant="ghost">
-          <QuestionIcon aria-hidden />
-        </Button>
-        <ThemeToggle />
       </div>
+    </>
+  )
+}
+
+/** The chats behind the clock: 30 of them, so "Load more" has work to do. */
+const HISTORY: HistoryEntry[] = Array.from({ length: 30 }, (_, index) => ({
+  id: `chat-${index}`,
+  title:
+    ["Weekend prices", "New oven cleaning page", "Reply to a review"][
+      index % 3
+    ] + (index > 2 ? ` ${Math.floor(index / 3) + 1}` : ""),
+  at: new Date(Date.UTC(2026, 8, 30 - index)).toISOString(),
+  // biome-ignore lint/a11y/useAnchorContent: the menu fills the link with the row.
+  link: <a href={`#chat-${index}`} />,
+}))
+
+/** The top bar's icons before the bell: a new chat and the history. */
+function TopActions() {
+  return (
+    <>
+      <Hint label="New chat">
+        <a
+          aria-label="New chat"
+          className={buttonVariants({ variant: "ghost", size: "icon" })}
+          href="#new"
+        >
+          <NotePencilIcon aria-hidden />
+        </a>
+      </Hint>
+      <HistoryMenu current="chat-0" items={HISTORY} />
     </>
   )
 }
@@ -117,6 +169,7 @@ function Rail() {
 function ShellSample() {
   return (
     <WorkspaceShell
+      actions={<TopActions />}
       className="h-[40rem] border border-border"
       notifications={<BellSample unread={3} />}
       panel={<SamplePanel />}
@@ -226,6 +279,23 @@ function ActionMenuSample() {
 
 const workspaceCatalog: Entry[] = [
   { name: "WorkspaceShell", render: () => <ShellSample /> },
+  {
+    name: "HistoryMenu",
+    render: () => (
+      <div className="flex justify-end">
+        <HistoryMenu current="chat-0" items={HISTORY} />
+      </div>
+    ),
+  },
+  {
+    name: "HistoryMenu empty",
+    render: () => (
+      <div className="flex justify-end">
+        <HistoryMenu items={[]} />
+      </div>
+    ),
+  },
+  { name: "Hint", render: () => <TopActions /> },
   { name: "ConversationRename", render: () => <ConversationSample /> },
   {
     name: "WorkspacePage",

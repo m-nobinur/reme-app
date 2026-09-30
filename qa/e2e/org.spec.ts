@@ -124,7 +124,12 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   // A new owner lands in onboarding, with the org's own first steps beside it.
   await visit(page, "/app")
   await expect(page).toHaveURL(/\/app\/c\/[0-9a-f-]{36}$/)
-  await expect(page.getByTitle(name, { exact: true })).toHaveText(name)
+  // The rail names the organisation beside its mark.
+  await expect(
+    page
+      .getByRole("complementary", { name: "Workspace" })
+      .getByRole("link", { name, exact: true })
+  ).toBeVisible()
   const steps = panel(page)
     .getByRole("region", { name: "First steps" })
     .getByRole("listitem")

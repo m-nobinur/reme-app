@@ -98,7 +98,7 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   const rail = page.getByRole("complementary", { name: "Workspace" })
 
   await open(page, "WorkspaceShell", WIDTHS.desktop)
-  expect((await rail.boundingBox())?.width).toBe(240)
+  expect((await rail.boundingBox())?.width).toBe(56)
   expect((await panel(page).boundingBox())?.width).toBe(352)
   await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "true")
   await expect(railToggle(page)).toBeHidden()
@@ -134,6 +134,53 @@ test("the bell carries the unread count and opens the newest", async ({
   await page.keyboard.press("Escape")
   await expect(menu).toHaveCount(0)
   await expect(bell).toBeFocused()
+})
+
+test("the rail names each icon on hover", async ({ page }) => {
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
+  await page
+    .getByRole("complementary", { name: "Workspace" })
+    .getByRole("button", { name: "Help" })
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("Help")
+})
+
+test("the history lists chats newest first, searchable, a page at a time", async ({
+  page,
+}) => {
+  await open(page, "WorkspaceShell", WIDTHS.desktop)
+  await page.getByRole("button", { name: "History" }).click()
+  const list = page.getByRole("list", { name: "Conversations" })
+  await expect(list.getByRole("link")).toHaveCount(12)
+  await expect(list.getByRole("link").first()).toContainText("Weekend prices")
+  await expect(list.getByRole("link").first()).toHaveAttribute(
+    "aria-current",
+    "page"
+  )
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(list.getByRole("link")).toHaveCount(24)
+
+  const search = page.getByRole("searchbox", {
+    name: "Search your conversations",
+  })
+  await expect(search).toHaveAttribute(
+    "placeholder",
+    "Search your conversations…"
+  )
+  await search.fill("review")
+  await expect(list.getByRole("link")).toHaveCount(10)
+  await settle(page)
+  await axe(page, "history menu")
+  await search.fill("nothing like this")
+  await expect(
+    page.getByText("No conversation has that in its title.")
+  ).toBeVisible()
+
+  await search.fill("")
+  await list.getByRole("link").nth(1).click()
+  await expect(page.locator('[data-slot="history-menu-content"]')).toHaveCount(
+    0
+  )
 })
 
 test("the panel sits under the bell, clear of the page from lg", async ({
@@ -173,7 +220,7 @@ test("the rail sheet on a phone traps focus and returns it on close", async ({
 test("a link in a sheet closes it", async ({ page }) => {
   await open(page, "WorkspaceShell", WIDTHS.phone)
   await railToggle(page).click()
-  await sheet(page).getByRole("link", { name: "Weekend prices" }).click()
+  await sheet(page).getByRole("link", { name: "Brightclean" }).click()
   await expect(sheet(page)).toHaveCount(0)
 })
 
@@ -187,9 +234,7 @@ test("the rail collapses and remembers it in a cookie", async ({ page }) => {
   expect(await cookie(page, "reme-rail")).toBe("closed")
 
   await page.getByRole("button", { name: "Show sidebar" }).click()
-  await expect
-    .poll(async () => (await rail.boundingBox())?.width ?? 0)
-    .toBe(240)
+  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(56)
   expect(await cookie(page, "reme-rail")).toBe("open")
 })
 
@@ -235,10 +280,10 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
   // Dispatched rather than clicked: a real modified click opens a new tab,
   // which is the browser's business and not what this asserts.
   await sheet(page)
-    .getByRole("link", { name: "Weekend prices" })
+    .getByRole("link", { name: "Brightclean" })
     .dispatchEvent("click", { button: 0, metaKey: true, bubbles: true })
   await sheet(page)
-    .getByRole("link", { name: "Weekend prices" })
+    .getByRole("link", { name: "Brightclean" })
     .dispatchEvent("click", { button: 1, bubbles: true })
   await expect(sheet(page)).toBeVisible()
 })

@@ -37,6 +37,8 @@ import type { ReactNode } from "react"
 type Entry = { name: string; render: () => ReactNode }
 
 const noop = () => undefined
+/** A change the catalog takes at once. */
+const taken = async () => true
 const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in, pinned so the snapshot does not tick. */
 const NOW = Date.parse(STARTED) + 250_000
@@ -213,6 +215,7 @@ function SamplePanel() {
         <YourWebsite
           host="brightclean-demo.example.invalid"
           live={3}
+          onRequestChanges={taken}
           thumbnail={THUMBNAIL}
         />
       </TabsContent>
@@ -491,6 +494,44 @@ const panelCatalog: Entry[] = [
       <YourWebsite
         host="brightclean-demo.example.invalid"
         live={3}
+        onRequestChanges={taken}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite request changes",
+    render: () => (
+      <YourWebsite
+        defaultAsking
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={taken}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite change refused",
+    render: () => (
+      <YourWebsite
+        defaultAsking
+        error="That did not go through. Try again."
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={taken}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite change sent",
+    render: () => (
+      <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={taken}
+        status="Sent. Reme is on it; a new version comes to you for review."
         thumbnail={THUMBNAIL}
       />
     ),
@@ -518,7 +559,9 @@ const panelCatalog: Entry[] = [
   },
   {
     name: "YourWebsite unpublished",
-    render: () => <YourWebsite host={null} live={null} />,
+    render: () => (
+      <YourWebsite host={null} live={null} onRequestChanges={taken} />
+    ),
   },
   {
     name: "PanelBlank",

@@ -11,6 +11,15 @@ const navLinkClass = cn(
 )
 
 /**
+ * Class for a control in the compact rail: an icon, square in the column,
+ * with its `data-slot="rail-label"` name beside it where the rail is wide
+ * enough to show it. A 24px mark (an avatar) takes less padding.
+ */
+const railItemClass = cn(
+  "flex h-10 w-full min-w-0 shrink-0 items-center gap-3 rounded-lg px-3 text-rail-foreground text-sm outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring has-data-[slot=mark]:px-2 aria-[current=page]:bg-primary/10 motion-reduce:transition-none [&_svg]:size-4 [&_svg]:shrink-0"
+)
+
+/**
  * The rail's navigation list. Children are `<li>` elements holding router
  * links, so this package still imports no router.
  */
@@ -72,4 +81,4 @@ function PageHeader({
   )
 }
 
-export { AppNav, countLabel, NavCount, navLinkClass, PageHeader }
+export { AppNav, countLabel, NavCount, navLinkClass, PageHeader, railItemClass }
