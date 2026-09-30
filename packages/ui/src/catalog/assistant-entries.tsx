@@ -20,6 +20,7 @@ import {
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
@@ -1253,6 +1254,64 @@ const assistantCatalog = [
       </UploadPhotosProvider>
     ),
   })),
+  // At the end of an open thread, then its other states on their own:
+  // approving, refused and approved.
+  {
+    name: "SiteReady",
+    render: () => (
+      <div className="flex flex-col gap-6">
+        <FixtureThread
+          height="h-[30rem]"
+          messages={[
+            ask("Can you add a line about pets?"),
+            {
+              content: [
+                {
+                  text: "Noted. I will add it once the first version is ready.",
+                  type: "text",
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+          ]}
+          settings={{
+            after: (
+              <SiteReady
+                onApprove={noop}
+                onMakeChanges={noop}
+                onSeePreview={noop}
+                version={1}
+              />
+            ),
+          }}
+        />
+        <div className="flex max-w-xl flex-col gap-6">
+          <SiteReady
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            pending
+            version={2}
+          />
+          <SiteReady
+            error="A newer version replaced that one. Check the latest before you decide."
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={2}
+          />
+          <SiteReady
+            approved
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={3}
+          />
+        </div>
+      </div>
+    ),
+  },
   {
     name: "RequestChange",
     render: () => (

@@ -106,3 +106,33 @@ test("photos preview, can be taken out, and are sent only on Upload", async ({
   await expect(upload).toBeEnabled()
   await expect(card.getByRole("img", { name: "van.png" })).toBeVisible()
 })
+
+test("the ready card sits at the end of the thread and never claims an approval early", async ({
+  page,
+}) => {
+  await open(page, "SiteReady")
+  const cards = page.locator('[data-slot="site-ready"]')
+  await expect(cards).toHaveCount(4)
+  const ready = cards.nth(0)
+  await expect(
+    ready.getByRole("heading", { name: "Your website is ready." })
+  ).toBeVisible()
+  await expect(ready.getByRole("button", { name: "Approve" })).toBeEnabled()
+  await expect(
+    ready.getByRole("button", { name: "Make changes" })
+  ).toBeEnabled()
+  await expect(
+    ready.getByRole("button", { name: "See the preview" })
+  ).toBeVisible()
+  // Inside the live region after the last message, so it is read out.
+  await expect(
+    page.locator('[aria-live="polite"] [data-slot="site-ready"]')
+  ).toHaveCount(1)
+  await expect(
+    cards.nth(1).getByRole("button", { name: "Approving" })
+  ).toBeDisabled()
+  await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
+  await expect(cards.nth(3)).toHaveText(
+    "Approved. Version 3 is being published."
+  )
+})
