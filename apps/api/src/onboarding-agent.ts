@@ -9,6 +9,7 @@ import {
   OnboardingPlan,
   PAGES,
   PALETTES,
+  PLANNER_TURN_MS,
   type PlanFactKey,
   PRONOUNS,
   ReviewQuoteFormInput,
@@ -84,7 +85,7 @@ export const PLANNER = {
   maxOutputTokens: 2_500,
   /** One call's limit, and the turn's; a slow call is aborted and the script answers. */
   callMs: 20_000,
-  totalMs: 30_000,
+  totalMs: PLANNER_TURN_MS,
   /**
    * The newest conversation rows the model reads. The facts and the
    * checklist carry everything older, so eight rows (four exchanges) keep
