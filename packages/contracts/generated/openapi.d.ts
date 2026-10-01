@@ -4556,7 +4556,7 @@ export interface components {
       site_id: string
       /** Format: uuid */
       assignment_id: string
-      version: number
+      version: number | null
       summary: string | null
       source_key: string
       artifact_prefix: string
