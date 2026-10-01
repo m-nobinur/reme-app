@@ -205,9 +205,14 @@ async function answer(page: Page, item: Locator) {
  * Waits for version `n`'s approval, answering any question the build asks
  * first, and approves it.
  */
-async function approveVersion(page: Page, n: number) {
+/**
+ * Approves the version waiting for review and returns its number. A build
+ * whose first report a gate refused reports again, and each report takes
+ * the site's next number (ADR-031), so the first version may not be v1.
+ */
+async function approveVersion(page: Page): Promise<number> {
   const approve = panel(page).getByRole("button", {
-    name: `Approve and publish v${n}`,
+    name: /^Approve and publish v\d+$/,
   })
   const question = panel(page).locator('[data-slot="question-item"]').first()
   const deadline = Date.now() + WAIT.approval
@@ -220,6 +225,7 @@ async function approveVersion(page: Page, n: number) {
     await answer(page, question)
   }
   await expect(approve).toBeEnabled()
+  const n = Number(/v(\d+)$/.exec(await approve.innerText())?.[1])
   await approve.click()
   // The site sits on the panel's Website tab, which appears once it is live.
   const website = panel(page).getByRole("tab", { name: "Website" })
@@ -228,6 +234,7 @@ async function approveVersion(page: Page, n: number) {
   await expect(panel(page).getByText(`Version ${n} is live`)).toBeVisible({
     timeout: WAIT.publish,
   })
+  return n
 }
 
 /**
@@ -304,8 +311,11 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       .getByRole("link", { name: "Continue getting started" })
       .click()
     await expect(page).toHaveURL(onboarding)
-    // Signup gave the name, so the first open card is the industry.
-    await expect(page.locator('[data-slot="ask-choice"] form')).toBeVisible()
+    // The welcome is text only and asks what the business does; every
+    // variant thanks the owner for choosing their business assistant.
+    await expect(
+      page.locator('[data-slot="aui_assistant-message-root"]').first()
+    ).toContainText("business assistant")
     run.blank_state_actions["Continue getting started"] = "clicked"
   })
 
@@ -362,17 +372,21 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   })
 
   let host = ""
+  let first = 0
+  let second = 0
   await step("v1 approved, live with the quote action", async () => {
-    await approveVersion(page, 1)
+    first = await approveVersion(page)
     const workspace = await readJson<Workspace>("/workspace")
-    expect(workspace.site.live?.version).toBe(1)
+    expect(workspace.site.live?.version).toBe(first)
     host = workspace.site.host ?? ""
     expect(host, "the workspace names no host").not.toBe("")
     await expectLive(page, host, ["Request a quote"])
     await expect(
-      panel(page).getByRole("tabpanel").getByRole("img", {
-        name: "Your website's home page on a laptop, version 1",
-      })
+      panel(page)
+        .getByRole("tabpanel")
+        .getByRole("img", {
+          name: `Your website's home page on a laptop, version ${first}`,
+        })
     ).toBeVisible()
   })
 
@@ -421,7 +435,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expect(
       panel(page).getByRole("heading", { name: "Working on" })
     ).toBeVisible()
-    await approveVersion(page, 2)
+    second = await approveVersion(page)
+    expect(second).toBeGreaterThan(first)
     await expectLive(page, host, [HERO])
     await expectQuote(page, host)
   })
@@ -473,7 +488,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
 
   await step("the api's own reads of the run", async () => {
     const workspace = await readJson<Workspace>("/workspace")
-    expect(workspace.site.live?.version).toBe(2)
+    expect(workspace.site.live?.version).toBe(second)
     expect(workspace.builds).toEqual([])
     expect(workspace.missing_facts).toEqual([])
 

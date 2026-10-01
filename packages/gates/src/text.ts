@@ -47,10 +47,7 @@ const EXTRACT: {
   {
     kind: "phone",
     pattern: /\+?\d[\d\s().-]{6,}\d/g,
-    key: (m) => {
-      const digits = m[0].replace(/\D/g, "")
-      return digits.length >= 7 ? digits : null
-    },
+    key: (m) => phoneKey(m[0]),
   },
   {
     kind: "time",
@@ -63,6 +60,17 @@ const EXTRACT: {
     key: (m) => m[0].replace(/\s/g, "").toUpperCase(),
   },
 ]
+
+/**
+ * A phone number's digits, with a UK number written as dialled at home
+ * ("07700 900123", eleven digits from 0) read as its +44 form, so the page
+ * can show the national form of an E.164 fact. Null under seven digits.
+ */
+export function phoneKey(text: string): string | null {
+  const digits = text.replace(/\D/g, "")
+  if (digits.length < 7) return null
+  return /^0\d{10}$/.test(digits) ? `44${digits.slice(1)}` : digits
+}
 
 const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
