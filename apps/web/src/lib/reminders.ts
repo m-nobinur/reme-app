@@ -41,7 +41,7 @@ export const questionOf = (
   )
 
 /** The calendar day `at` falls on in `zone`, as a day count to compare. */
-export const dayOf = (at: Date, zone: string) =>
+const dayOf = (at: Date, zone: string) =>
   Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
 
 /** `Today, 4:30 pm`, `Tomorrow, 9:00 am`, else `Fri 3 Oct, 9:00 am`, in `zone`. */

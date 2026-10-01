@@ -85,12 +85,7 @@ import { onboardingFor } from "@/lib/onboarding"
 import { anchorOf } from "@/lib/reminders"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
-import {
-  PanelAnnouncer,
-  usePanel,
-  WorkspacePanel,
-  WorkspacePanelLine,
-} from "@/panel/workspace-panel"
+import { WorkspacePanel, WorkspacePanelLine } from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app")({
   // The authentication guard, in this loader and specifically not in
@@ -200,10 +195,6 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
-  // What the panel says on this page; with nothing to say there is no panel.
-  // A workspace that did not load still shows one, which says so.
-  const panel = usePanel(live.workspace)
-  const hasPanel = panel !== null || live.workspace === null
   const orgName = active?.name ?? "No organisation"
   const ownerName = owner.name || owner.email
   const notifications = notificationsOf(
@@ -356,8 +347,8 @@ function AppLayout() {
             viewAll={<Link to="/app/notifications" />}
           />
         }
-        panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}
-        panelLine={hasPanel ? <WorkspacePanelLine panel={panel} /> : null}
+        panel={<WorkspacePanel />}
+        panelLine={<WorkspacePanelLine />}
         title={stored ? conversationTitle(stored) : conversation}
         titleError={
           stored && failed === stored.id
@@ -587,7 +578,6 @@ function AppLayout() {
           </WorkspacePage>
         )}
       </WorkspaceShell>
-      <PanelAnnouncer panel={panel} />
     </LiveWorkspaceProvider>
   )
 }
