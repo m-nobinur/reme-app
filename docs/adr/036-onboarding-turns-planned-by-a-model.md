@@ -49,6 +49,10 @@ not a limousine firm.
 - An outage degrades onboarding to the script, not to an error.
 - Planner latency is about 5 s at p50 and up to 15 s at p95 on a slow provider, spent in the model's reasoning; the chat shows its pending state meanwhile. Turning reasoning off halves it but tripled invalid plans in the eval, so it stays at low effort.
 - The Developer's "no invented specifics" rule is enforced by its own self-check, not by a gate.
+- Uploaded photos stay with the org's other rows when an account is deleted, as ADR-035 keeps every
+  row; the erasure workflow in §10.5 removes them with the rest.
+- When the provider is slow, a turn falls back to the script's wording after 20 seconds; the web
+  waits for the whole turn (`CHAT_TURN_MS`), so the owner sees a reply rather than a timeout.
 - There is no manual site builder. An owner who skips the build is told so and can ask for the
   build later.
 
