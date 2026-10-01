@@ -116,8 +116,9 @@ for (const theme of ["light", "dark"] as const) {
     page,
   }) => {
     // One axe run per entry: with the live panel's states the catalog took
-    // 25 to 30 s on a loaded machine, against the 30 s default.
-    test.setTimeout(90_000)
+    // 25 to 30 s on a loaded machine, against the 30 s default, and with the
+    // onboarding cards and thread fixtures it passed 90 s under a full suite.
+    test.setTimeout(180_000)
     await page.goto(`/?theme=${theme}`)
 
     for (const name of await entryNames(page)) {
@@ -163,9 +164,12 @@ for (const theme of ["light", "dark"] as const) {
     ).toHaveCount(0)
 
     for (const name of await entryNames(page)) {
+      // Two pixels of slack: WorkspaceShell's panel inset rounds a sub-pixel
+      // edge either way between runs (one pixel, 2026-10-01), and a real
+      // change moves far more than two.
       await expect
         .soft(page.locator(`[data-entry="${name}"]`))
-        .toHaveScreenshot(`${name}-${theme}.png`)
+        .toHaveScreenshot(`${name}-${theme}.png`, { maxDiffPixels: 2 })
     }
   })
 }
