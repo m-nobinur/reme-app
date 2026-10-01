@@ -181,7 +181,8 @@ export function seed(kit: Tenancy, who: Owner) {
           .set({ state, updatedAt: new Date() })
           .where(eq(assignments.id, id))
       ),
-    revision: (assignmentId: string, version: number) =>
+    /** A `null` version is a report the gates refused, still `building`. */
+    revision: (assignmentId: string, version: number | null) =>
       kit.withOrg({ orgId }, async (db) => {
         const id = crypto.randomUUID()
         await db.insert(siteRevisions).values({
@@ -193,7 +194,7 @@ export function seed(kit: Tenancy, who: Owner) {
           sourceKey: `sites/${orgId}/${id}/source`,
           artifactPrefix: `sites/${orgId}/${id}/`,
           manifestKey: `sites/${orgId}/${id}/manifest.json`,
-          status: "preview",
+          status: version === null ? "building" : "preview",
         })
         return id
       }),

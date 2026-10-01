@@ -653,7 +653,7 @@ consoleOnly.get("/:id", async (c) => {
         .select()
         .from(siteRevisions)
         .where(eq(siteRevisions.assignmentId, id))
-        .orderBy(sql`${siteRevisions.version} desc`)
+        .orderBy(sql`${siteRevisions.createdAt} desc`)
       return { row, revisions, cost: await assignmentCost(db, id) }
     })
   if (!found) return notFound(c, id)
@@ -1057,7 +1057,8 @@ function parseValue(value: unknown): unknown {
  * revision it found and the one host the router will honour it on,
  * `preview-v{n}-{slug}` under this environment's suffix (ADR-030), the slug's
  * base cut if the label would pass 63 characters (`previewHost`), good for
- * a day. A revision still `building` has no artifact to show and is refused.
+ * a day. A revision still `building`, or one the gates refused and so left
+ * without a number, has nothing to show and is refused.
  */
 bridge.get("/:id/preview", async (c) => {
   const id = c.req.param("id")
@@ -1080,7 +1081,7 @@ bridge.get("/:id/preview", async (c) => {
       })
       .from(siteRevisions)
       .where(eq(siteRevisions.assignmentId, id))
-      .orderBy(sql`${siteRevisions.version} desc`)
+      .orderBy(sql`${siteRevisions.createdAt} desc`)
       .limit(1)
     if (!revision) return null
     const [org] = await db
@@ -1091,7 +1092,8 @@ bridge.get("/:id/preview", async (c) => {
     return { revision, slug: org.slug }
   })
   if (!found) return notFound(c, id)
-  if (found.revision.status === "building") {
+  const { version } = found.revision
+  if (found.revision.status === "building" || version === null) {
     return failure(c, 409, {
       class: "validation",
       code: "revision.building",
@@ -1099,11 +1101,7 @@ bridge.get("/:id/preview", async (c) => {
       detail: { revision_id: found.revision.id },
     })
   }
-  const host = previewHost(
-    found.slug,
-    found.revision.version,
-    c.env.SITE_HOST_SUFFIX
-  )
+  const host = previewHost(found.slug, version, c.env.SITE_HOST_SUFFIX)
   const exp = Math.floor(Date.now() / 1000) + PREVIEW_TTL_S
   // Two claims over the same revision: `site` opens the preview, and
   // `screenshots` rides on the three images so they show inline where no

@@ -3,7 +3,9 @@ import { Timestamp, Uuid } from "./common.ts"
 
 /**
  * `SiteRevision` (ADR-031). `version` is the site's own counter, so the owner
- * reads it as `v3`; the tag is derived, never stored, so it cannot drift.
+ * reads it as `v3`; the tag is derived, never stored, so it cannot drift. A
+ * revision takes its number when it passes the gates, so a report the gates
+ * refused keeps `null` and the versions the owner sees have no gaps.
  * `status: "published"` means the revision was activated at least once. It
  * never means "live now": liveness is `deployments.active_revision` and
  * nothing else (§11.1.3). `retired` revisions keep their row after the sweep
@@ -15,7 +17,7 @@ export const SiteRevision = z.strictObject({
   /** One site per org today, seeded equal to `org_id`; baked into R2 keys. */
   site_id: Uuid,
   assignment_id: Uuid,
-  version: z.int().positive(),
+  version: z.int().positive().nullable(),
   /** Written at publish from `CompletionReport.changes[]`. */
   summary: z.string().min(1).nullable(),
   /** `sites/{site_id}/{revision_id}/source.tar.zst` */

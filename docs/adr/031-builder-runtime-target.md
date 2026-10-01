@@ -61,8 +61,11 @@ R2, are the fast path when the container is the same; the tarball is the path th
 
 **Retention keeps two revisions per site and deletes the rest seven days after they stop
 mattering.** `v{n}` is the site's own counter, so a version number means something to the owner:
-v3 is live, v2 rolls back. Every kept revision carries its tag and the change summary the
-Developer wrote in `CompletionReport.changes[]`. When a publish succeeds, the publisher marks
+v3 is live, v2 rolls back. A revision takes its number when it passes the gates, so the count
+holds only versions the owner can see: a report the gates refuse keeps its row with no number,
+and the attempt that passes takes the next one. A new site starts at v1, with no gaps. Every
+kept revision carries its tag and the change summary the Developer wrote in
+`CompletionReport.changes[]`. When a publish succeeds, the publisher marks
 every revision other than the active one and the previous one `retired` with a `retire_after`
 seven days out, and destroys the assignment's sandbox at once, since the snapshot makes it
 recoverable. A daily sweep deletes the R2 prefix of every revision whose `retire_after` has
