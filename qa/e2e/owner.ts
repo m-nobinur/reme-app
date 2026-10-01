@@ -134,64 +134,123 @@ export async function clearProbe(
   return failures
 }
 
+/** What the owner of a Leeds cleaning firm opens with. */
+const OPENING =
+  "Hi! We're a cleaning company in Leeds. We do regular home cleaning, deep cleans and end of tenancy cleans."
+
 /**
- * What a run types into each onboarding fact card, by the label of its one
- * input. The card's question is the same for every org, but the assistant's
- * line above it is not, so a card is known by its input.
+ * The owner's reply, picked by what the assistant just asked or by a fact
+ * card's label. First match wins, so the email comes before anything that
+ * mentions quotes, and the assistant's name before the owner's.
  */
-export const ANSWERS: Record<string, string> = {
-  "Products or services, separated by commas":
-    "Regular home cleaning, deep cleans, end of tenancy cleans",
-  "Your customers": "Busy households and letting agents",
-  "How you work":
+const REPLIES: [RegExp, string][] = [
+  [
+    /assistant'?s name|name (for )?(me|yourself)|call me\b|go by|introduce myself|name.*assistant/i,
+    "Sam",
+  ],
+  [/your name|call you/i, "Alex"],
+  [
+    /(phone|number).*e-?mail|e-?mail.*(phone|number)/i,
+    "07700 900123, hello@example.net",
+  ],
+  [/e-?mail/i, "hello@example.net"],
+  [/phone|number|ring/i, "07700 900123"],
+  [/slogan|tagline|one line|sum up/i, "No slogan yet."],
+  [
+    /quote|need to know|before you (can|could)/i,
+    "The size of the home, how many bedrooms and bathrooms, the kind of clean, and the date they want.",
+  ],
+  [/customers|clients|who .*(book|for)/i, "Busy households and letting agents"],
+  [
+    /area|towns|postcode|cover|travel|where/i,
+    "Leeds and the villages around it",
+  ],
+  [
+    /how you work|run|operate|day to day|typical|first (contact|enquiry)/i,
     "Two teams of two, booked a week ahead, with our own products",
-  "Towns, regions or postcodes": "Leeds and the villages around it",
-  "Phone number": "07700 900123",
-  "Email address": "hello@example.net",
-  "Assistant's name": "Sam",
-  "Your name": "Alex",
-}
+  ],
+  [
+    /products|services|offer|sell/i,
+    "Regular home cleaning, deep cleans, end of tenancy cleans",
+  ],
+]
+const reply = (asked: string) =>
+  REPLIES.find(([pattern]) => pattern.test(asked))?.[1] ?? "You choose."
 
 /** The option a choice card is answered with, when it offers it; else its first. */
 const PICKS = ["Cleaning and home services", "Yes, build it for me"]
 
 /**
- * The onboarding conversation answered through its cards until the first
- * build starts, anything skippable skipped. Signup recorded the name, so it
- * asks 18: the industry, offerings, customers, how the business runs, the
- * area, phone, email and tagline (skipped), the assistant's name, pronouns
- * and tone, the owner's name, whether to build the site (yes), its
- * template, colours, lettering and pages (as ticked), and photos (skipped).
- * The build then starts on its own, with no approval card. One round more
- * than that is the guard against a script that never ends, and the count
- * then fails. Returns how many facts the answers wrote.
+ * The onboarding conversation played as an owner would, until the first
+ * build starts. A model plans each turn: some questions come as a card,
+ * others as plain chat answered in the composer, and an answered card
+ * renders nothing. So each step waits for the assistant to finish, answers
+ * the open card if there is one, else replies to its last question. The
+ * build starts on its own once the quote form is confirmed. A turn budget
+ * guards against a conversation that never ends.
  */
-export async function answerOnboarding(page: Page): Promise<number> {
-  // Each answer is a server round trip, and both callers run against a
-  // deployment reading the staging database from wherever the run is.
-  const slow = expect.configure({ timeout: 30_000 })
-  const cards = page.locator(
-    '[data-slot="ask-fact"], [data-slot="ask-choice"], [data-slot="ask-upload"]'
-  )
-  // An open card holds an input; an answered one only says what was chosen.
-  const open = page.locator("form, input[type=file]")
-  const pending = cards.filter({ has: open })
-  const answered = cards.filter({ hasNot: open })
-  const build = page.locator('[data-slot="request-change"]')
-  const asked = 18
-  let count = 0
-  let stated = 0
-  while (count <= asked) {
-    await slow(pending.or(build).first()).toBeVisible()
-    if (await build.count()) break
-    const card = pending.first()
-    // The next card takes the focus once its turn has finished streaming.
-    await slow(card.locator("input").first()).toBeFocused()
-    const skip = card.getByRole("button", { name: "Skip for now" })
+export async function answerOnboarding(page: Page): Promise<void> {
+  // A planner turn can take 45 s, read from wherever the run is.
+  const slow = expect.configure({ timeout: 90_000 })
+  const assistant = page.locator('[data-slot="aui_assistant-message-root"]')
+  const pending = page
+    .locator(
+      '[data-slot="ask-fact"], [data-slot="ask-choice"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
+    )
+    .filter({ has: page.locator("form, input[type=file], button") })
+  const started = page
+    .locator('[data-slot="request-change"]')
+    .filter({ hasText: "Started" })
+  const input = page.getByLabel("Message input")
+  const settled = async () => {
+    await slow(
+      page.getByRole("button", { name: "Stop generating" })
+    ).toBeHidden()
+    await slow(
+      page.locator('[data-slot="aui_assistant-message-indicator"]')
+    ).toHaveCount(0)
+  }
+  // Each step is its own assistant message, so an answer has landed once
+  // one more has arrived and finished.
+  const step = async (act: () => Promise<void>) => {
+    const before = await assistant.count()
+    await act()
+    await slow.poll(() => assistant.count()).toBeGreaterThan(before)
+    await settled()
+  }
+  const say = (text: string) =>
+    step(async () => {
+      await input.fill(text)
+      await input.press("Enter")
+    })
+
+  await settled()
+  let opened = false
+  for (let turn = 0; turn < 45; turn++) {
+    if (await started.count()) return
+    if (!(await pending.count())) {
+      if (!opened) {
+        opened = true
+        await say(OPENING)
+        continue
+      }
+      const said = (await assistant.last().innerText()).replace(/\s+/g, " ")
+      const question = said
+        .split(/(?<=[.?!])\s+/)
+        .filter((sentence) => sentence.includes("?"))
+        .at(-1)
+      await say(reply(question ?? said))
+      continue
+    }
+    opened = true
+    const card = pending.last()
     const slot = await card.getAttribute("data-slot")
-    if (await skip.count()) {
-      // The tagline and the photos, which an owner may leave for later.
-      await skip.click()
+    if (slot === "ask-upload") {
+      await step(() =>
+        card.getByRole("button", { name: "Skip for now" }).click()
+      )
+    } else if (slot === "review-quote-form") {
+      await step(() => card.getByRole("button", { name: "Looks good" }).click())
     } else if (slot === "ask-choice") {
       // Pages come ticked; every other card takes one pick.
       if ((await card.getByRole("checkbox").count()) === 0) {
@@ -203,21 +262,20 @@ export async function answerOnboarding(page: Page): Promise<number> {
         }
         await pick.click()
       }
-      await card.getByRole("button", { name: "Continue" }).click()
-      stated += 1
+      await step(() => card.getByRole("button", { name: "Continue" }).click())
     } else {
-      const label = await card.locator("form label").first().innerText()
-      const answer = ANSWERS[label.trim()]
-      expect(answer, `no answer for the card asking "${label}"`).toBeDefined()
-      await card.getByLabel(label.trim(), { exact: true }).fill(answer ?? "")
-      await card.getByRole("button", { name: "Save" }).click()
-      stated += 1
+      const label = (
+        await card.locator("form label").first().innerText()
+      ).trim()
+      const field = card.getByLabel(label, { exact: true })
+      // The owner's name opens with the one they signed in with.
+      if (!(await field.inputValue())) await field.fill(reply(label))
+      await step(() => card.getByRole("button", { name: "Save" }).click())
     }
-    count += 1
-    await slow(answered).toHaveCount(count)
   }
-  expect(count, "cards answered before the build started").toBe(asked)
-  return stated
+  await expect(started, "the build had not started after 45 turns").toHaveCount(
+    1
+  )
 }
 
 /**
