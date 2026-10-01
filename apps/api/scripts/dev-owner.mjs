@@ -208,7 +208,8 @@ export async function appOn(app, url, root, fetcher = fetch) {
   }
   if (app === "web") {
     const html = await response.text()
-    return html.includes("<title>Reme</title>") && html.includes(`/@fs${root}/`)
+    // The home page titles itself "Reme · ...", so match the name at the start.
+    return html.includes("<title>Reme") && html.includes(`/@fs${root}/`)
       ? "ours"
       : "foreign"
   }
