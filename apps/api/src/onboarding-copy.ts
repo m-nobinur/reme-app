@@ -184,11 +184,12 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
       : "Got it. Who are your ideal customers, the people you'd most like to hear from? You can skip this one.",
     "Thanks, that's useful. Who do you most enjoy working for? The site will speak to them first. It's fine to skip this.",
   ],
-  // Real proof points make the site credible; never required.
+  // Who runs the business and real proof points: the About page's person
+  // and the site's credibility. Never required.
   "business.proof": (v) => [
-    `Is there anything that sets ${v.business} apart, like how long you've been trading, accreditations, insurance or a guarantee? A review you can quote counts too. It's fine to skip this one.`,
-    "What makes customers choose you over anyone else? Years in business, qualifications, awards or a guarantee all help the site earn trust. You can skip this if nothing comes to mind.",
-    "One more about the business. Is there anything you're proud of that the site could mention, such as years trading, memberships or a guarantee? Skipping is fine.",
+    `Who's behind ${v.business}, and what sets it apart? Your name, how long you've been trading, accreditations, insurance or a guarantee all help, and a review you can quote counts too. It's fine to skip this one.`,
+    "Tell me a little about who runs the business and why customers choose you. Your name, years in business, qualifications, awards or a guarantee all help the site earn trust. You can skip this if nothing comes to mind.",
+    "One more about the business. Who's behind it, and is there anything you're proud of that the site could mention, such as years trading, memberships or a guarantee? Skipping is fine.",
   ],
   // Where the business works, asked the way a local customer would think of it.
   "service_area.text": (v) => [
