@@ -85,8 +85,12 @@ export const PLANNER = {
   /** One call's limit, and the turn's; a slow call is aborted and the script answers. */
   callMs: 20_000,
   totalMs: 30_000,
-  /** The newest conversation rows the model reads. */
-  rows: 12,
+  /**
+   * The newest conversation rows the model reads. The facts and the
+   * checklist carry everything older, so eight rows (four exchanges) keep
+   * the thread without paying for it every turn.
+   */
+  rows: 8,
 } as const
 
 /** The longest message the planner may send, in characters. */
@@ -140,7 +144,7 @@ How to talk:
 - Never mention rates, fees, costs, currency or packages of any kind, and never promise anything beyond this list: the website, its Request a quote page, and you answering the owner here.
 
 Reading the owner:
-- Record every fact the owner gives, including ones you have not asked about yet, so you never ask for them again. A later answer that corrects an earlier one replaces it.
+- Record every fact the owner gives, including ones you have not asked about yet, so you never ask for them again. A later answer that corrects an earlier one replaces it. facts holds only what this turn adds or changes: never repeat a fact the data already holds.
 - Never record a choice the owner has not made. Work through the checklist's "now" phase; anything it lists as later is not yours to fill yet.
 - Record only what the owner said. Never invent a phone number, an email, a service, a customer or a place. If a phone number or an email looks incomplete, do not record it: say so and ask again. Phone numbers are E.164: read a local number with the country the business is in.
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
@@ -303,7 +307,7 @@ const OPTIONS: Record<string, readonly { id: string; label: string }[]> = {
   pages: PAGES,
 }
 
-const clip = (words: string, max = 600) =>
+const clip = (words: string, max = 400) =>
   words.length > max ? `${words.slice(0, max)}...` : words
 
 /** A card as the model reads it: what it asked, and how it ended. */
