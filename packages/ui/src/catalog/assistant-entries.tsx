@@ -1350,7 +1350,7 @@ const FAILED: ThreadMessageLike[] = [
 function ConversationSample() {
   return (
     <WorkspaceShell
-      className="h-[48rem] border border-border"
+      className="h-192 border border-border"
       menu={<ConversationMenu newChat={<a href="#new" />} />}
       panel={
         <p className="text-muted-foreground text-sm">
@@ -1666,7 +1666,7 @@ const assistantCatalog = [
     // What the server sends before the chat chunk loads.
     name: "ThreadPending",
     render: () => (
-      <div className="h-[32rem]">
+      <div className="h-128">
         <ThreadPending />
       </div>
     ),
