@@ -73,11 +73,16 @@ export const PlanNext = z.discriminatedUnion("kind", [
       ...(PlanFactKey | "quote.form")[],
     ]),
   }),
-  /** A closed list from the contracts; `preselected` ticks some of its ids. */
+  /**
+   * A closed list from the contracts; `preselected` ticks some of its ids,
+   * and for the palettes `initial` names the three or four shown first, or
+   * is empty for the card's own seeded four.
+   */
   z.strictObject({
     kind: z.literal("ask_choice"),
     step: ChoiceStep,
     preselected: z.array(Text(40)).max(16),
+    initial: z.array(Text(40)).max(4),
   }),
   /** A form for one fact, such as a phone number. */
   z.strictObject({
