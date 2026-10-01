@@ -7,6 +7,7 @@ import {
 } from "./assignment.ts"
 import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { FactRecord } from "./fact.ts"
+import { choiceFacts } from "./onboarding.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -38,8 +39,9 @@ const fact = <K extends string, V extends z.ZodRawShape>(
   z.strictObject({ key: z.literal(key), value: refine(z.strictObject(value)) })
 
 /**
- * The value an owner can state for a fact, by key: the six the starter site
- * requires (`required: true` in its site config) plus the tagline. The shapes
+ * The value an owner can state for a fact, by key: what the starter site
+ * requires (`required: true` in its site config) plus what onboarding learns
+ * about the business, the assistant and the site the owner wants. The shapes
  * are the golden fixtures'. Currencies are the ones the content gate can
  * verify. The keys are `FactValue.options`; there is no second list.
  *
@@ -68,6 +70,21 @@ export const FactValue = z.discriminatedUnion("key", [
     currency: z.enum(["GBP", "USD", "EUR"]),
   }),
   fact("business.tagline", { tagline: Text(120) }),
+  fact("business.industry", choiceFacts.industry),
+  fact("business.offerings", { items: z.array(Text(120)).min(1).max(12) }),
+  fact("business.audience", { text: Text(500) }),
+  fact("business.overview", { text: Text(800) }),
+  fact("service_area.text", { text: Text(200) }),
+  fact("assistant.name", { name: Text(40) }),
+  fact("assistant.pronouns", choiceFacts.pronouns),
+  fact("assistant.tone", choiceFacts.tone),
+  fact("owner.preferred_name", { name: Text(60) }),
+  fact("site.build_mode", choiceFacts.buildMode),
+  fact("site.template", choiceFacts.template),
+  fact("site.palette", choiceFacts.palette),
+  fact("site.font", choiceFacts.font),
+  fact("site.pages", choiceFacts.pages),
+  fact("media.uploads", choiceFacts.uploads),
 ])
 
 export type FactValueKey = FactValue["key"]
@@ -77,6 +94,26 @@ export const FactValueKey = z.enum(
     ...FactValueKey[],
   ]
 )
+
+/**
+ * The facts onboarding fills from a list of presets or an upload rather than
+ * a form, so `ask_fact` never asks for them: `ask_choice` and `ask_upload` do.
+ */
+export const CHOICE_FACT_KEYS = [
+  "business.industry",
+  "assistant.pronouns",
+  "assistant.tone",
+  "site.build_mode",
+  "site.template",
+  "site.palette",
+  "site.font",
+  "site.pages",
+  "media.uploads",
+] as const satisfies readonly FactValueKey[]
+export type ChoiceFactKey = (typeof CHOICE_FACT_KEYS)[number]
+
+/** The keys an owner types an answer for, which the web gives inputs to. */
+export type AskableFactKey = Exclude<FactValueKey, ChoiceFactKey>
 
 /** The longest text answer an owner can give, in characters. */
 export const ANSWER_TEXT_MAX = 500

@@ -79,6 +79,57 @@ export const samples: Record<ContractName, unknown> = {
     answer: "stated",
     fact: { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
   },
+  AskChoiceInput: {
+    step: "tone",
+    options: [
+      {
+        id: "friendly",
+        label: "Friendly",
+        hint: "Warm and approachable",
+        visual: null,
+      },
+      { id: "casual", label: "Casual", hint: null, visual: null },
+    ],
+    multiple: false,
+    preselected: [],
+    other: null,
+    skippable: false,
+  },
+  AskChoiceOutput: { answer: "chosen", ids: ["friendly"], other: null },
+  AskUploadInput: {
+    accept: ["image/jpeg", "image/png", "image/webp"],
+    max_files: 12,
+    max_bytes: 5242880,
+    skippable: true,
+  },
+  AskUploadOutput: {
+    answer: "uploaded",
+    assets: [
+      {
+        id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+        name: "fleet-front.jpg",
+        content_type: "image/jpeg",
+        bytes: 482113,
+      },
+    ],
+  },
+  Asset: {
+    id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+    name: "fleet-front.jpg",
+    content_type: "image/jpeg",
+    bytes: 482113,
+    alt: "Two black saloon cars outside a hotel",
+  },
+  UploadedAssets: {
+    assets: [
+      {
+        id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+        name: "fleet-front.jpg",
+        content_type: "image/jpeg",
+        bytes: 482113,
+      },
+    ],
+  },
   Assignment: {
     assignment_id: ASSIGNMENT,
     org_id: ORG,

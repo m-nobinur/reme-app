@@ -2,6 +2,12 @@ import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
+import {
+  Asset,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
+  UPLOAD_TYPES,
+} from "./onboarding.ts"
 import { ANSWER_TEXT_MAX, BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
 import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
@@ -77,6 +83,96 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
+/** The step of onboarding an `ask_choice` card is for. The api reads the answer by it. */
+export const ChoiceStep = z.enum([
+  "industry",
+  "pronouns",
+  "tone",
+  "build_for_me",
+  "manual_builder",
+  "template",
+  "palette",
+  "font",
+  "pages",
+])
+
+/** What a choice looks like beside its label: colour chips, a type sample or a page sketch. */
+const ChoiceVisual = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("swatches"),
+    colors: z
+      .array(z.string().regex(/^#[0-9a-f]{6}$/))
+      .min(1)
+      .max(4),
+  }),
+  z.strictObject({ kind: z.literal("font"), family: Text(80) }),
+  z.strictObject({ kind: z.literal("template"), id: Text(20) }),
+])
+
+/**
+ * `ask_choice`'s input: a question answered from a short list. `other` is
+ * the owner's way out of the list, a label and a hint for a text box, or
+ * null when the list is closed. The question itself is the text part before
+ * the card, written by the api.
+ */
+export const AskChoiceInput = z.strictObject({
+  step: ChoiceStep,
+  options: z
+    .array(
+      z.strictObject({
+        id: Text(40),
+        label: Text(80),
+        hint: Text(120).nullable(),
+        visual: ChoiceVisual.nullable(),
+      })
+    )
+    .min(2)
+    .max(16),
+  /** Whether more than one may be picked. */
+  multiple: z.boolean(),
+  /** Options ticked when the card opens. */
+  preselected: z.array(Text(40)).max(16),
+  other: z.strictObject({ label: Text(60), placeholder: Text(120) }).nullable(),
+  skippable: z.boolean(),
+})
+
+/**
+ * `ask_choice`'s output. The api refuses an id that is not in the call's
+ * options, a step other than the call's, and an answer with neither an id
+ * nor the owner's own words.
+ */
+export const AskChoiceOutput = z.discriminatedUnion("answer", [
+  z.strictObject({
+    answer: z.literal("chosen"),
+    ids: z.array(Text(40)).max(16),
+    other: Text(200).nullable(),
+  }),
+  z.strictObject({ answer: z.literal("skipped") }),
+])
+
+/**
+ * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
+ * on the wire so the web enforces what the api will.
+ */
+export const AskUploadInput = z.strictObject({
+  accept: z.array(z.enum(UPLOAD_TYPES)).min(1),
+  max_files: z.int().min(1).max(UPLOAD_MAX_FILES),
+  max_bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
+  skippable: z.boolean(),
+})
+
+/**
+ * `ask_upload`'s output: the photos the owner sent to `POST /assets` first,
+ * by id. The api refuses an id it did not store for this org.
+ */
+export const AskUploadOutput = z.discriminatedUnion("answer", [
+  z.strictObject({
+    answer: z.literal("uploaded"),
+    assets: z.array(Asset).min(1).max(UPLOAD_MAX_FILES),
+  }),
+  z.strictObject({ answer: z.literal("skipped") }),
+])
+
 /**
  * `request_change`'s output once the owner said yes: the build it started,
  * or why it was refused. Its input is `OwnerChangeRequest`. A no is the AI
@@ -88,14 +184,15 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
- * The owner's resolution of one pending call: an answer to `ask_fact`, or a
- * yes or no on a call that needs approval.
+ * The owner's resolution of one pending call: an answer to `ask_fact`,
+ * `ask_choice` or `ask_upload`, or a yes or no on a call that needs approval.
+ * The api reads `output` against the call's own tool.
  */
 const ChatResult = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("answer"),
     tool_call_id: ToolCallId,
-    output: AskFactOutput,
+    output: z.union([AskFactOutput, AskChoiceOutput, AskUploadOutput]),
   }),
   z.strictObject({
     kind: z.literal("approval"),
@@ -157,6 +254,11 @@ export const ChatRequest = z.strictObject({
   ]),
 })
 
+export type ChoiceStep = z.infer<typeof ChoiceStep>
+export type AskChoiceInput = z.infer<typeof AskChoiceInput>
+export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type AskUploadInput = z.infer<typeof AskUploadInput>
+export type AskUploadOutput = z.infer<typeof AskUploadOutput>
 export type AskFactInput = z.infer<typeof AskFactInput>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>

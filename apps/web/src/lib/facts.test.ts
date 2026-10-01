@@ -52,6 +52,98 @@ const SHAPES: [FactValue, string, string][] = [
     "Tagline",
     "Clean homes, fictional town",
   ],
+  [
+    {
+      key: "business.industry",
+      value: { name: "Limousine and chauffeur hire", category: "chauffeur" },
+    },
+    "Industry",
+    "Limousine and chauffeur hire",
+  ],
+  [
+    {
+      key: "business.offerings",
+      value: { items: ["Airport transfers", "Wedding hire"] },
+    },
+    "Products and services",
+    "Airport transfers, Wedding hire",
+  ],
+  [
+    {
+      key: "business.audience",
+      value: { text: "Couples and corporate travellers" },
+    },
+    "Who you serve",
+    "Couples and corporate travellers",
+  ],
+  [
+    { key: "business.overview", value: { text: "Six cars, booked by phone" } },
+    "How you work",
+    "Six cars, booked by phone",
+  ],
+  [
+    { key: "service_area.text", value: { text: "Greater Fairhaven" } },
+    "Area you cover",
+    "Greater Fairhaven",
+  ],
+  [
+    { key: "assistant.name", value: { name: "Sam" } },
+    "Assistant's name",
+    "Sam",
+  ],
+  [
+    { key: "assistant.pronouns", value: { id: "she_her" } },
+    "Assistant's pronouns",
+    "she_her",
+  ],
+  [
+    { key: "assistant.tone", value: { id: "friendly" } },
+    "Assistant's tone",
+    "friendly",
+  ],
+  [
+    { key: "owner.preferred_name", value: { name: "Jo" } },
+    "What the assistant calls you",
+    "Jo",
+  ],
+  [
+    { key: "site.build_mode", value: { mode: "assistant" } },
+    "Who builds the site",
+    "assistant",
+  ],
+  [
+    { key: "site.template", value: { id: "classic" } },
+    "Website template",
+    "classic",
+  ],
+  [{ key: "site.palette", value: { id: "ocean" } }, "Website colours", "ocean"],
+  [
+    { key: "site.font", value: { id: "clean_sans" } },
+    "Website font",
+    "clean_sans",
+  ],
+  [
+    { key: "site.pages", value: { ids: ["home", "quote"] } },
+    "Website pages",
+    "home, quote",
+  ],
+  [
+    {
+      key: "media.uploads",
+      value: {
+        items: [
+          {
+            id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+            name: "fleet-front.jpg",
+            content_type: "image/jpeg",
+            bytes: 1200,
+          },
+        ],
+      },
+    },
+    "Your photos",
+    "fleet-front.jpg",
+  ],
 ]
 
 it("has a sample for every FactValue branch", () => {

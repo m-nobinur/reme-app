@@ -23,7 +23,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
-import type { AnswerSpec } from "@workspace/ui/lib/answer"
+import { type AnswerSpec, askable } from "@workspace/ui/lib/answer"
 import type { ReactNode } from "react"
 
 /**
@@ -282,7 +282,7 @@ const panelCatalog: Entry[] = [
     name: "QuestionItem kinds",
     render: () => (
       <div className="grid gap-4 sm:grid-cols-2">
-        {FactValueKey.options.map((key) => (
+        {FactValueKey.options.filter(askable).map((key) => (
           <div key={key}>{question({ kind: "fact", key }, key)}</div>
         ))}
         {question({ kind: "text", maxLength: 80, email: false }, "Parking")}

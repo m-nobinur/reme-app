@@ -1,7 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
 import {
+  AskChoiceInput,
+  AskChoiceOutput,
   AskFactInput,
   AskFactOutput,
+  AskUploadInput,
+  AskUploadOutput,
   ChatRequest,
   type ChatResult,
   RequestChangeOutput,
@@ -10,6 +14,7 @@ import {
   TOOL_UNKNOWN,
   toolErrorKind,
 } from "../src/chat.ts"
+import { PALETTES } from "../src/onboarding.ts"
 import {
   ANSWER_TEXT_MAX,
   type FactValue,
@@ -291,5 +296,107 @@ describe("toolErrorKind", () => {
     ["any other text", "The build is on fire."],
   ])("reads %s as unknown", (_name, errorText) => {
     expect(toolErrorKind(errorText)).toBe("unknown")
+  })
+})
+
+describe("the onboarding cards", () => {
+  const choice = samples.AskChoiceInput as AskChoiceInput
+  it.each([
+    ["a closed list", choice],
+    [
+      "a list with an Other and a swatch",
+      {
+        ...choice,
+        multiple: true,
+        preselected: ["friendly"],
+        other: { label: "Something else", placeholder: "Describe it" },
+        options: [
+          {
+            id: "ocean",
+            label: "Ocean",
+            hint: null,
+            visual: {
+              kind: "swatches",
+              colors: [...(PALETTES[0]?.swatches.slice(0, 1) ?? [])],
+            },
+          },
+          { id: "forest", label: "Forest", hint: null, visual: null },
+        ],
+      },
+    ],
+  ])("accepts %s", (_name, input) => {
+    expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["an unknown step", { ...choice, step: "favourite_colour" }],
+    ["one option", { ...choice, options: choice.options.slice(0, 1) }],
+    [
+      "a swatch with no leading hash",
+      {
+        ...choice,
+        options: [
+          {
+            id: "a",
+            label: "A",
+            hint: null,
+            visual: { kind: "swatches", colors: ["0b5fa5"] },
+          },
+          choice.options[1],
+        ],
+      },
+    ],
+  ])("refuses %s", (_name, input) => {
+    expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(REFUSED)
+  })
+
+  it.each([
+    ["AskChoiceOutput", AskChoiceOutput, samples.AskChoiceOutput],
+    ["AskChoiceOutput", AskChoiceOutput, { answer: "skipped" }],
+    ["AskUploadOutput", AskUploadOutput, samples.AskUploadOutput],
+    ["AskUploadInput", AskUploadInput, samples.AskUploadInput],
+  ] as const)("accepts a %s", (name, schema, value) => {
+    expect(verdict(name, schema, value)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    [
+      "an upload with no photos",
+      AskUploadOutput,
+      { answer: "uploaded", assets: [] },
+    ],
+    [
+      "an SVG",
+      AskUploadInput,
+      { ...(samples.AskUploadInput as object), accept: ["image/svg+xml"] },
+    ],
+    [
+      "a limit above the cap",
+      AskUploadInput,
+      { ...(samples.AskUploadInput as object), max_bytes: 50_000_000 },
+    ],
+  ] as const)("refuses %s", (_name, schema, value) => {
+    expect(verdict("AskUploadInput", schema, value)).toEqual(REFUSED)
+  })
+
+  it("lets a results turn answer with any of the three cards' outputs", () => {
+    const turn = (output: unknown) => ({
+      conversation_id: CONVERSATION,
+      mode: "act",
+      turn: {
+        kind: "results",
+        message_id: "a1Xy7Qp0aB",
+        results: [{ kind: "answer", tool_call_id: "call_1", output }],
+      },
+    })
+    for (const output of [
+      samples.AskFactOutput,
+      samples.AskChoiceOutput,
+      samples.AskUploadOutput,
+    ]) {
+      expect(verdict("ChatRequest", ChatRequest, turn(output))).toEqual(
+        ACCEPTED
+      )
+    }
   })
 })
