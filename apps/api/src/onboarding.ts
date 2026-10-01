@@ -1,11 +1,15 @@
 import {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDetailsInput,
+  AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
   AskUploadInput,
   AskUploadOutput,
   type ChoiceStep,
+  DETAILS_KEYS,
+  type DetailsStep,
   FactValue,
   type FactValueKey,
   FIXED_PAGES,
@@ -27,7 +31,9 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import type { Part, ToolPart } from "./chat.ts"
+import type { JevDecision } from "./jev.ts"
 import {
+  chose,
   hash,
   manualEnd,
   notStarted,
@@ -50,19 +56,19 @@ import {
  * is missing. `chat.ts` does the reading and writing.
  */
 
-/** A step is its fact's key for an `ask_fact`, its `ChoiceStep` for an `ask_choice`. */
+/**
+ * A step is its fact's key for an `ask_fact`, its `ChoiceStep` for an
+ * `ask_choice`, its `DetailsStep` for an `ask_details`.
+ */
 export type StepId =
   | "business.name"
   | "business.offerings"
-  | "business.audience"
-  | "business.overview"
   | "service_area.text"
-  | "business.phone"
-  | "business.email"
-  | "business.tagline"
-  | "assistant.name"
+  | "business.audience"
+  | "business.proof"
   | "owner.preferred_name"
   | ChoiceStep
+  | DetailsStep
   | "upload"
   | "quote_form"
   | "build"
@@ -70,8 +76,15 @@ export type StepId =
 /** The first build's goal: the owner's details are in the facts. */
 export const ONBOARDING_GOAL = "Build my website from the details I gave you."
 
-/** The facts an owner may skip; every other one the site or the assistant needs. */
-export const SKIPPABLE: readonly FactValueKey[] = ["business.tagline"]
+/**
+ * The facts an owner may skip; every other one the site or the assistant
+ * needs. The slogan and how a job runs are never asked: the builder drafts
+ * them.
+ */
+export const SKIPPABLE: readonly FactValueKey[] = [
+  "business.audience",
+  "business.proof",
+]
 
 export type Held = { key: string; value: unknown }
 
@@ -102,8 +115,23 @@ export type Onboarding = Progress & {
   orgName: string
   /** The session's name for the owner, or "". */
   ownerName: string
-  /** The session's email, whose local part stands in for a name the session lacks. */
+  /** The session's email: the contact card's starting email, and a stand-in for a missing name. */
   ownerEmail?: string
+  /**
+   * How often each fact has been asked here, by a card or a planned question
+   * (`askedSoFar`), so the script never asks an optional one twice.
+   */
+  asked?: Readonly<Record<string, number>>
+  /** Business-specific lines written in the background, once they are ready. */
+  prepared?: Prepared | null
+}
+
+/** What the background call writes for later steps (`onboarding-prepare.ts`). */
+export type Prepared = {
+  /** The photo question for this business, such as the fleet for a chauffeur firm. */
+  photo_question: string
+  /** The business's services as a short phrase, such as "your wedding cars". */
+  services_phrase: string
 }
 
 /** Whether the script has finished: the build is under way or the owner went their own way. */
@@ -147,6 +175,8 @@ export function voiceOf(o: Onboarding): Voice {
     template: template?.custom ? null : label(TEMPLATES, template?.id),
     palette: label(PALETTES, palette?.id),
     ownColour: palette?.brand ?? palette?.custom ?? null,
+    services: o.prepared?.services_phrase ?? null,
+    photoQuestion: o.prepared?.photo_question ?? null,
   }
 }
 
@@ -356,6 +386,34 @@ export const factCard = (
 }
 
 /**
+ * A details card: the step's facts together, each one the org holds filled
+ * in, and the sign-in email offered as the business's until one is held.
+ */
+export const detailsCard = (
+  step: DetailsStep,
+  o: Onboarding,
+  newId: () => string
+) => {
+  const held = DETAILS_KEYS[step].flatMap((key) => {
+    const value = factValue(o.facts, key)
+    return value === undefined ? [] : [{ key, value }]
+  })
+  const email = FactValue.safeParse({
+    key: "business.email",
+    value: { address: o.ownerEmail ?? "" },
+  })
+  const prefill =
+    step === "contact" && !has(o, "business.email") && email.success
+      ? [...held, email.data]
+      : held
+  return call(
+    "tool-ask_details",
+    AskDetailsInput.parse({ step, prefill, skippable: false }),
+    newId
+  )
+}
+
+/**
  * A choice card from the contracts' lists. The planner may replace the
  * step's own ticks (`preselected`) and the palettes shown first (`initial`).
  */
@@ -402,10 +460,27 @@ type Step = {
   ask: (o: Onboarding, newId: () => string) => Part[]
 }
 
+/**
+ * A fact asked with a form. An optional one is done once it has been asked,
+ * by a card or by the planner in words, whatever the answer.
+ */
 const askFact = (key: Extract<StepId, FactValueKey>): Step => ({
   id: key,
-  done: (o) => has(o, key) || o.passed.includes(key),
+  done: (o) =>
+    has(o, key) ||
+    o.passed.includes(key) ||
+    (SKIPPABLE.includes(key) && (o.asked?.[key] ?? 0) > 0),
   ask: (o, newId) => [text(question(key, voiceOf(o))), factCard(o, key, newId)],
+})
+
+/** A few related facts on one card, done once every one is held. */
+const askDetails = (step: DetailsStep): Step => ({
+  id: step,
+  done: (o) => DETAILS_KEYS[step].every((key) => has(o, key)),
+  ask: (o, newId) => [
+    text(question(step, voiceOf(o))),
+    detailsCard(step, o, newId),
+  ],
 })
 
 /** A choice step, done once its fact exists or while `applies` says it is not asked. */
@@ -426,8 +501,12 @@ const building = (o: Onboarding) => mode(o) === "assistant"
 
 /**
  * The script, in order. Phase 1 the business, phase 2 the assistant, phase
- * 3 the website, phase 4 photos, phase 5 the build. "Skip" on the build
- * question takes the manual branch instead of phases 3 to 5.
+ * 3 the website and its quote form, phase 4 photos, phase 5 the build.
+ * "Skip" on the build question takes the manual branch instead of phases 3
+ * to 5. The opener asks what the business does in words, and the planner
+ * reads the answers to the open questions; the script asks the rest with a
+ * card, and asks the open ones with a form when the planner cannot run. The
+ * industry card comes only when the owner's words did not tell the planner.
  *
  * The photo step is the one step asked even when its fact exists, so the
  * build only ever follows a turn that wrote no fact: the orchestrator
@@ -435,18 +514,15 @@ const building = (o: Onboarding) => mode(o) === "assistant"
  * uncommitted writes.
  */
 export const STEPS: readonly Step[] = [
-  askFact("business.name"),
-  askChoice("industry", "business.industry"),
   askFact("business.offerings"),
-  askFact("business.audience"),
-  askFact("business.overview"),
   askFact("service_area.text"),
-  askFact("business.phone"),
-  askFact("business.email"),
-  askFact("business.tagline"),
-  askFact("assistant.name"),
-  askChoice("pronouns", "assistant.pronouns"),
-  askChoice("tone", "assistant.tone"),
+  askFact("business.audience"),
+  askFact("business.proof"),
+  askChoice("industry", "business.industry"),
+  // Sign-up states it; asked only when the name it gave did not parse.
+  askFact("business.name"),
+  askDetails("contact"),
+  askDetails("assistant"),
   askFact("owner.preferred_name"),
   askChoice("build_for_me", "site.build_mode"),
   {
@@ -465,28 +541,19 @@ export const STEPS: readonly Step[] = [
   askChoice("font", "site.font", building),
   askChoice("pages", "site.pages", building),
   {
-    id: "upload",
-    done: (o) => !building(o) || o.closed.includes("upload"),
-    ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
-  },
-  {
-    // The build waits for a quote form the owner reviewed or declined. With
-    // no model to draft one, the script offers a short form to confirm; the
-    // planner reads any changes the owner asks for.
+    // The build waits for a quote form the owner reviewed or declined. The
+    // question is asked in words and the planner proposes a form from the
+    // answer; with no model, a typed answer gets the script's short form to
+    // confirm (`defaultQuoteForm`).
     id: "quote_form",
     done: (o) =>
       !building(o) || has(o, "quote.form") || o.closed.includes("quote_form"),
-    ask: (o, newId) => [
-      text(quoteForm(voiceOf(o))),
-      call(
-        "tool-review_quote_form",
-        ReviewQuoteFormInput.parse({
-          fields: DEFAULT_QUOTE_FIELDS,
-          note: null,
-        }),
-        newId
-      ),
-    ],
+    ask: (o) => [text(question("quote_form", voiceOf(o)))],
+  },
+  {
+    id: "upload",
+    done: (o) => !building(o) || o.closed.includes("upload"),
+    ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
   },
   {
     id: "build",
@@ -498,19 +565,52 @@ export const STEPS: readonly Step[] = [
   },
 ]
 
+/** The script's quote form, for a typed answer no model could read: a short form to confirm. */
+export const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
+  text(quoteForm(voiceOf(o))),
+  call(
+    "tool-review_quote_form",
+    ReviewQuoteFormInput.parse({ fields: DEFAULT_QUOTE_FIELDS, note: null }),
+    newId
+  ),
+]
+
+/** The step the script is on, or undefined once nothing is left. */
+export const currentStep = (o: Onboarding) =>
+  STEPS.find((each) => !each.done(o))
+
 /** The parts of the next step, or the manual branch's closing line once nothing is left. */
 export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
-  const step = STEPS.find((each) => !each.done(o))
+  const step = currentStep(o)
   if (step) return step.ask(o, newId)
   return [text(manualEnd(voiceOf(o), o.builder === true))]
 }
 
-/** The first row a new org sees: the opener, then the first question. */
-export function opening(o: Onboarding, newId: () => string): Part[] {
-  const [lead, ...rest] = onboardingStep(o, newId)
-  return lead?.type === "text"
-    ? [text(`${opener(voiceOf(o))}\n\n${lead.text}`), ...rest]
-    : [text(opener(voiceOf(o))), ...(lead ? [lead] : []), ...rest]
+/**
+ * The first row a new org sees: the opener alone, text only, which asks
+ * what the business does in words. Its answer goes to the planner, or to the
+ * script's `openCard`.
+ */
+export const opening = (o: Onboarding): Part[] => [text(opener(voiceOf(o)))]
+
+/**
+ * The card a typed message answers when none is waiting: the step the
+ * script is on, when the opener or the planner asked it in words. A form's
+ * card for a fact; the script's short quote form for the quote question.
+ * Never stored: a retry shows it under a new id.
+ */
+export function openCard(
+  o: Onboarding,
+  newId: () => string
+): ToolPart | undefined {
+  const step = currentStep(o)
+  if (step?.id === "quote_form") {
+    return defaultQuoteForm(o, newId)[1] as ToolPart
+  }
+  const key = step?.id as FactValueKey | undefined
+  return key && FactValue.options.some((f) => f.shape.key.value === key)
+    ? factCard(o, key, newId)
+    : undefined
 }
 
 /** The build step's call, when these parts are it. */
@@ -544,9 +644,13 @@ export function built(
   ]
 }
 
-/** What an answer to a step means for the script. */
+/**
+ * What an answer to a step means for the script. `chose` names what the
+ * assistant picked for an owner who left it to them: those facts are
+ * `inferred`, and the next step says what was picked.
+ */
 export type Answer =
-  | { kind: "facts"; facts: FactValue[] }
+  | { kind: "facts"; facts: FactValue[]; chose?: string }
   | { kind: "passed"; step: StepId; builder?: boolean }
   | { kind: "retry"; reason: RetryReason }
 
@@ -579,12 +683,15 @@ export function stepOf(part: ToolPart): StepId | null {
   if (part.type === "tool-review_quote_form") return "quote_form"
   const input = part.input as { key?: StepId; step?: StepId } | null
   if (part.type === "tool-ask_fact") return input?.key ?? null
-  if (part.type === "tool-ask_choice") return input?.step ?? null
+  if (part.type === "tool-ask_choice" || part.type === "tool-ask_details") {
+    return input?.step ?? null
+  }
   return null
 }
 
 const CARDS: readonly ToolPart["type"][] = [
   "tool-ask_fact",
+  "tool-ask_details",
   "tool-ask_choice",
   "tool-ask_upload",
   "tool-review_quote_form",
@@ -595,10 +702,32 @@ export const isCard = (part: { type: string }) =>
 /** Each card's output schema, so a stored answer and a retry compare alike. */
 export const OUTPUTS = {
   "tool-ask_fact": AskFactOutput,
+  "tool-ask_details": AskDetailsOutput,
   "tool-ask_choice": AskChoiceOutput,
   "tool-ask_upload": AskUploadOutput,
   "tool-review_quote_form": ReviewQuoteFormOutput,
 } as const
+
+/**
+ * The facts a details card states: only the step's own keys, each once,
+ * every value a `FactValue`. Null to refuse the answer.
+ */
+function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
+  const answer = AskDetailsOutput.safeParse(output)
+  if (!answer.success) return null
+  if (answer.data.answer === "skipped") {
+    return input.skippable ? { kind: "passed", step: input.step } : null
+  }
+  const keys = answer.data.facts.map((f) => f.key as string)
+  const allowed = DETAILS_KEYS[input.step] as readonly string[]
+  if (
+    new Set(keys).size !== keys.length ||
+    !keys.every((key) => allowed.includes(key))
+  ) {
+    return null
+  }
+  return { kind: "facts", facts: answer.data.facts }
+}
 
 /**
  * The contact details the starter's quote form always asks, by the key or
@@ -719,6 +848,10 @@ export function cardAnswer(
 ): Answer | null {
   const step = stepOf(part)
   if (!step) return null
+  if (part.type === "tool-ask_details") {
+    const input = AskDetailsInput.safeParse(part.input)
+    return input.success ? detailsAnswer(input.data, output) : null
+  }
   if (part.type === "tool-ask_fact") {
     const answer = AskFactOutput.safeParse(output)
     const { key } = part.input as AskFactInput
@@ -792,9 +925,8 @@ const e164 = (words: string) =>
 /** The field each text-asked fact keeps its words in. */
 const FIELD: Partial<Record<FactValueKey, string>> = {
   "business.name": "name",
-  "business.tagline": "tagline",
   "business.audience": "text",
-  "business.overview": "text",
+  "business.proof": "text",
   "service_area.text": "text",
   "assistant.name": "name",
   "owner.preferred_name": "name",
@@ -860,17 +992,42 @@ function typedChoice(input: AskChoiceInput, words: string): Answer {
   return { kind: "retry", reason: words.length > 200 ? "long" : "unclear" }
 }
 
+/** An email address and a number in E.164 typed over the contact card, as far as plain matching finds them. */
+function typedContact(words: string): Answer {
+  const facts = [
+    FactValue.safeParse({
+      key: "business.email",
+      value: { address: words.match(/[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+/)?.[0] },
+    }),
+    FactValue.safeParse({
+      key: "business.phone",
+      value: { e164: e164(words.match(/\+?[\d\s().-]{7,}\d/)?.[0] ?? "") },
+    }),
+  ].flatMap((f) => (f.success ? [f.data] : []))
+  if (facts.length > 0) return { kind: "facts", facts }
+  // A number with no country code is the likeliest miss, so say so.
+  return {
+    kind: "retry",
+    reason: /\d{6}/.test(words.replace(/\D/g, "")) ? "phone" : "details",
+  }
+}
+
 /**
  * What a typed reply means for the card it overtook. Text asks take the
  * words as the value; choice cards match an option or take the owner's own
- * words when the card has an Other; the photo card takes a skip. Anything
- * else asks again, with a line that says what was missing.
+ * words when the card has an Other; the photo card takes a skip; the contact
+ * card takes an email and a full number. Anything else asks again, with a
+ * line that says what was missing. The planner reads the owner's words
+ * first whenever it can; this is the script's reading without a model.
  */
 export function typedAnswer(part: ToolPart, words: string): Answer {
   const step = stepOf(part)
   // Without a model nothing can read a proposal's changes from words.
-  if (!step || step === "quote_form")
-    return { kind: "retry", reason: "unclear" }
+  if (step === "quote_form") return { kind: "retry", reason: "quote" }
+  if (step === "contact") return typedContact(words)
+  if (!step || step === "assistant") {
+    return { kind: "retry", reason: step ? "details" : "unclear" }
+  }
   if (part.type === "tool-ask_upload") {
     return saysSkip(words)
       ? { kind: "passed", step }
@@ -895,7 +1052,109 @@ export function again(
   o: Onboarding,
   newId: () => string
 ): Part[] {
-  return [text(retry(reason, voiceOf(o))), call(part.type, part.input, newId)]
+  const why =
+    reason === "quote" ? quoteForm(voiceOf(o)) : retry(reason, voiceOf(o))
+  return [text(why), call(part.type, part.input, newId)]
+}
+
+/** The names the assistant may take when the owner leaves it to them. */
+const NAMES = ["Ava", "Sam", "Max", "Mia", "Leo", "Isla"]
+
+/**
+ * The facts the assistant picks for a card the owner left to it ("you
+ * pick"), and what it says it picked, or null when the card is not the
+ * assistant's to answer: what the business does, its contact details and
+ * whether to build are always the owner's.
+ */
+export function pickFor(part: ToolPart, o: Onboarding): Answer | null {
+  const step = stepOf(part)
+  const name = NAMES[hash(`${o.orgId}|name`) % NAMES.length] as string
+  const palette = firstPalettes(o.orgId)[0] as PaletteId
+  const font = FONTS[0]?.id
+  // Each pick, and how the assistant names it to the owner.
+  const picks: Partial<Record<StepId, [FactValue, string][]>> = {
+    assistant: [
+      [{ key: "assistant.name", value: { name } }, `the name ${name}`],
+      [{ key: "assistant.pronouns", value: { id: "they_them" } }, "they/them"],
+      [{ key: "assistant.tone", value: { id: "friendly" } }, "a friendly tone"],
+    ],
+    template: [
+      [
+        { key: "site.template", value: { id: "classic" } },
+        `the ${label(TEMPLATES, "classic")} layout`,
+      ],
+    ],
+    palette: [
+      [
+        { key: "site.palette", value: { id: palette } },
+        `the ${label(PALETTES, palette)} colours`,
+      ],
+    ],
+    font: font
+      ? [
+          [
+            { key: "site.font", value: { id: font } },
+            `${label(FONTS, font)} lettering`,
+          ],
+        ]
+      : [],
+    pages: [
+      [
+        {
+          key: "site.pages",
+          value: {
+            ids: PAGES.map((p) => p.id).filter((p) =>
+              DEFAULT_PAGES.includes(p)
+            ),
+          },
+        },
+        "the usual pages",
+      ],
+    ],
+  }
+  // Only what the owner has not said: a name they typed stays theirs.
+  const left = ((step && picks[step]) || []).filter(([f]) => !has(o, f.key))
+  if (left.length === 0) return null
+  const named = left.map(([, said]) => said)
+  return {
+    kind: "facts",
+    facts: left.map(([f]) => f),
+    chose:
+      named.length > 1
+        ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
+        : (named[0] as string),
+  }
+}
+
+/**
+ * What a confident Jev decision on a typed reply means for its card: the
+ * option it named, or the assistant's pick when the owner left it to them.
+ * Null when code cannot answer it, so the planner reads the words.
+ */
+export function decided(
+  part: ToolPart,
+  decision: JevDecision,
+  o: Onboarding
+): Answer | null {
+  if (decision.kind === "defer") return pickFor(part, o)
+  const input = AskChoiceInput.safeParse(part.input)
+  return part.type === "tool-ask_choice" && input.success
+    ? chosen(input.data, [decision.option], null)
+    : null
+}
+
+/** The next step's parts, after a line saying what the assistant picked, when it picked. */
+export function withChoice(
+  answer: Answer | undefined,
+  o: Onboarding,
+  step: Part[]
+): Part[] {
+  if (answer?.kind !== "facts" || !answer.chose) return step
+  const line = chose(voiceOf(o), answer.chose)
+  const [lead, ...rest] = step
+  return lead?.type === "text"
+    ? [text(`${line}\n\n${lead.text}`), ...rest]
+    : [text(line), ...step]
 }
 
 /** One card of the conversation, as `readScript` reads it. */

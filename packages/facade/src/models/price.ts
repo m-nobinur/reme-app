@@ -79,6 +79,7 @@ export const HOST_ROUTING = {
  */
 const MIN_LIVE_PROVIDERS: Record<string, number> = {
   "deepseek/deepseek-v4.1-flash": 3,
+  "anthropic/claude-sonnet-5.5": 3,
 }
 
 /** Dollars per million, rounded as OpenRouter's own figures are. */
@@ -126,7 +127,7 @@ const longContextTiers = (pricing: Pricing | undefined) => {
       input: capped("prompt"),
       output: capped("completion"),
       cacheRead: capped("input_cache_read"),
-      cacheWrite: 0,
+      cacheWrite: capped("input_cache_write"),
     }
   })
 }
@@ -142,8 +143,10 @@ const longContextTiers = (pricing: Pricing | undefined) => {
  * logged at what OpenRouter billed (`billed` in `transport.ts`); the cap
  * prices only a call OpenRouter reports no cost for, and the CoS's
  * reservations, so both err high rather than low (§29.2).
- * Cache reads are not capped by routing, so theirs is the dearest any
- * admitted provider charges. The context and output limits are the smallest
+ * Cache reads and writes are not capped by routing, so theirs are the
+ * dearest any admitted provider charges; pi-ai takes written tokens out of
+ * the input and prices them at `cacheWrite`, so a zero there would price an
+ * Anthropic call's prompt under what it bills. The context and output limits are the smallest
  * any admitted provider serves, so a request fits whichever one is picked.
  */
 export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
@@ -189,7 +192,12 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
           blocks(e.pricing).map(rate("input_cache_read"))
         )
       ),
-      cacheWrite: 0,
+      cacheWrite: Math.max(
+        0,
+        ...admitted.flatMap((e) =>
+          blocks(e.pricing).map(rate("input_cache_write"))
+        )
+      ),
       ...(tiers.length > 0 ? { tiers } : {}),
     },
     contextWindow:

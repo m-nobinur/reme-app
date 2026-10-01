@@ -391,10 +391,13 @@ describe("another org's conversation is 404 and never written to", () => {
     const theirId = onboarding?.id as string
     const before = await history(theirs, theirId)
     const tail = before.at(-1)
-    // The card, wherever it sits: the opener's text comes before it.
-    const call = tail?.content.parts.find((p) =>
+    // The card, wherever it sits, or an id of the right shape: the opener
+    // asks in words, and the refusal comes before any call is looked up.
+    const call = (tail?.content.parts.find((p) =>
       p.type.startsWith("tool-")
-    ) as unknown as { toolCallId: string }
+    ) as unknown as { toolCallId: string } | undefined) ?? {
+      toolCallId: "call_cross",
+    }
     for (const turn of [
       { kind: "message", message_id: "u_cross", text: "Build it" },
       {

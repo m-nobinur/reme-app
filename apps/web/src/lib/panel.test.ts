@@ -186,7 +186,7 @@ describe("getting started", () => {
       input({ route: ROUTES.website, conversations: [onboardingChat] })
     )
     expect(panel?.headline[1]).toBe(
-      "Reme has the details it needs. Finish getting started and it builds the site."
+      "Reme has every detail it needs. Finish getting started to build the site."
     )
     expect(panel?.line.detail).toBe("your details are in")
   })
@@ -195,7 +195,7 @@ describe("getting started", () => {
     const panel = panelFor(input())
     expect(panel?.headline).toEqual([
       "Fixture Clean has no website yet.",
-      "Ask Reme in a chat and it builds one for you to review.",
+      "Ask Reme in a chat to build one for you to review.",
     ])
     expect(panel?.suggestions).toEqual([{ kind: "start-website" }])
     expect(panel?.line.lead).toBe("Let's get your website started")
@@ -237,6 +237,19 @@ describe("in a chat", () => {
     expect(chat({ builds: [build("release_candidate", 4)] })?.headline).toEqual(
       ["Reme is publishing version 4 now."]
     )
+  })
+
+  it("calls the assistant by the name the owner gave it", () => {
+    const named = { assistantName: "Ava" }
+    expect(
+      chat({ ...named, builds: [build("validating", 4)] })?.headline[0]
+    ).toBe("Ava is building version 4 while you chat.")
+    expect(chat(named)?.headline[1]).toBe(
+      "Ask Ava to change a page, check what needs you, or set a reminder."
+    )
+    expect(
+      panelFor(input({ workspace: workspace(named), business: null }))?.headline
+    ).toEqual(["Name your business and Ava can start on its website."])
   })
 
   it("puts a review first, and leaves changes to the review's own button", () => {

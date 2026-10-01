@@ -70,6 +70,9 @@ const facts = {
   "business.overview": {
     text: "Six cars, eight chauffeurs, bookings by phone or email",
   },
+  "business.proof": {
+    text: "Trading since 2009, fully insured, every driver DBS checked",
+  },
   "service_area.text": { text: "Greater Fairhaven and the airports" },
   "assistant.name": { name: "Sam" },
   "assistant.pronouns": { id: "she_her" },
@@ -378,6 +381,7 @@ describe("the bridge's building blocks", () => {
       "business.offerings",
       "business.audience",
       "business.overview",
+      "business.proof",
       "service_area.text",
       "assistant.name",
       "assistant.pronouns",

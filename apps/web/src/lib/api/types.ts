@@ -109,6 +109,8 @@ export type Workspace = {
   host: string | null
   /** The required facts still to ask for. */
   missingFacts: FactValueKey[]
+  /** The name the owner gave their assistant, or null before they chose one. */
+  assistantName: string | null
   /** What the api derived from rows waiting on the owner, as facts. */
   derivedReminders: DerivedReminder[]
   /** Open reminders someone wrote down, soonest due first, undated after. */

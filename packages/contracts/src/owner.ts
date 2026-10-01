@@ -70,6 +70,12 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("business.offerings", { items: z.array(Text(120)).min(1).max(12) }),
   fact("business.audience", { text: Text(500) }),
   fact("business.overview", { text: Text(800) }),
+  /**
+   * What sets the business apart, in the owner's words: years trading,
+   * accreditations, insurance, guarantees, awards, reviews they can quote.
+   * The site states only what this holds.
+   */
+  fact("business.proof", { text: Text(600) }),
   fact("service_area.text", { text: Text(200) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),
@@ -323,6 +329,8 @@ export const WorkspaceStatus = z.strictObject({
   attention: z.array(AttentionItem),
   /** The required facts still to ask for. */
   missing_facts: z.array(FactValueKey),
+  /** The name the owner gave their assistant, or null before they chose one. */
+  assistant_name: Text(40).nullable(),
   reminders: z.strictObject({
     /** Open ones only: soonest due first, undated after, then newest first. */
     notes: z.array(Reminder).max(REMINDER_NOTES_MAX),

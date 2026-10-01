@@ -1,6 +1,8 @@
 import type {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDetailsInput,
+  AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
   AskUploadInput,
@@ -25,6 +27,7 @@ export type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
 } & {
   ask_fact: { input: AskFactInput; output: AskFactOutput }
+  ask_details: { input: AskDetailsInput; output: AskDetailsOutput }
   ask_choice: { input: AskChoiceInput; output: AskChoiceOutput }
   ask_upload: { input: AskUploadInput; output: AskUploadOutput }
   review_quote_form: {

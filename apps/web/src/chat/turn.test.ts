@@ -149,6 +149,24 @@ const choice = (state: string, extra: object = {}) =>
     ...extra,
   }) as unknown as Part
 
+const details = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-ask_details",
+    toolCallId: "call_assistant",
+    state,
+    input: { step: "assistant", prefill: [], skippable: true },
+    ...extra,
+  }) as unknown as Part
+
+const NAMED = {
+  answer: "stated",
+  facts: [
+    { key: "assistant.name", value: { name: "Ava" } },
+    { key: "assistant.pronouns", value: { id: "she_her" } },
+    { key: "assistant.tone", value: { id: "friendly" } },
+  ],
+}
+
 const photos = (state: string, extra: object = {}) =>
   ({
     type: "tool-ask_upload",
@@ -637,4 +655,31 @@ it("the route's own 401 says the session ended, and its 413 says why", async () 
   await expect(chatFetch("/api/chat")).rejects.toThrow(
     "This message is too long to send."
   )
+})
+
+it("a details card sends the facts it resolves, and reads back as the owner's words", () => {
+  const open = [assistant(details("input-available"))]
+  const reply = replyTo(open, { toolCallId: "call_assistant", output: NAMED })
+  expect(reply).toEqual({
+    role: "user",
+    parts: [{ type: "text", text: "Ava, she/her, Friendly" }],
+    metadata: { reply: true },
+  })
+  const sent = [
+    assistant(details("output-available", { output: NAMED })),
+    { ...(reply as ChatMessage), id: "msg_reply" },
+  ]
+  expect(sendsOn({ messages: sent.slice(0, 1) })).toBe(false)
+  expect(ChatRequest.parse(chatTurn(CONVERSATION, "act", sent)).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [
+      { kind: "answer", tool_call_id: "call_assistant", output: NAMED },
+    ],
+    reply: { message_id: "msg_reply", text: "Ava, she/her, Friendly" },
+  })
+  expect(
+    replyText(details("output-available", { output: { answer: "skipped" } }))
+  ).toBe(SKIPPED)
+  expect(replyText(details("input-available"))).toBeNull()
 })

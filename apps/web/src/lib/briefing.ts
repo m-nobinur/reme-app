@@ -40,6 +40,10 @@ function due(at: string, now: Date): string {
   return `${when} at ${clock(date)}`
 }
 
+/** What the owner calls their assistant: the name they gave it, else Reme. */
+export const assistantOf = (workspace: Workspace | null) =>
+  workspace?.assistantName ?? "Reme"
+
 export function briefingOf(
   org: OrgSummary | null,
   workspace: Workspace | null,
@@ -100,7 +104,7 @@ export function briefingOf(
   } else if (unpublished) {
     next = `Version ${unpublished.version} is ready but not published.`
   } else if (facts) {
-    next = `Reme still needs ${factsNeeded(facts.keys)}.`
+    next = `${assistantOf(workspace)} still needs ${factsNeeded(facts.keys)}.`
   } else if (building && live) {
     next = "A change is being built."
   }
@@ -168,7 +172,7 @@ export const askerOf = (item: AttentionItem, names: Record<string, string>) =>
   (item.raisedById && names[item.raisedById]) || item.raisedBy
 
 /**
- * The panel's opening lines, two at most: what Reme is doing, then what the
+ * The panel's opening lines, two at most: what the assistant is doing, then what the
  * owner should do next. With nothing to do it says so in one line. `now` is
  * null while the reader's clock is unknown (the server's render): nothing is
  * said about today then, so the server's HTML and the first browser render
@@ -198,6 +202,7 @@ export function digestOf(
   const facts = derivedReminders.find(
     (reminder) => reminder.rule === "facts_missing"
   )
+  const assistant = assistantOf(workspace)
 
   // What waits on the owner, most pressing first, with how many items each covers.
   const needs: { text: string; count: number }[] = []
@@ -233,13 +238,16 @@ export function digestOf(
     })
   } else if (facts) {
     // A question is usually the build asking for the same fact.
-    needs.push({ text: `Reme needs ${factsNeeded(facts.keys)}.`, count: 1 })
+    needs.push({
+      text: `${assistant} needs ${factsNeeded(facts.keys)}.`,
+      count: 1,
+    })
   }
 
   const doing = building
     ? live
-      ? "Reme is updating your website."
-      : "Reme is building your website."
+      ? `${assistant} is updating your website.`
+      : `${assistant} is building your website.`
     : null
   const total = needs.reduce((sum, need) => sum + need.count, 0)
   const count = (n: number, more = "") =>
@@ -262,7 +270,7 @@ export function digestOf(
     ? `Your site is live on version ${live}.`
     : open
       ? "Your website is under way."
-      : "Tell Reme about your business to start your website."
+      : `Tell ${assistant} about your business to start your website.`
   if (!live && !open) return [site]
   // A dated reminder may fall today, which only the browser can say.
   return !now && dated.length ? [site] : [`All caught up. ${site}`]

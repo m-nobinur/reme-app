@@ -16,7 +16,7 @@ export const PERSONAS = [
   {
     id: "limousine",
     signIn: { orgName: "Regal Rides", ownerName: "David Okafor" },
-    sheet: `You run Regal Rides, a limousine and chauffeur hire firm in Manchester, UK, with 4 stretch limos and 2 executive saloons. Services: wedding cars, prom limos, airport transfers, corporate travel, nights out. Customers: couples getting married, school proms, businesses. A job: they enquire, you check the date and vehicle, send a quote, take a deposit, the chauffeur turns up 15 minutes early. You cover Greater Manchester and Cheshire. Phone 0161 496 0000 is NOT yours; yours is 07700 900 412. Email bookings@regalrides.invalid. Slogan: "Arrive in style". You want the assistant called Jeeves, he/him, professional. Call you Dave. To quote you need pick-up, drop-off, date and time, how many passengers, which car and the occasion.`,
+    sheet: `You run Regal Rides, a limousine and chauffeur hire firm in Manchester, UK, with 4 stretch limos and 2 executive saloons. Services: wedding cars, prom limos, airport transfers, corporate travel, nights out. Customers: couples getting married, school proms, businesses. A job: they enquire, you check the date and vehicle, send a quote, take a deposit, the chauffeur turns up 15 minutes early. You cover Greater Manchester and Cheshire. Phone 0161 496 0000 is NOT yours; yours is 07700 900 412. Email bookings@regalrides.invalid. Slogan: "Arrive in style". You want the assistant called Jeeves, he/him, professional. Call you Dave. To quote you need pick-up, drop-off, date and time, how many passengers, which car and the occasion. What sets you apart: 12 years trading, fully licensed and insured, and every chauffeur is DBS checked.`,
     style:
       "Chatty and warm, long sentences, British spelling. Answers two questions at once when he can.",
     truth: {
@@ -49,7 +49,7 @@ export const PERSONAS = [
   {
     id: "family-lawyer",
     signIn: { orgName: "Hartley Family Law", ownerName: "Priya Hartley" },
-    sheet: `You are Priya Hartley, a family solicitor running Hartley Family Law in Leeds, UK. Services: divorce and separation, child arrangements, financial settlements, prenuptial agreements, mediation. Clients: parents and couples going through separation, often stressed. A case: free 20 minute call, then a fixed first consultation, then you advise and represent. You cover Leeds, Bradford and Wakefield, and video calls anywhere in England. Phone 0113 496 0555. Email priya@hartleylaw.invalid. No slogan. Assistant: call it Clara, she/her, professional. Call you Priya. To quote you need the type of matter, whether children are involved, whether the other party has a solicitor, and how urgent it is.`,
+    sheet: `You are Priya Hartley, a family solicitor running Hartley Family Law in Leeds, UK. Services: divorce and separation, child arrangements, financial settlements, prenuptial agreements, mediation. Clients: parents and couples going through separation, often stressed. A case: free 20 minute call, then a fixed first consultation, then you advise and represent. You cover Leeds, Bradford and Wakefield, and video calls anywhere in England. Phone 0113 496 0555. Email priya@hartleylaw.invalid. No slogan. Assistant: call it Clara, she/her, professional. Call you Priya. To quote you need the type of matter, whether children are involved, whether the other party has a solicitor, and how urgent it is. What sets you apart: 15 years in family law, a member of Resolution, and fixed-fee first consultations.`,
     style:
       "Precise and a little formal, full sentences, somewhat sceptical of AI.",
     truth: {
@@ -83,7 +83,7 @@ export const PERSONAS = [
   {
     id: "dog-groomer",
     signIn: { orgName: "Suds on Wheels", ownerName: "Jess Moran" },
-    sheet: `You are Jess, you run Suds on Wheels, a mobile dog grooming van in Bristol, UK. Services: full groom, bath and brush, nail clipping, puppy intro grooms, de-shedding. Customers: busy dog owners and elderly owners who can't travel. A job: book online or by text, you park outside, groom in the van in about 90 minutes, dog goes back fresh. Area: Bristol and 10 miles around. Phone 07700 900 733. Email jess@sudsonwheels.invalid. Slogan: "Pampered pooches at your door". You have no idea what to call the assistant and tell it to choose. Call you Jess. To quote you need the breed, size, coat condition and whether they are nervous.`,
+    sheet: `You are Jess, you run Suds on Wheels, a mobile dog grooming van in Bristol, UK. Services: full groom, bath and brush, nail clipping, puppy intro grooms, de-shedding. Customers: busy dog owners and elderly owners who can't travel. A job: book online or by text, you park outside, groom in the van in about 90 minutes, dog goes back fresh. Area: Bristol and 10 miles around. Phone 07700 900 733. Email jess@sudsonwheels.invalid. Slogan: "Pampered pooches at your door". You have no idea what to call the assistant and tell it to choose. Call you Jess. To quote you need the breed, size, coat condition and whether they are nervous. What sets you apart: City & Guilds qualified, fully insured, and dogs are groomed one at a time with no cages.`,
     style:
       "Very terse, lowercase, typos, no punctuation. Types things like 'yeh' and 'dunno'.",
     truth: {
@@ -108,7 +108,7 @@ export const PERSONAS = [
   {
     id: "funeral-director",
     signIn: { orgName: "Whitmore & Sons", ownerName: "Graham Whitmore" },
-    sheet: `You are Graham Whitmore of Whitmore & Sons Funeral Directors, a family firm since 1952 in Norwich, UK. Services: traditional funerals, direct cremation, green burials, pre-paid funeral plans, repatriation. Customers: bereaved families, people planning ahead. A job: the family calls any time day or night, you collect the deceased, meet the family to arrange everything, conduct the funeral. Area: Norwich and Norfolk. Phone 01632 960 321. Email care@whitmorefunerals.invalid. Slogan: "Caring for Norfolk families since 1952". Assistant: Grace, she/her, professional, gentle. Call you Mr Whitmore. To quote you need the type of service, burial or cremation, the date wanted, and the number of mourners.`,
+    sheet: `You are Graham Whitmore of Whitmore & Sons Funeral Directors, a family firm since 1952 in Norwich, UK. Services: traditional funerals, direct cremation, green burials, pre-paid funeral plans, repatriation. Customers: bereaved families, people planning ahead. A job: the family calls any time day or night, you collect the deceased, meet the family to arrange everything, conduct the funeral. Area: Norwich and Norfolk. Phone 01632 960 321. Email care@whitmorefunerals.invalid. Slogan: "Caring for Norfolk families since 1952". Assistant: Grace, she/her, professional, gentle. Call you Mr Whitmore. To quote you need the type of service, burial or cremation, the date wanted, and the number of mourners. What sets you apart: a family firm since 1952 and a member of the National Association of Funeral Directors.`,
     style: "Gentle, measured, old-fashioned, polite.",
     truth: {
       name: /whitmore/i,
@@ -139,7 +139,7 @@ export const PERSONAS = [
   {
     id: "tattoo-studio",
     signIn: { orgName: "Black Lotus Tattoo", ownerName: "Kai Brennan" },
-    sheet: `You are Kai, you run Black Lotus Tattoo in Brighton, UK, a custom tattoo studio with 3 artists. Services: custom tattoos, fine line, blackwork, cover-ups, piercings. Customers: 18 to 40s, lots of first-timers and collectors. A job: consultation, design sent for approval, deposit, session. Area: walk-ins in Brighton, clients travel from across the south east. Phone 07700 900 950. Email ink@blacklotus.invalid. No slogan. Assistant name Raven, they/them, casual. Call you Kai. To quote you need the placement, the size in cm, colour or black and grey, and a description or reference.`,
+    sheet: `You are Kai, you run Black Lotus Tattoo in Brighton, UK, a custom tattoo studio with 3 artists. Services: custom tattoos, fine line, blackwork, cover-ups, piercings. Customers: 18 to 40s, lots of first-timers and collectors. A job: consultation, design sent for approval, deposit, session. Area: walk-ins in Brighton, clients travel from across the south east. Phone 07700 900 950. Email ink@blacklotus.invalid. No slogan. Assistant name Raven, they/them, casual. Call you Kai. To quote you need the placement, the size in cm, colour or black and grey, and a description or reference. What sets you apart: council licensed, a sterile single-use studio, and award-winning artists at Brighton Tattoo Convention.`,
     style: "Casual, short, a bit sarcastic.",
     truth: {
       name: /black lotus/i,
@@ -172,7 +172,7 @@ export const PERSONAS = [
   {
     id: "cleaner",
     signIn: { orgName: "Sparkle & Shine", ownerName: "Maria Lopes" },
-    sheet: `You are Maria, you run Sparkle & Shine, a domestic cleaning company in Reading, UK, with 6 cleaners. Services: weekly and fortnightly cleans, deep cleans, end of tenancy cleans, oven cleaning. Customers: busy professionals and families, landlords. A job: free home visit, agree a schedule, same cleaner every time. Area: Reading, Wokingham and Bracknell. Phone 0118 496 0777. Email hello@sparkleshine.invalid. Slogan: "Your home, our passion". Assistant: Mia, she/her, friendly. Call you Maria. To quote you need the number of bedrooms and bathrooms, how often, and whether there are pets.`,
+    sheet: `You are Maria, you run Sparkle & Shine, a domestic cleaning company in Reading, UK, with 6 cleaners. Services: weekly and fortnightly cleans, deep cleans, end of tenancy cleans, oven cleaning. Customers: busy professionals and families, landlords. A job: free home visit, agree a schedule, same cleaner every time. Area: Reading, Wokingham and Bracknell. Phone 0118 496 0777. Email hello@sparkleshine.invalid. Slogan: "Your home, our passion". Assistant: Mia, she/her, friendly. Call you Maria. To quote you need the number of bedrooms and bathrooms, how often, and whether there are pets. What sets you apart: all cleaners are vetted and insured, and if something is missed you come back within 24 hours.`,
     style: "Friendly, normal sentences.",
     truth: {
       name: /sparkle/i,
@@ -201,7 +201,7 @@ export const PERSONAS = [
   {
     id: "drone-photographer",
     signIn: { orgName: "SkyFrame Aerial", ownerName: "Tom Adeyemi" },
-    sheet: `You are Tom, you run SkyFrame Aerial, drone photography and video in Cardiff, Wales, UK. CAA licensed. Services: property and estate agent aerials, roof and building inspections, weddings and events, construction progress. Customers: estate agents, builders, couples, surveyors. A job: check the airspace and permissions, fly on the day, edit and deliver within 48 hours. Area: South Wales and the South West of England. Phone 029 2018 0123 (a Cardiff landline). Email tom@skyframe.invalid. No slogan. Assistant name Ava, she/her, friendly. Call you Tom. To quote you need the location or postcode, what it's for, photos or video or both, and the date.`,
+    sheet: `You are Tom, you run SkyFrame Aerial, drone photography and video in Cardiff, Wales, UK. CAA licensed. Services: property and estate agent aerials, roof and building inspections, weddings and events, construction progress. Customers: estate agents, builders, couples, surveyors. A job: check the airspace and permissions, fly on the day, edit and deliver within 48 hours. Area: South Wales and the South West of England. Phone 029 2018 0123 (a Cardiff landline). Email tom@skyframe.invalid. No slogan. Assistant name Ava, she/her, friendly. Call you Tom. To quote you need the location or postcode, what it's for, photos or video or both, and the date. What sets you apart: CAA licensed and fully insured for commercial flights.`,
     style: "Enthusiastic, uses exclamation marks, asks questions back.",
     truth: {
       name: /skyframe/i,
@@ -235,7 +235,7 @@ export const PERSONAS = [
   {
     id: "cafe",
     signIn: { orgName: "The Little Bean", ownerName: "Sophie Clarke" },
-    sheet: `You are Sophie, you run The Little Bean, an independent café in York, UK. Services: breakfast, lunch, homemade cakes, speciality coffee, private hire for parties and outside catering for offices. Customers: locals, students, tourists, office workers. A job for catering or hire: they message, you agree a menu and numbers, deliver or host. Area: café in York city centre, catering within York. Phone 01632 960 222. Email hello@littlebean.invalid. Slogan: "Good coffee, better company". Assistant: Bean, he/him, casual. Call you Soph. To quote catering or hire you need the date, the number of guests, dietary needs and delivery or collection.`,
+    sheet: `You are Sophie, you run The Little Bean, an independent café in York, UK. Services: breakfast, lunch, homemade cakes, speciality coffee, private hire for parties and outside catering for offices. Customers: locals, students, tourists, office workers. A job for catering or hire: they message, you agree a menu and numbers, deliver or host. Area: café in York city centre, catering within York. Phone 01632 960 222. Email hello@littlebean.invalid. Slogan: "Good coffee, better company". Assistant: Bean, he/him, casual. Call you Soph. To quote catering or hire you need the date, the number of guests, dietary needs and delivery or collection. What sets you apart: rated 5 for food hygiene, and the coffee is roasted in York.`,
     style: "Bubbly, short messages, emojis sometimes.",
     truth: {
       name: /little bean/i,
@@ -266,7 +266,7 @@ export const PERSONAS = [
   {
     id: "wedding-florist",
     signIn: { orgName: "Petal & Stem", ownerName: "Amara Nwosu" },
-    sheet: `You are Amara, you run Petal & Stem, a wedding and event florist in Bath, UK. Services: bridal bouquets, buttonholes, ceremony arches, table centrepieces, funeral tributes. Customers: engaged couples, venues, event planners. A job: consultation, mood board, proposal, then flowers delivered and set up on the day. Area: Bath, Bristol and the Cotswolds. Phone +44 7700 900 616. Email amara@petalandstem.invalid. Slogan: "Flowers that tell your story". Assistant: Flora, she/her, friendly. Call you Amara. To quote you need the wedding date, the venue, the number of guests, the colour scheme and which pieces they want.`,
+    sheet: `You are Amara, you run Petal & Stem, a wedding and event florist in Bath, UK. Services: bridal bouquets, buttonholes, ceremony arches, table centrepieces, funeral tributes. Customers: engaged couples, venues, event planners. A job: consultation, mood board, proposal, then flowers delivered and set up on the day. Area: Bath, Bristol and the Cotswolds. Phone +44 7700 900 616. Email amara@petalandstem.invalid. Slogan: "Flowers that tell your story". Assistant: Flora, she/her, friendly. Call you Amara. To quote you need the wedding date, the venue, the number of guests, the colour scheme and which pieces they want. What sets you apart: 8 years doing weddings and featured in a regional bridal magazine.`,
     style: "Warm and wordy, answers several things at once.",
     truth: {
       name: /petal/i,
@@ -293,7 +293,7 @@ export const PERSONAS = [
   {
     id: "plumber",
     signIn: { orgName: "Fixright Plumbing", ownerName: "Steve Doyle" },
-    sheet: `You are Steve, a one-man plumber and heating engineer, Fixright Plumbing, in Derby, UK. Gas Safe registered. Services: boiler servicing and repairs, boiler installs, leaks, bathroom fitting, emergency callouts. Customers: homeowners, landlords, letting agents. A job: they call, you ask what's wrong, visit, quote, fix. Area: Derby and 15 miles. Phone 07700 900 188. Email steve@fixright.invalid. No slogan. Assistant: whatever, you choose. he/him is fine. Tone professional. Call you Steve. To quote you need what the problem is, the boiler make if it's heating, how urgent, and the postcode.`,
+    sheet: `You are Steve, a one-man plumber and heating engineer, Fixright Plumbing, in Derby, UK. Gas Safe registered. Services: boiler servicing and repairs, boiler installs, leaks, bathroom fitting, emergency callouts. Customers: homeowners, landlords, letting agents. A job: they call, you ask what's wrong, visit, quote, fix. Area: Derby and 15 miles. Phone 07700 900 188. Email steve@fixright.invalid. No slogan. Assistant: whatever, you choose. he/him is fine. Tone professional. Call you Steve. To quote you need what the problem is, the boiler make if it's heating, how urgent, and the postcode. What sets you apart: Gas Safe registered, 20 years' experience, and a 12 month guarantee on all work.`,
     style: "Blunt, busy, few words, sometimes answers the wrong question.",
     truth: {
       name: /fixright/i,
@@ -324,7 +324,7 @@ export const PERSONAS = [
   {
     id: "tutor",
     signIn: { orgName: "Bright Minds Tutoring", ownerName: "Dr Helen Park" },
-    sheet: `You are Helen, a maths and physics tutor, Bright Minds Tutoring, based in Toronto, Canada, teaching online and in person. Services: GCSE-equivalent and high school maths, physics, university entrance prep, group revision classes. Customers: parents of 13 to 18 year olds, some adult learners. A job: free trial lesson, agree a weekly slot, progress report each month. Area: Toronto in person, online anywhere in Canada. Phone (416) 555-0147. Email helen@brightminds.invalid. Slogan: "Confidence through understanding". Assistant: Newton, he/him, friendly. Call you Helen. To quote you need the subject, the student's grade, online or in person, and how many lessons a week.`,
+    sheet: `You are Helen, a maths and physics tutor, Bright Minds Tutoring, based in Toronto, Canada, teaching online and in person. Services: GCSE-equivalent and high school maths, physics, university entrance prep, group revision classes. Customers: parents of 13 to 18 year olds, some adult learners. A job: free trial lesson, agree a weekly slot, progress report each month. Area: Toronto in person, online anywhere in Canada. Phone (416) 555-0147. Email helen@brightminds.invalid. Slogan: "Confidence through understanding". Assistant: Newton, he/him, friendly. Call you Helen. To quote you need the subject, the student's grade, online or in person, and how many lessons a week. What sets you apart: a qualified teacher with 10 years in the classroom.`,
     style: "Clear and organised, North American spelling.",
     truth: {
       name: /bright minds/i,
@@ -356,7 +356,7 @@ export const PERSONAS = [
   {
     id: "almost-nothing",
     signIn: { orgName: "JB Services", ownerName: "" },
-    sheet: `You are JB, you do odd jobs and handyman work around Swindon, UK: flat-pack assembly, shelves, small repairs, garden tidying. Customers: anyone. How a job goes: they text you, you go and do it. Area: Swindon. Phone 07700 900 555. Email jb@jbservices.invalid. No slogan, no idea about names, doesn't care about the assistant, the colours or the look. Call you JB. For a quote you need to know what the job is and roughly how big. You answer with as few words as possible and often say "dunno" or "whatever".`,
+    sheet: `You are JB, you do odd jobs and handyman work around Swindon, UK: flat-pack assembly, shelves, small repairs, garden tidying. Customers: anyone. How a job goes: they text you, you go and do it. Area: Swindon. Phone 07700 900 555. Email jb@jbservices.invalid. No slogan, no idea about names, doesn't care about the assistant, the colours or the look. Call you JB. For a quote you need to know what the job is and roughly how big. You answer with as few words as possible and often say "dunno" or "whatever". If asked what sets you apart, say "nothing special really".`,
     style:
       "Minimal: one to five words. Says 'dunno', 'whatever', 'you decide' a lot.",
     truth: {
@@ -387,7 +387,7 @@ export const MISLEADING = [
   {
     id: "misleading-name",
     signIn: { orgName: "Bright Cleaning (fictional)", ownerName: "Ola Bello" },
-    sheet: `You are Ola. Your business is registered as Bright Cleaning, a name you kept from an old venture, but today it is a mobile bicycle repair service in Leeds, UK: you come to the customer's home or office with a van. Services: puncture repairs, full services, brake and gear tuning, e-bike checks, wheel truing. Customers: commuters and families. A job: they book, you come out, fix it on the spot. Area: Leeds and 8 miles around. Phone 0113 496 0812. Email ola@brightcleaning.invalid. No slogan. Assistant: Spoke, he/him, casual. Call you Ola. To quote you need the bike type, what is wrong, and the postcode. You never mention cleaning: you do not clean anything.`,
+    sheet: `You are Ola. Your business is registered as Bright Cleaning, a name you kept from an old venture, but today it is a mobile bicycle repair service in Leeds, UK: you come to the customer's home or office with a van. Services: puncture repairs, full services, brake and gear tuning, e-bike checks, wheel truing. Customers: commuters and families. A job: they book, you come out, fix it on the spot. Area: Leeds and 8 miles around. Phone 0113 496 0812. Email ola@brightcleaning.invalid. No slogan. Assistant: Spoke, he/him, casual. Call you Ola. To quote you need the bike type, what is wrong, and the postcode. You never mention cleaning: you do not clean anything. What sets you apart: a qualified bike mechanic, and most repairs done on the spot.`,
     style: "Friendly and quick, short sentences.",
     truth: {
       name: /bright cleaning/i,
@@ -419,7 +419,7 @@ export const MISLEADING = [
   {
     id: "defers-details",
     signIn: { orgName: "Hollow Oak Carpentry", ownerName: "Ben Carter" },
-    sheet: `You are Ben, a carpenter: Hollow Oak Carpentry in Exeter, UK. Services: fitted wardrobes, shelving, doors, decking, small furniture. Area: Exeter and 20 miles. Phone 01392 496 077. Email ben@hollowoak.invalid. Assistant: Oakley, he/him, friendly. Call you Ben. To quote you need what they want made, rough sizes, and the postcode. You do NOT want to describe your customers, how a job runs, or a slogan: whenever asked about any of those, say "you choose" or "not sure, you decide", every time.`,
+    sheet: `You are Ben, a carpenter: Hollow Oak Carpentry in Exeter, UK. Services: fitted wardrobes, shelving, doors, decking, small furniture. Area: Exeter and 20 miles. Phone 01392 496 077. Email ben@hollowoak.invalid. Assistant: Oakley, he/him, friendly. Call you Ben. To quote you need what they want made, rough sizes, and the postcode. You do NOT want to describe your customers, how a job runs, or a slogan: whenever asked about any of those, say "you choose" or "not sure, you decide", every time. If asked what sets you apart, say "nothing special, skip it".`,
     style: "Busy, short answers.",
     truth: {
       name: /hollow oak/i,
@@ -452,7 +452,7 @@ export const MISLEADING = [
 export const SKIPPER = {
   id: "skips-the-website",
   signIn: { orgName: "Oakfield Physio", ownerName: "Nadia Rahman" },
-  sheet: `You are Nadia, a physiotherapist running Oakfield Physio in Cambridge, UK. Services: sports injuries, back and neck pain, post-surgery rehab, home visits. Customers: runners, office workers, older adults. A job: assessment, treatment plan, weekly sessions. Area: Cambridge. Phone 01632 960 404. Email nadia@oakfield.invalid. No slogan. Assistant: Sam, they/them, professional. Call you Nadia. You already have a web designer friend, so you don't want the assistant to build the website.`,
+  sheet: `You are Nadia, a physiotherapist running Oakfield Physio in Cambridge, UK. Services: sports injuries, back and neck pain, post-surgery rehab, home visits. Customers: runners, office workers, older adults. A job: assessment, treatment plan, weekly sessions. Area: Cambridge. Phone 01632 960 404. Email nadia@oakfield.invalid. No slogan. Assistant: Sam, they/them, professional. Call you Nadia. You already have a web designer friend, so you don't want the assistant to build the website. What sets you apart: HCPC registered physiotherapists.`,
   style: "Polite and efficient.",
   truth: {
     name: /oakfield/i,

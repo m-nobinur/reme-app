@@ -400,7 +400,7 @@ async function createAssignment(
         // writes its id here (`takeSnapshot`).
         factSnapshotId: crypto.randomUUID(),
         packRefs: [{ key: "cleaning", version: "0.1.0" }],
-        budgetUsd: 5,
+        budgetUsd: 20,
         idempotencyKey: key,
       })
       .returning()

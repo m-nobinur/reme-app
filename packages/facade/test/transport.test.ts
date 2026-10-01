@@ -1,4 +1,4 @@
-import { createModels } from "@earendil-works/pi-ai"
+import { type Context, createModels } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import { FacadeError } from "../src/errors.ts"
 import { HOST_ROUTING } from "../src/models/price.ts"
@@ -144,7 +144,13 @@ function openrouterStream(cost?: number) {
   })
 }
 
-async function call(cost?: number) {
+async function call(
+  cost?: number,
+  id = "deepseek/deepseek-v4.1-flash",
+  context: Context = {
+    messages: [{ role: "user", content: "Say ready", timestamp: 0 }],
+  }
+) {
   const models = createModels()
   for (const provider of buildProviders(
     { OPENROUTER_API_KEY: "or-key" },
@@ -152,23 +158,23 @@ async function call(cost?: number) {
   )) {
     models.setProvider(provider)
   }
-  const model = models.getModel("openrouter", "deepseek/deepseek-v4.1-flash")
+  const model = models.getModel("openrouter", id)
   if (!model) throw new Error("model did not resolve")
   const sent: Record<string, unknown>[] = []
-  const reply = await models.complete(
-    model,
-    { messages: [{ role: "user", content: "Say ready", timestamp: 0 }] },
-    {
-      fetch: async (_input, init) => {
-        sent.push(JSON.parse(String(init?.body)))
-        return new Response(openrouterStream(cost), {
-          headers: { "content-type": "text/event-stream" },
-        })
-      },
-    }
-  )
+  const headers: Headers[] = []
+  const reply = await models.complete(model, context, {
+    // As flue's agent loop calls it: a session id, no cache retention.
+    sessionId: "build-1",
+    fetch: async (_input, init) => {
+      sent.push(JSON.parse(String(init?.body)))
+      headers.push(new Headers(init?.headers))
+      return new Response(openrouterStream(cost), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    },
+  })
   const listed = (1_000 * model.cost.input + 100 * model.cost.output) / 1e6
-  return { reply, sent, listed }
+  return { reply, sent, headers, listed }
 }
 
 describe("the logged cost of an OpenRouter call", () => {
@@ -197,5 +203,63 @@ describe("an OpenRouter call's host", () => {
       ignore: HOST_ROUTING.ignore,
       data_collection: "deny",
     })
+  })
+})
+
+/**
+ * The Developer's calls to Claude through OpenRouter's Chat Completions are
+ * cached as pi-ai marks them for an `anthropic/` id: the system prompt, the
+ * last tool and the last message each end a cached block, at the default
+ * five-minute lifetime, which covers a build's back-to-back calls. Other
+ * models get no marks: their hosts cache a repeated prefix on their own.
+ */
+describe("an OpenRouter call's prompt cache", () => {
+  const tool = (name: string) => ({
+    name,
+    description: `${name} a file`,
+    parameters: { type: "object", properties: {} } as never,
+  })
+  const context: Context = {
+    systemPrompt: "You are the Developer.",
+    tools: [tool("read"), tool("edit")],
+    messages: [
+      { role: "user", content: "Build the site", timestamp: 0 },
+      {
+        role: "user",
+        content: [{ type: "text", text: "The facts" }],
+        timestamp: 0,
+      },
+    ],
+  }
+  const ephemeral = { type: "ephemeral" }
+
+  it("marks the system prompt, the last tool and the last message for Claude", async () => {
+    const { sent, headers } = await call(
+      undefined,
+      "anthropic/claude-sonnet-5.5",
+      context
+    )
+    const body = sent[0] as {
+      messages: { role: string; content: unknown }[]
+      tools: { cache_control?: unknown }[]
+    }
+    expect(body.messages[0]).toMatchObject({
+      content: [{ type: "text", cache_control: ephemeral }],
+    })
+    expect(body.tools.map((t) => t.cache_control)).toEqual([
+      undefined,
+      ephemeral,
+    ])
+    expect(JSON.stringify(body.messages[1])).not.toContain("cache_control")
+    expect(body.messages.at(-1)?.content).toEqual([
+      { type: "text", text: "The facts", cache_control: ephemeral },
+    ])
+    // OpenRouter keeps a session on one host, so the cache written is read.
+    expect(headers[0]?.get("x-session-id")).toBe("build-1")
+  })
+
+  it("marks nothing for a model whose host caches on its own", async () => {
+    const { sent } = await call(undefined, undefined, context)
+    expect(JSON.stringify(sent[0])).not.toContain("cache_control")
   })
 })

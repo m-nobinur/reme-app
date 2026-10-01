@@ -12,6 +12,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
+import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import {
   canDrop,
   confirmedFields,
@@ -238,7 +239,10 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="@container my-3 flex max-w-2xl flex-col gap-4 rounded-3xl border border-border bg-card p-4 text-card-foreground"
+      className={cn(
+        CARD_SURFACE,
+        "@container my-3 flex max-w-2xl flex-col gap-4"
+      )}
       data-slot="review-quote-form"
     >
       <div className="flex flex-col gap-1">

@@ -21,8 +21,8 @@ import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import type { Ids } from "./state.ts"
 
-/** The owner's decision: model spend is capped at $1 per assignment. */
-const ASSIGNMENT_CAP_USD = 1
+/** The owner's decision: model spend is capped at $20 per assignment. */
+export const ASSIGNMENT_CAP_USD = 20
 
 /** How long a spec is good for. A run past this needs a new session and spec. */
 const SPEC_TTL_MS = 24 * 60 * 60 * 1000

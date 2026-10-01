@@ -1,5 +1,47 @@
 [
   {
+    "id": "anthropic/claude-sonnet-5.5",
+    "name": "Anthropic: Claude Sonnet 5.5",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "cost": {
+      "input": 4.2,
+      "output": 21,
+      "cacheRead": 0.22,
+      "cacheWrite": 2.75
+    },
+    "contextWindow": 1000000,
+    "maxTokens": 128000,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 4.2,
+          "completion": 21
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
     "id": "deepseek/deepseek-v4.1-flash",
     "name": "DeepSeek: DeepSeek V4.1 Flash",
     "api": "openai-completions",
@@ -8,19 +50,112 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.63,
-      "output": 2.52,
-      "cacheRead": 0.14,
+      "input": 0.0567,
+      "output": 1.26,
+      "cacheRead": 0.027,
       "cacheWrite": 0
     },
-    "contextWindow": 1000000,
-    "maxTokens": 32768,
+    "contextWindow": 1040000,
+    "maxTokens": 384000,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.63,
-          "completion": 2.52
+          "prompt": 0.0567,
+          "completion": 1.26
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
+    "id": "google/gemini-3.8-flash",
+    "name": "Google: Gemini 3.8 Flash",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "cost": {
+      "input": 1.575,
+      "output": 7.875,
+      "cacheRead": 0.135,
+      "cacheWrite": 0.075
+    },
+    "contextWindow": 1048576,
+    "maxTokens": 65536,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 1.575,
+          "completion": 7.875
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
+    "id": "openai/gpt-6.1-sol",
+    "name": "OpenAI: GPT-6.1 Sol",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["image", "text"],
+    "cost": {
+      "input": 4.2,
+      "output": 21,
+      "cacheRead": 0.4,
+      "cacheWrite": 10,
+      "tiers": [
+        {
+          "inputTokensAbove": 271999,
+          "input": 8.4,
+          "output": 31.5,
+          "cacheRead": 0.42,
+          "cacheWrite": 10.5
+        }
+      ]
+    },
+    "contextWindow": 1050000,
+    "maxTokens": 128000,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 4.2,
+          "completion": 21
         },
         "ignore": [
           "alibaba",
@@ -103,7 +238,7 @@
     "cost": {
       "input": 0.315,
       "output": 1.05,
-      "cacheRead": 0.06,
+      "cacheRead": 0.08,
       "cacheWrite": 0
     },
     "contextWindow": 262144,

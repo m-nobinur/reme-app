@@ -74,6 +74,11 @@ const SHAPES: [FactValue, string, string][] = [
     "Six cars, booked by phone",
   ],
   [
+    { key: "business.proof", value: { text: "Trading since 2009" } },
+    "What sets you apart",
+    "Trading since 2009",
+  ],
+  [
     { key: "service_area.text", value: { text: "Greater Fairhaven" } },
     "Area you cover",
     "Greater Fairhaven",

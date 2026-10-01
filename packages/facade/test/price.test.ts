@@ -81,6 +81,19 @@ describe("a generated OpenRouter entry", () => {
     })
   })
 
+  it("prices cache writes at the dearest admitted provider's, as reads are", () => {
+    const writes = (write: number) => ({
+      ...rates(0.1, 0.4, 0.01),
+      input_cache_write: perToken(write),
+    })
+    const { entry } = openrouterEntry(listed, [
+      provider("Cheap", writes(0.125)),
+      provider("Double", writes(0.2)),
+      provider("Dear", { ...rates(0.3, 0.9, 0.2), input_cache_write: "1" }),
+    ])
+    expect(entry.cost.cacheWrite).toBe(0.2)
+  })
+
   it("promises only the window and output every admitted provider serves", () => {
     const { entry } = openrouterEntry(listed, providers)
     expect(entry.contextWindow).toBe(250_000)

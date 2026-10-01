@@ -370,8 +370,8 @@ export async function sessionState(
   }
 }
 
-/** ADR-034's cap on an org's CoS spend per UTC day. */
-const DAILY_CAP_USD = 1
+/** The cap on an org's CoS and onboarding spend per UTC day: $100, the owner's call (2026-10-01), so testing never hits it. */
+export const DAILY_CAP_USD = 100
 
 /**
  * Whether the org's CoS spend today, with `amount` added, stays within the
@@ -406,7 +406,20 @@ export async function withinCap(
       and t.payload->>'turn_id' = c.payload->>'turn_id'
     where c.org_id = ${orgId} and c.type = 'cos.context'
       and c.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
-  return Number(row?.spent ?? 0) + amount <= DAILY_CAP_USD
+  // Onboarding's background copy call: its cost once written, its
+  // reservation until then (`onboarding-prepare.ts`).
+  const [prepared] = await db.execute<{ spent: number }>(sql`
+    select coalesce(sum(coalesce(
+        (r.payload->>'cost_usd')::float8, (p.payload->>'reserved_usd')::float8)), 0) as spent
+    from ${events} p
+    left join ${events} r on r.org_id = p.org_id and r.type = 'onboarding.prepared'
+      and r.payload->>'conversation_id' = p.payload->>'conversation_id'
+    where p.org_id = ${orgId} and p.type = 'onboarding.prepare'
+      and p.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
+  return (
+    Number(row?.spent ?? 0) + Number(prepared?.spent ?? 0) + amount <=
+    DAILY_CAP_USD
+  )
 }
 
 /** A turn's opening writes, in the order the log holds them. */

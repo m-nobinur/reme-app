@@ -13,6 +13,7 @@ import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import { ulid } from "ulid"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import {
+  ASSIGNMENT_CAP_USD,
   hideFacts,
   issueSpec,
   takeSnapshot,
@@ -140,7 +141,7 @@ live("issueSpec", () => {
         "A"
       )
     })
-    expect(spec.budget_snapshot.model_usd_cap).toBe(1)
+    expect(spec.budget_snapshot.model_usd_cap).toBe(ASSIGNMENT_CAP_USD)
     expect(verifySpec(spec, KEY).spec_id).toBe(spec.spec_id)
 
     const [logged] = await kit.withOrg({ orgId }, (db) =>

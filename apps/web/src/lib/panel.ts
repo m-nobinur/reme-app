@@ -3,7 +3,7 @@ import { BUILD_STAGES } from "@workspace/ui/components/live-panel"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import type { AttentionItem, Workspace } from "./api/types"
-import { askerOf, digestOf } from "./briefing"
+import { askerOf, assistantOf, digestOf } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
 
@@ -195,6 +195,7 @@ export function panelFor(input: PanelInput): Panel | null {
     : null
   const page = pageOf(input.route, input.conversation, onboarding)
   const fresh = live === null && builds.length === 0
+  const assistant = assistantOf(workspace)
 
   // The approvals page lists every review itself, so the panel leaves them
   // to it rather than draw each one twice.
@@ -269,7 +270,7 @@ export function panelFor(input: PanelInput): Panel | null {
 
   const headline = ((): string[] => {
     if (!business) {
-      return ["Name your business and Reme can start on its website."]
+      return [`Name your business and ${assistant} can start on its website.`]
     }
     if (page === "reminders" && reminders) return [reminders]
     if (steps) {
@@ -281,24 +282,24 @@ export function panelFor(input: PanelInput): Panel | null {
         return [
           intro,
           missingFacts.length === 1
-            ? "One detail to go before Reme can build it."
-            : `${missingFacts.length} details to go before Reme can build it.`,
+            ? `One detail to go before ${assistant} can build it.`
+            : `${missingFacts.length} details to go before ${assistant} can build it.`,
         ]
       }
       return [
         intro,
         onboarding
-          ? "Reme has the details it needs. Finish getting started and it builds the site."
-          : "Ask Reme in a chat and it builds one for you to review.",
+          ? `${assistant} has every detail it needs. Finish getting started to build the site.`
+          : `Ask ${assistant} in a chat to build one for you to review.`,
       ]
     }
     if (page === "chat" || page === "onboarding") {
       if (working?.state === "release_candidate") {
-        return [`Reme is publishing ${buildName(working, live)} now.`]
+        return [`${assistant} is publishing ${buildName(working, live)} now.`]
       }
       if (working) {
         return [
-          `Reme is building ${buildName(working, live)} while you chat.`,
+          `${assistant} is building ${buildName(working, live)} while you chat.`,
           // The stepper below says the stage; this says what the owner can do.
           "Keep chatting. Nothing goes live until you approve it.",
         ]
@@ -320,7 +321,7 @@ export function panelFor(input: PanelInput): Panel | null {
       if (live) {
         return [
           `Version ${live} of your website is live.`,
-          "Ask Reme to change a page, check what needs you, or set a reminder.",
+          `Ask ${assistant} to change a page, check what needs you, or set a reminder.`,
         ]
       }
     }
@@ -337,15 +338,15 @@ export function panelFor(input: PanelInput): Panel | null {
         return [
           `Version ${live} is live${host ? ` at ${host}` : ""}.${published}`,
           working
-            ? `Reme is building ${buildName(working, live)}. You review it before it replaces this one.`
+            ? `${assistant} is building ${buildName(working, live)}. You review it before it replaces this one.`
             : approval
               ? `Version ${approval.version} is ready to replace it once you approve.`
-              : "Ask for a change and Reme builds a new version for you to review.",
+              : `Ask for a change and ${assistant} builds a new version for you to review.`,
         ]
       }
       if (working) {
         return [
-          "Reme is building your first version.",
+          `${assistant} is building your first version.`,
           "You review it before it goes live.",
         ]
       }

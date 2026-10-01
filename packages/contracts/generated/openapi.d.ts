@@ -132,6 +132,13 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.proof"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "service_area.text"
                 value: {
                   text: string
@@ -457,6 +464,508 @@ export interface components {
           /** @constant */
           answer: "skipped"
         }
+    AskDetailsInput: {
+      /** @enum {string} */
+      step: "contact" | "assistant"
+      prefill: (
+        | {
+            /** @constant */
+            key: "business.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.phone"
+            value: {
+              e164: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.email"
+            value: {
+              /** Format: email */
+              address: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "hours.weekday"
+            value: {
+              open: string
+              close: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.radius"
+            value: {
+              centre: string
+              radius_km: number
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.tagline"
+            value: {
+              tagline: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.industry"
+            value: {
+              name: string
+              category:
+                | (
+                    | "cleaning"
+                    | "chauffeur"
+                    | "legal"
+                    | "health"
+                    | "beauty"
+                    | "food"
+                    | "trades"
+                    | "automotive"
+                    | "property"
+                    | "education"
+                    | "events"
+                    | "retail"
+                  )
+                | null
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.offerings"
+            value: {
+              items: string[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.audience"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.overview"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.proof"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "service_area.text"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.pronouns"
+            value: {
+              /** @enum {string} */
+              id: "he_him" | "she_her" | "they_them"
+            }
+          }
+        | {
+            /** @constant */
+            key: "assistant.tone"
+            value: {
+              /** @enum {string} */
+              id: "friendly" | "professional" | "casual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.preferred_name"
+            value: {
+              name: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.build_mode"
+            value: {
+              /** @enum {string} */
+              mode: "assistant" | "manual"
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.template"
+            value: {
+              /** @enum {string} */
+              id: "classic" | "modern" | "bold"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.palette"
+            value: {
+              id:
+                | (
+                    | "ocean"
+                    | "classic_blue"
+                    | "harbour"
+                    | "lagoon"
+                    | "forest"
+                    | "sage"
+                    | "sunset"
+                    | "mocha"
+                    | "cardinal"
+                    | "berry"
+                    | "burgundy"
+                    | "midnight"
+                    | "damson"
+                    | "ultra_violet"
+                    | "graphite"
+                    | "onyx"
+                  )
+                | "custom"
+              custom?: string
+              brand?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.font"
+            value: {
+              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.pages"
+            value: {
+              ids: (
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+              )[]
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "media.uploads"
+            value: {
+              items: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+              }[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "quote.form"
+            value: {
+              fields: {
+                key: string
+                label: string
+                /** @enum {string} */
+                type:
+                  | "text"
+                  | "textarea"
+                  | "number"
+                  | "date"
+                  | "select"
+                  | "tel"
+                  | "email"
+                required: boolean
+                hint: string | null
+                options: string[] | null
+              }[]
+            }
+          }
+      )[]
+      skippable: boolean
+    }
+    AskDetailsOutput:
+      | {
+          /** @constant */
+          answer: "stated"
+          facts: (
+            | {
+                /** @constant */
+                key: "business.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.phone"
+                value: {
+                  e164: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.email"
+                value: {
+                  /** Format: email */
+                  address: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "hours.weekday"
+                value: {
+                  open: string
+                  close: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.radius"
+                value: {
+                  centre: string
+                  radius_km: number
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.tagline"
+                value: {
+                  tagline: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.industry"
+                value: {
+                  name: string
+                  category:
+                    | (
+                        | "cleaning"
+                        | "chauffeur"
+                        | "legal"
+                        | "health"
+                        | "beauty"
+                        | "food"
+                        | "trades"
+                        | "automotive"
+                        | "property"
+                        | "education"
+                        | "events"
+                        | "retail"
+                      )
+                    | null
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.offerings"
+                value: {
+                  items: string[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.audience"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.overview"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.proof"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "service_area.text"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.pronouns"
+                value: {
+                  /** @enum {string} */
+                  id: "he_him" | "she_her" | "they_them"
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.tone"
+                value: {
+                  /** @enum {string} */
+                  id: "friendly" | "professional" | "casual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.preferred_name"
+                value: {
+                  name: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.build_mode"
+                value: {
+                  /** @enum {string} */
+                  mode: "assistant" | "manual"
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.template"
+                value: {
+                  /** @enum {string} */
+                  id: "classic" | "modern" | "bold"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.palette"
+                value: {
+                  id:
+                    | (
+                        | "ocean"
+                        | "classic_blue"
+                        | "harbour"
+                        | "lagoon"
+                        | "forest"
+                        | "sage"
+                        | "sunset"
+                        | "mocha"
+                        | "cardinal"
+                        | "berry"
+                        | "burgundy"
+                        | "midnight"
+                        | "damson"
+                        | "ultra_violet"
+                        | "graphite"
+                        | "onyx"
+                      )
+                    | "custom"
+                  custom?: string
+                  brand?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.font"
+                value: {
+                  id:
+                    | ("clean_sans" | "classic_serif" | "soft_rounded")
+                    | "custom"
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.pages"
+                value: {
+                  ids: (
+                    | "home"
+                    | "services"
+                    | "about"
+                    | "gallery"
+                    | "testimonials"
+                    | "faq"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  )[]
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "media.uploads"
+                value: {
+                  items: {
+                    /** Format: uuid */
+                    id: string
+                    name: string
+                    /** @enum {string} */
+                    content_type: "image/jpeg" | "image/png" | "image/webp"
+                    bytes: number
+                    alt?: string
+                  }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "quote.form"
+                value: {
+                  fields: {
+                    key: string
+                    label: string
+                    /** @enum {string} */
+                    type:
+                      | "text"
+                      | "textarea"
+                      | "number"
+                      | "date"
+                      | "select"
+                      | "tel"
+                      | "email"
+                    required: boolean
+                    hint: string | null
+                    options: string[] | null
+                  }[]
+                }
+              }
+          )[]
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
     AskFactInput:
       | {
           /** @constant */
@@ -552,6 +1061,14 @@ export interface components {
       | {
           /** @constant */
           key: "business.overview"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.proof"
           skippable: boolean
           prefill: {
             text: string
@@ -804,6 +1321,13 @@ export interface components {
             | {
                 /** @constant */
                 key: "business.overview"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.proof"
                 value: {
                   text: string
                 }
@@ -1314,6 +1838,13 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "business.proof"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "service_area.text"
                                   value: {
                                     text: string
@@ -1466,6 +1997,268 @@ export interface components {
                                     }[]
                                   }
                                 }
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "stated"
+                            facts: (
+                              | {
+                                  /** @constant */
+                                  key: "business.name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.phone"
+                                  value: {
+                                    e164: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.email"
+                                  value: {
+                                    /** Format: email */
+                                    address: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "hours.weekday"
+                                  value: {
+                                    open: string
+                                    close: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "service_area.radius"
+                                  value: {
+                                    centre: string
+                                    radius_km: number
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.tagline"
+                                  value: {
+                                    tagline: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.industry"
+                                  value: {
+                                    name: string
+                                    category:
+                                      | (
+                                          | "cleaning"
+                                          | "chauffeur"
+                                          | "legal"
+                                          | "health"
+                                          | "beauty"
+                                          | "food"
+                                          | "trades"
+                                          | "automotive"
+                                          | "property"
+                                          | "education"
+                                          | "events"
+                                          | "retail"
+                                        )
+                                      | null
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.offerings"
+                                  value: {
+                                    items: string[]
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.audience"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.overview"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.proof"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "service_area.text"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.pronouns"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "he_him" | "she_her" | "they_them"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.tone"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "friendly" | "professional" | "casual"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "owner.preferred_name"
+                                  value: {
+                                    name: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.build_mode"
+                                  value: {
+                                    /** @enum {string} */
+                                    mode: "assistant" | "manual"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.template"
+                                  value: {
+                                    /** @enum {string} */
+                                    id: "classic" | "modern" | "bold"
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.palette"
+                                  value: {
+                                    id:
+                                      | (
+                                          | "ocean"
+                                          | "classic_blue"
+                                          | "harbour"
+                                          | "lagoon"
+                                          | "forest"
+                                          | "sage"
+                                          | "sunset"
+                                          | "mocha"
+                                          | "cardinal"
+                                          | "berry"
+                                          | "burgundy"
+                                          | "midnight"
+                                          | "damson"
+                                          | "ultra_violet"
+                                          | "graphite"
+                                          | "onyx"
+                                        )
+                                      | "custom"
+                                    custom?: string
+                                    brand?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.font"
+                                  value: {
+                                    id:
+                                      | (
+                                          | "clean_sans"
+                                          | "classic_serif"
+                                          | "soft_rounded"
+                                        )
+                                      | "custom"
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.pages"
+                                  value: {
+                                    ids: (
+                                      | "home"
+                                      | "services"
+                                      | "about"
+                                      | "gallery"
+                                      | "testimonials"
+                                      | "faq"
+                                      | "service_area"
+                                      | "contact"
+                                      | "quote"
+                                    )[]
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "media.uploads"
+                                  value: {
+                                    items: {
+                                      /** Format: uuid */
+                                      id: string
+                                      name: string
+                                      /** @enum {string} */
+                                      content_type:
+                                        | "image/jpeg"
+                                        | "image/png"
+                                        | "image/webp"
+                                      bytes: number
+                                      alt?: string
+                                    }[]
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "quote.form"
+                                  value: {
+                                    fields: {
+                                      key: string
+                                      label: string
+                                      /** @enum {string} */
+                                      type:
+                                        | "text"
+                                        | "textarea"
+                                        | "number"
+                                        | "date"
+                                        | "select"
+                                        | "tel"
+                                        | "email"
+                                      required: boolean
+                                      hint: string | null
+                                      options: string[] | null
+                                    }[]
+                                  }
+                                }
+                            )[]
                           }
                         | {
                             /** @constant */
@@ -1785,6 +2578,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.proof"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -2043,6 +2843,7 @@ export interface components {
               | "business.offerings"
               | "business.audience"
               | "business.overview"
+              | "business.proof"
               | "service_area.text"
               | "assistant.name"
               | "assistant.pronouns"
@@ -2150,6 +2951,13 @@ export interface components {
               | {
                   /** @constant */
                   key: "business.overview"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.proof"
                   value: {
                     text: string
                   }
@@ -2615,6 +3423,7 @@ export interface components {
         | "business.offerings"
         | "business.audience"
         | "business.overview"
+        | "business.proof"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -2723,6 +3532,7 @@ export interface components {
             | "business.offerings"
             | "business.audience"
             | "business.overview"
+            | "business.proof"
             | "service_area.text"
             | "assistant.name"
             | "assistant.pronouns"
@@ -2948,6 +3758,13 @@ export interface components {
       | {
           /** @constant */
           key: "business.overview"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.proof"
           value: {
             text: string
           }
@@ -3534,6 +4351,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.proof"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -3978,6 +4802,7 @@ export interface components {
         | "business.offerings"
         | "business.audience"
         | "business.overview"
+        | "business.proof"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -3991,6 +4816,7 @@ export interface components {
         | "media.uploads"
         | "quote.form"
       )[]
+      assistant_name: string | null
       reminders: {
         notes: {
           /** Format: uuid */
@@ -4043,6 +4869,7 @@ export interface components {
                 | "business.offerings"
                 | "business.audience"
                 | "business.overview"
+                | "business.proof"
                 | "service_area.text"
                 | "assistant.name"
                 | "assistant.pronouns"

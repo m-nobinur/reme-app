@@ -143,6 +143,8 @@ for (const theme of ["light", "dark"] as const) {
       !existsSync(BASELINES) && test.info().config.updateSnapshots === "none",
       "no baselines on this machine: pnpm --filter @workspace/ui test:update"
     )
+    // One screenshot per entry, and the catalog outgrew the default 30 s.
+    test.setTimeout(90_000)
     await page.goto(`/?theme=${theme}`)
     // The variable font loads from node_modules through Vite; without this the
     // first snapshot of a run is taken mid-swap and every later one is not.

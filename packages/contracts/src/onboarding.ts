@@ -136,7 +136,11 @@ export const PAGES = [
   { id: "gallery", label: "Gallery", hint: "Photos of your work" },
   { id: "testimonials", label: "Reviews", hint: "What customers say" },
   { id: "faq", label: "FAQ", hint: "Answers to common questions" },
-  { id: "service_area", label: "Areas we cover", hint: "Where you work" },
+  {
+    id: "service_area",
+    label: "Areas we cover",
+    hint: "The towns and areas you serve",
+  },
   { id: "contact", label: "Contact", hint: "Phone, email and hours" },
   { id: "quote", label: "Request a quote", hint: "Always included" },
 ] as const satisfies readonly Preset<string>[]

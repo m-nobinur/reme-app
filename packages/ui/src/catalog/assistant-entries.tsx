@@ -371,6 +371,86 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
   },
 ]
 
+/** An `ask_details` call in one of its states. */
+const askDetails = (
+  step: "contact" | "assistant",
+  extra: {
+    result?: unknown
+    isError?: boolean
+    skippable?: boolean
+    prefill?: unknown[]
+  } = {}
+) => ({
+  args: {
+    step,
+    prefill: (extra.prefill ?? []) as [],
+    skippable: extra.skippable ?? false,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `details_${step}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_details",
+  type: "tool-call" as const,
+})
+
+const SIGN_IN_EMAIL = {
+  key: "business.email",
+  value: { address: "sam@brightclean.example" },
+}
+
+const ASK_DETAILS_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "How can customers reach Brightclean?",
+    askDetails("contact", {
+      result: {
+        answer: "stated",
+        facts: [
+          { key: "business.phone", value: { e164: "+447700900123" } },
+          SIGN_IN_EMAIL,
+        ],
+      },
+    }),
+    "07700 900123, sam@brightclean.example"
+  ),
+  ...answeredStep(
+    "And your assistant?",
+    askDetails("assistant", {
+      result: { answer: "skipped" },
+      skippable: true,
+    }),
+    "Skip for now"
+  ),
+  {
+    content: [
+      askDetails("contact", {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      askDetails("assistant", { isError: true, result: { error: BROKEN } }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      question(
+        "How can customers reach Brightclean? I have filled in the email you signed up with."
+      ),
+      askDetails("contact", { prefill: [SIGN_IN_EMAIL] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Last thing: what should your assistant be called?"),
+      askDetails("assistant", { skippable: true }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
 type Choice = {
   id: string
   label: string
@@ -1342,6 +1422,120 @@ const FAILED: ThreadMessageLike[] = [
   },
 ]
 
+const REPLY_WORDS =
+  "Thanks, I have the number. I will put it on every page of your website, in the header and the footer, so people can ring you from wherever they land. Some customers would rather write than ring, so one more thing: which email address should enquiries go to?"
+
+/** Onboarding up to a typed answer: the open card a typed message overtakes is gone. */
+const BEFORE_SEND: ThreadMessageLike[] = [
+  ...ONBOARDING.slice(0, 2),
+  {
+    content: [
+      question("Brightclean, got it. What number should customers ring?"),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+const pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
+
+/**
+ * A thread the owner sends in. The reply lands after a pause, whole or word
+ * by word as a streamed model reply does, and ends on the next question's
+ * card, so a test can watch the viewport from the send to the end of the turn.
+ */
+const OPENING: ThreadMessageLike[] = [
+  {
+    content: [
+      question(
+        "Hi Sam, I'm Reme. I will set up your website and look after enquiries while you work. To start, what is your business called?"
+      ),
+      askFact("business.name"),
+    ],
+    id: "opening",
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/**
+ * Onboarding's opening message, played in as a live reply the first time it
+ * is seen. It starts as seen, so a snapshot of it holds still; Play again
+ * runs it from the top as a new owner sees it.
+ */
+function RevealSample() {
+  const [run, setRun] = useState(0)
+  return (
+    <div className="flex flex-col gap-3">
+      <Button
+        className="self-start"
+        onClick={() => setRun((count) => count + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Play again
+      </Button>
+      <OwnerThread
+        height="h-[28rem]"
+        isDisabled={false}
+        key={run}
+        messages={OPENING}
+        settings={{ reveal: { unseen: () => run > 0, seen: () => undefined } }}
+      />
+    </div>
+  )
+}
+
+function SendingThread({ streamed }: { streamed: boolean }) {
+  const [messages, setMessages] = useState<ThreadMessageLike[]>(BEFORE_SEND)
+  const [isRunning, setRunning] = useState(false)
+  const runtime = useExternalStoreRuntime({
+    convertMessage: (message: ThreadMessageLike) => ({
+      createdAt: FIXTURE_TIME,
+      ...message,
+    }),
+    isRunning,
+    messages,
+    onNew: async (message) => {
+      const sent = message.content.find((part) => part.type === "text")
+      const turn = messages.length
+      setMessages((all) => [
+        ...all,
+        { ...ask(sent?.type === "text" ? sent.text : ""), id: `sent_${turn}` },
+      ])
+      setRunning(true)
+      await pause(600)
+      const words = REPLY_WORDS.split(" ")
+      const steps = streamed ? words.length : 1
+      for (let step = 1; step <= steps; step++) {
+        const text = streamed ? words.slice(0, step).join(" ") : REPLY_WORDS
+        setMessages((all) => [
+          ...all.filter((each) => each.id !== `reply_${turn}`),
+          {
+            // The next question's card follows the words, as onboarding's do.
+            content: [
+              { text, type: "text" },
+              ...(step === steps ? [askFact("business.email")] : []),
+            ],
+            id: `reply_${turn}`,
+            role: "assistant",
+            status: step === steps ? WAITING : { type: "running" },
+          },
+        ])
+        if (streamed) await pause(30)
+      }
+      setRunning(false)
+    },
+  })
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <div className="h-[44rem] overflow-hidden rounded-3xl border border-border">
+        <Thread autoFocus={false} components={{ ToolFallback: Approval }} />
+      </div>
+    </AssistantRuntimeProvider>
+  )
+}
+
 /**
  * The conversation in its frame, as `/app` renders it: the title and ··· in
  * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
@@ -1471,6 +1665,12 @@ const assistantCatalog = [
     name: "AskFact",
     render: () => (
       <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+    ),
+  },
+  {
+    name: "AskDetails",
+    render: () => (
+      <FixtureThread height="h-[88rem]" messages={ASK_DETAILS_STATES} />
     ),
   },
   {
@@ -1643,6 +1843,9 @@ const assistantCatalog = [
     ),
   },
   { name: "ThreadSiteChange", render: () => <SiteChangeThread /> },
+  { name: "ThreadSend", render: () => <SendingThread streamed={false} /> },
+  { name: "ThreadSendStreamed", render: () => <SendingThread streamed /> },
+  { name: "ThreadReveal", render: () => <RevealSample /> },
   {
     name: "ThreadLoading",
     render: () => (

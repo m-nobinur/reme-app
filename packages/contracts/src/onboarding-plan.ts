@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ChoiceStep } from "./chat.ts"
+import { ChoiceStep, DetailsStep } from "./chat.ts"
 import { QuoteFields } from "./onboarding.ts"
 import { FactValue, type FactValueKey } from "./owner.ts"
 import { Text } from "./text.ts"
@@ -89,6 +89,8 @@ export const PlanNext = z.discriminatedUnion("kind", [
     kind: z.literal("ask_fact"),
     key: z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]),
   }),
+  /** One card for a few related facts: phone and email, or the assistant's name, pronouns and tone. */
+  z.strictObject({ kind: z.literal("ask_details"), step: DetailsStep }),
   /** The photo drop zone. */
   z.strictObject({ kind: z.literal("ask_upload") }),
   /** The questions the site's quote request form should ask, for the owner to confirm. */
