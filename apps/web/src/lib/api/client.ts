@@ -2,6 +2,7 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
+  CHAT_TURN_MS,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -110,6 +111,8 @@ async function call(
     etag?: string | null
     /** A body already serialised, sent as it is. */
     raw?: string
+    /** How long the api has to start answering, when not `API_TIMEOUT_MS`. */
+    timeoutMs?: number
   } = {}
 ): Promise<Response | null> {
   const session = await forwardedSession()
@@ -122,13 +125,17 @@ async function call(
   }
   if (init.key) headers["idempotency-key"] = init.key
   if (init.etag) headers["if-none-match"] = init.etag
-  return await apiFetch(new URL(path, apiUrl()), {
-    method: init.method ?? "GET",
-    headers,
-    body:
-      init.raw ??
-      (init.body === undefined ? undefined : JSON.stringify(init.body)),
-  })
+  return await apiFetch(
+    new URL(path, apiUrl()),
+    {
+      method: init.method ?? "GET",
+      headers,
+      body:
+        init.raw ??
+        (init.body === undefined ? undefined : JSON.stringify(init.body)),
+    },
+    init.timeoutMs
+  )
 }
 
 /** One write. The caller reads the answer, since some refusals are the owner's to act on. */
@@ -627,7 +634,10 @@ export const apiSource: OwnerDataSource = {
   updateConversation,
   rateMessage,
   conversationMessages,
-  chat: (raw) => call("/chat", { method: "POST", raw }),
+  // A turn may wait on the onboarding planner, then the script, before it
+  // answers; cut short, the owner's retry finds it still running (chat.busy).
+  chat: (raw) =>
+    call("/chat", { method: "POST", raw, timeoutMs: CHAT_TURN_MS }),
   assets: async ({ body, type, length, key }) => {
     const session = await forwardedSession()
     if (!session) return null

@@ -1,4 +1,4 @@
-import { ErrorEnvelope } from "@workspace/contracts"
+import { CHAT_TURN_MS, ErrorEnvelope } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { API_TIMEOUT_MS } from "./transport"
 
@@ -46,7 +46,9 @@ it("answers a stalled call with a transient 504 envelope once the bound passes",
   stall()
   const { apiSource } = await import("./client")
   const answer = apiSource.chat("{}")
-  await vi.advanceTimersByTimeAsync(API_TIMEOUT_MS - 1)
+  // A chat turn may wait on the onboarding planner, then the script.
+  expect(CHAT_TURN_MS).toBeGreaterThan(API_TIMEOUT_MS)
+  await vi.advanceTimersByTimeAsync(CHAT_TURN_MS - 1)
   expect(signal?.aborted).toBe(false)
   await vi.advanceTimersByTimeAsync(1)
   const response = await answer
@@ -57,7 +59,7 @@ it("answers a stalled call with a transient 504 envelope once the bound passes",
   })
 })
 
-it("turns a stalled read into an error a screen can show", async () => {
+it("turns a stalled read into an error a screen can show, on the ordinary bound", async () => {
   stall()
   const { apiSource } = await import("./client")
   const read = apiSource.staff()
