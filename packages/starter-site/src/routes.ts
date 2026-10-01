@@ -25,6 +25,7 @@ export const navLinks: { href: string; label: string }[] = [
   { href: "/", label: site.navHome },
   { href: "/services/", label: site.navServices },
   { href: "/service-area/", label: site.navServiceArea },
+  { href: "/about/", label: site.navAbout },
   { href: "/contact/", label: site.navContact },
   { href: "/quote/", label: site.navQuote },
   { href: "/booking/", label: site.navBooking },

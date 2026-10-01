@@ -1,0 +1,61 @@
+---
+import { hasRoute } from "../../routes"
+import { site } from "../../site-config"
+import Icon from "../Icon/Icon.astro"
+
+interface Props {
+  /** The h2, off the service area page. */
+  heading?: string
+}
+
+const { heading = "" } = Astro.props
+const towns = site.areaTowns
+  .split("\n")
+  .map((line) => line.trim())
+  .filter(Boolean)
+const place = towns.length > 0 ? "" : site.serviceAreaText
+// Off the service area page, the section points to it.
+const more =
+  site.areaLink &&
+  hasRoute("/service-area/") &&
+  Astro.url.pathname !== "/service-area/"
+---
+
+{
+  (towns.length > 0 || place || site.areaBody || site.serviceArea) && (
+    <section class="band area-section">
+      <div class="wrap area-inner">
+        <div class="area-copy">
+          {heading && <h2>{heading}</h2>}
+          {site.areaBody && <p class="area-body">{site.areaBody}</p>}
+          {more && (
+            <p class="section-more">
+              <a class="more-link" href="/service-area/">
+                {site.areaLink}
+              </a>
+            </p>
+          )}
+        </div>
+        <div class="area-places">
+          {place && (
+            <p class="area-place">
+              <Icon name="mapPin" />
+              <span>{place}</span>
+            </p>
+          )}
+          {towns.length > 0 && (
+            <ul class="area-towns">
+              {towns.map((town) => (
+                <li>
+                  <Icon name="mapPin" />
+                  <span>{town}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {site.serviceArea && <p class="area-radius">{site.serviceArea}</p>}
+        </div>
+      </div>
+    </section>
+  )
+}

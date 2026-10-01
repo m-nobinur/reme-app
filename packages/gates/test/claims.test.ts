@@ -123,6 +123,18 @@ describe("the claims gate", () => {
     }
   })
 
+  it("lets the owner's business.proof support what it says, and nothing more", () => {
+    const proof = [
+      ...PLAIN,
+      fact("business.proof", {
+        text: "Fully insured, and every job guaranteed",
+      }),
+    ]
+    for (const main of ["<p>Fully insured</p>", "<p>Guaranteed work</p>"])
+      expect(verdict(main, proof).passed, main).toBe(true)
+    expect(verdict("<p>Award-winning cleaners</p>", proof).passed).toBe(false)
+  })
+
   it("passes a credential or guarantee a fact states and fails one it does not", () => {
     for (const main of [
       "<p>Fully insured and bonded</p>",

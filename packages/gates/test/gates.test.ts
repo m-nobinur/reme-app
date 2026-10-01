@@ -241,6 +241,30 @@ describe("the structured data gate", () => {
     })
   })
 
+  it("passes an FAQPage with its questions and fails one without them", () => {
+    const faq = (extra: Record<string, unknown>) =>
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        ...extra,
+      })
+    const questions = {
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "Do I need to be in?",
+          acceptedAnswer: { "@type": "Answer", text: "No." },
+        },
+      ],
+    }
+    expect(
+      checkStructuredData(pages(home(undefined, faq(questions)))).passed
+    ).toBe(true)
+    expect(checkStructuredData(pages(home(undefined, faq({})))).passed).toBe(
+      false
+    )
+  })
+
   it("fails JSON that does not parse, a missing context, an unknown type or a missing name", () => {
     for (const ld of [
       "{not json",

@@ -15,12 +15,12 @@
  *
  * Numbered fields are one list each, filled from 1 upwards. A list entry
  * renders only when its own fields are set, and a section whose entries are
- * all empty renders nothing at all, heading included.
+ * all empty renders nothing at all, heading included. Fill what the facts
+ * support and leave the rest empty: a short page beats a padded one.
  *
  * `fields` is read in declaration order when asking for missing facts, so the
- * required facts come first. Its keys are exactly the keys of `site`, which
- * the type below enforces and the starter's tests check against the
- * `SiteField` contract.
+ * required facts come first. Its keys are exactly the keys of `site`: every
+ * key in FACTS is a fact field and every other key is composed.
  */
 type Field =
   | { kind: "fact"; fact_key: string; required: boolean }
@@ -49,6 +49,12 @@ const values = {
   audience: "",
   /** business.overview, how the business works, as given. */
   overview: "",
+  /**
+   * business.proof, what sets the business apart, as given: years trading,
+   * insurance, accreditations, guarantees, awards. The only source for
+   * proofBody and trust1 to trust3, which may rephrase it and never add to it.
+   */
+  proof: "",
   /** hours.weekday for structured data, as "Mo-Fr 08:00-17:00". */
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
@@ -92,7 +98,7 @@ const values = {
   template: "classic",
   /**
    * The type the owner chose (site.font): clean_sans, classic_serif or
-   * soft_rounded. Empty or anything else keeps the default pairing.
+   * soft_rounded. Empty or anything else keeps the template's own type.
    */
   font: "",
   /** media.uploads, the path of the owner's logo, as "/uploads/<id>.png". Empty shows the business name as text. */
@@ -101,14 +107,38 @@ const values = {
   logoAlt: "",
   /**
    * media.uploads, the path of the owner's photo the home page's hero shows,
-   * as "/uploads/<id>.jpg". Empty keeps the hero's drawn panel.
+   * as "/uploads/<id>.jpg". Empty gives each template its photo-free hero.
    */
   heroImage: "",
   /** What that photo shows, in one sentence: its alt text. The hero shows the photo only with it. */
   heroImageAlt: "",
-  /** The home page's h1: a short slogan. Falls back to the business name. */
+  /**
+   * The home page's h1: the main service and the area, as "Weekly house
+   * cleaning in Fairhaven". Falls back to the business name.
+   */
   heroHeading: "",
+  /** One sentence: what a customer gets. Under the h1 when there is no tagline. */
   homeIntro: "",
+  /**
+   * Each page's <title> and meta description. A title is 50 to 60
+   * characters with the service, the area and the business name; a
+   * description is 140 to 155 characters with a reason to request a quote.
+   * Empty falls back to the page's heading and intro.
+   */
+  homeTitle: "",
+  homeDescription: "",
+  aboutTitle: "",
+  aboutDescription: "",
+  servicesTitle: "",
+  servicesDescription: "",
+  serviceAreaTitle: "",
+  serviceAreaDescription: "",
+  contactTitle: "",
+  contactDescription: "",
+  quoteTitle: "",
+  quoteDescription: "",
+  /** Each page's lede under its h1: one or two sentences for that page. */
+  aboutIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
   contactIntro: "",
@@ -122,23 +152,82 @@ const values = {
   quoteEmailSubject: "Quote request",
   bookingIntro: "",
   aboutHeading: "About us",
+  /** The link from the home page's about section to the about page. */
+  aboutLink: "More about us",
+  overviewHeading: "How we work",
   audienceHeading: "Who we work with",
+  proofHeading: "What sets us apart",
+  /** business.proof in the site's voice, in two to four sentences. Empty shows proof as given. */
+  proofBody: "",
+  /**
+   * The trust strip under the home hero: up to three short points, under six
+   * words each, each restating part of business.proof ("Fully insured",
+   * "Trading since 2009"). Empty without that fact.
+   */
+  trust1: "",
+  trust2: "",
+  trust3: "",
   offeringsHeading: "Everything we offer",
   valuePropsHeading: "Why choose us",
+  /**
+   * Three reasons to choose the business, each a fact or business.proof put
+   * as a benefit. An icon is a key of ICONS in src/icons.ts that shows what
+   * its card says, as "calendarCheck"; empty shows checkCircle.
+   */
   valueProp1Title: "",
   valueProp1Body: "",
+  valueProp1Icon: "",
   valueProp2Title: "",
   valueProp2Body: "",
+  valueProp2Icon: "",
   valueProp3Title: "",
   valueProp3Body: "",
+  valueProp3Icon: "",
   serviceCardsHeading: "What we do",
+  /** The link under the service cards to the services page, off that page. */
+  serviceCardsLink: "See all services",
+  serviceIncludesLabel: "What is included",
+  serviceForLabel: "Who it is for",
+  /**
+   * Up to six services, one per business.offerings item that a fact
+   * describes. Name; Body, one benefit-led sentence; Icon, a key of ICONS in
+   * src/icons.ts, no key twice; Includes, what the service covers, one item
+   * to a line, from the facts; For, one sentence on who it suits, from
+   * business.audience. A card shows Name, Body and Icon; the services page
+   * shows them all.
+   */
   service1Name: "",
   service1Body: "",
+  service1Icon: "",
+  service1Includes: "",
+  service1For: "",
   service2Name: "",
   service2Body: "",
+  service2Icon: "",
+  service2Includes: "",
+  service2For: "",
   service3Name: "",
   service3Body: "",
+  service3Icon: "",
+  service3Includes: "",
+  service3For: "",
+  service4Name: "",
+  service4Body: "",
+  service4Icon: "",
+  service4Includes: "",
+  service4For: "",
+  service5Name: "",
+  service5Body: "",
+  service5Icon: "",
+  service5Includes: "",
+  service5For: "",
+  service6Name: "",
+  service6Body: "",
+  service6Icon: "",
+  service6Includes: "",
+  service6For: "",
   stepsHeading: "How it works",
+  /** Three steps from first contact to the finished job. */
   step1Title: "",
   step1Body: "",
   step2Title: "",
@@ -150,26 +239,62 @@ const values = {
   statRatingLabel: "Average rating",
   testimonialsHeading: "What clients say",
   galleryHeading: "Our work",
+  /**
+   * The places service_area.text names, one to a line, and nothing it does
+   * not name. Empty shows service_area.text as given.
+   */
+  areaTowns: "",
+  /** A short paragraph on working in the area, with no landmark, venue or time the facts do not give. */
+  areaBody: "",
+  /** The link from the home page's area section to the service area page. */
+  areaLink: "See the areas we cover",
   faqHeading: "Common questions",
+  /**
+   * Six to eight questions a customer of this trade asks before booking,
+   * each answered from a fact in one or two sentences. Fewer when the facts
+   * answer fewer; never a price.
+   */
   faq1Question: "",
   faq1Answer: "",
   faq2Question: "",
   faq2Answer: "",
   faq3Question: "",
   faq3Answer: "",
+  faq4Question: "",
+  faq4Answer: "",
+  faq5Question: "",
+  faq5Answer: "",
+  faq6Question: "",
+  faq6Answer: "",
+  faq7Question: "",
+  faq7Answer: "",
+  faq8Question: "",
+  faq8Answer: "",
   ctaHeading: "",
   ctaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
   ctaLabel: "",
+  /** The quote page's side column: what happens after a visitor sends the form. */
+  quoteAsideHeading: "What happens next",
+  quoteNext1: "Send the form with as much detail as you can.",
+  quoteNext2: "We read your request and check what the job needs.",
+  quoteNext3: "We reply by email or phone with your quote.",
+  quoteTalkHeading: "Rather talk it through?",
   skipLink: "Skip to content",
   primaryNavLabel: "Main",
   footerNavLabel: "Footer",
+  /** The button that opens the navigation on a phone. */
+  navMenu: "Menu",
   navHome: "Home",
+  navAbout: "About",
   navServices: "Services",
   navServiceArea: "Service area",
   navContact: "Contact",
   navQuote: "Request a quote",
-  navBooking: "Book",
+  /** Empty until the booking page ships, so no menu links to it. */
+  navBooking: "",
+  footerPagesHeading: "Pages",
+  footerContactHeading: "Get in touch",
   servicesHeading: "Services",
   serviceAreaHeading: "Service area",
   contactHeading: "Contact",
@@ -199,157 +324,48 @@ const values = {
 /** Typed as strings, not literals: the Developer changes these values. */
 export const site: Record<keyof typeof values, string> = values
 
-const composed: Field = { kind: "composed" }
+const fact = (fact_key: string, required = false): Field => ({
+  kind: "fact",
+  fact_key,
+  required,
+})
 
-export const fields: Record<keyof typeof site, Field> = {
-  businessName: { kind: "fact", fact_key: "business.name", required: true },
-  phone: { kind: "fact", fact_key: "business.phone", required: true },
-  email: { kind: "fact", fact_key: "business.email", required: true },
-  industry: { kind: "fact", fact_key: "business.industry", required: true },
-  offerings: { kind: "fact", fact_key: "business.offerings", required: true },
-  serviceAreaText: {
-    kind: "fact",
-    fact_key: "service_area.text",
-    required: true,
-  },
-  weekdayHours: { kind: "fact", fact_key: "hours.weekday", required: false },
-  serviceArea: {
-    kind: "fact",
-    fact_key: "service_area.radius",
-    required: false,
-  },
-  tagline: { kind: "fact", fact_key: "business.tagline", required: false },
-  audience: { kind: "fact", fact_key: "business.audience", required: false },
-  overview: { kind: "fact", fact_key: "business.overview", required: false },
-  openingHours: { kind: "fact", fact_key: "hours.weekday", required: false },
-  areaServed: {
-    kind: "fact",
-    fact_key: "service_area.radius",
-    required: false,
-  },
-  testimonial1Quote: {
-    kind: "fact",
-    fact_key: "testimonials.quote_1",
-    required: false,
-  },
-  testimonial1Author: {
-    kind: "fact",
-    fact_key: "testimonials.author_1",
-    required: false,
-  },
-  testimonial2Quote: {
-    kind: "fact",
-    fact_key: "testimonials.quote_2",
-    required: false,
-  },
-  testimonial2Author: {
-    kind: "fact",
-    fact_key: "testimonials.author_2",
-    required: false,
-  },
-  statYearsValue: {
-    kind: "fact",
-    fact_key: "about.years_in_business",
-    required: false,
-  },
-  statClientsValue: {
-    kind: "fact",
-    fact_key: "about.clients_served",
-    required: false,
-  },
-  statRatingValue: {
-    kind: "fact",
-    fact_key: "reviews.average_rating",
-    required: false,
-  },
-  photo1Src: { kind: "fact", fact_key: "media.photo_1", required: false },
-  photo1Alt: { kind: "fact", fact_key: "media.photo_1_alt", required: false },
-  photo2Src: { kind: "fact", fact_key: "media.photo_2", required: false },
-  photo2Alt: { kind: "fact", fact_key: "media.photo_2_alt", required: false },
-  photo3Src: { kind: "fact", fact_key: "media.photo_3", required: false },
-  photo3Alt: { kind: "fact", fact_key: "media.photo_3_alt", required: false },
-  brandColor: composed,
-  template: composed,
-  font: composed,
-  logo: { kind: "fact", fact_key: "media.uploads", required: false },
-  logoAlt: composed,
-  heroImage: { kind: "fact", fact_key: "media.uploads", required: false },
-  heroImageAlt: composed,
-  heroHeading: composed,
-  homeIntro: composed,
-  servicesIntro: composed,
-  serviceAreaIntro: composed,
-  contactIntro: composed,
-  quoteIntro: composed,
-  quoteFormAction: composed,
-  quoteEmailSubject: composed,
-  bookingIntro: composed,
-  aboutHeading: composed,
-  audienceHeading: composed,
-  offeringsHeading: composed,
-  valuePropsHeading: composed,
-  valueProp1Title: composed,
-  valueProp1Body: composed,
-  valueProp2Title: composed,
-  valueProp2Body: composed,
-  valueProp3Title: composed,
-  valueProp3Body: composed,
-  serviceCardsHeading: composed,
-  service1Name: composed,
-  service1Body: composed,
-  service2Name: composed,
-  service2Body: composed,
-  service3Name: composed,
-  service3Body: composed,
-  stepsHeading: composed,
-  step1Title: composed,
-  step1Body: composed,
-  step2Title: composed,
-  step2Body: composed,
-  step3Title: composed,
-  step3Body: composed,
-  statYearsLabel: composed,
-  statClientsLabel: composed,
-  statRatingLabel: composed,
-  testimonialsHeading: composed,
-  galleryHeading: composed,
-  faqHeading: composed,
-  faq1Question: composed,
-  faq1Answer: composed,
-  faq2Question: composed,
-  faq2Answer: composed,
-  faq3Question: composed,
-  faq3Answer: composed,
-  ctaHeading: composed,
-  ctaBody: composed,
-  ctaLabel: composed,
-  skipLink: composed,
-  primaryNavLabel: composed,
-  footerNavLabel: composed,
-  navHome: composed,
-  navServices: composed,
-  navServiceArea: composed,
-  navContact: composed,
-  navQuote: composed,
-  navBooking: composed,
-  servicesHeading: composed,
-  serviceAreaHeading: composed,
-  contactHeading: composed,
-  quoteHeading: composed,
-  bookingHeading: composed,
-  quoteContactLegend: composed,
-  quoteRequestLegend: composed,
-  quoteNameLabel: composed,
-  quoteEmailLabel: composed,
-  quotePhoneLabel: composed,
-  quoteChoose: composed,
-  quoteOptional: composed,
-  quoteSubmit: composed,
-  quoteNextSteps: composed,
-  phoneLabel: composed,
-  emailLabel: composed,
-  weekdayHoursLabel: composed,
-  notFoundHeading: composed,
-  notFoundBody: composed,
-  homeLink: composed,
+/** The fields that render a fact; every other field is composed. */
+const FACTS: Partial<Record<keyof typeof site, Field>> = {
+  businessName: fact("business.name", true),
+  phone: fact("business.phone", true),
+  email: fact("business.email", true),
+  industry: fact("business.industry", true),
+  offerings: fact("business.offerings", true),
+  serviceAreaText: fact("service_area.text", true),
+  weekdayHours: fact("hours.weekday"),
+  serviceArea: fact("service_area.radius"),
+  tagline: fact("business.tagline"),
+  audience: fact("business.audience"),
+  overview: fact("business.overview"),
+  proof: fact("business.proof"),
+  openingHours: fact("hours.weekday"),
+  areaServed: fact("service_area.radius"),
+  testimonial1Quote: fact("testimonials.quote_1"),
+  testimonial1Author: fact("testimonials.author_1"),
+  testimonial2Quote: fact("testimonials.quote_2"),
+  testimonial2Author: fact("testimonials.author_2"),
+  statYearsValue: fact("about.years_in_business"),
+  statClientsValue: fact("about.clients_served"),
+  statRatingValue: fact("reviews.average_rating"),
+  photo1Src: fact("media.photo_1"),
+  photo1Alt: fact("media.photo_1_alt"),
+  photo2Src: fact("media.photo_2"),
+  photo2Alt: fact("media.photo_2_alt"),
+  photo3Src: fact("media.photo_3"),
+  photo3Alt: fact("media.photo_3_alt"),
+  logo: fact("media.uploads"),
+  heroImage: fact("media.uploads"),
 }
+
+export const fields = Object.fromEntries(
+  Object.keys(site).map((key) => [
+    key,
+    FACTS[key as keyof typeof site] ?? { kind: "composed" },
+  ])
+) as Record<keyof typeof site, Field>

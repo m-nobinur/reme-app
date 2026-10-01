@@ -11,15 +11,21 @@ const items = [
 
 {
   items.length > 0 && (
-    <section class="testimonials">
-      {site.testimonialsHeading && <h2>{site.testimonialsHeading}</h2>}
-      <div class="card-grid">
-        {items.map((item) => (
-          <figure class="card card-bordered">
-            <blockquote>{item.quote}</blockquote>
-            {item.author && <figcaption>{item.author}</figcaption>}
-          </figure>
-        ))}
+    <section class="band testimonials">
+      <div class="wrap">
+        {site.testimonialsHeading && (
+          <div class="section-head">
+            <h2>{site.testimonialsHeading}</h2>
+          </div>
+        )}
+        <div class="quote-grid">
+          {items.map((item) => (
+            <figure class="card">
+              <blockquote>{item.quote}</blockquote>
+              {item.author && <figcaption>{item.author}</figcaption>}
+            </figure>
+          ))}
+        </div>
       </div>
     </section>
   )

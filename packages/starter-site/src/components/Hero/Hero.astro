@@ -1,25 +1,32 @@
 ---
+import Icon from "../Icon/Icon.astro"
+
 interface Props {
-  /** The page's h1, read from a site field. */
+  /** The page's h1, from a site field. */
   heading: string
-  /** One sentence under the heading, read from a site field. */
+  /** A sentence or two under it. */
   lede?: string
-  /** A short line above the heading, such as the industry, from a site field. */
+  /** A short line above it, as site.industry. */
   eyebrow?: string
-  /** split for the home page, compact for a page header, centered otherwise. */
-  variant?: "split" | "centered" | "compact"
-  /** The owner's photo, shown only with a path and alt text: in place of the split panel, a cropped banner otherwise. */
+  /** home on the home page, page elsewhere. */
+  variant?: "home" | "page"
+  /** The home photo, shown with both halves. */
   image?: { src: string; alt: string }
+  /** Services shown when there is no photo. */
+  highlights?: { name: string; icon: string }[]
 }
 
 const {
   heading,
   lede = "",
   eyebrow = "",
-  variant = "centered",
+  variant = "page",
   image,
+  highlights = [],
 } = Astro.props
-const photo = image?.src && image.alt ? image : null
+const photo = variant === "home" && image?.src && image.alt ? image : null
+const listed =
+  variant === "home" && !photo ? highlights.filter((h) => h.name) : []
 // Rendered rather than slotted, so a hero whose actions all resolve to
 // nothing is a hero with no actions and not an empty row.
 const actions = Astro.slots.has("default")
@@ -29,7 +36,13 @@ const actions = Astro.slots.has("default")
 
 {
   (heading || lede || actions) && (
-    <section class:list={["hero", `hero-${variant}`]}>
+    <section
+      class:list={[
+        "hero",
+        `hero-${variant}`,
+        variant === "home" && (photo ? "hero-photo" : "hero-plain"),
+      ]}
+    >
       <div class="wrap hero-inner">
         <div class="hero-text">
           {eyebrow && <p class="eyebrow">{eyebrow}</p>}
@@ -37,7 +50,7 @@ const actions = Astro.slots.has("default")
           {lede && <p class="lede">{lede}</p>}
           {actions && <div class="actions" set:html={actions} />}
         </div>
-        {photo ? (
+        {photo && (
           <img
             class="hero-image"
             src={photo.src}
@@ -45,8 +58,16 @@ const actions = Astro.slots.has("default")
             fetchpriority="high"
             decoding="async"
           />
-        ) : (
-          variant === "split" && <div class="hero-panel" aria-hidden="true" />
+        )}
+        {listed.length > 0 && (
+          <ul class="hero-list">
+            {listed.map((item) => (
+              <li>
+                <Icon name={item.icon} />
+                <span>{item.name}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </section>

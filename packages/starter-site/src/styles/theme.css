@@ -20,12 +20,18 @@
      template. */
   --font-display: ui-serif, Georgia, "Times New Roman", serif;
 
+  /* Type. One scale for the body; the display steps are tokens each
+     template sets for itself below. Steps sit at least 1.25 apart. */
   --text-sm: 0.875rem;
   --text-base: 1.0625rem;
   --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
   --text-xl: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
-  --text-2xl: clamp(1.6rem, 1.35rem + 1.2vw, 2.1rem);
-  --text-display: clamp(2.35rem, 1.7rem + 3.2vw, 4rem);
+  --text-2xl: clamp(1.75rem, 1.35rem + 1.7vw, 2.625rem);
+  --text-page: clamp(2.25rem, 1.6rem + 2.8vw, 3.75rem);
+  --text-hero: clamp(2.5rem, 1.6rem + 3.8vw, 4.5rem);
+  --display-weight: 600;
+  --display-tracking: -0.02em;
+  --display-case: none;
 
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;
@@ -36,9 +42,17 @@
   --space-xl: 3rem;
   --space-2xl: 4rem;
 
-  --section-gap: clamp(3.25rem, 2.2rem + 4vw, 5.5rem);
-  --container: 68rem;
-  --measure: 36rem;
+  /* Rhythm. Every section is a band with the same padding, every band holds
+     one container, and every grid uses one gap, so nothing on a page sits at
+     a spacing of its own. */
+  --gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
+  --container: 72rem;
+  --container-narrow: 46rem;
+  --measure: 38rem;
+  --section-pad: clamp(3.5rem, 2.25rem + 5vw, 6.5rem);
+  --section-head-gap: clamp(1.75rem, 1.25rem + 1.5vw, 2.75rem);
+  --grid-gap: clamp(1rem, 0.7rem + 1.2vw, 1.75rem);
+  --header-h: 4.5rem;
 
   --radius-sm: calc(var(--radius) - 0.15rem);
   --radius-md: var(--radius);
@@ -52,4 +66,40 @@
   --brand-text: var(--primary);
   --brand-soft: color-mix(in oklch, var(--brand) 7%, var(--background));
   --brand-line: color-mix(in oklch, var(--brand) 22%, var(--border));
+
+  --radius-card: var(--radius-lg);
+  --radius-button: var(--radius-md);
+  --radius-media: var(--radius-lg);
+
+  /* The page's own pair, kept by name so a surface can turn it over: a dark
+     band sets --background to --ink and --foreground to --paper. */
+  --ink: var(--foreground);
+  --paper: var(--background);
+}
+
+/* The templates' own type and shape. Plain attribute selectors, so the
+   owner's font, written as html:root in the page head, still wins. */
+[data-template="modern"] {
+  --font-display: var(--font-sans);
+  --text-hero: clamp(2.75rem, 1.4rem + 5.2vw, 5.75rem);
+  --text-page: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
+  --display-weight: 500;
+  --display-tracking: -0.035em;
+  --radius-card: 1.25rem;
+  --radius-button: 999px;
+  --radius-media: 1.25rem;
+  --header-h: 5rem;
+}
+
+[data-template="bold"] {
+  --font-display: var(--font-sans);
+  --text-2xl: clamp(2rem, 1.4rem + 2.4vw, 3.25rem);
+  --text-page: clamp(2.75rem, 1.5rem + 5vw, 5.5rem);
+  --text-hero: clamp(3rem, 0.9rem + 8.6vw, 8.5rem);
+  --display-weight: 800;
+  --display-tracking: -0.035em;
+  --display-case: uppercase;
+  --radius-card: 0;
+  --radius-button: 0;
+  --radius-media: 0;
 }

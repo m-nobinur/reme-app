@@ -9,9 +9,11 @@ import {
   HIDDEN_FACTS_KEY,
 } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
+import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
 import { describe, expect, it } from "vitest"
 import {
   assignmentGoal,
+  COPY_RULES,
   ownerChoices,
   photoFile,
   siteRules,
@@ -74,25 +76,42 @@ describe("the Developer's site rules", () => {
     expect(text(true)).toContain("call ask_chief for it rather than writing it")
   })
 
-  it("says what persuasive copy is welcome", () => {
+  it("says how the copy reads, the page heads and the icons", () => {
     const rules = text(false)
-    expect(rules).toContain("benefit-led slogan under eight words")
-    expect(rules).toContain("call to action that names the action")
+    expect(rules).toContain("local copywriter for this trade")
+    expect(rules).toContain("heroHeading names the main service and the area")
+    expect(rules).toContain("50 to 60 characters")
+    expect(rules).toContain("140 to 155 characters")
+    expect(rules).toContain("ICONS key in src/icons.ts")
+    expect(rules).toContain("astro build ends with a copy check")
+    expect(rules).not.toContain(String.fromCharCode(0x2014))
+  })
+
+  it("keeps proof to what the owner said and asks the owner rarely", () => {
+    const rules = text(false)
+    expect(rules).toContain("business.proof is the only source")
+    expect(rules).toContain("never add to it")
+    expect(rules).toContain("once a build at most")
+    expect(rules).toContain(
+      "Never ask for a nice-to-have or for business.proof"
+    )
+  })
+
+  it("bans the copy check's own stock phrases", () => {
+    const rules = text(false)
+    for (const phrase of BANNED_PHRASES) expect(rules, phrase).toContain(phrase)
   })
 
   it("names every word the claims gate fails, from the gate's own list", () => {
     const rules = text(false)
     for (const word of Object.values(CLAIM_VOCABULARY).flat())
       expect(rules, word).toContain(word)
-    expect(rules).toContain("Call ask_chief for the fact")
+    expect(rules).toContain("Write the line without the claim instead")
   })
 
   it("keeps the copy guidance short enough for the cached segment", () => {
-    const added = siteRules(false, []).filter((rule) =>
-      /Persuasive copy|claims gate fails/.test(rule)
-    )
-    expect(added).toHaveLength(2)
-    expect(added.join(" ").split(/\s+/).length).toBeLessThan(160)
+    expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
+    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(560)
   })
 })
 
@@ -193,7 +212,10 @@ describe("the owner's onboarding choices in the rules", () => {
     )
     expect(rules).toContain("ui-serif, Georgia, serif")
     expect(rules).toContain(
-      "Home and Request a quote, plus About, Gallery. Build each extra page from the existing components"
+      "Home and Request a quote, plus About, Gallery. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
+    )
+    expect(rules).toContain(
+      "Build any other extra page from the existing components"
     )
     expect(rules).toContain("a professional tone")
   })

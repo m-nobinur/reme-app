@@ -49,8 +49,8 @@ beforeAll(async () => {
   const [classic, modern, bold, panel] = await Promise.all([
     build({ site: FILLED }),
     build({ site: { ...FILLED, template: "modern", font: "classic_serif" } }),
-    // Bold carries one photo and classic none in its hero, so the single
-    // figure and the drawn panel are each built once.
+    // Bold carries one gallery photo and the panel build no hero photo, so
+    // the single figure and the photo-free hero are each built once.
     build({
       site: { ...FILLED, template: "bold", brandColor: MIDNIGHT, ...ONE_PHOTO },
     }),
@@ -83,34 +83,40 @@ describe("a template", () => {
     }
   })
 
-  test("has a hero of its own", () => {
-    expect(classes(home("classic"))).toContain("hero-split")
-    expect(classes(home("modern"))).toContain("hero-centered")
-    expect(classes(home("bold"))).toContain("hero-compact")
+  test("gives each template its own hero, header and type in its styles", () => {
+    const css = readFileSync(join(ROOT, "src/styles/site.css"), "utf8")
+    for (const name of ["classic", "modern", "bold"]) {
+      expect(classes(home(name)), name).toContain("hero-home")
+      expect(css, name).toContain(`[data-template="${name}"] .hero-home`)
+    }
   })
 
-  test("leads with the figures, or with the pictures for modern", () => {
-    for (const name of ["classic", "bold"]) {
-      expect(at(home(name), "stats"), name).toBeLessThan(
-        at(home(name), "gallery")
+  test("leads with the proof, then the services, and closes on the questions", () => {
+    for (const name of ["classic", "modern", "bold"]) {
+      const page = home(name)
+      expect(at(page, "trust-strip"), name).toBeLessThan(
+        at(page, "band service-cards")
+      )
+      expect(at(page, "band service-cards"), name).toBeLessThan(
+        at(page, "band faq")
       )
     }
-    expect(at(home("modern"), "gallery")).toBeLessThan(
-      at(home("modern"), "stats")
-    )
   })
 
-  test("puts the owner's photo in the hero, in place of the split panel", () => {
+  test("puts the owner's photo in the hero, or the services when there is none", () => {
     for (const name of ["classic", "modern", "bold"]) {
       const img = home(name).elements.find((el) =>
         (el.attrs.class ?? "").split(" ").includes("hero-image")
       )
       expect(img?.attrs.src, name).toBe(FILLED.heroImage)
       expect(img?.attrs.alt, name).toBe(FILLED.heroImageAlt)
-      expect(classes(home(name)), name).not.toContain("hero-panel")
+      expect(classes(home(name)), name).toContain("hero-photo")
+      expect(classes(home(name)), name).not.toContain("hero-list")
     }
-    expect(classes(home("panel"))).toContain("hero-panel")
+    expect(classes(home("panel"))).toContain("hero-plain")
+    expect(classes(home("panel"))).toContain("hero-list")
     expect(classes(home("panel"))).not.toContain("hero-image")
+    expect(home("panel").texts).toContain(FILLED.service1Name)
   })
 
   test("shows the owner's logo in place of the name, and the name as text without one", () => {

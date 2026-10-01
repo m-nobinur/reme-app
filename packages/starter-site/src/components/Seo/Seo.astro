@@ -2,20 +2,22 @@
 import { site } from "../../site-config"
 
 interface Props {
-  /** The page's own title; the business name is appended. */
+  /** The page's own title; the business name is appended once. */
   title: string
-  /** The meta and Open Graph description, read from a site field. */
+  /** The meta description, from a site field. */
   description?: string
-  /** Items from src/structured-data.ts; the schema.org context is added here. */
+  /** Items from src/structured-data.ts. */
   jsonLd?: Record<string, unknown>[]
   /** Keeps the page out of search results, as the 404 page does. */
   noindex?: boolean
 }
 
 const { title, description = "", jsonLd = [], noindex = false } = Astro.props
-const pageTitle = [...new Set([title, site.businessName].filter(Boolean))].join(
-  " | "
-)
+// A title that already names the business keeps it once.
+const pageTitle =
+  site.businessName && !title.includes(site.businessName)
+    ? [title, site.businessName].filter(Boolean).join(" | ")
+    : title
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : ""
 // `<` escaped so a field value can never close the script element.
 const blocks = jsonLd.map((item) =>

@@ -1,0 +1,49 @@
+---
+import CtaBand from "../components/CtaBand/CtaBand.astro"
+import Hero from "../components/Hero/Hero.astro"
+import Section from "../components/Section/Section.astro"
+import Testimonials from "../components/Testimonials/Testimonials.astro"
+import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
+import ValueProps from "../components/ValueProps/ValueProps.astro"
+import Base from "../layouts/Base.astro"
+import { site } from "../site-config"
+import { localBusiness } from "../structured-data"
+
+// Who runs the business, how it works and for whom, from business.overview,
+// business.audience and business.proof. With none of the three this page
+// has nothing to say, and the Developer deletes it.
+const proof = site.proofBody || site.proof
+---
+
+<Base
+  title={site.aboutTitle || site.aboutHeading}
+  description={site.aboutDescription || site.aboutIntro}
+  jsonLd={localBusiness(Astro.site)}
+>
+  <Hero heading={site.aboutHeading} lede={site.aboutIntro} />
+  <TrustStrip />
+  {
+    site.overview && (
+      <Section heading={site.overviewHeading}>
+        <p>{site.overview}</p>
+      </Section>
+    )
+  }
+  {
+    site.audience && (
+      <Section heading={site.audienceHeading}>
+        <p>{site.audience}</p>
+      </Section>
+    )
+  }
+  {
+    proof && (
+      <Section heading={site.proofHeading}>
+        <p>{proof}</p>
+      </Section>
+    )
+  }
+  <ValueProps />
+  <Testimonials />
+  <CtaBand />
+</Base>

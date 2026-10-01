@@ -16,9 +16,11 @@ props:
     description: primary for the one main action, secondary for the rest.
 constraints:
   - Renders nothing when href or label is empty.
+  - A phone label goes through phoneText from src/phone.ts; the tel link keeps
+    site.phone.
   - At most one primary per group of actions.
 examples:
-  - '<ActionLink href={`tel:${site.phone}`} label={site.phone} />'
+  - '<ActionLink href={`tel:${site.phone}`} label={phoneText(site.phone)} />'
   - '<ActionLink href="/quote/" label={site.navQuote} variant="secondary" />'
 forbidden:
   - a literal label, phone number or email address

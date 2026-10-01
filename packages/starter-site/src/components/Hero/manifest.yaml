@@ -1,39 +1,46 @@
 component: Hero
 path: src/components/Hero/Hero.astro
-summary: The page's h1 with an optional lede and action links as children.
+summary: The page's h1 with a lede and action links; on the home page the
+  template sets its composition.
 props:
   - name: heading
     type: string
     required: true
-    description: The page's h1, read from a site field.
+    description: The page's h1, from a site field.
   - name: lede
     type: string
     required: false
-    description: One sentence under the heading, read from a site field.
+    description: A sentence or two under it.
   - name: eyebrow
     type: string
     required: false
-    description: A short line above the heading, such as the industry, from a site field.
+    description: A short line above it, as site.industry.
   - name: variant
-    type: '"split" | "centered" | "compact"'
+    type: '"home" | "page"'
     required: false
-    description: split for the home page, compact for a page header, centered otherwise.
+    description: home on the home page, page elsewhere.
   - name: image
     type: "{ src: string; alt: string }"
     required: false
-    description: "The owner's photo, shown only with a path and alt text: in place
-      of the split panel, a cropped banner otherwise."
+    description: The home photo, shown with both halves.
+  - name: highlights
+    type: "{ name: string; icon: string }[]"
+    required: false
+    description: Services shown when there is no photo.
 constraints:
   - One per page, first inside the layout.
   - Children are ActionLink elements only.
-  - split for the home page, compact for a page under it, centered otherwise.
+  - home on the home page, page everywhere else. The home hero follows
+    site.template, with the copy beside the photo, the photo full-bleed behind
+    it, or oversized type over stacked blocks.
+  - With no photo the home hero shows highlights, the first three services with
+    their icons, never an empty box.
   - Renders nothing when the heading, the lede and the actions are all empty.
   - eyebrow is for the home page, with site.industry.
   - image is the home page's, from site.heroImage and site.heroImageAlt; it
     renders only with both, and the same photo is not used again on the page.
 examples:
-  - "<Hero heading={site.servicesHeading} lede={site.servicesIntro}
-    variant=\"compact\" />"
+  - "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
 forbidden:
   - a second Hero on a page
   - literal text in heading or lede

@@ -1,7 +1,11 @@
 /* Every colour here comes from a token: tokens.css, which is a byte-identical
    copy of packages/ui/src/styles/tokens.css, or the marketing layer over it in
    theme.css. Light only: the tokens flip under a `.dark` class, and a static
-   page with no script has nothing to set it. */
+   page with no script has nothing to set it.
+
+   One system, three templates. Every section is a band of the same padding
+   holding one container; the templates below change type, shape and surface
+   by data-template, never the spacing. */
 
 *,
 *::before,
@@ -12,6 +16,8 @@
 html {
   color-scheme: light;
   -webkit-text-size-adjust: 100%;
+  /* An in-page link lands below the sticky header, not under it. */
+  scroll-padding-top: calc(var(--header-h) + var(--space-sm));
 }
 
 body {
@@ -23,35 +29,14 @@ body {
   line-height: 1.65;
 }
 
+img {
+  max-width: 100%;
+}
+
 .wrap {
-  max-width: var(--container);
+  max-width: calc(var(--container) + var(--gutter) * 2);
   margin-inline: auto;
-  padding-inline: var(--space-sm);
-}
-
-@media (min-width: 40rem) {
-  .wrap {
-    padding-inline: var(--space-lg);
-  }
-}
-
-/* Sections sit in the middle column; a band spans the page, which is what lets
-   the hero and the call to action carry a background of their own. */
-main {
-  display: grid;
-  grid-template-columns: 1fr min(var(--container), 100% - 2rem) 1fr;
-  row-gap: var(--section-gap);
-  padding-block-end: var(--space-2xl);
-}
-
-main > * {
-  grid-column: 2;
-}
-
-@media (min-width: 40rem) {
-  main {
-    grid-template-columns: 1fr min(var(--container), 100% - 4rem) 1fr;
-  }
+  padding-inline: var(--gutter);
 }
 
 a {
@@ -59,8 +44,7 @@ a {
   text-underline-offset: 0.2em;
 }
 
-a:focus-visible,
-summary:focus-visible {
+:is(a, summary, button):focus-visible {
   outline: 2px solid var(--brand-text);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
@@ -70,15 +54,16 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.015em;
+  font-weight: var(--display-weight);
+  line-height: 1.1;
+  letter-spacing: var(--display-tracking);
   text-wrap: balance;
 }
 
 h1 {
-  font-size: var(--text-display);
+  font-size: var(--text-page);
   margin: 0 0 var(--space-sm);
+  text-transform: var(--display-case);
 }
 
 h2 {
@@ -88,9 +73,8 @@ h2 {
 
 h3 {
   font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  margin: 0 0 var(--space-3xs);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-2xs);
 }
 
 p {
@@ -99,10 +83,11 @@ p {
 }
 
 .lede {
+  margin: 0;
+  max-width: var(--measure);
   color: var(--muted-foreground);
   font-size: var(--text-lg);
-  max-width: var(--measure);
-  margin: 0;
+  line-height: 1.55;
 }
 
 .mark {
@@ -112,44 +97,104 @@ p {
   color: var(--brand-text);
 }
 
-/* A section names itself with a short rule above the heading rather than a
-   coloured chip. One ornament, used everywhere, drawn from the brand. */
-.value-props > h2::before,
-.service-cards > h2::before,
-.steps > h2::before,
-.testimonials > h2::before,
-.gallery > h2::before,
-.faq > h2::before,
-.section > h2::before {
-  content: "";
-  display: block;
-  width: 2.5rem;
-  height: 3px;
-  margin-block-end: var(--space-md);
-  background: var(--brand);
+/* Bands. A band after a plain band drops its top padding, so two plain
+   sections sit one section apart rather than two; a tinted band keeps both. */
+
+.band {
+  padding-block: var(--section-pad);
+}
+
+.band:not(.band-tint) + .band:not(.band-tint) {
+  padding-block-start: 0;
+}
+
+.section-head {
+  max-width: var(--container-narrow);
+  margin-block-end: var(--section-head-gap);
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.section-more {
+  margin: var(--space-lg) 0 0;
+}
+
+.more-link {
+  font-weight: 600;
+  text-decoration-thickness: 1px;
+}
+
+.more-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* A titled block with its heading beside the text on a wide screen. The FAQ,
+   the reasons and the area use the same split, so the page has one rhythm. */
+.section-inner,
+.faq-inner,
+.value-inner,
+.area-inner {
+  display: grid;
+  gap: var(--section-head-gap) var(--space-2xl);
+}
+
+@media (min-width: 56rem) {
+  .section-inner,
+  .faq-inner,
+  .value-inner,
+  .area-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  :is(.faq-inner, .value-inner) > .section-head {
+    margin: 0;
+  }
+}
+
+.section-inner > h2 {
+  margin: 0;
+}
+
+.section-body > :last-child {
+  margin-bottom: 0;
+}
+
+.section-lede {
+  font-size: var(--text-lg);
 }
 
 /* Header */
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   border-bottom: 1px solid var(--border);
   background: var(--background);
 }
 
-.site-header .wrap {
+.header-inner {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2xs) var(--space-md);
-  min-height: 4rem;
-  padding-block: var(--space-2xs);
+  gap: var(--space-2xs);
+  min-height: var(--header-h);
+}
+
+@media (min-width: 30rem) {
+  .header-inner {
+    gap: var(--space-md);
+  }
 }
 
 .site-name {
+  margin-inline-end: auto;
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
   color: var(--foreground);
   text-decoration: none;
 }
@@ -163,133 +208,116 @@ p {
   object-fit: contain;
 }
 
-.site-footer .site-logo {
-  height: 2rem;
-}
-
-.site-header nav {
-  margin-inline-start: auto;
+@media (max-width: 29.99rem) {
+  .site-header .site-logo {
+    max-width: 7.5rem;
+  }
 }
 
 .site-header ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--space-md);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.site-header nav a {
+.nav-wide {
+  display: none;
+}
+
+.nav-wide ul {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.nav-wide a {
   display: inline-flex;
   align-items: center;
   min-height: 2.75rem;
   color: var(--foreground);
   font-size: var(--text-sm);
-  letter-spacing: 0.01em;
+  font-weight: 500;
   text-decoration: none;
 }
 
-.site-header nav a:hover {
+.nav-wide a:hover {
   color: var(--brand-text);
 }
 
-.site-header nav a[aria-current="page"] {
+.nav-wide a[aria-current="page"] {
   color: var(--brand-text);
   box-shadow: inset 0 -2px 0 var(--brand);
 }
 
-/* Hero */
-
-.hero {
-  padding-block: var(--space-2xl) var(--space-xl);
-  background: var(--brand-soft);
-  border-block-end: 1px solid var(--brand-line);
-}
-
-.hero-compact {
-  padding-block: var(--space-xl) var(--space-lg);
-}
-
-.hero-inner {
-  display: grid;
-  gap: var(--space-xl);
+/* The phone menu is a native disclosure: it opens with no script, and the
+   summary is announced as a button that says whether it is open. */
+.menu-toggle {
+  display: inline-flex;
   align-items: center;
-}
-
-.hero h1 {
-  max-width: 20ch;
-}
-
-.eyebrow {
-  margin: 0 0 var(--space-xs);
-  color: var(--brand-text);
+  gap: var(--space-2xs);
+  min-height: 2.75rem;
+  padding-inline: var(--space-xs);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-button);
+  color: var(--foreground);
+  cursor: pointer;
   font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  list-style: none;
 }
 
-/* The panel is ornament and says nothing: a tinted field, a soft wash of the
-   brand and a dot grid. Not a placeholder for a photograph the site does not
-   have. */
-.hero-panel {
+.menu-toggle::-webkit-details-marker {
   display: none;
-  min-height: 21rem;
-  border-radius: var(--radius-lg);
-  background-color: color-mix(in oklch, var(--brand) 9%, var(--card));
-  /* Two flat discs and a dot grid: an abstract mark drawn from the brand, not
-     a blurred stand-in for a photograph the site does not have. */
-  background-image:
-    radial-gradient(circle at 74% 72%, var(--brand) 0 20%, transparent 20.3%),
-    radial-gradient(
-      circle at 38% 34%,
-      color-mix(in oklch, var(--brand) 40%, transparent) 0 27%,
-      transparent 27.3%
-    ),
-    radial-gradient(
-      color-mix(in oklch, var(--brand) 32%, transparent) 1.5px,
-      transparent 1.6px
-    );
-  background-size:
-    100% 100%,
-    100% 100%,
-    1.5rem 1.5rem;
 }
 
-/* The owner's photo, cropped to a fixed shape so no upload stretches the
-   hero: beside the text in the split layout, a banner under it otherwise. */
-.hero-image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: var(--radius-lg);
-  background: var(--brand-soft);
+.menu-toggle::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-0.1rem, -0.1rem);
+  transition: transform 160ms ease;
 }
 
-.hero-centered .hero-image {
-  max-width: 60rem;
-  margin-inline: auto;
-  aspect-ratio: 21 / 9;
+.nav-narrow[open] .menu-toggle::after {
+  transform: rotate(225deg) translate(-0.1rem, -0.1rem);
 }
 
-.hero-compact .hero-image {
-  aspect-ratio: 3 / 1;
+.nav-narrow nav {
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  padding: var(--space-2xs) var(--gutter) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: var(--shadow-card);
 }
 
-@media (min-width: 56rem) {
-  .hero-split .hero-image {
-    aspect-ratio: 4 / 3;
-  }
+.nav-narrow a {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  font-weight: 500;
+  text-decoration: none;
+}
 
-  .hero-split .hero-inner {
-    grid-template-columns: 1.15fr 1fr;
-  }
+.nav-narrow a[aria-current="page"] {
+  color: var(--brand-text);
+}
 
-  .hero-split .hero-panel {
+@media (min-width: 60rem) {
+  .nav-wide {
     display: block;
   }
+
+  .nav-narrow {
+    display: none;
+  }
 }
+
+/* Actions */
 
 .actions {
   display: flex;
@@ -301,17 +329,19 @@ p {
 .action {
   display: inline-flex;
   align-items: center;
-  min-height: 2.875rem;
+  justify-content: center;
+  min-height: 3rem;
   padding-inline: var(--space-md);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-button);
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-decoration: none;
   transition:
     background-color 160ms ease,
-    border-color 160ms ease;
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .action-primary {
@@ -320,12 +350,12 @@ p {
 }
 
 .action-primary:hover {
-  background: color-mix(in oklch, var(--brand) 86%, var(--foreground));
+  background: color-mix(in oklch, var(--brand) 84%, var(--foreground));
 }
 
 .action-secondary {
   border-color: var(--brand-line);
-  background: var(--background);
+  background: transparent;
   color: var(--foreground);
 }
 
@@ -333,82 +363,342 @@ p {
   border-color: var(--brand);
 }
 
-.hero-centered .hero-text {
-  max-width: 46rem;
-  margin-inline: auto;
+.header-action .action {
+  min-height: 2.75rem;
+  padding-inline: var(--space-sm);
+  white-space: nowrap;
 }
 
-.hero-centered h1,
-.hero-centered .lede {
-  margin-inline: auto;
+@media (max-width: 29.99rem) {
+  .header-action .action {
+    padding-inline: var(--space-xs);
+    font-size: 0.8125rem;
+  }
+
+  [data-template="bold"] .header-action .action {
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
 }
 
-.hero-centered {
-  text-align: center;
+/* Hero */
+
+.hero {
+  position: relative;
 }
 
-.hero-centered .actions {
-  justify-content: center;
+.hero-text {
+  max-width: 44rem;
 }
 
-/* Sections */
+.eyebrow {
+  margin: 0 0 var(--space-sm);
+  color: var(--brand-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 
-.intro {
-  max-width: var(--measure);
+.hero-home h1 {
+  font-size: var(--text-hero);
+  line-height: 1.02;
+}
+
+.hero-page {
+  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem)
+    clamp(2.5rem, 1.75rem + 3vw, 4.5rem);
+  border-bottom: 1px solid var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.hero-page h1 {
+  max-width: 22ch;
+}
+
+/* The owner's photo, cropped to a fixed shape so no upload stretches the
+   hero. Each template places it: beside the text, behind it, or under it. */
+.hero-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 4;
+  object-fit: cover;
+  border-radius: var(--radius-media);
+  background: var(--brand-soft);
+}
+
+/* With no photo the hero shows what the business does: the services, each
+   with its icon. Never a grey box standing in for a picture. */
+.hero-list {
+  display: grid;
   margin: 0;
-  font-size: var(--text-lg);
-  color: var(--muted-foreground);
+  padding: 0;
+  list-style: none;
 }
 
-.section p:last-child,
-.card p:last-child,
-.cta-text p:last-child {
-  margin-bottom: 0;
+.hero-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.25;
 }
+
+/* Trust strip */
+
+.trust-strip {
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.trust-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md) var(--space-xl);
+  padding-block: var(--space-lg);
+}
+
+.trust-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-xl);
+  margin: 0;
+}
+
+.trust-figures div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.trust-figures dt {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.trust-figures dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--display-weight);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trust-points li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-weight: 600;
+}
+
+/* Cards */
 
 .card-grid {
   display: grid;
-  gap: var(--space-md);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  list-style: none;
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
-.card-bordered {
-  padding: var(--space-md);
+.card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2xs);
+  padding: var(--space-lg) var(--space-md);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   background: var(--card);
   color: var(--card-foreground);
 }
 
-.value-props .card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-3xs) var(--space-xs);
-}
-
-.value-props .mark {
-  grid-row: span 2;
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-block-start: 0.1rem;
-}
-
-.value-props p {
-  color: var(--muted-foreground);
+.card :is(h3, p) {
   margin: 0;
 }
 
-.service-cards p {
+.card p {
   color: var(--muted-foreground);
+}
+
+.card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-md);
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+.card-icon .mark {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: inherit;
+}
+
+/* A linked card: the name is the link, stretched over the card, and the
+   card answers the pointer and shows the focus ring. */
+.card-linked h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.card-linked h3 a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.card-linked h3 a:focus-visible {
+  outline: none;
+}
+
+.card-linked:has(a:focus-visible) {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 3px;
+}
+
+.card-linked {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.card-linked:hover {
+  border-color: var(--brand-line);
+  box-shadow: var(--shadow-card);
+}
+
+.card-linked:hover h3 {
+  color: var(--brand-text);
+}
+
+/* Reasons to choose */
+
+.value-props {
+  background: var(--brand-soft);
+}
+
+.value-list {
+  display: grid;
+  gap: var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.value-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-sm) var(--space-md);
+  align-items: start;
+}
+
+.value-list .card-icon {
+  background: var(--background);
+}
+
+.value-list p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* Services page */
+
+.service-detail {
+  display: grid;
+  gap: var(--space-lg) var(--space-2xl);
+  padding-block: var(--space-xl);
+  border-top: 1px solid var(--border);
+}
+
+.service-detail:first-child {
+  padding-block-start: 0;
+  border-top: 0;
+}
+
+.service-detail:last-child {
+  padding-block-end: 0;
+}
+
+@media (min-width: 56rem) {
+  .service-detail {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+.service-detail-main .mark {
+  width: 2rem;
+  height: 2rem;
+  margin-block-end: var(--space-sm);
+}
+
+.service-detail-main h2 {
+  margin-block-end: var(--space-sm);
+}
+
+.service-detail-body {
+  font-size: var(--text-lg);
+}
+
+.service-detail-facts {
+  padding: var(--space-lg) var(--space-md);
+  border-radius: var(--radius-card);
+  background: var(--brand-soft);
+}
+
+.facts-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.service-detail-facts :is(ul, p) {
+  margin: 0 0 var(--space-md);
+}
+
+.service-detail-facts > :last-child {
+  margin-bottom: 0;
+}
+
+.check-list {
+  display: grid;
+  gap: var(--space-2xs);
+  padding: 0;
+  list-style: none;
+}
+
+.check-list li {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2xs);
+}
+
+.check-list .mark {
+  margin-block-start: 0.2rem;
 }
 
 .offerings {
   display: grid;
   gap: var(--space-2xs) var(--space-md);
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
   margin: 0;
   padding-inline-start: 1.1em;
 }
@@ -421,85 +711,67 @@ p {
 
 .step-list {
   display: grid;
-  gap: var(--space-md);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   counter-reset: step;
-  list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 1.25rem 0 0;
+  list-style: none;
 }
 
 .step-list li {
   counter-increment: step;
-  padding-block-start: var(--space-md);
-  border-block-start: 1px solid var(--border);
+  border-block-start: 1px solid var(--brand-line);
 }
 
+/* The number is a badge sitting on the rule, so the steps read as one line. */
 .step-list li::before {
   content: counter(step);
-  display: block;
-  margin-block-end: var(--space-2xs);
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-variant-numeric: tabular-nums;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-block: -1.25rem var(--space-sm);
+  border: 1px solid var(--brand-line);
+  border-radius: 50%;
+  background: var(--background);
   color: var(--brand-text);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .step-list p {
+  margin: 0;
   color: var(--muted-foreground);
-  margin: 0;
-}
-
-/* Stats */
-
-.stats {
-  display: grid;
-  gap: var(--space-md);
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  margin: 0;
-  padding: var(--space-md) 0;
-  border-block: 1px solid var(--border);
-}
-
-.stats div {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: var(--space-3xs);
-}
-
-.stats dt {
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-}
-
-.stats dd {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Testimonials */
 
-.testimonials figure {
+.quote-grid {
   display: grid;
-  gap: var(--space-xs);
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.testimonials figure {
   margin: 0;
-  align-content: start;
+  gap: var(--space-sm);
+  border-inline-start: 3px solid var(--brand);
 }
 
 .testimonials blockquote {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--text-lg);
-  line-height: 1.4;
+  font-size: var(--text-xl);
+  line-height: 1.35;
 }
 
 .testimonials figcaption {
   color: var(--muted-foreground);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 /* Gallery */
@@ -508,11 +780,11 @@ p {
    stretch across the page. */
 .gallery-grid {
   display: grid;
-  gap: var(--space-sm);
+  gap: var(--grid-gap);
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
-  list-style: none;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 .gallery-grid img {
@@ -520,12 +792,28 @@ p {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-media);
   background: var(--brand-soft);
 }
 
+/* Three photos: one large, two stacked beside it. */
+@media (min-width: 48rem) {
+  .gallery-3 {
+    grid-template-columns: 2fr 1fr;
+  }
+
+  .gallery-3 li:first-child {
+    grid-row: span 2;
+  }
+
+  .gallery-3 li:first-child img {
+    height: 100%;
+    aspect-ratio: auto;
+  }
+}
+
 .gallery-single {
-  max-width: 36rem;
+  max-width: 44rem;
   margin: 0;
 }
 
@@ -534,16 +822,139 @@ p {
   width: 100%;
   aspect-ratio: 3 / 2;
   object-fit: cover;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-media);
   background: var(--brand-soft);
 }
 
-/* Quote form */
+/* Service area */
+
+.area-body {
+  font-size: var(--text-lg);
+}
+
+.area-copy h2 {
+  margin-block-end: var(--space-md);
+}
+
+.area-places {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.area-place {
+  display: flex;
+  align-items: start;
+  gap: var(--space-xs);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--display-weight);
+  line-height: 1.3;
+}
+
+.area-place .mark {
+  margin-block-start: 0.3rem;
+}
+
+.area-towns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.area-towns li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: var(--space-3xs) var(--space-xs);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  font-weight: 500;
+}
+
+.area-towns .mark {
+  width: 1rem;
+  height: 1rem;
+}
+
+.area-radius {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* Quote */
+
+.quote-layout {
+  display: grid;
+  gap: var(--space-2xl);
+}
+
+@media (min-width: 60rem) {
+  .quote-layout {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .quote-aside {
+    position: sticky;
+    top: calc(var(--header-h) + var(--space-md));
+  }
+}
+
+.quote-aside {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-md);
+  border-radius: var(--radius-card);
+  background: var(--brand-soft);
+}
+
+.quote-aside h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.next-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  counter-reset: next;
+  list-style: none;
+}
+
+.next-list li {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--space-xs);
+  counter-increment: next;
+}
+
+.next-list li::before {
+  content: counter(next);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--brand-foreground);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
 
 .quote-form {
   display: grid;
-  gap: var(--space-lg);
-  max-width: 40rem;
+  gap: var(--space-xl);
+  max-width: 42rem;
 }
 
 .quote-form fieldset {
@@ -559,7 +970,8 @@ p {
   padding: 0;
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 600;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
 }
 
 .quote-field {
@@ -584,11 +996,13 @@ p {
   font-size: var(--text-sm);
 }
 
+/* The field's edge reads at 3:1 against the page, as a control's must. */
 .quote-field :is(input, select, textarea) {
   width: 100%;
-  min-height: 2.875rem;
+  min-height: 3rem;
   padding: var(--space-2xs) var(--space-xs);
-  border: 1px solid var(--input);
+  border: 1px solid
+    color-mix(in oklch, var(--foreground) 38%, var(--background));
   border-radius: var(--radius-md);
   background: var(--background);
   color: var(--foreground);
@@ -599,8 +1013,7 @@ p {
   resize: vertical;
 }
 
-.quote-field :is(input, select, textarea):focus-visible,
-.quote-submit button:focus-visible {
+.quote-field :is(input, select, textarea):focus-visible {
   outline: 2px solid var(--brand-text);
   outline-offset: 2px;
 }
@@ -630,12 +1043,17 @@ p {
 /* Frequently asked questions */
 
 .faq-list {
-  max-width: 48rem;
-  border-block-start: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
 }
 
 .faq details {
-  border-block-end: 1px solid var(--border);
+  padding-inline: var(--space-md);
+}
+
+.faq details + details {
+  border-block-start: 1px solid var(--border);
 }
 
 .faq summary {
@@ -643,11 +1061,15 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  min-height: 3rem;
-  padding-block: var(--space-xs);
+  min-height: 3.5rem;
+  padding-block: var(--space-sm);
   cursor: pointer;
   font-weight: 600;
   list-style: none;
+}
+
+.faq summary:hover {
+  color: var(--brand-text);
 }
 
 .faq summary::-webkit-details-marker {
@@ -670,41 +1092,29 @@ p {
 }
 
 .faq details p {
-  margin: 0 0 var(--space-sm);
+  margin: 0 0 var(--space-md);
   max-width: 60ch;
   color: var(--muted-foreground);
 }
 
-/* Contact details */
+/* Contact details. A dl's rows may hold only dt and dd, so the icon sits
+   inside the dt: beside both lines in the list, above them on a card. */
 
 .contact-details {
   display: grid;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   margin: 0;
 }
 
-.contact-details div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 var(--space-xs);
-  align-items: center;
-}
-
 .contact-details dt {
-  grid-column: 2;
   color: var(--muted-foreground);
   font-size: var(--text-sm);
   line-height: 1.3;
 }
 
 .contact-details dd {
-  grid-column: 2;
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-.contact-details .mark {
-  grid-row: span 2;
 }
 
 .contact-details dd a {
@@ -716,10 +1126,53 @@ p {
   color: var(--brand-text);
 }
 
+.contact-list div {
+  position: relative;
+  display: grid;
+  align-content: center;
+  min-height: 2.25rem;
+  padding-inline-start: calc(2.25rem + var(--space-xs));
+}
+
+.contact-list .card-icon {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--background);
+}
+
+.contact-list .card-icon .mark {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.contact-cards {
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.contact-cards div {
+  padding: var(--space-lg) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.contact-cards .card-icon {
+  display: grid;
+  margin-block-end: var(--space-sm);
+}
+
+.contact-cards dd {
+  font-weight: 600;
+}
+
 /* Call to action */
 
 .cta-band {
-  padding-block: var(--space-2xl);
   background: var(--brand);
   color: var(--brand-foreground);
 }
@@ -729,11 +1182,11 @@ p {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md) var(--space-lg);
+  gap: var(--space-md) var(--space-xl);
 }
 
 .cta-text {
-  max-width: 34rem;
+  max-width: 36rem;
 }
 
 .cta-text h2 {
@@ -741,90 +1194,99 @@ p {
   color: var(--brand-foreground);
 }
 
-.cta-band .actions {
+.cta-body {
   margin: 0;
 }
 
-.cta-band .action-primary {
+.cta-band .actions {
+  margin-block-start: 0;
+}
+
+/* On a brand surface the actions turn over: the page colour on the brand. */
+:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary {
   background: var(--brand-foreground);
   color: var(--brand);
 }
 
-.cta-band .action-primary:hover {
+:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary:hover {
   background: color-mix(in oklch, var(--brand-foreground) 88%, var(--brand));
 }
 
-.cta-band .action-secondary {
-  background: transparent;
-  border-color: color-mix(in oklch, var(--brand-foreground) 45%, transparent);
+:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary {
+  border-color: color-mix(in oklch, var(--brand-foreground) 50%, transparent);
   color: var(--brand-foreground);
 }
 
-/* The ring has to show against the band it sits on, not against the page. */
-.cta-band a:focus-visible {
-  outline-color: var(--brand-foreground);
-}
-
-.cta-band .action-secondary:hover {
+:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary:hover {
   border-color: var(--brand-foreground);
   background: color-mix(in oklch, var(--brand-foreground) 12%, transparent);
 }
 
-/* The two bands that span the page, after the rules they override. */
-main > .hero,
-main > .cta-band {
-  grid-column: 1 / -1;
-}
-
-/* The hero opens the page and the band closes it, so neither keeps the gap
-   the sections between them share. */
-main > .hero:first-child {
-  margin-block-end: calc(var(--section-gap) * -1 + var(--space-xl));
-}
-
-main > .cta-band:last-child {
-  margin-block-start: calc(var(--section-gap) * -1 + var(--space-2xl));
-  margin-block-end: calc(var(--space-2xl) * -1);
+:is(.cta-band, [data-template="modern"] .hero-plain) a:focus-visible {
+  outline-color: var(--brand-foreground);
 }
 
 /* Footer */
 
 .site-footer {
+  padding-block: var(--section-pad) var(--space-xl);
   border-top: 1px solid var(--border);
-  padding-block: var(--space-2xl);
   background: var(--brand-soft);
 }
 
 .footer-grid {
   display: grid;
-  gap: var(--space-md) var(--space-xl);
+  gap: var(--space-xl);
   align-items: start;
 }
 
-@media (min-width: 46rem) {
+@media (min-width: 48rem) {
   .footer-grid {
-    grid-template-columns: auto auto auto;
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1.3fr);
   }
+}
+
+.footer-brand {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
 }
 
 .site-footer .site-name {
   margin: 0;
 }
 
+.site-footer .site-logo {
+  height: 2rem;
+}
+
+.footer-blurb {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted-foreground);
+}
+
+.footer-heading {
+  margin: 0 0 var(--space-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .site-footer ul {
   display: grid;
   gap: var(--space-3xs);
-  list-style: none;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 .site-footer nav a {
   display: inline-block;
   padding-block: var(--space-3xs);
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
+  color: var(--foreground);
   text-decoration: none;
 }
 
@@ -833,18 +1295,11 @@ main > .cta-band:last-child {
   text-decoration: underline;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .action,
-  .faq summary::after {
-    transition: none;
-  }
-}
-
 .skip-link {
   position: absolute;
   left: var(--space-sm);
   top: -4rem;
-  z-index: 1;
+  z-index: 30;
   padding: var(--space-2xs) var(--space-xs);
   border-radius: var(--radius-sm);
   background: var(--background);
@@ -855,125 +1310,481 @@ main > .cta-band:last-child {
   top: var(--space-2xs);
 }
 
-/* Templates. Classic is everything above: a light header, a split hero with
-   its panel, bordered cards. The two below restyle the same markup by
-   data-template, so a site switches layout without a new component. */
-
-/* Modern: centred and airy. The header stacks in the middle, the hero drops
-   its tint, sections sit further apart and cards lose their borders. */
-[data-template="modern"] {
-  --section-gap: clamp(4rem, 2.8rem + 5vw, 7rem);
+@media (prefers-reduced-motion: reduce) {
+  .action,
+  .card-linked,
+  .faq summary::after,
+  .menu-toggle::after {
+    transition: none;
+  }
 }
 
-[data-template="modern"] .site-header {
-  border-bottom: 0;
-}
-
-[data-template="modern"] .site-header .wrap {
-  flex-direction: column;
-  justify-content: center;
-  padding-block: var(--space-md) var(--space-xs);
-}
-
-[data-template="modern"] .site-header nav {
-  margin-inline: 0;
-}
-
-[data-template="modern"] .hero {
-  padding-block: var(--space-2xl);
+/* An ink surface: the page's pair turned over, so every rule above reads on
+   it unchanged. Bold's header, hero and footer wear it. */
+[data-template="bold"] :is(.site-header, .hero, .site-footer) {
+  --background: var(--ink);
+  --foreground: var(--paper);
+  --card: color-mix(in oklch, var(--paper) 8%, var(--ink));
+  --card-foreground: var(--paper);
+  --muted-foreground: color-mix(in oklch, var(--paper) 72%, var(--ink));
+  --border: color-mix(in oklch, var(--paper) 22%, var(--ink));
+  --brand-text: var(--paper);
+  --brand-soft: color-mix(in oklch, var(--paper) 8%, var(--ink));
+  --brand-line: color-mix(in oklch, var(--paper) 30%, var(--ink));
   background: var(--background);
-  border-block-end: 0;
+  color: var(--foreground);
 }
 
-[data-template="modern"] .hero h1 {
-  max-width: 18ch;
-  font-weight: 400;
-}
+/* Classic: a steady, warm layout. A light header, the copy beside the
+   photo on a tinted field, bordered cards with the icon beside the name. */
 
-[data-template="modern"] .gallery-grid img,
-[data-template="modern"] .card-bordered {
-  border-radius: var(--radius-lg);
-}
-
-[data-template="modern"] .card-bordered {
-  border-color: transparent;
+[data-template="classic"] .hero-home {
+  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
+  border-bottom: 1px solid var(--brand-line);
   background: var(--brand-soft);
 }
 
-/* Bold: dark and dense. The header and hero share one dark block, the
-   figures sit on a brand band across the page, and cards carry a heavy rule.
-   Text on the dark block is the page's own pair turned over, so it keeps the
-   contrast the tokens already hold. */
-[data-template="bold"] {
-  --section-gap: clamp(2.5rem, 1.8rem + 3vw, 4rem);
+[data-template="classic"] .hero-home .hero-inner {
+  display: grid;
+  gap: var(--space-xl);
+  align-items: center;
 }
 
-[data-template="bold"] :is(h1, h2, h3) {
-  font-weight: 800;
-  letter-spacing: -0.03em;
+@media (min-width: 56rem) {
+  [data-template="classic"] .hero-home .hero-inner {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
 }
 
-[data-template="bold"] :is(.site-header, .hero) {
-  border: 0;
-  background: var(--foreground);
-  color: var(--background);
+[data-template="classic"] .hero-home .hero-image {
+  box-shadow: 1rem 1rem 0 var(--brand-line);
 }
 
-[data-template="bold"]
-  :is(.site-header .site-name, .site-header nav a, .hero .lede) {
-  color: var(--background);
+[data-template="classic"] .hero-list {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 
-/* A logo drawn for a light page stays legible on the dark block. */
-[data-template="bold"] .site-header .site-logo {
-  padding: var(--space-3xs);
-  border-radius: var(--radius-md);
-  background: var(--background);
+[data-template="classic"] .hero-list li {
+  padding-block: var(--space-sm);
 }
 
-[data-template="bold"] .hero .eyebrow {
-  color: var(--background);
+[data-template="classic"] .hero-list .mark {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
-[data-template="bold"] .site-header nav a:hover,
-[data-template="bold"] .site-header nav a[aria-current="page"] {
-  color: var(--background);
-  box-shadow: inset 0 -2px 0 var(--background);
+[data-template="classic"] .card {
+  column-gap: var(--space-sm);
+  box-shadow: var(--shadow-card);
 }
 
-[data-template="bold"] :is(.site-header, .hero) a:focus-visible {
-  outline-color: var(--background);
+[data-template="classic"] .card:has(> .card-icon) {
+  grid-template-columns: auto 1fr;
 }
 
-[data-template="bold"] .hero .action-secondary {
-  border-color: var(--background);
+[data-template="classic"] .card:has(> .card-icon) > :not(.card-icon) {
+  grid-column: 2;
 }
 
-[data-template="bold"] .hero h1 {
-  max-width: 16ch;
-  text-transform: uppercase;
+[data-template="classic"] .card-icon {
+  grid-row: span 2;
 }
 
-[data-template="bold"] main > .stats {
-  grid-column: 1 / -1;
-  /* Flush under the hero, which keeps --space-xl below it. */
-  margin-block-start: calc(var(--space-xl) * -1);
-  padding: var(--space-lg) max(var(--space-sm), (100% - var(--container)) / 2);
-  border: 0;
+[data-template="classic"] .card-linked:hover {
+  box-shadow:
+    0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent),
+    0 14px 32px -14px color-mix(in oklch, var(--foreground) 28%, transparent);
+}
+
+/* Modern: led by the picture. The photo fills the hero behind the copy with
+   a dark wash for legibility; with no photo the hero is the brand colour.
+   Pill buttons, borderless tinted cards, large light type. */
+
+[data-template="modern"] .site-header {
+  border-bottom-color: transparent;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+[data-template="modern"] .hero-home {
+  display: grid;
+  align-items: end;
+  min-height: clamp(30rem, 72vh, 46rem);
+  padding-block: var(--section-pad);
+}
+
+[data-template="modern"] .hero-home .hero-inner {
+  width: 100%;
+}
+
+[data-template="modern"] .hero-home .hero-text {
+  position: relative;
+  z-index: 2;
+}
+
+[data-template="modern"] .hero-photo .hero-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+[data-template="modern"] .hero-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--ink) 88%, transparent) 0%,
+    color-mix(in oklch, var(--ink) 70%, transparent) 55%,
+    color-mix(in oklch, var(--ink) 25%, transparent) 100%
+  );
+}
+
+[data-template="modern"] .hero-photo {
+  --foreground: var(--paper);
+  --muted-foreground: color-mix(in oklch, var(--paper) 86%, var(--ink));
+  --brand-text: var(--paper);
+  --brand-line: color-mix(in oklch, var(--paper) 55%, transparent);
+  color: var(--foreground);
+}
+
+[data-template="modern"] .hero-plain {
+  --foreground: var(--brand-foreground);
+  --muted-foreground: var(--brand-foreground);
+  --brand-text: var(--brand-foreground);
   background: var(--brand);
   color: var(--brand-foreground);
 }
 
-[data-template="bold"] .stats dt {
+[data-template="modern"] .hero-page {
+  border-bottom: 0;
+  background: var(--background);
+}
+
+[data-template="modern"] .trust-inner {
+  justify-content: center;
+}
+
+[data-template="modern"]
+  :is(.card, .faq-list, .area-places, .contact-cards div) {
+  border-color: transparent;
+  background: var(--brand-soft);
+}
+
+[data-template="modern"] .card-icon {
+  width: auto;
+  height: auto;
+  justify-self: start;
+  background: none;
+}
+
+[data-template="modern"] .card-icon .mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+[data-template="modern"] .card-linked:hover {
+  border-color: var(--brand-line);
+  box-shadow: none;
+}
+
+[data-template="modern"] .value-props {
+  padding-block-start: 0;
+  background: var(--background);
+}
+
+[data-template="modern"] .value-props + .band {
+  padding-block-start: 0;
+}
+
+[data-template="modern"] .value-list li {
+  padding: var(--space-lg) var(--space-md);
+  border-radius: var(--radius-card);
+  background: var(--brand-soft);
+}
+
+[data-template="modern"] .step-list li::before {
+  border-color: transparent;
+  background: var(--brand-soft);
+}
+
+[data-template="modern"] .testimonials figure {
+  border-inline-start: 0;
+}
+
+[data-template="modern"] .cta-inner {
+  flex-direction: column;
+  text-align: center;
+}
+
+[data-template="modern"] .cta-body {
+  margin-inline: auto;
+}
+
+[data-template="modern"] .site-footer {
+  background: var(--background);
+}
+
+/* Bold: a poster. Oversized type on an ink hero, the lede and actions on a
+   brand block stacked under it, hard edges, ink rules between sections. */
+
+[data-template="bold"] .site-header {
+  border-bottom: 0;
+}
+
+[data-template="bold"] .nav-wide a {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-template="bold"] .nav-wide a[aria-current="page"] {
+  box-shadow: inset 0 -3px 0 var(--brand);
+}
+
+[data-template="bold"] .action {
+  border-width: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+}
+
+[data-template="bold"] .site-header .site-logo {
+  padding: var(--space-3xs);
+  background: var(--paper);
+}
+
+[data-template="bold"] .hero-home {
+  padding-block: clamp(2.5rem, 1.5rem + 4vw, 5rem) 0;
+}
+
+[data-template="bold"] .hero-home .hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The text's parts join the hero's grid, so the lede and the actions can
+   share a brand block while the heading spans the page above them. */
+[data-template="bold"] .hero-home .hero-text {
+  display: contents;
+}
+
+[data-template="bold"] .hero-home h1 {
+  margin-block-end: var(--space-xl);
+  max-width: 14ch;
+  line-height: 0.92;
+}
+
+[data-template="bold"] .hero-home :is(.lede, .actions) {
+  max-width: none;
+  margin: 0;
+  padding-inline: var(--space-lg);
+  background: var(--brand);
   color: var(--brand-foreground);
 }
 
-[data-template="bold"] .stats dd {
-  font-size: var(--text-display);
+[data-template="bold"] .hero-home .lede {
+  padding-block-start: var(--space-lg);
+  font-weight: 500;
 }
 
-[data-template="bold"] .card-bordered {
+[data-template="bold"] .hero-home .actions {
+  padding-block: var(--space-lg);
+}
+
+[data-template="bold"] .hero-home .action-primary {
+  background: var(--brand-foreground);
+  color: var(--brand);
+}
+
+[data-template="bold"] .hero-home .action-secondary {
+  border-color: var(--brand-foreground);
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .hero-home .actions a:focus-visible {
+  outline-color: var(--brand-foreground);
+}
+
+[data-template="bold"] .hero-home .actions {
+  align-items: center;
+  align-content: start;
+}
+
+@media (min-width: 56rem) {
+  [data-template="bold"] .hero-home .hero-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  [data-template="bold"] .hero-home :is(.eyebrow, h1) {
+    grid-column: 1 / -1;
+  }
+
+  [data-template="bold"] .hero-home :is(.lede, .actions) {
+    grid-column: 1;
+  }
+
+  [data-template="bold"] .hero-home :is(.hero-image, .hero-list) {
+    grid-column: 2;
+    grid-row: 3 / span 2;
+  }
+}
+
+[data-template="bold"] .hero-home .hero-image {
+  height: 100%;
+  min-height: 18rem;
+  aspect-ratio: auto;
+}
+
+[data-template="bold"] .hero-list {
+  counter-reset: offer;
+  align-content: center;
+  padding: var(--space-lg);
+  background: var(--card);
+}
+
+[data-template="bold"] .hero-list li {
+  counter-increment: offer;
+  padding-block: var(--space-xs);
+  border-bottom: 2px solid var(--border);
+  text-transform: uppercase;
+}
+
+[data-template="bold"] .hero-list li::before {
+  content: counter(offer, decimal-leading-zero);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-template="bold"] .hero-list .mark {
+  color: var(--foreground);
+}
+
+[data-template="bold"] .hero-page {
+  border-bottom: 0;
+}
+
+[data-template="bold"] .hero-page .lede {
+  color: var(--muted-foreground);
+}
+
+[data-template="bold"] :is(h2, .site-name) {
+  text-transform: uppercase;
+}
+
+[data-template="bold"] .band:not(.band-tint) + .band:not(.band-tint) {
+  padding-block-start: var(--section-pad);
+  border-top: 2px solid var(--foreground);
+}
+
+[data-template="bold"] .trust-strip {
+  border-bottom: 2px solid var(--foreground);
+}
+
+[data-template="bold"] .trust-figures dd {
+  font-size: var(--text-page);
+}
+
+[data-template="bold"] :is(.card, .faq-list, .area-places, .contact-cards div) {
   border: 2px solid var(--foreground);
-  border-radius: var(--radius-sm);
-  box-shadow: none;
+  box-shadow: 0.375rem 0.375rem 0 var(--foreground);
+}
+
+[data-template="bold"] .card-linked:hover {
+  border-color: var(--foreground);
+  box-shadow: 0.625rem 0.625rem 0 var(--brand);
+}
+
+[data-template="bold"] .card-icon {
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .value-props {
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .value-list p {
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .value-list .card-icon {
+  background: var(--brand-foreground);
+  color: var(--brand);
+}
+
+[data-template="bold"] .step-list li {
+  border-block-start: 2px solid var(--foreground);
+}
+
+[data-template="bold"] .step-list li::before {
+  border: 0;
+  border-radius: 0;
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+[data-template="bold"] .testimonials figure {
+  border-inline-start: 2px solid var(--foreground);
+}
+
+[data-template="bold"] :is(.service-detail-facts, .quote-aside) {
+  border: 2px solid var(--foreground);
+}
+
+[data-template="bold"] .area-towns li {
+  border-radius: 0;
+}
+
+[data-template="bold"] .next-list li::before {
+  border-radius: 0;
+}
+
+[data-template="bold"] .footer-heading {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-template="bold"] .site-footer .site-logo {
+  padding: var(--space-3xs);
+  background: var(--paper);
+}
+
+[data-template="modern"] .hero-plain .hero-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-block-start: var(--space-xl);
+}
+
+[data-template="modern"] .hero-plain .hero-list li {
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid
+    color-mix(in oklch, var(--brand-foreground) 40%, transparent);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+[data-template="modern"] .hero-plain .hero-list .mark {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: inherit;
+}
+
+[data-template="classic"] .hero-home .hero-list li + li {
+  border-top: 1px solid var(--border);
 }

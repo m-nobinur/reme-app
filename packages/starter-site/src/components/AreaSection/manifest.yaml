@@ -1,0 +1,19 @@
+component: AreaSection
+path: src/components/AreaSection/AreaSection.astro
+summary: Where the business works, the places it names and a short local paragraph.
+props:
+  - name: heading
+    type: string
+    required: false
+    description: The h2, off the service area page.
+constraints:
+  - Reads areaTowns, areaBody, areaLink, serviceAreaText and serviceArea.
+    areaTowns lists only places service_area.text names, one to a line; empty
+    shows service_area.text as given.
+  - Off the service area page it links there with areaLink.
+examples:
+  - "<AreaSection heading={site.serviceAreaHeading} />"
+  - "<AreaSection />"
+forbidden:
+  - a place, landmark or travel time the facts do not give
+source: generated

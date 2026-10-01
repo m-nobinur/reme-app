@@ -10,10 +10,10 @@ import { site } from "../site-config"
 ---
 
 <Base title={site.bookingHeading} description={site.bookingIntro}>
-  <Hero
-    variant="compact"
-    heading={site.bookingHeading}
-    lede={site.bookingIntro}
-  />
-  <ContactDetails />
+  <Hero heading={site.bookingHeading} lede={site.bookingIntro} />
+  <section class="band">
+    <div class="wrap">
+      <ContactDetails variant="cards" />
+    </div>
+  </section>
 </Base>

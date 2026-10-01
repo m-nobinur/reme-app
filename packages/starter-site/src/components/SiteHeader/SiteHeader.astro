@@ -9,12 +9,18 @@ const current = Astro.url.pathname
 const links = navLinks.filter((link) => link.href !== primaryAction?.href)
 // The owner's logo stands in for the name only with alt text to name it.
 const logo = site.logo && site.logoAlt
+// One list for both menus: inline on a wide screen, behind a native
+// disclosure on a phone, so the menu opens with no script.
+const items = links.map((link) => ({
+  ...link,
+  current: current === link.href ? ("page" as const) : undefined,
+}))
 ---
 
 {
   (site.businessName || links.length > 0) && (
     <header class="site-header">
-      <div class="wrap">
+      <div class="wrap header-inner">
         {logo ? (
           <a class="site-name" href="/">
             <img class="site-logo" src={site.logo} alt={site.logoAlt} />
@@ -26,15 +32,12 @@ const logo = site.logo && site.logoAlt
             </a>
           )
         )}
-        {links.length > 0 && (
-          <nav aria-label={site.primaryNavLabel}>
+        {items.length > 0 && (
+          <nav class="nav-wide" aria-label={site.primaryNavLabel}>
             <ul>
-              {links.map((link) => (
+              {items.map((link) => (
                 <li>
-                  <a
-                    href={link.href}
-                    aria-current={current === link.href ? "page" : undefined}
-                  >
+                  <a href={link.href} aria-current={link.current}>
                     {link.label}
                   </a>
                 </li>
@@ -43,7 +46,25 @@ const logo = site.logo && site.logoAlt
           </nav>
         )}
         {primaryAction && (
-          <ActionLink href={primaryAction.href} label={primaryAction.label} />
+          <span class="header-action">
+            <ActionLink href={primaryAction.href} label={primaryAction.label} />
+          </span>
+        )}
+        {items.length > 0 && site.navMenu && (
+          <details class="nav-narrow">
+            <summary class="menu-toggle">{site.navMenu}</summary>
+            <nav aria-label={site.primaryNavLabel}>
+              <ul>
+                {items.map((link) => (
+                  <li>
+                    <a href={link.href} aria-current={link.current}>
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </details>
         )}
       </div>
     </header>

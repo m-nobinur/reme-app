@@ -1,0 +1,18 @@
+---
+import { iconPath } from "../../icons"
+
+interface Props {
+  /** A key of ICONS in src/icons.ts. */
+  name: string
+}
+
+const d = iconPath(Astro.props.name)
+---
+
+{
+  d && (
+    <svg class="mark" viewBox="0 0 256 256" aria-hidden="true">
+      <path fill="currentColor" d={d} />
+    </svg>
+  )
+}

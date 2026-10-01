@@ -1,40 +1,50 @@
 ---
 import ActionLink from "../components/ActionLink/ActionLink.astro"
+import AreaSection from "../components/AreaSection/AreaSection.astro"
 import CtaBand from "../components/CtaBand/CtaBand.astro"
 import Faq from "../components/Faq/Faq.astro"
 import Gallery from "../components/Gallery/Gallery.astro"
 import Hero from "../components/Hero/Hero.astro"
 import Section from "../components/Section/Section.astro"
 import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
-import Stats from "../components/Stats/Stats.astro"
 import Steps from "../components/Steps/Steps.astro"
 import Testimonials from "../components/Testimonials/Testimonials.astro"
+import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
 import Base from "../layouts/Base.astro"
-import { templateOf } from "../presets"
-import { primaryAction } from "../routes"
+import { phoneText } from "../phone"
+import { hasRoute, primaryAction } from "../routes"
 import { site } from "../site-config"
-import { localBusiness, webSite } from "../structured-data"
+import {
+  faqPage,
+  localBusiness,
+  serviceItems,
+  webSite,
+} from "../structured-data"
 
-// One page, three layouts. Classic leads with trust: a split hero, then the
-// figures. Modern leads with pictures: a centred hero, then the gallery.
-// Bold leads with the figures on a band under a compact hero. The rest of
-// the order is shared, and styles/site.css does the rest by data-template.
-const template = templateOf(site.template)
-const HERO = { classic: "split", modern: "centered", bold: "compact" } as const
+// One order for every template; styles/site.css gives each its own hero,
+// header, type and surfaces by data-template. A section with no facts
+// behind it renders nothing, so a business with little to say gets a short
+// page rather than a padded one.
+const about = site.aboutIntro || site.overview
 ---
 
 <Base
-  title={site.businessName}
-  description={site.tagline}
-  jsonLd={[...webSite(Astro.site), ...localBusiness(Astro.site)]}
+  title={site.homeTitle || site.businessName}
+  description={site.homeDescription || site.tagline || site.homeIntro}
+  jsonLd={[
+    ...webSite(Astro.site),
+    ...localBusiness(Astro.site),
+    ...faqPage(),
+  ]}
 >
   <Hero
-    variant={HERO[template]}
+    variant="home"
     eyebrow={site.industry}
     heading={site.heroHeading || site.businessName}
-    lede={site.tagline}
+    lede={site.tagline || site.homeIntro}
     image={{ src: site.heroImage, alt: site.heroImageAlt }}
+    highlights={serviceItems.slice(0, 3)}
   >
     {
       primaryAction && (
@@ -45,30 +55,36 @@ const HERO = { classic: "split", modern: "centered", bold: "compact" } as const
       site.phone && (
         <ActionLink
           href={`tel:${site.phone}`}
-          label={site.phone}
+          label={phoneText(site.phone)}
           variant="secondary"
         />
       )
     }
   </Hero>
-  {template === "modern" ? <Gallery /> : <Stats />}
-  {site.homeIntro && <p class="intro">{site.homeIntro}</p>}
+  <TrustStrip />
   <ServiceCards />
   <ValueProps />
+  <Steps />
   {
-    (site.overview || site.audience) && (
+    about && (
       <Section heading={site.aboutHeading}>
-        {site.overview && <p>{site.overview}</p>}
-        {site.audience && site.audienceHeading && (
-          <h3>{site.audienceHeading}</h3>
+        {site.tagline && site.homeIntro && (
+          <p class="section-lede">{site.homeIntro}</p>
         )}
-        {site.audience && <p>{site.audience}</p>}
+        <p>{about}</p>
+        {hasRoute("/about/") && site.aboutLink && (
+          <p class="section-more">
+            <a class="more-link" href="/about/">
+              {site.aboutLink}
+            </a>
+          </p>
+        )}
       </Section>
     )
   }
-  <Steps />
   <Testimonials />
-  {template === "modern" ? <Stats /> : <Gallery />}
+  <Gallery />
+  <AreaSection heading={site.serviceAreaHeading} />
   <Faq />
   <CtaBand />
 </Base>

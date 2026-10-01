@@ -1,6 +1,7 @@
 ---
-import { navLinks } from "../../routes"
+import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
+import ActionLink from "../ActionLink/ActionLink.astro"
 import ContactDetails from "../ContactDetails/ContactDetails.astro"
 
 const hasContact = Boolean(
@@ -10,22 +11,35 @@ const hasContact = Boolean(
     site.serviceAreaText ||
     site.serviceArea
 )
+const blurb = site.tagline || site.homeIntro
 ---
 
 {
   (site.businessName || hasContact || navLinks.length > 0) && (
     <footer class="site-footer">
       <div class="wrap footer-grid">
-        {site.logo && site.logoAlt ? (
-          <p class="site-name">
-            <img class="site-logo" src={site.logo} alt={site.logoAlt} />
-          </p>
-        ) : (
-          site.businessName && <p class="site-name">{site.businessName}</p>
-        )}
-        <ContactDetails />
+        <div class="footer-brand">
+          {site.logo && site.logoAlt ? (
+            <p class="site-name">
+              <img class="site-logo" src={site.logo} alt={site.logoAlt} />
+            </p>
+          ) : (
+            site.businessName && <p class="site-name">{site.businessName}</p>
+          )}
+          {blurb && <p class="footer-blurb">{blurb}</p>}
+          {primaryAction && (
+            <ActionLink
+              href={primaryAction.href}
+              label={primaryAction.label}
+              variant="secondary"
+            />
+          )}
+        </div>
         {navLinks.length > 0 && (
           <nav aria-label={site.footerNavLabel}>
+            {site.footerPagesHeading && (
+              <h2 class="footer-heading">{site.footerPagesHeading}</h2>
+            )}
             <ul>
               {navLinks.map((link) => (
                 <li>
@@ -34,6 +48,14 @@ const hasContact = Boolean(
               ))}
             </ul>
           </nav>
+        )}
+        {hasContact && (
+          <div class="footer-contact">
+            {site.footerContactHeading && (
+              <h2 class="footer-heading">{site.footerContactHeading}</h2>
+            )}
+            <ContactDetails />
+          </div>
         )}
       </div>
     </footer>

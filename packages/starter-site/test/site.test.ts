@@ -14,7 +14,7 @@ import {
   ROOT,
   readPages,
 } from "./build"
-import { FILLED } from "./fixture"
+import { FILLED, NO_PROOF } from "./fixture"
 import { ALLOWED, validateJsonLd } from "./jsonld"
 
 const REQUIRED_FACTS = [
@@ -140,7 +140,13 @@ describe("the site as shipped, with no facts", () => {
  * it; the filled build has all of them set, so all of them must.
  */
 const SECTIONS: { name: string; selector: string; shows: string }[] = [
-  { name: "Stats", selector: "stats", shows: "12" },
+  { name: "TrustStrip", selector: "trust-strip", shows: "Fully insured" },
+  {
+    name: "ServiceCards sections",
+    selector: "service-details",
+    shows: "Bathrooms cleaned",
+  },
+  { name: "AreaSection", selector: "area-section", shows: "Oakley" },
   { name: "ValueProps", selector: "value-props", shows: "The same cleaner" },
   { name: "ServiceCards", selector: "service-cards", shows: "Weekly clean" },
   { name: "Steps", selector: "steps", shows: "Tell us about the home" },
@@ -209,6 +215,34 @@ describe("a component with its fields filled", () => {
     const pages = pagesOf(filled)
     expect(hasClass(pages, "hero")).toBe(true)
     expect(visible(pages)).toContain("A home you come back to")
+  })
+})
+
+describe("proof", () => {
+  let bare: Built | undefined
+  beforeAll(async () => {
+    bare = await build({ site: NO_PROOF })
+  }, 120_000)
+  afterAll(() => clean(bare))
+
+  test("shows no figure, review or proof point without the facts behind them", () => {
+    const pages = pagesOf(bare)
+    for (const name of ["trust-strip", "testimonials"])
+      expect(hasClass(pages, name), name).toBe(false)
+    const texts = visible(pages)
+    for (const text of [
+      FILLED.statYearsValue,
+      FILLED.trust2,
+      FILLED.proofHeading,
+      FILLED.testimonial1Quote,
+    ])
+      expect(texts, text).not.toContain(text)
+  })
+
+  test("shows the owner's proof, as given or rephrased, on the about page", () => {
+    const about = pagesOf(filled).find((p) => p.file === "about/index.html")
+    expect(about?.texts).toContain(FILLED.proofHeading)
+    expect(about?.texts).toContain(FILLED.proofBody)
   })
 })
 
@@ -356,11 +390,11 @@ describe("structured data", () => {
 
     expect(items.length).toBeGreaterThan(0)
     expect(new Set(items.map((item) => item.value["@type"]))).toEqual(
-      new Set(["WebSite", "LocalBusiness"])
+      new Set(["WebSite", "LocalBusiness", "FAQPage", "Service"])
     )
     for (const { value } of items) {
       expect(ALLOWED).toContain(value["@type"])
-      expect(value.name).toBeTruthy()
+      expect(value.name ?? value.mainEntity).toBeTruthy()
     }
     expect(validateJsonLd(items)).toEqual([])
   }, 60_000)
