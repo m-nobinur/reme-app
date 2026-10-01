@@ -826,6 +826,42 @@ p {
   background: var(--brand-soft);
 }
 
+/* About: the story beside the owner's photo on a wide screen, stacked on a
+   narrow one, and the text alone at a reading width without a photo. */
+
+.story-inner {
+  display: grid;
+  gap: var(--section-head-gap) var(--space-2xl);
+  align-items: center;
+}
+
+@media (min-width: 56rem) {
+  .story-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.story-text {
+  max-width: var(--container-narrow);
+}
+
+.story-text .section-lede {
+  margin-bottom: var(--space-lg);
+}
+
+.story-text > :last-child {
+  margin-bottom: 0;
+}
+
+.story-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-media);
+  background: var(--brand-soft);
+}
+
 /* Service area */
 
 .area-body {

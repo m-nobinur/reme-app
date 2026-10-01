@@ -25,8 +25,10 @@ import {
 // One order for every template; styles/site.css gives each its own hero,
 // header, type and surfaces by data-template. A section with no facts
 // behind it renders nothing, so a business with little to say gets a short
-// page rather than a padded one.
-const about = site.aboutIntro || site.overview
+// page rather than a padded one. Without an about page, the home page's
+// about section says who the business serves too.
+const about = site.aboutIntro || site.overviewBody || site.overview
+const audience = !hasRoute("/about/") && (site.audienceBody || site.audience)
 ---
 
 <Base
@@ -66,12 +68,13 @@ const about = site.aboutIntro || site.overview
   <ValueProps />
   <Steps />
   {
-    about && (
+    (about || audience) && (
       <Section heading={site.aboutHeading}>
         {site.tagline && site.homeIntro && (
           <p class="section-lede">{site.homeIntro}</p>
         )}
-        <p>{about}</p>
+        {about && <p>{about}</p>}
+        {audience && <p>{audience}</p>}
         {hasRoute("/about/") && site.aboutLink && (
           <p class="section-more">
             <a class="more-link" href="/about/">

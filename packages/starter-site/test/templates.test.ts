@@ -149,6 +149,7 @@ describe("a template", () => {
       ".hero-image",
       ".gallery-grid img",
       ".gallery-single img",
+      ".story-photo",
     ]) {
       const rule =
         css.match(
@@ -161,6 +162,18 @@ describe("a template", () => {
     // A logo keeps its own shape, at a fixed height.
     expect(css).toMatch(
       /\n\.site-logo \{[^}]*height: 2\.5rem;[^}]*object-fit: contain;/
+    )
+  })
+
+  test("sets the about page's story beside the owner's photo", () => {
+    for (const name of ["classic", "modern", "bold"]) {
+      const about = readPages(built[name]?.dist ?? "").find(
+        (each) => each.file === "about/index.html"
+      )
+      expect(about && classes(about), name).toContain("story-split")
+    }
+    expect(readFileSync(join(ROOT, "src/styles/site.css"), "utf8")).toMatch(
+      /@media \(min-width: 56rem\) \{\s*\.story-split \{\s*grid-template-columns/
     )
   })
 

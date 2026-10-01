@@ -10,9 +10,19 @@ import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
 
 // Who runs the business, how it works and for whom, from business.overview,
-// business.audience and business.proof. With none of the three this page
-// has nothing to say, and the Developer deletes it.
+// business.audience and business.proof. Without overview or proof this page
+// has too little to say: the Developer deletes it, and the home page's about
+// section carries the audience instead.
+const story = site.overviewBody || site.overview
+const audience = site.audienceBody || site.audience
 const proof = site.proofBody || site.proof
+// The story's photo: the first gallery photo, else the home hero's, since
+// neither shows on this page. Both halves or none.
+const photo = [
+  { src: site.photo1Src, alt: site.photo1Alt },
+  { src: site.heroImage, alt: site.heroImageAlt },
+].find((each) => each.src && each.alt)
+const storyHeading = story ? site.overviewHeading : site.audienceHeading
 ---
 
 <Base
@@ -23,17 +33,28 @@ const proof = site.proofBody || site.proof
   <Hero heading={site.aboutHeading} lede={site.aboutIntro} />
   <TrustStrip />
   {
-    site.overview && (
-      <Section heading={site.overviewHeading}>
-        <p>{site.overview}</p>
-      </Section>
-    )
-  }
-  {
-    site.audience && (
-      <Section heading={site.audienceHeading}>
-        <p>{site.audience}</p>
-      </Section>
+    (story || audience) && (
+      <section class="band about-story">
+        <div class:list={["wrap", "story-inner", photo && "story-split"]}>
+          <div class="story-text">
+            {storyHeading && <h2>{storyHeading}</h2>}
+            {story && <p class="section-lede">{story}</p>}
+            {story && audience && site.audienceHeading && (
+              <h3>{site.audienceHeading}</h3>
+            )}
+            {audience && <p>{audience}</p>}
+          </div>
+          {photo && (
+            <img
+              class="story-photo"
+              src={photo.src}
+              alt={photo.alt}
+              loading="lazy"
+              decoding="async"
+            />
+          )}
+        </div>
+      </section>
     )
   }
   {
