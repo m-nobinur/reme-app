@@ -12,6 +12,7 @@ import {
   type ContentKind,
   contentClaimsIn,
   factsForContent,
+  phoneKey,
 } from "./text.ts"
 
 export {
@@ -295,18 +296,13 @@ function locatedClaims(
     const visit = (value: unknown, bearing: boolean) => {
       if (typeof value === "string" && bearing) {
         add(value, block.node)
-        const digits = value.replace(/\D/g, "")
+        const key = phoneKey(value)
         if (
           /^\+?[\d\s().-]+$/.test(value) &&
-          digits.length >= 7 &&
+          key &&
           !contentClaimsIn(value).length
         ) {
-          found.push({
-            kind: "phone",
-            text: value,
-            key: digits,
-            node: block.node,
-          })
+          found.push({ kind: "phone", text: value, key, node: block.node })
         }
       } else if (Array.isArray(value)) {
         for (const v of value) visit(v, bearing)

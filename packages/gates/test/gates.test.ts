@@ -106,6 +106,16 @@ describe("the content gate", () => {
     }
   })
 
+  it("reads a UK number shown as dialled at home as its E.164 fact", () => {
+    const facts = [...FACTS, fact("business.phone_uk", "+447700900123")]
+    expect(
+      checkContent(pages(home("<p>Call 07700 900123</p>")), facts).passed
+    ).toBe(true)
+    expect(
+      checkContent(pages(home("<p>Call 07700 900124</p>")), facts).passed
+    ).toBe(false)
+  })
+
   it("fails a claim in structured data too", () => {
     const ld = LD.replace("+15550142", "+15550199")
     const result = checkContent(pages(home(undefined, ld)), FACTS)
@@ -200,24 +210,24 @@ describe("the content gate", () => {
 
   it("reads the path, query and fragment after the site's own host", () => {
     for (const [text, kind, key] of [
-      [`${HOST}/call-07700900123`, "phone", "07700900123"],
-      [`${HOST}#tel=07700-900123`, "phone", "07700900123"],
+      [`${HOST}/call-07700900123`, "phone", "447700900123"],
+      [`${HOST}#tel=07700-900123`, "phone", "447700900123"],
       [`${HOST}/?price=£35`, "price", "GBP:35.00"],
-      [`(${HOST}/x)07700900123`, "phone", "07700900123"],
+      [`(${HOST}/x)07700900123`, "phone", "447700900123"],
       [
         `${HOST}/call\u2800us\u2800on\u280007700\u2800900123`,
         "phone",
-        "07700900123",
+        "447700900123",
       ],
       [
         `${HOST}/call\u3164us\u3164on\u316407700\u3164900123`,
         "phone",
-        "07700900123",
+        "447700900123",
       ],
       [
         `${HOST}/call\u200bus\u200bon\u200b07700\u200b900123`,
         "phone",
-        "07700900123",
+        "447700900123",
       ],
     ] as const) {
       expect(contentClaimsIn(text, [HOST]), text).toContainEqual(
