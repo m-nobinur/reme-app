@@ -1875,7 +1875,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         planner: start.model,
       }).turn(
         id,
-        answer(changed.after, { answer: "confirmed", fields: dated }),
+        {
+          ...answer(changed.after, { answer: "confirmed", fields: dated }),
+          turn: {
+            ...answer(changed.after, { answer: "confirmed", fields: dated })
+              .turn,
+            reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+          },
+        },
         stub
       )
       expect(stub.calls).toHaveLength(1)
@@ -1883,8 +1890,23 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         `onboarding:${id}`
       )
       expect(seen).toEqual([{ fields: dated }])
-      expect(started.after.parts.slice(-5)).toMatchObject([
-        { type: "tool-review_quote_form", state: "output-available" },
+      // The reply path: the card's row ends with the card, then the owner's
+      // reply and the build each have a row of their own.
+      const rows = await talker(who).rows(id)
+      expect(rows.slice(-3).map((r) => r.id)).toEqual([
+        changed.after.id,
+        "u_q_ok",
+        started.after.id,
+      ])
+      expect(
+        (rows.at(-3)?.content as { parts: ToolPart[] } | undefined)?.parts.at(
+          -1
+        )
+      ).toMatchObject({
+        type: "tool-review_quote_form",
+        state: "output-available",
+      })
+      expect(started.after.parts).toMatchObject([
         { type: "step-start" },
         {
           type: "tool-request_change",
@@ -1897,6 +1919,19 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(
         await kit.withOrg({ orgId: who.orgId }, (db) => readScript(db, id))
       ).toMatchObject({ offered: true })
+      // The same reply again is refused, and writes nothing.
+      const again = await talker(who).send({
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          ...answer(changed.after, { answer: "confirmed", fields: dated }).turn,
+          reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+        },
+      })
+      expect(again.response.status).toBe(409)
+      expect(ErrorEnvelope.parse(JSON.parse(again.text)).code).toBe(
+        "chat.message_exists"
+      )
       const closes = (await logged(who, id)).filter(
         (e) => e.type === "cos.turn"
       )

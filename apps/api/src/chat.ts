@@ -1532,6 +1532,10 @@ async function openPlan(
     waitingOn = waitingCard(held.tail) ?? null
     input = { kind: "message", text: turn.text }
   } else {
+    // A reply already written is the script's to refuse.
+    if (turn.reply && (await messageTaken(db, id, turn.reply.message_id))) {
+      return null
+    }
     const answered = answerOf(held, turn, onboarding)
     if (!answered) return null
     current = withAnswer(onboarding, answered.meant)
@@ -1854,25 +1858,18 @@ async function commitPlan(
       throw new Refusal(messageExists())
     }
     await cancelPending(db, p.id, held.tail)
-    const assistantId = p.newId()
+    const assistantId = await ownerThenStep(
+      db,
+      p.owner,
+      p.id,
+      held.tail?.id ?? null,
+      { id: turn.message_id, text: turn.text },
+      step,
+      p.newId
+    )
     const content: Content = {
       role: "assistant",
       parts: [{ type: "step-start" }, ...step],
-    }
-    for (const row of [
-      {
-        id: turn.message_id,
-        parentId: held.tail?.id ?? null,
-        content: { role: "user", parts: [{ type: "text", text: turn.text }] },
-      },
-      { id: assistantId, parentId: turn.message_id, content },
-    ]) {
-      await db.insert(conversationMessages).values({
-        conversationId: p.id,
-        orgId: p.owner.orgId,
-        format: FORMAT,
-        ...row,
-      })
     }
     await db
       .update(conversations)
@@ -1886,13 +1883,38 @@ async function commitPlan(
     output,
   } = answered as NonNullable<typeof answered>
   const done: ToolPart = { ...waitingCall, state: "output-available", output }
+  const answeredParts = tail.content.parts.map((part) =>
+    part === waitingCall ? done : part
+  )
+  // With the owner's reply, as the script does it: the card's row ends with
+  // the card, and the reply and the plan's step each get a row of their own.
+  const { reply } = turn
+  if (reply) {
+    if (await messageTaken(db, p.id, reply.message_id)) {
+      throw new Refusal(messageExists())
+    }
+    const finished = { ...tail.content, parts: shown(answeredParts) }
+    if (!(await swapTail(db, p.id, tail, finished))) {
+      throw new Refusal(stale())
+    }
+    const assistantId = await ownerThenStep(
+      db,
+      p.owner,
+      p.id,
+      tail.id,
+      { id: reply.message_id, text: reply.text },
+      step,
+      p.newId
+    )
+    const content: Content = {
+      role: "assistant",
+      parts: [{ type: "step-start" }, ...step],
+    }
+    return { ...base, id: assistantId, content, lead: [] }
+  }
   const content = {
     ...tail.content,
-    parts: shown([
-      ...tail.content.parts.map((part) => (part === waitingCall ? done : part)),
-      { type: "step-start" } as const,
-      ...step,
-    ]),
+    parts: shown([...answeredParts, { type: "step-start" } as const, ...step]),
   }
   if (!(await swapTail(db, p.id, tail, content))) throw new Refusal(stale())
   return { ...base, id: tail.id, content, lead: resolved(done) }
