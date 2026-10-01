@@ -135,6 +135,37 @@ describe("the claims gate", () => {
     expect(verdict("<p>Award-winning cleaners</p>", proof).passed).toBe(false)
   })
 
+  it("holds the About page's rephrased overview and audience to their facts", () => {
+    const facts = [
+      ...PLAIN,
+      fact("business.overview", {
+        text: "One cleaner keeps each home, on the same day every week.",
+      }),
+      fact("business.audience", { text: "Households with busy weeks." }),
+    ]
+    // overviewBody, then audienceBody, as the About page's story renders them.
+    const story = (overviewBody: string, audienceBody: string) =>
+      `<section class="band about-story"><h2>One cleaner for every home</h2><p class="section-lede">${overviewBody}</p><h3>Who we clean for</h3><p>${audienceBody}</p></section>`
+    const overview =
+      "Your home gets one cleaner, who comes on the same day each week."
+    const audience = "We clean for households with busy weeks."
+    expect(verdict(story(overview, audience), facts).passed).toBe(true)
+    for (const claim of [
+      "We are an award-winning team.",
+      "We have 20 years of experience.",
+      "We are fully insured.",
+    ]) {
+      for (const main of [
+        story(`${overview} ${claim}`, audience),
+        story(overview, `${audience} ${claim}`),
+      ]) {
+        const result = verdict(main, facts)
+        expect(result.passed, main).toBe(false)
+        expect(result.offending_node, main).toContain("section>p")
+      }
+    }
+  })
+
   it("passes a credential or guarantee a fact states and fails one it does not", () => {
     for (const main of [
       "<p>Fully insured and bonded</p>",

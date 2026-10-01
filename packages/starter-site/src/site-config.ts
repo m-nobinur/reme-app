@@ -45,9 +45,9 @@ const values = {
   serviceArea: "",
   /** business.tagline, the owner's one line, as given. */
   tagline: "",
-  /** business.audience, who the business serves, as given. */
+  /** business.audience, who the business serves, as given. The only source for audienceBody. */
   audience: "",
-  /** business.overview, how the business works, as given. */
+  /** business.overview, how the business works, as given. The only source for overviewBody. */
   overview: "",
   /**
    * business.proof, what sets the business apart, as given: years trading,
@@ -157,6 +157,10 @@ const values = {
   overviewHeading: "How we work",
   audienceHeading: "Who we work with",
   proofHeading: "What sets us apart",
+  /** business.overview in the site's voice, in two to four sentences: rephrase it, never add to it. Empty shows overview as given. */
+  overviewBody: "",
+  /** business.audience in the site's voice, in one or two sentences: rephrase it, never add to it. Empty shows audience as given. */
+  audienceBody: "",
   /** business.proof in the site's voice, in two to four sentences. Empty shows proof as given. */
   proofBody: "",
   /**

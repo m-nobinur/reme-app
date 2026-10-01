@@ -109,6 +109,16 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("Write the line without the claim instead")
   })
 
+  it("has the About page's copy rephrase its facts under headings written for the business", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add"
+    )
+    expect(rules).toContain(
+      "overviewHeading, audienceHeading and proofHeading name this business's service or area, never one bare word or a stock label"
+    )
+  })
+
   it("keeps the copy guidance short enough for the cached segment", () => {
     expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
     expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(560)
@@ -218,6 +228,19 @@ describe("the owner's onboarding choices in the rules", () => {
       "Build any other extra page from the existing components"
     )
     expect(rules).toContain("a professional tone")
+  })
+
+  it("keeps the About page only with an overview or proof to show", () => {
+    const rules = ownerChoices([
+      fact("site.pages", { ids: ["home", "about", "quote"] }),
+    ]).join("\n")
+    expect(rules).toContain(
+      "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience."
+    )
+    const without = ownerChoices([
+      fact("site.pages", { ids: ["home", "quote"] }),
+    ]).join("\n")
+    expect(without).not.toContain("if business.overview and business.proof")
   })
 
   it("quotes the owner's own words as guidance", () => {

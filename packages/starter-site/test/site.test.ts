@@ -65,7 +65,7 @@ beforeAll(async () => {
     build({
       site: { ...FILLED, phone: "", email: "" },
       pages: { "planted.astro": PLANTED },
-      remove: ["quote.astro", "booking.astro"],
+      remove: ["quote.astro", "booking.astro", "about.astro"],
     }),
     build({ site: MARKED, quoteForm: MARKED_FORM }),
   ])
@@ -171,7 +171,8 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
   {
     name: "Section",
     selector: "section",
-    shows: "One cleaner keeps each home, on the same day every week.",
+    shows:
+      "We have cleaned homes in Fairhaven since 2014. We are fully insured, and every cleaner works for us directly rather than through an agency.",
   },
 ]
 
@@ -243,6 +244,41 @@ describe("proof", () => {
     const about = pagesOf(filled).find((p) => p.file === "about/index.html")
     expect(about?.texts).toContain(FILLED.proofHeading)
     expect(about?.texts).toContain(FILLED.proofBody)
+  })
+})
+
+describe("the about page", () => {
+  const page = (built: Built | undefined, file: string) => {
+    const found = pagesOf(built).find((p) => p.file === file)
+    if (!found) throw new Error(`no ${file}`)
+    return found
+  }
+
+  test("tells the story in the site's voice beside the owner's photo", () => {
+    const about = page(filled, "about/index.html")
+    for (const text of [
+      FILLED.overviewHeading,
+      FILLED.overviewBody,
+      FILLED.audienceHeading,
+      FILLED.audienceBody,
+    ])
+      expect(about.texts, text).toContain(text)
+    for (const text of [FILLED.overview, FILLED.audience])
+      expect(about.texts, text).not.toContain(text)
+    const photo = about.elements.find((el) =>
+      (el.attrs.class ?? "").split(" ").includes("story-photo")
+    )
+    expect(photo?.attrs.src).toBe(FILLED.photo1Src)
+    expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
+  })
+
+  test("without one, the home page says who the business serves and links nowhere", () => {
+    const hrefs = pagesOf(planted).flatMap((p) =>
+      p.elements.map((el) => el.attrs.href ?? "")
+    )
+    expect(hrefs).not.toContain("/about/")
+    expect(page(planted, "index.html").texts).toContain(FILLED.audienceBody)
+    expect(page(filled, "index.html").texts).not.toContain(FILLED.audienceBody)
   })
 })
 
@@ -480,7 +516,7 @@ describe("routes", () => {
     const hrefs = pagesOf(planted).flatMap((page) =>
       page.elements.map((el) => el.attrs.href ?? "")
     )
-    for (const path of ["/quote/", "/booking/"]) {
+    for (const path of ["/quote/", "/booking/", "/about/"]) {
       expect(urls).not.toContain(`${ORIGIN}${path}`)
       expect(hrefs).not.toContain(path)
     }

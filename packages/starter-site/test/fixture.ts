@@ -68,6 +68,13 @@ export const FILLED: Record<string, string> = {
   aboutDescription:
     "BrightClean has cleaned homes in Fairhaven since 2014 with its own insured cleaners. Meet the team behind your weekly clean and request a quote.",
   aboutIntro: "A local cleaning firm with its own cleaners, not an agency.",
+  overviewHeading: "One cleaner for every home in Fairhaven",
+  overviewBody:
+    "Your home gets one cleaner, who learns how you like it kept. They come on the same day every week, so you always know when.",
+  audienceHeading: "Homes we clean for",
+  audienceBody:
+    "We clean for households with busy weeks, and for homes with pets underfoot.",
+  proofHeading: "Why Fairhaven trusts us",
   service1Includes:
     "Kitchen surfaces and appliances wiped\nBathrooms cleaned\nFloors vacuumed and mopped\nBins emptied",
   service1For: "Households who want the house kept on top of every week.",
