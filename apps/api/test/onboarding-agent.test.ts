@@ -15,6 +15,7 @@ import {
   uploadCard,
 } from "../src/onboarding.ts"
 import {
+  askedSoFar,
   buildMissing,
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
@@ -503,6 +504,73 @@ describe("the plan's checks", () => {
         typed("pick-up and passengers", o)
       )[0]
     ).toMatch(/drop email/)
+  })
+})
+
+describe("what the planner reads and how often it asks", () => {
+  it("reads the trade from the industry and the owner's words, never from the name", () => {
+    // A limousine firm whose name says cleaning.
+    const o = onboarding([
+      { key: "business.name", value: { name: "Bright Cleaning (fictional)" } },
+      {
+        key: "business.industry",
+        value: { name: "Limousine hire", category: "chauffeur" },
+      },
+      { key: "business.offerings", value: { items: ["Wedding cars"] } },
+    ])
+    const data = turnData(typed("hello", o))
+    const json = JSON.parse(
+      (data.split("\n")[2] as string).replace(/\\u003c/g, "<")
+    ) as Record<string, unknown>
+    expect(Object.keys(json)[0]).toBe("what_the_business_does")
+    expect(json.what_the_business_does).toMatchObject({
+      industry: { name: "Limousine hire", category: "chauffeur" },
+      services: ["Wedding cars"],
+    })
+    expect(json.business_name).toEqual({
+      name: "Bright Cleaning (fictional)",
+      note: "only what it is called; it says nothing about what it does",
+    })
+  })
+
+  it("never holds the build for optional details, and asks each at most twice", () => {
+    expect(
+      buildMissing(
+        onboarding(without("business.audience", "business.overview"), {
+          closed: ["upload", "quote_form"],
+        })
+      )
+    ).toEqual([])
+    const o = onboarding(without("business.overview", "business.phone"))
+    const ask = (about: string) =>
+      plan({ next: { kind: "ask_open", about } as Plan["next"] })
+    const asked = (overview: number, phone: number): PlanState => ({
+      ...typed("you choose", o),
+      asked: { "business.overview": overview, "business.phone": phone },
+    })
+    expect(errorsOf(ask("business.overview"), asked(1, 0))).toEqual([])
+    expect(errorsOf(ask("business.overview"), asked(2, 0))[0]).toMatch(
+      /optional and has been asked 2 times/
+    )
+    // A required fact stays asked for, however often.
+    expect(errorsOf(ask("business.phone"), asked(2, 5))).toEqual([])
+    // The checklist says so, so the model moves on.
+    expect(turnData(asked(2, 0))).toContain("optional, asked enough: leave it")
+  })
+
+  it("counts asks from cards and from questions asked in words", () => {
+    const asked = askedSoFar(
+      [
+        { type: "tool-ask_fact", step: "business.overview" },
+        { type: "tool-ask_choice", step: "palette" },
+        { type: "tool-ask_upload", step: null },
+      ],
+      [
+        plan({ next: { kind: "ask_open", about: "business.overview" } }),
+        plan({ next: { kind: "answer_only" } }),
+      ]
+    )
+    expect(asked).toEqual({ "business.overview": 2, "site.palette": 1 })
   })
 })
 

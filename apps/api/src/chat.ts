@@ -5,6 +5,7 @@ import {
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
+  OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -13,6 +14,7 @@ import {
   conversationMessages,
   conversations,
   eq,
+  events,
   newUlid,
   type OrgScopedDb,
   orgs,
@@ -101,6 +103,7 @@ import {
   applied as withAnswer,
 } from "./onboarding.ts"
 import {
+  askedSoFar,
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
   PLANNER,
@@ -1506,6 +1509,44 @@ async function recentRows(db: OrgScopedDb, id: string): Promise<PlanRow[]> {
 }
 
 /**
+ * How often each fact has been asked here: the cards in every row, and the
+ * questions in words the planner's answered turns sent, read from each such
+ * turn's last logged step, the plan the owner saw.
+ */
+async function askedOf(
+  db: OrgScopedDb,
+  id: string
+): Promise<Record<string, number>> {
+  const cards = await db.execute<{ type: string; step: string | null }>(
+    sql`select p->>'type' as type,
+      coalesce(p->'input'->>'key', p->'input'->>'step') as step
+    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and p->>'type' in ('tool-ask_fact', 'tool-ask_choice')`
+  )
+  const steps = await db.execute<{ text: string | null }>(
+    sql`select s.payload->'messages'->0->'content'->0->>'text' as text
+    from ${events} s
+    join ${events} t on t.session_id = s.session_id and t.type = 'cos.turn'
+      and t.payload->>'turn_id' = s.payload->>'turn_id'
+      and t.payload->>'outcome' = 'answered'
+      and (t.payload->>'steps')::int - 1 = (s.payload->>'step')::int
+    join ${events} c on c.session_id = s.session_id and c.type = 'cos.context'
+      and c.payload->>'turn_id' = s.payload->>'turn_id'
+      and c.payload->>'context_policy_version' = ${PLANNER_VERSION}
+    where s.session_id = ${id} and s.type = 'cos.step'`
+  )
+  const plans = [...steps].flatMap((row) => {
+    try {
+      const plan = OnboardingPlan.safeParse(JSON.parse(row.text ?? ""))
+      return plan.success ? [plan.data] : []
+    } catch {
+      return []
+    }
+  })
+  return askedSoFar([...cards], plans)
+}
+
+/**
  * For the first transaction: the planner's turn, or null when the script
  * answers this one. The script keeps every turn that is not a typed message
  * or one valid answer to the waiting card (a retry, a stale id, an invalid
@@ -1546,6 +1587,7 @@ async function openPlan(
     pending: waitingOn,
     input,
     rows: await recentRows(db, id),
+    asked: await askedOf(db, id),
   }
   const data = turnData(state)
   const reserved = await planReservation(price, data)
