@@ -1734,7 +1734,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       const next = planner([
         plan({
           say: "Bold it is. Now the colours.",
-          next: { kind: "ask_choice", step: "palette", preselected: [] },
+          next: {
+            kind: "ask_choice",
+            step: "palette",
+            preselected: [],
+            initial: ["forest", "ocean", "sunset"],
+          },
         }),
       ])
       const picked = await talker(who, undefined, { planner: next.model }).turn(
@@ -1749,7 +1754,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         {
           type: "tool-ask_choice",
           state: "input-available",
-          input: { step: "palette" },
+          input: { step: "palette", initial: ["forest", "ocean", "sunset"] },
         },
       ])
       expect(

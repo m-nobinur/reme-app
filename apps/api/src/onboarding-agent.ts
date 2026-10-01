@@ -153,7 +153,7 @@ Reading the owner:
 Your next move (next.kind):
 - ask_open: a question they answer in words; about is the fact you are after, or "quote.form" for what they need to know to quote.
 - ask_fact: a small form for one fact. Always use it to ask what you should call the owner (key owner.preferred_name; it opens with the name they signed in with) and to ask your own name (assistant.name). It also suits the phone number or the email.
-- ask_choice: a card with a fixed list. Use it for industry, pronouns, tone, build_for_me, manual_builder, template, palette, font and pages. The card shows the options, so don't list them in your message. preselected is almost always empty; it may tick this card's own option ids.
+- ask_choice: a card with a fixed list. Use it for industry, pronouns, tone, build_for_me, manual_builder, template, palette, font and pages. The card shows the options, so don't list them in your message. preselected is almost always empty; it may tick this card's own option ids. For the palette card, initial may name the three or four palette ids that suit this business best, shown first (the owner can still see them all and pick their own colour); leave it empty otherwise.
 - ask_upload, review_quote_form, start_build: as above.
 - answer_only: you answer or acknowledge without a new question, for a side question or the close of the manual path.
 - A waiting card: when the owner typed instead of using the card they were shown, set pending_card. "answered" means their words answered it: record the fact it asks for (for a quote form, answered means they accept it as proposed). "declined" means they don't want to answer it or have no photos. "unanswered" means they wrote about something else; use answer_only and the card is shown again. With no waiting card, pending_card is null.
@@ -772,6 +772,20 @@ export function checkPlan(
           `preselected holds ${unknown.join(", ")}, not options of ${next.step}; use ${ids.join(", ")}`
         )
       }
+      if (next.initial.length > 0) {
+        const shown = new Set(next.initial)
+        if (next.step !== "palette") {
+          errors.push("initial belongs to the palette card; leave it empty")
+        } else if (
+          next.initial.length < 3 ||
+          shown.size !== next.initial.length ||
+          next.initial.some((id) => !ids.includes(id))
+        ) {
+          errors.push(
+            `initial names three or four different palettes of ${ids.join(", ")}, or stays empty`
+          )
+        }
+      }
       if (!choiceMultiple(next.step, after) && next.preselected.length > 1) {
         errors.push(`${next.step} takes one option; preselect one at most`)
       }
@@ -1031,14 +1045,12 @@ export function planParts(
     case "ask_choice":
       return [
         said,
-        choiceCard(
-          next.step,
-          after,
-          newId,
-          next.preselected.length > 0
+        choiceCard(next.step, after, newId, {
+          ...(next.preselected.length > 0
             ? { preselected: next.preselected }
-            : undefined
-        ),
+            : {}),
+          ...(next.initial.length > 0 ? { initial: next.initial } : {}),
+        }),
       ]
     case "ask_upload":
       return [said, uploadCard(newId)]

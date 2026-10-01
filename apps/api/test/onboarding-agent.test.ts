@@ -230,7 +230,14 @@ describe("the plan's checks", () => {
 
   it("builds every card from the contracts: a bad preselected id or a design card before building is refused", () => {
     const ask = (step: string, preselected: string[] = []) =>
-      plan({ next: { kind: "ask_choice", step, preselected } as Plan["next"] })
+      plan({
+        next: {
+          kind: "ask_choice",
+          step,
+          preselected,
+          initial: [],
+        } as Plan["next"],
+      })
     const building = onboarding(without("site.template", "site.palette"))
     expect(errorsOf(ask("template"), typed("ok", building))).toEqual([])
     expect(
@@ -249,6 +256,46 @@ describe("the plan's checks", () => {
     )
   })
 
+  it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
+    const o = onboarding(without("site.palette"))
+    const palette = (initial: string[], step = "palette") =>
+      plan({
+        next: {
+          kind: "ask_choice",
+          step,
+          preselected: [],
+          initial,
+        } as Plan["next"],
+      })
+    const s = typed("ok", o)
+    const fine = checkPlan(palette(["forest", "ocean", "sunset"]), s)
+    if (!fine.ok) throw new Error(fine.errors.join("; "))
+    expect(planParts(fine.checked, s, counter())[1]).toMatchObject({
+      input: { step: "palette", initial: ["forest", "ocean", "sunset"] },
+    })
+    // Empty keeps the card's own seeded four.
+    const seeded = checkPlan(palette([]), s)
+    if (!seeded.ok) throw new Error(seeded.errors.join("; "))
+    expect(
+      (planParts(seeded.checked, s, counter())[1] as ToolPart).input
+    ).toMatchObject({ initial: expect.any(Array) })
+    for (const bad of [
+      ["forest", "ocean"],
+      ["forest", "ocean", "moon"],
+      ["forest", "forest", "ocean"],
+    ]) {
+      expect(errorsOf(palette(bad), s)[0], bad.join()).toMatch(
+        /three or four different palettes/
+      )
+    }
+    expect(
+      errorsOf(
+        palette(["forest", "ocean", "sunset"], "template"),
+        typed("ok", onboarding(without("site.template")))
+      )
+    ).toContain("initial belongs to the palette card; leave it empty")
+  })
+
   it("never asks again what the facts hold, and asks each kind of fact on its own card", () => {
     const o = onboarding(without("assistant.tone", "owner.preferred_name"))
     const open = (about: string) =>
@@ -265,7 +312,12 @@ describe("the plan's checks", () => {
     expect(
       errorsOf(
         plan({
-          next: { kind: "ask_choice", step: "template", preselected: [] },
+          next: {
+            kind: "ask_choice",
+            step: "template",
+            preselected: [],
+            initial: [],
+          },
         }),
         typed("hi", onboarding(EVERYTHING))
       )[0]
@@ -274,7 +326,12 @@ describe("the plan's checks", () => {
 
   it("covers the business and the assistant before the website, and follows a skip with the builder question", () => {
     const website = plan({
-      next: { kind: "ask_choice", step: "build_for_me", preselected: [] },
+      next: {
+        kind: "ask_choice",
+        step: "build_for_me",
+        preselected: [],
+        initial: [],
+      },
     })
     expect(
       errorsOf(
@@ -369,7 +426,7 @@ describe("the plan's checks", () => {
       chosen_for_owner: ["site.palette"],
       pending_card: "answered",
       say: "I've gone with Forest, you can change it any time.",
-      next: { kind: "ask_choice", step: "font", preselected: [] },
+      next: { kind: "ask_choice", step: "font", preselected: [], initial: [] },
     })
     const checked = checkPlan(delegated, typed("you choose", o, card))
     expect(checked.ok && checked.checked.chosen).toEqual([
