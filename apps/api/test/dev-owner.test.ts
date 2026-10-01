@@ -319,6 +319,9 @@ describe("the local servers", () => {
     const other = `<title>Reme</title><link href="/@fs/elsewhere/packages/ui/x.css">`
     expect(await appOn("web", "http://w", root, page(other))).toBe("foreign")
     expect(await appOn("web", "http://w", root, refused)).toBe("absent")
+    // The home page's title carries a tagline after the name.
+    const titled = `<title>Reme · The AI assistant</title><link href="/@fs${root}/packages/ui/x.css">`
+    expect(await appOn("web", "http://w", root, page(titled))).toBe("ours")
   })
 
   it("knows the api by its health report, and only a passing one", async () => {
