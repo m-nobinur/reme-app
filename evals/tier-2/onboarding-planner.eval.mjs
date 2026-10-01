@@ -15,6 +15,7 @@ import {
   typedAnswer,
 } from "../../apps/api/src/onboarding.ts"
 import {
+  askedSoFar,
   buildMissing,
   DEFAULT_ONBOARDING_MODEL,
   PLANNER,
@@ -27,7 +28,7 @@ import {
 import models from "../../packages/facade/src/models/openrouter.models.json" with {
   type: "json",
 }
-import { PERSONAS, SKIPPER } from "../onboarding-personas.mjs"
+import { MISLEADING, PERSONAS, SKIPPER } from "../onboarding-personas.mjs"
 
 /**
  * Tier 2 (§16.3), live: the onboarding planner against the real model, over
@@ -188,6 +189,20 @@ async function onboard(persona, spec) {
     pending: pending ?? null,
     input,
     rows: sim.rows.slice(-PLANNER.rows),
+    // As `chat.ts` counts them: every card in the rows, and the planned questions in words.
+    asked: askedSoFar(
+      sim.rows.flatMap((r) =>
+        r.parts
+          .filter(
+            (p) => p.type === "tool-ask_fact" || p.type === "tool-ask_choice"
+          )
+          .map((p) => ({
+            type: p.type,
+            step: p.input?.key ?? p.input?.step ?? null,
+          }))
+      ),
+      plans
+    ),
   })
   const put = (facts) => {
     for (const fact of facts) {
@@ -195,6 +210,7 @@ async function onboard(persona, spec) {
     }
   }
   const calls = []
+  const plans = []
   const problems = []
   const says = []
   let fallbacks = 0
@@ -254,6 +270,7 @@ async function onboard(persona, spec) {
     const { checked } = outcome
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
+    plans.push(checked.plan)
     for (const problem of sayProblems(checked.plan.say))
       problems.push(`say: ${problem}`)
     const parts = planParts(checked, s, newId)
@@ -406,6 +423,30 @@ async function onboard(persona, spec) {
   ) {
     problems.push(`assistant name ${factOf(sim.facts, "assistant.name")?.name}`)
   }
+  // The trade comes from the owner, never from a misleading business name.
+  if (persona.notTrade) {
+    // The name itself may be said; a trade drawn from it may not.
+    const name = (factOf(sim.facts, "business.name")?.name ?? "")
+      .replace(/\s*\(.*\)$/, "")
+      .toLowerCase()
+    const wrong = says.filter((s) =>
+      persona.notTrade.test(s.toLowerCase().split(name).join(""))
+    )
+    if (wrong.length > 0) problems.push(`said the wrong trade: ${wrong[0]}`)
+  }
+  // An optional detail the owner deferred is asked at most twice in all.
+  for (const key of [
+    "business.audience",
+    "business.overview",
+    "business.tagline",
+  ]) {
+    const times = plans.filter(
+      (p) =>
+        (p.next.kind === "ask_open" && p.next.about === key) ||
+        (p.next.kind === "ask_fact" && p.next.key === key)
+    ).length
+    if (times > 2) problems.push(`asked ${key} ${times} times`)
+  }
   // A trade off the list is kept in the owner's words, with the closest category or none.
   const industry = factOf(sim.facts, "business.industry")
   if (persona.industry && !persona.industry.test(industry?.name ?? "")) {
@@ -555,7 +596,7 @@ export default async function run() {
     process.env.ONBOARDING_EVAL_MODELS ?? DEFAULT_ONBOARDING_MODEL
   ).split(",")
   const only = process.env.ONBOARDING_EVAL_PERSONAS?.split(",")
-  const personas = [...PERSONAS, SKIPPER].filter(
+  const personas = [...PERSONAS, ...MISLEADING, SKIPPER].filter(
     (p) => !only || only.includes(p.id)
   )
   const results = []

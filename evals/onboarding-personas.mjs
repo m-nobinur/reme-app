@@ -382,6 +382,72 @@ export const PERSONAS = [
   },
 ]
 
+/** A business whose name says another trade, and an owner who defers every optional detail. */
+export const MISLEADING = [
+  {
+    id: "misleading-name",
+    signIn: { orgName: "Bright Cleaning (fictional)", ownerName: "Ola Bello" },
+    sheet: `You are Ola. Your business is registered as Bright Cleaning, a name you kept from an old venture, but today it is a mobile bicycle repair service in Leeds, UK: you come to the customer's home or office with a van. Services: puncture repairs, full services, brake and gear tuning, e-bike checks, wheel truing. Customers: commuters and families. A job: they book, you come out, fix it on the spot. Area: Leeds and 8 miles around. Phone 0113 496 0812. Email ola@brightcleaning.invalid. No slogan. Assistant: Spoke, he/him, casual. Call you Ola. To quote you need the bike type, what is wrong, and the postcode. You never mention cleaning: you do not clean anything.`,
+    style: "Friendly and quick, short sentences.",
+    truth: {
+      name: /bright cleaning/i,
+      phone: "+441134960812",
+      email: "ola@brightcleaning.invalid",
+      callMe: "Ola",
+      assistant: /spoke/i,
+    },
+    turns: {},
+    cards: {
+      industry: "type:Mobile bicycle repair",
+      pronouns: "he_him",
+      tone: "casual",
+      build_for_me: "yes",
+      template: "modern",
+      palette: "type:you choose",
+      font: "clean_sans",
+      upload: "skip",
+    },
+    quote: "confirm",
+    industry: /bicycle|bike|cycle/i,
+    notTrade: /\bclean(ing|er|ers)\b/i,
+    quoteExpect: [
+      /bike|bicycle|type/i,
+      /problem|wrong|issue|fault/i,
+      /postcode|address|location/i,
+    ],
+  },
+  {
+    id: "defers-details",
+    signIn: { orgName: "Hollow Oak Carpentry", ownerName: "Ben Carter" },
+    sheet: `You are Ben, a carpenter: Hollow Oak Carpentry in Exeter, UK. Services: fitted wardrobes, shelving, doors, decking, small furniture. Area: Exeter and 20 miles. Phone 01392 496 077. Email ben@hollowoak.invalid. Assistant: Oakley, he/him, friendly. Call you Ben. To quote you need what they want made, rough sizes, and the postcode. You do NOT want to describe your customers, how a job runs, or a slogan: whenever asked about any of those, say "you choose" or "not sure, you decide", every time.`,
+    style: "Busy, short answers.",
+    truth: {
+      name: /hollow oak/i,
+      phone: "+441392496077",
+      email: "ben@hollowoak.invalid",
+      callMe: "Ben",
+      assistant: /oakley/i,
+    },
+    turns: {},
+    cards: {
+      industry: "trades",
+      pronouns: "he_him",
+      tone: "friendly",
+      build_for_me: "yes",
+      template: "classic",
+      palette: "forest",
+      font: "clean_sans",
+      upload: "skip",
+    },
+    quote: "confirm",
+    quoteExpect: [
+      /what|item|made|project|job/i,
+      /size|dimension|measure/i,
+      /postcode|address|location/i,
+    ],
+  },
+]
+
 /** The owner who skips the website: the manual path, told honestly there is no builder yet. */
 export const SKIPPER = {
   id: "skips-the-website",
