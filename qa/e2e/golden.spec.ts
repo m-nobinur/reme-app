@@ -296,10 +296,11 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   })
 
   await step("blank state: continue getting started", async () => {
-    // Only while nothing is built: the panel's first steps link back to
-    // the onboarding conversation.
-    await visit(page, "/app/notifications")
+    // Only while nothing is built: on the Website page the panel's next
+    // step links back to the onboarding conversation.
+    await visit(page, "/app/website")
     await panel(page)
+      .getByRole("list", { name: "Next steps" })
       .getByRole("link", { name: "Continue getting started" })
       .click()
     await expect(page).toHaveURL(onboarding)

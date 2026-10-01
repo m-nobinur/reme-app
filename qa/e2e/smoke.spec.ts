@@ -56,18 +56,29 @@ function panel(page: Page) {
   return page.getByRole("complementary", { name: "Panel" })
 }
 
-test("the panel shows a new owner their first steps and nothing else", async ({
+test("the panel asks a new owner to name the business and nothing else", async ({
   page,
 }) => {
   await visit(page, "/app")
   // This account has no organisation, so a question, an approval or a build
-  // here is either a leak or a fixture, and both are defects.
+  // here is either a leak or a fixture, and both are defects. With no
+  // business there are no steps to list yet: naming it comes first.
   await expect(
-    panel(page).getByRole("heading", { name: "First steps", level: 2 })
+    panel(page).getByText(
+      "Name your business and Reme can start on its website."
+    )
   ).toBeVisible()
   await expect(panel(page).getByRole("listitem")).toHaveText([
-    "To do: Build your first version",
+    "Name your business",
   ])
+  await expect(
+    panel(page)
+      .getByRole("list", { name: "Next steps" })
+      .getByRole("link", { name: "Name your business" })
+  ).toBeVisible()
+  await expect(
+    panel(page).getByRole("heading", { name: "First steps" })
+  ).toHaveCount(0)
   await expect(
     panel(page).getByRole("heading", { name: "Waiting on you" })
   ).toHaveCount(0)
@@ -86,7 +97,9 @@ test("the panel is where the owner left it on the first paint", async ({
   // first paint and this would pass on the shift it exists to prevent.
   //
   // The conversation routes too: the chat itself is client only, and the
-  // frame and panel around it are still the server's.
+  // frame and panel around it are still the server's. Only pages where this
+  // account's panel has something to say: it has no business, so Approvals
+  // has no panel at all, and the server sends none.
   const panelClass = async (path: string, state: string) => {
     await page.context().addCookies([
       {
@@ -100,11 +113,8 @@ test("the panel is where the owner left it on the first paint", async ({
     const html = await response.text()
     return /<aside[^>]*id="workspace-panel"[^>]*>/.exec(html)?.[0] ?? ""
   }
-  for (const path of [
-    "/app/approvals",
-    "/app",
-    "/app/c/00000000-0000-4000-8000-000000000000",
-  ]) {
+  expect(await panelClass("/app/approvals", "open")).toBe("")
+  for (const path of ["/app", "/app/c/00000000-0000-4000-8000-000000000000"]) {
     const closed = await panelClass(path, "closed")
     expect(closed, `no panel in the server HTML of ${path}`).toContain(
       "workspace-panel"
