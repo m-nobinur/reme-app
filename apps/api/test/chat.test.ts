@@ -1971,6 +1971,87 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ).toEqual(Array(5).fill("answered"))
     }, 90_000)
 
+    it("asks the slogan once before the website, counting a question asked in words", async () => {
+      // Everything for the website but the audience and the slogan. The
+      // opening card is the industry's, so nothing has asked the slogan.
+      const before = UP_TO_PHOTOS.filter(
+        (f) =>
+          f.key !== "business.audience" &&
+          f.key !== "business.tagline" &&
+          !f.key.startsWith("site.")
+      )
+      const website = plan({
+        say: "Shall I build your website?",
+        next: {
+          kind: "ask_choice",
+          step: "build_for_me",
+          preselected: [],
+          initial: [],
+        },
+      })
+      const audience = {
+        facts: { "business.audience": { text: "Busy families" } },
+        pending_card: "answered",
+      }
+      const setUp = async (tag: string) => {
+        const who = await owner(kit, url as string, tag)
+        await who.call(stubOrchestrator(), "/facts", {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ facts: before }),
+        })
+        const id = await talker(who).onboarding()
+        return { who, id }
+      }
+      const typedTurn = (message_id: string, text: string) => ({
+        turn: { kind: "message", message_id, text },
+      })
+
+      // The slogan never asked: the website question is refused twice, and
+      // the script answers with its own next step, the slogan.
+      const early = await setUp("chat-slogan-early")
+      const refused = planner([
+        { ...website, ...audience },
+        { ...website, ...audience },
+      ])
+      const fell = await talker(early.who, undefined, {
+        planner: refused.model,
+      }).turn(
+        early.id,
+        typedTurn("u_sl_1", "Cleaning and home services, mostly busy families")
+      )
+      expect(refused.calls).toHaveLength(2)
+      // The script's own next step: the audience, then the slogan in turn.
+      expect(pendingCall(fell.after).input).toMatchObject({
+        key: "business.audience",
+      })
+
+      // Asked in words once, "no slogan" is the answer: the website follows.
+      const asked = await setUp("chat-slogan-asked")
+      const slogan = planner([
+        plan({
+          ...audience,
+          say: "Busy families, lovely. Do you have a slogan?",
+          next: { kind: "ask_open", about: "business.tagline" },
+        }),
+      ])
+      await talker(asked.who, undefined, { planner: slogan.model }).turn(
+        asked.id,
+        typedTurn("u_sl_2", "Cleaning and home services, mostly busy families")
+      )
+      const next = planner([website])
+      const site = await talker(asked.who, undefined, {
+        planner: next.model,
+      }).turn(asked.id, typedTurn("u_sl_3", "No slogan, thanks"))
+      expect(next.calls).toHaveLength(1)
+      expect(next.calls[0]).toContain(
+        'business.tagline\\":\\"optional, missing'
+      )
+      expect(pendingCall(site.after).input).toMatchObject({
+        step: "build_for_me",
+      })
+    }, 60_000)
+
     it("lets the script answer a turn the planner cannot: a failing model, and a spent budget", async () => {
       const who = await owner(kit, url as string, "chat-fallback")
       const broken = planner([new Error("provider down")])

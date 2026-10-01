@@ -558,6 +558,37 @@ describe("what the planner reads and how often it asks", () => {
     expect(turnData(asked(2, 0))).toContain("optional, asked enough: leave it")
   })
 
+  it("asks each optional detail once before the website, unless the owner already gave it", () => {
+    const o = onboarding(without("site.build_mode"))
+    const website = plan({
+      next: {
+        kind: "ask_choice",
+        step: "build_for_me",
+        preselected: [],
+        initial: [],
+      },
+    })
+    const at = (asked: Record<string, number>, facts = o) => ({
+      ...typed("ok", facts),
+      asked,
+    })
+    // The slogan was never asked: the website waits.
+    expect(errorsOf(website, at({}))[0]).toMatch(
+      /still missing: business\.tagline/
+    )
+    expect(turnData(at({}))).toContain(
+      "optional, not asked yet: ask once before the website"
+    )
+    // Asked once, and "no slogan" stated nothing: that is an answer.
+    expect(errorsOf(website, at({ "business.tagline": 1 }))).toEqual([])
+    // Given in the owner's own words: never asked.
+    const held = onboarding([
+      ...without("site.build_mode"),
+      { key: "business.tagline", value: { tagline: "Arrive in style" } },
+    ])
+    expect(errorsOf(website, at({}, held))).toEqual([])
+  })
+
   it("counts asks from cards and from questions asked in words", () => {
     const asked = askedSoFar(
       [
