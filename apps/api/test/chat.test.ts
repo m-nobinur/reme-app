@@ -2030,6 +2030,55 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(read.calls).toHaveLength(1)
     }, 60_000)
 
+    /** Spends the org's daily cap in its session log, so no planner call fits. */
+    const spendCap = async (who: Owner, id: string) => {
+      await kit.withOrg({ orgId: who.orgId }, async (db) => {
+        const chief = await chiefStaffId(db)
+        const turnId = newUlid()
+        for (const [type, payload] of [
+          [
+            "cos.context",
+            {
+              turn_id: turnId,
+              prefix_sha256: "a".repeat(64),
+              context_policy_version: "4",
+              mode: "ask",
+              active_tools: [],
+              text: "x",
+              reserved_usd: 0,
+            },
+          ],
+          [
+            "cos.turn",
+            {
+              outcome: "answered",
+              turn_id: turnId,
+              model: "m",
+              usage: {
+                input_tokens: 0,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+              },
+              cost_usd: DAILY_CAP_USD,
+              tools: [],
+              steps: 1,
+              first_chunk_ms: 1,
+            },
+          ],
+        ] as const) {
+          await appendSessionEvent(db, {
+            orgId: who.orgId,
+            staffId: chief as string,
+            assignmentId: null,
+            sessionId: id,
+            type,
+            payload,
+            taint: [],
+          })
+        }
+      })
+    }
+
     describe("racing Jev with the planner", () => {
       /** An org at the layout card, with a typed reply's turn ready to send. */
       const atTemplate = async (name: string) => {
@@ -2243,6 +2292,42 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         expect(pendingCall(await talker(who).tail(id)).input).toMatchObject({
           step: "palette",
         })
+      }, 60_000)
+
+      it("answers with Jev's reading when the planner fails on its own", async () => {
+        const { who, id } = await atTemplate("chat-failed")
+        const broken = planner([new Error("provider down")])
+        await talker(who, undefined, {
+          planner: broken.model,
+          jev: async () => {
+            // Only after the planner has failed on its own.
+            while (broken.calls.length === 0) {
+              await new Promise((r) => setTimeout(r, 5))
+            }
+            await new Promise((r) => setTimeout(r, 50))
+            return { kind: "answer", option: "modern" }
+          },
+        }).say(id, "u_failed_1", "The modern one, please")
+        expect(broken.calls.length).toBeGreaterThan(0)
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.template")?.value
+        ).toEqual({ id: "modern" })
+        expect((await lastTurn(who, id))?.outcome).toBe("gated")
+      }, 60_000)
+
+      it("answers with Jev's reading when no planner turn can open", async () => {
+        const { who, id } = await atTemplate("chat-capped")
+        await spendCap(who, id)
+        const spent = planner([plan({ say: "never sent" })])
+        const sent = await talker(who, undefined, {
+          planner: spent.model,
+          jev: async () => ({ kind: "answer", option: "bold" }),
+        }).say(id, "u_capped_1", "Go with the bold look")
+        expect(spent.calls).toHaveLength(0)
+        expect(pendingCall(sent.after).input).toMatchObject({ step: "palette" })
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.template")?.value
+        ).toEqual({ id: "bold" })
       }, 60_000)
     })
 
@@ -2635,51 +2720,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
 
       // Over the day's cap: no model call at all.
-      await kit.withOrg({ orgId: who.orgId }, async (db) => {
-        const chief = await chiefStaffId(db)
-        const turnId = newUlid()
-        for (const [type, payload] of [
-          [
-            "cos.context",
-            {
-              turn_id: turnId,
-              prefix_sha256: "a".repeat(64),
-              context_policy_version: "4",
-              mode: "ask",
-              active_tools: [],
-              text: "x",
-              reserved_usd: 0,
-            },
-          ],
-          [
-            "cos.turn",
-            {
-              outcome: "answered",
-              turn_id: turnId,
-              model: "m",
-              usage: {
-                input_tokens: 0,
-                cached_input_tokens: 0,
-                output_tokens: 0,
-              },
-              cost_usd: DAILY_CAP_USD,
-              tools: [],
-              steps: 1,
-              first_chunk_ms: 1,
-            },
-          ],
-        ] as const) {
-          await appendSessionEvent(db, {
-            orgId: who.orgId,
-            staffId: chief as string,
-            assignmentId: null,
-            sessionId: id,
-            type,
-            payload,
-            taint: [],
-          })
-        }
-      })
+      await spendCap(who, id)
       const spent = planner([plan({ say: "never sent" })])
       const capped = await talker(who, undefined, {
         planner: spent.model,

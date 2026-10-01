@@ -731,6 +731,13 @@ export async function chat(
               )
             : null
         if (job) return { plan: job }
+        // No planner to race (over budget, frozen, a retry): Jev's reading
+        // still answers the card when it is sure, as before the race.
+        // ponytail: waits on Jev (1 s at most) with the connection held, on
+        // these rare turns only; move it before the lock if they grow common.
+        const answered =
+          given ??
+          (racing ? await gateAnswer(db, held, id, owner, await racing) : null)
         return scriptTurn(
           db,
           env,
@@ -740,7 +747,7 @@ export async function chat(
           id,
           parsed.data,
           newId,
-          given
+          answered
         )
       }
       const reserve = model && price && !log.frozen ? reservation(price) : 0
@@ -2083,6 +2090,10 @@ async function plannedTurn(
       cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
     })
   )
+  // A planner that failed on its own leaves the script to answer, and Jev's
+  // reading, when it has one, is still the best reading of the reply. Waited
+  // for here, outside the transaction; `gateAnswer` checks it still applies.
+  if (!outcome.ok && !gate && p.gate) gate = await p.gate
   const scope = {
     orgId: p.owner.orgId,
     workosUserId: p.owner.session.workosUserId,
