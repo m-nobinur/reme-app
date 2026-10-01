@@ -17,6 +17,7 @@ import {
 import {
   buildMissing,
   DEFAULT_ONBOARDING_MODEL,
+  PLANNER,
   plannerModel,
   planParts,
   planTurn,
@@ -186,7 +187,7 @@ async function onboard(persona, spec) {
     onboarding: o,
     pending: pending ?? null,
     input,
-    rows: sim.rows.slice(-12),
+    rows: sim.rows.slice(-PLANNER.rows),
   })
   const put = (facts) => {
     for (const fact of facts) {
