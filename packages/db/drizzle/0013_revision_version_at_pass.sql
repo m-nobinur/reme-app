@@ -1,0 +1,1 @@
+ALTER TABLE "site_revisions" ALTER COLUMN "version" DROP NOT NULL;

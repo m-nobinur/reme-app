@@ -787,8 +787,11 @@ export const assignmentTransitions = pgTable(
 
 /**
  * `SiteRevision` (ADR-031). `version` is the site's own counter; the `v{n}`
- * tag is derived from it and never stored. Rows outlive their files: retention
- * deletes the R2 prefix and leaves the summary readable.
+ * tag is derived from it and never stored. It is set when the revision passes
+ * the gates, so a refused report keeps `null` and the owner sees no gaps; the
+ * unique key holds only over numbered rows, since nulls are distinct. Rows
+ * outlive their files: retention deletes the R2 prefix and leaves the summary
+ * readable.
  */
 export const siteRevisions = pgTable(
   "site_revisions",
@@ -800,7 +803,7 @@ export const siteRevisions = pgTable(
     /** One site per org today, seeded equal to `org_id`; baked into R2 keys. */
     siteId: uuid("site_id").notNull(),
     assignmentId: uuid("assignment_id").notNull(),
-    version: integer("version").notNull(),
+    version: integer("version"),
     summary: text("summary"),
     sourceKey: text("source_key").notNull(),
     artifactPrefix: text("artifact_prefix").notNull(),
