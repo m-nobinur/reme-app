@@ -1671,7 +1671,7 @@ type Staged = {
  * message hash, then its answer with its usage and cost.
  */
 async function callEvents(turn: Turn, calls: PlanCall[]) {
-  const events = await Promise.all(
+  const written = await Promise.all(
     calls.map(async (c, step) => [
       {
         type: "cos.call" as const,
@@ -1697,7 +1697,7 @@ async function callEvents(turn: Turn, calls: PlanCall[]) {
       },
     ])
   )
-  return events.flat()
+  return written.flat()
 }
 
 /** The planner turn's `cos.turn`: `fallback` when the script answered it. */

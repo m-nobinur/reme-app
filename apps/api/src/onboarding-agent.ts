@@ -781,15 +781,15 @@ export function checkPlan(
   const asked = (key: string) => s.asked?.[key] ?? 0
   const pestered = (key: string) =>
     (OPTIONAL as readonly string[]).includes(key) && asked(key) >= OPTIONAL_ASKS
-  const about =
+  const askedKey =
     next.kind === "ask_open"
       ? next.about
       : next.kind === "ask_fact"
         ? next.key
         : null
-  if (about && pestered(about) && !held(about as FactValueKey)) {
+  if (askedKey && pestered(askedKey) && !held(askedKey as FactValueKey)) {
     errors.push(
-      `${about} is optional and has been asked ${asked(about)} times; leave it and move on`
+      `${askedKey} is optional and has been asked ${asked(askedKey)} times; leave it and move on`
     )
   }
   switch (next.kind) {
