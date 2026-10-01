@@ -1,4 +1,5 @@
 ---
+import { phoneText } from "../../phone"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
@@ -6,11 +7,11 @@ import ActionLink from "../ActionLink/ActionLink.astro"
 
 {
   (site.ctaHeading || site.ctaBody) && (
-    <section class="cta-band">
+    <section class="band band-tint cta-band">
       <div class="wrap cta-inner">
         <div class="cta-text">
           {site.ctaHeading && <h2>{site.ctaHeading}</h2>}
-          {site.ctaBody && <p>{site.ctaBody}</p>}
+          {site.ctaBody && <p class="cta-body">{site.ctaBody}</p>}
         </div>
         <div class="actions">
           {primaryAction && (
@@ -22,7 +23,7 @@ import ActionLink from "../ActionLink/ActionLink.astro"
           {site.phone && (
             <ActionLink
               href={`tel:${site.phone}`}
-              label={site.phone}
+              label={phoneText(site.phone)}
               variant="secondary"
             />
           )}

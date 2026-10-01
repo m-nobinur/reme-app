@@ -1,25 +1,29 @@
 ---
 import { site } from "../../site-config"
 
-const items = [
-  { title: site.step1Title, body: site.step1Body },
-  { title: site.step2Title, body: site.step2Body },
-  { title: site.step3Title, body: site.step3Body },
-].filter((item) => item.title || item.body)
+const items = ([1, 2, 3] as const)
+  .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
+  .filter((item) => item.title || item.body)
 ---
 
 {
   items.length > 0 && (
-    <section class="steps">
-      {site.stepsHeading && <h2>{site.stepsHeading}</h2>}
-      <ol class="step-list">
-        {items.map((item) => (
-          <li>
-            {item.title && <h3>{item.title}</h3>}
-            {item.body && <p>{item.body}</p>}
-          </li>
-        ))}
-      </ol>
+    <section class="band steps">
+      <div class="wrap">
+        {site.stepsHeading && (
+          <div class="section-head">
+            <h2>{site.stepsHeading}</h2>
+          </div>
+        )}
+        <ol class="step-list">
+          {items.map((item) => (
+            <li>
+              {item.title && <h3>{item.title}</h3>}
+              {item.body && <p>{item.body}</p>}
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   )
 }

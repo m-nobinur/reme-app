@@ -1,25 +1,109 @@
 ---
+import { iconPath } from "../../icons"
+import { hasRoute, primaryAction } from "../../routes"
 import { site } from "../../site-config"
+import { serviceItems as items } from "../../structured-data"
+import ActionLink from "../ActionLink/ActionLink.astro"
+import Icon from "../Icon/Icon.astro"
 
-const items = [
-  { name: site.service1Name, body: site.service1Body },
-  { name: site.service2Name, body: site.service2Body },
-  { name: site.service3Name, body: site.service3Body },
-].filter((item) => item.name || item.body)
+interface Props {
+  /** cards on home, sections on the services page. */
+  variant?: "cards" | "sections"
+}
+
+const { variant = "cards" } = Astro.props
+// With a services page, each card's name links to its own section there and
+// the whole card answers the pointer; without one the cards are plain.
+const linked = hasRoute("/services/")
 ---
 
 {
-  items.length > 0 && (
-    <section class="service-cards">
-      {site.serviceCardsHeading && <h2>{site.serviceCardsHeading}</h2>}
-      <ul class="card-grid">
+  items.length > 0 && variant === "cards" && (
+    <section class="band service-cards">
+      <div class="wrap">
+        {site.serviceCardsHeading && (
+          <div class="section-head">
+            <h2>{site.serviceCardsHeading}</h2>
+          </div>
+        )}
+        <ul class="card-grid">
+          {items.map((item) => (
+            <li class:list={["card", linked && "card-linked"]}>
+              {iconPath(item.icon) && (
+                <span class="card-icon">
+                  <Icon name={item.icon} />
+                </span>
+              )}
+              {item.name && (
+                <h3>
+                  {linked ? (
+                    <a href={`/services/#${item.id}`}>{item.name}</a>
+                  ) : (
+                    item.name
+                  )}
+                </h3>
+              )}
+              {item.body && <p>{item.body}</p>}
+            </li>
+          ))}
+        </ul>
+        {linked && site.serviceCardsLink && (
+          <p class="section-more">
+            <a class="more-link" href="/services/">
+              {site.serviceCardsLink}
+            </a>
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
+{
+  items.length > 0 && variant === "sections" && (
+    <section class="band service-details">
+      <div class="wrap">
         {items.map((item) => (
-          <li class="card card-bordered">
-            {item.name && <h3>{item.name}</h3>}
-            {item.body && <p>{item.body}</p>}
-          </li>
+          <article class="service-detail" id={item.id}>
+            <div class="service-detail-main">
+              <Icon name={item.icon} />
+              {item.name && <h2>{item.name}</h2>}
+              {item.body && <p class="service-detail-body">{item.body}</p>}
+              {primaryAction && (
+                <ActionLink
+                  href={primaryAction.href}
+                  label={primaryAction.label}
+                  variant="secondary"
+                />
+              )}
+            </div>
+            {(item.includes.length > 0 || item.for) && (
+              <div class="service-detail-facts">
+                {item.includes.length > 0 && (
+                  <>
+                    {site.serviceIncludesLabel && (
+                      <h3 class="facts-label">{site.serviceIncludesLabel}</h3>
+                    )}
+                    <ul class="check-list">
+                      {item.includes.map((line) => (
+                        <li>
+                          <Icon name="checkCircle" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {item.for && (
+                  <>
+                    {site.serviceForLabel && <h3 class="facts-label">{site.serviceForLabel}</h3>}
+                    <p>{item.for}</p>
+                  </>
+                )}
+              </div>
+            )}
+          </article>
         ))}
-      </ul>
+      </div>
     </section>
   )
 }

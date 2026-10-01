@@ -7,7 +7,11 @@ interface Props {
 const { heading } = Astro.props
 ---
 
-<section class="section">
-  {heading && <h2>{heading}</h2>}
-  <slot />
+<section class="band section">
+  <div class="wrap section-inner">
+    {heading && <h2>{heading}</h2>}
+    <div class="section-body">
+      <slot />
+    </div>
+  </div>
 </section>

@@ -160,6 +160,7 @@ const REQUIRED: Record<string, readonly string[]> = {
   Service: ["name"],
   WebSite: ["name"],
   BreadcrumbList: ["itemListElement"],
+  FAQPage: ["mainEntity"],
 }
 
 /** JSON-LD validated locally: it parses, names schema.org, uses an allowed type and carries that type's required properties. */

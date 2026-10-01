@@ -1,0 +1,19 @@
+component: Icon
+path: src/components/Icon/Icon.astro
+summary: One phosphor icon from src/icons.ts, decorative, beside a visible label.
+props:
+  - name: name
+    type: string
+    required: true
+    description: A key of ICONS in src/icons.ts.
+constraints:
+  - Renders nothing for a name src/icons.ts does not hold.
+  - Hidden from screen readers, so the text beside it carries the meaning.
+  - The cards draw their icons from their icon fields; use Icon directly only in
+    a page, as the service area page does.
+examples:
+  - "<Icon name=\"calendarCheck\" />"
+forbidden:
+  - an icon as the only label of a link or button
+  - an SVG or icon library added to the site
+source: generated

@@ -108,6 +108,12 @@ export const SUPPORTING_FACT_PREFIXES = [
   "testimonials.",
 ] as const
 
+/**
+ * Whole keys that support the same words: the owner's own account of what
+ * sets the business apart, which may name its insurance, awards or years.
+ */
+const SUPPORTING_FACT_KEYS = ["business.proof"] as const
+
 const TESTIMONIAL_PREFIX = "testimonials."
 
 export type ClaimKind =
@@ -240,7 +246,10 @@ function supportFrom(facts: readonly FactRecord[]): Support {
     const text = JSON.stringify(fact.value) ?? ""
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))
-    if (SUPPORTING_FACT_PREFIXES.some((p) => fact.key.startsWith(p)))
+    if (
+      SUPPORTING_FACT_PREFIXES.some((p) => fact.key.startsWith(p)) ||
+      (SUPPORTING_FACT_KEYS as readonly string[]).includes(fact.key)
+    )
       support.words.push(stems(text))
     if (fact.key.startsWith(TESTIMONIAL_PREFIX))
       support.testimonials.push(flatten(text))

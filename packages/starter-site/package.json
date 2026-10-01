@@ -31,6 +31,7 @@
   "exports": {
     "./site-config": "./src/site-config.ts",
     "./brand": "./src/brand.ts",
+    "./copy-check": "./src/copy-check.ts",
     "./manifests.json": "./manifests.json"
   }
 }

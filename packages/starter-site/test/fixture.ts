@@ -41,6 +41,57 @@ export const FILLED: Record<string, string> = {
   servicesIntro: "Three ways we clean, and what each one covers.",
   serviceAreaIntro: "Where a cleaner can reach you.",
   contactIntro: "Call, write, or ask for a quote.",
+  homeTitle: "Weekly and deep house cleaning in Fairhaven | BrightClean",
+  homeDescription:
+    "BrightClean sends the same cleaner to your home on the same day each week, across Fairhaven and nearby villages. Tell us about your home for a quote.",
+  servicesTitle: "Weekly, deep and end of tenancy cleaning | BrightClean",
+  servicesDescription:
+    "Weekly cleans, deep cleans and end of tenancy cleans for homes in Fairhaven and the villages around it. See what each covers and request a quote.",
+  serviceAreaTitle:
+    "House cleaning in Fairhaven and nearby villages | BrightClean",
+  serviceAreaDescription:
+    "BrightClean cleans homes in Fairhaven and the villages around it, within 25 km of the town. Check you are covered, then request a quote for your home.",
+  contactTitle: "Contact BrightClean | House cleaning in Fairhaven",
+  contactDescription:
+    "Call or email BrightClean about weekly, deep or end of tenancy cleaning in Fairhaven, weekdays 08:00 to 17:00, or request a quote online any time.",
+  quoteTitle: "Request a cleaning quote in Fairhaven | BrightClean",
+  quoteDescription:
+    "Tell BrightClean about your home, the clean you need and when, and we reply by email or phone with a quote. Covering Fairhaven and nearby villages.",
+  proof:
+    "Trading in Fairhaven since 2014. Fully insured. Every cleaner is employed by us, not an agency.",
+  proofBody:
+    "We have cleaned homes in Fairhaven since 2014. We are fully insured, and every cleaner works for us directly rather than through an agency.",
+  trust1: "Cleaning Fairhaven since 2014",
+  trust2: "Fully insured",
+  trust3: "Our own employed cleaners",
+  aboutTitle: "About BrightClean | House cleaners in Fairhaven",
+  aboutDescription:
+    "BrightClean has cleaned homes in Fairhaven since 2014 with its own insured cleaners. Meet the team behind your weekly clean and request a quote.",
+  aboutIntro: "A local cleaning firm with its own cleaners, not an agency.",
+  service1Includes:
+    "Kitchen surfaces and appliances wiped\nBathrooms cleaned\nFloors vacuumed and mopped\nBins emptied",
+  service1For: "Households who want the house kept on top of every week.",
+  service2Includes:
+    "Inside the oven and fridge\nSkirting boards and door frames\nLimescale removed from taps and tiles",
+  service2For: "Homes that need a reset before a weekly routine starts.",
+  service3Includes:
+    "Every room top to bottom\nInside cupboards and appliances\nWindows cleaned inside",
+  service3For: "Tenants handing back keys and landlords between lets.",
+  areaTowns: "Fairhaven\nOakley\nBrook Green",
+  areaBody:
+    "We clean homes across Fairhaven and the villages around it, so your cleaner is never far away.",
+  faq4Question: "Is the same cleaner sent every week?",
+  faq4Answer: "Yes. One cleaner keeps each home, on the same day every week.",
+  faq5Question: "Which areas do you cover?",
+  faq5Answer: "Fairhaven and the villages around it, within 25 km of the town.",
+  faq6Question: "Are you insured?",
+  faq6Answer: "Yes, we are fully insured.",
+  service1Icon: "house",
+  service2Icon: "sprayBottle",
+  service3Icon: "key",
+  valueProp1Icon: "handshake",
+  valueProp2Icon: "broom",
+  valueProp3Icon: "calendarCheck",
   valueProp1Title: "The same cleaner",
   valueProp1Body: "One cleaner learns your home and keeps it.",
   valueProp2Title: "Nothing to buy",
@@ -67,6 +118,40 @@ export const FILLED: Record<string, string> = {
   faq3Answer: "Yes, by telephone.",
   ctaHeading: "Ready for a clean home?",
   ctaBody: "Tell us about the home and we take it from there.",
+}
+
+/** The same business with no proof: no figures, reviews, proof or trust points. */
+export const NO_PROOF: Record<string, string> = {
+  ...FILLED,
+  proof: "",
+  proofBody: "",
+  trust1: "",
+  trust2: "",
+  trust3: "",
+  statYearsValue: "",
+  statClientsValue: "",
+  statRatingValue: "",
+  testimonial1Quote: "",
+  testimonial1Author: "",
+  testimonial2Quote: "",
+  testimonial2Author: "",
+  faq6Question: "",
+  faq6Answer: "",
+}
+
+/** The same business with no photos and no logo. */
+export const NO_PHOTOS: Record<string, string> = {
+  ...FILLED,
+  logo: "",
+  logoAlt: "",
+  heroImage: "",
+  heroImageAlt: "",
+  photo1Src: "",
+  photo1Alt: "",
+  photo2Src: "",
+  photo2Alt: "",
+  photo3Src: "",
+  photo3Alt: "",
 }
 
 /**

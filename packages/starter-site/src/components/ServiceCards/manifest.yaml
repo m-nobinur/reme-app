@@ -1,13 +1,22 @@
 component: ServiceCards
 path: src/components/ServiceCards/ServiceCards.astro
-summary: The services on offer, as cards of a name and a sentence.
-props: []
+summary: The services, as linked cards on the home page or a full section each
+  on the services page.
+props:
+  - name: variant
+    type: '"cards" | "sections"'
+    required: false
+    description: cards on home, sections on the services page.
 constraints:
-  - Reads service1Name to service3Body itself; a card renders only when one of
-    its two fields is set.
-  - No prices anywhere. The site quotes on request, through the quote page.
+  - Reads serviceItems from src/structured-data.ts (service1Name to
+    service6For); a service renders only with a name or a body.
+  - A card shows Name, Body and Icon and links to its section, id service-N, on
+    the services page. A section adds Includes, one item to a line, For, and a
+    quote link.
+  - Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice.
 examples:
   - "<ServiceCards />"
+  - '<ServiceCards variant="sections" />'
 forbidden:
   - a price
   - a service the facts give no sign of

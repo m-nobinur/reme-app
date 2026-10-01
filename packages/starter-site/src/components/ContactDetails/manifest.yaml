@@ -1,12 +1,19 @@
 component: ContactDetails
 path: src/components/ContactDetails/ContactDetails.astro
-summary: Phone, email, weekday hours and service area as a labelled list.
-props: []
+summary: Phone, email, weekday hours and service area, each with its icon, as a
+  list or as cards.
+props:
+  - name: variant
+    type: '"list" | "cards"'
+    required: false
+    description: cards on the contact page, list elsewhere.
 constraints:
   - Reads site.phone, site.email, site.weekdayHours and site.serviceAreaText
     (else site.serviceArea) itself; each row renders only when its field is set.
+  - The list suits the footer and the quote page; the contact page uses cards.
 examples:
   - "<ContactDetails />"
+  - '<ContactDetails variant="cards" />'
 forbidden:
   - passing contact details as props or children
 source: generated

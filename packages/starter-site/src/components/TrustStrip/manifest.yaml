@@ -1,0 +1,16 @@
+component: TrustStrip
+path: src/components/TrustStrip/TrustStrip.astro
+summary: A band under the home hero with the business's figures and up to three
+  proof points.
+props: []
+constraints:
+  - Figures are fact fields (statYearsValue, statClientsValue, statRatingValue);
+    one with no value does not render.
+  - trust1 to trust3 restate business.proof in under six words each, and stay
+    empty without it.
+  - Renders nothing when there are no figures and no points.
+examples:
+  - "<TrustStrip />"
+forbidden:
+  - a figure or point no fact states
+source: generated

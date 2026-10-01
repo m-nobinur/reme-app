@@ -1,11 +1,14 @@
 component: ValueProps
 path: src/components/ValueProps/ValueProps.astro
-summary: Up to three reasons to choose the business, each a title and a sentence.
+summary: Up to three reasons to choose the business, each an icon, a title and a
+  sentence, on one panel.
 props: []
 constraints:
-  - Reads valueProp1Title to valueProp3Body itself, in order; an entry renders
-    only when one of its two fields is set.
-  - Renders nothing when all six fields are empty.
+  - Reads valueProp1Title to valueProp3Icon itself, in order; an entry renders
+    only when its title or body is set.
+  - Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason;
+    an empty or unknown one shows checkCircle.
+  - Renders nothing when every title and body is empty.
 examples:
   - "<ValueProps />"
 forbidden:

@@ -9,6 +9,7 @@ export const ALLOWED = [
   "Service",
   "WebSite",
   "BreadcrumbList",
+  "FAQPage",
 ] as const
 
 /**

@@ -5,23 +5,26 @@ props:
   - name: title
     type: string
     required: true
-    description: The page's own title; the business name is appended.
+    description: The page's own title; the business name is appended once.
   - name: description
     type: string
     required: false
-    description: The meta and Open Graph description, read from a site field.
+    description: The meta description, from a site field.
   - name: jsonLd
     type: Record<string, unknown>[]
     required: false
-    description: Items from src/structured-data.ts; the schema.org context is added here.
+    description: Items from src/structured-data.ts.
   - name: noindex
     type: boolean
     required: false
     description: Keeps the page out of search results, as the 404 page does.
 constraints:
   - The Base layout renders it; a page passes these props to Base.
-  - JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service or
-    WebSite only.
+  - JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service,
+    WebSite or FAQPage only.
+  - A page's title and description come from its own fields (servicesTitle,
+    servicesDescription and so on), unique to the page; the business name is
+    appended to a title that does not already carry it.
 examples:
   - "<Base title={site.contactHeading} description={site.contactIntro}
     jsonLd={localBusiness(Astro.site)}>"

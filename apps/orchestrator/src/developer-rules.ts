@@ -12,6 +12,7 @@ import {
 } from "@workspace/contracts"
 import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
+import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
@@ -25,9 +26,19 @@ const WORDS = [
   ...CLAIM_VOCABULARY.guarantee,
 ].join(", ")
 const COUNTS = CLAIM_VOCABULARY.counted.join(", ")
-const COPY_RULES = [
-  '- Persuasive copy is welcome: a benefit-led slogan under eight words, a supporting line under it, value propositions about care, reliability and convenience, and a call to action that names the action ("Request a quote").',
-  `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. Call ask_chief for the fact, or write the line without the claim.`,
+/**
+ * How the copy reads, as checks a reviewer can tick. The stock phrases are
+ * the starter's copy check's own list, which `astro build` prints against.
+ */
+export const COPY_RULES = [
+  `- Write as a local copywriter for this trade: specific to these services, customers and area, benefit first, plain words, active voice, sentences under 20 words, one to three sentences a paragraph, British English unless the facts spell American. Never write ${BANNED_PHRASES.join(", ")} or a stock phrase like them, an em dash, an exclamation mark in a heading, or one phrase twice on a page. Name the area where it reads naturally, never as a keyword list.`,
+  '- heroHeading names the main service and the area ("Weekly house cleaning in Fairhaven"); the line under it says in one sentence what the customer gets. Each service gets a benefit-led Body, Includes (what the facts say it covers, one a line) and For (who it suits, from business.audience). Steps run from first contact to the finished job. Value props are reasons a fact supports. Write six to eight FAQs when the facts answer that many. areaTowns lists only places service_area.text names. ctaHeading and ctaBody give a reason to ask now, with no deadline or offer. servicesHeading, serviceAreaHeading and contactHeading name the service or area, not one bare word.',
+  "- Set service1Icon to service6Icon and valueProp1Icon to valueProp3Icon to the ICONS key in src/icons.ts that shows what that card says, no key twice in a section.",
+  "- business.proof is the only source for trust1 to trust3, proofBody and any years, insurance, accreditation, guarantee, award or review on the site: shorten or rephrase it, never add to it. Without it leave those empty, and the strip and sections they fill drop out.",
+  "- Each page's Title field (homeTitle, servicesTitle and so on) is 50 to 60 characters naming service, area and business; its Description field is 140 to 155 characters saying what the page offers and why to request a quote; both unique to the page. FAQ questions are what this trade's customers ask before booking, in their words.",
+  `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. Write the line without the claim instead.`,
+  "- Beyond the required facts, call ask_chief only when a missing fact would leave a core section empty or wrong, such as no detail on any service: once a build at most, as one plain question with an example answer. Never ask for a nice-to-have or for business.proof; leave its section out.",
+  "- astro build ends with a copy check. Fix every line it prints about text you wrote; a fact shown as given may stay.",
 ]
 
 /**
@@ -71,6 +82,14 @@ export function siteRules(
   ]
 }
 
+/** The starter's optional pages, by the page id an owner picks them by. */
+const STARTER_PAGES = {
+  about: "src/pages/about.astro",
+  services: "src/pages/services.astro",
+  service_area: "src/pages/service-area.astro",
+  contact: "src/pages/contact.astro",
+}
+
 /** A fact's value, when the stored one still parses. */
 function factValue<K extends FactValueKey>(
   facts: readonly FactRecord[],
@@ -109,7 +128,7 @@ export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
 const CONTENT_RULES = [
   "- Write the copy from business.industry, business.offerings, business.audience, business.overview, service_area.text and the contact facts below: what the business does, for whom, how it works with a customer and where. Every service description, benefit, process step, FAQ answer and line that reads like a customer's words traces to one of them. Rephrase; never add.",
   '- A benefit heading may stay general ("Easy to book", "Local to you"), but no line states a specific that no fact states: no place beyond service_area.text (no airports, venues or landmarks), no service extra such as meet and greet or a driver who keeps in touch, no response or arrival time, no years, no award, no fleet or team size, no qualification or membership, no named equipment, product or brand.',
-  "- When the facts are thin, write less: fewer cards, shorter lines, plainer words. Leave an optional field empty rather than fill it with something the facts do not say.",
+  "- When the facts are thin, write less: fewer cards, shorter lines, plainer words. Leave an optional field empty rather than fill it with something the facts do not say; a section with nothing set drops out, so never pad one to keep it.",
   "- An FAQ answer only restates a fact below or points the visitor to Request a quote. Leave out a question no fact answers.",
   "- Before report_complete, read back every sentence you wrote. For each specific in it (a place, a service, an extra, a time, a number, a person, a qualification) name the fact it came from. Cut or generalise any you cannot, and list what you cut in risks.",
 ]
@@ -149,6 +168,9 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const extra = pages?.ids.filter(
     (id) => !(FIXED_PAGES as readonly string[]).includes(id)
   )
+  const drop = Object.entries(STARTER_PAGES)
+    .filter(([id]) => !pages?.ids.includes(id as never))
+    .map(([, file]) => file)
   return [
     ...CONTENT_RULES,
     ...(template
@@ -178,7 +200,7 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
         : []),
     ...(pages
       ? [
-          `- Pages: Home and Request a quote, plus ${extra?.length ? extra.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. Build each extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
+          `- Pages: Home and Request a quote, plus ${extra?.length ? extra.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}${drop.includes(STARTER_PAGES.about) ? "" : "Delete src/pages/about.astro if business.overview, business.audience and business.proof are all missing. "}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
         ]
       : []),
     ...(tone

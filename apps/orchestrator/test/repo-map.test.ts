@@ -36,6 +36,21 @@ describe("the repository map", () => {
     )
   })
 
+  it("gives the component manifests one line between them", () => {
+    const withManifests = {
+      ...starter,
+      "src/components/Hero/Hero.astro": "---\n---\n",
+      "src/components/Hero/manifest.yaml": "component: Hero\n",
+      "src/components/Steps/Steps.astro": "---\n---\n",
+      "src/components/Steps/manifest.yaml": "component: Steps\n",
+    }
+    const mapped = repoMap(withManifests).split("\n")
+    expect(mapped.filter((l) => l.includes("manifest.yaml"))).toEqual([
+      "src/components/<Name>/manifest.yaml (2 files): one beside each component, with its constraints and examples",
+    ])
+    expect(mapped).toHaveLength(Object.keys(withManifests).length - 1)
+  })
+
   it("is the same map whatever order the files arrive in", () => {
     const reversed = Object.fromEntries(Object.entries(starter).reverse())
     expect(repoMap(reversed)).toBe(map)

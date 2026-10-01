@@ -1,6 +1,7 @@
 component: SiteHeader
 path: src/components/SiteHeader/SiteHeader.astro
-summary: The header with business name, navigation and one call to action.
+summary: The sticky header with the business name, navigation, a phone menu and
+  one call to action.
 props: []
 constraints:
   - The Base layout renders it on every page.
@@ -8,6 +9,8 @@ constraints:
     its page exists and its label field is set.
   - The owner's logo (site.logo with site.logoAlt) replaces the business name at
     a fixed height; with no logo the name shows as text.
+  - On a phone the links sit behind a native details menu labelled navMenu,
+    which needs no script.
 examples:
   - "<SiteHeader />"
 forbidden:

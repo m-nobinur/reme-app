@@ -1,0 +1,43 @@
+---
+import { site } from "../../site-config"
+import Icon from "../Icon/Icon.astro"
+
+// Figures are fact fields; a figure with no value does not render, label or
+// no label. The points restate business.proof and are empty without it. So
+// with no proof and no figures there is no strip at all.
+const figures = [
+  { value: site.statYearsValue, label: site.statYearsLabel },
+  { value: site.statClientsValue, label: site.statClientsLabel },
+  { value: site.statRatingValue, label: site.statRatingLabel },
+].filter((item) => item.value)
+const points = [site.trust1, site.trust2, site.trust3].filter(Boolean)
+---
+
+{
+  (figures.length > 0 || points.length > 0) && (
+    <section class="trust-strip">
+      <div class="wrap trust-inner">
+        {figures.length > 0 && (
+          <dl class="trust-figures">
+            {figures.map((item) => (
+              <div>
+                {item.label && <dt>{item.label}</dt>}
+                <dd>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {points.length > 0 && (
+          <ul class="trust-points">
+            {points.map((point) => (
+              <li>
+                <Icon name="checkCircle" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  )
+}

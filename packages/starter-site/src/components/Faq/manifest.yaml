@@ -3,10 +3,14 @@ path: src/components/Faq/Faq.astro
 summary: Questions and answers, each one a native disclosure that needs no script.
 props: []
 constraints:
-  - Reads faq1Question to faq3Answer itself; an entry needs both halves to
-    render.
+  - Reads faqItems from src/structured-data.ts, which reads faq1Question to
+    faq8Answer; an entry needs both halves to render. Six to eight when the
+    facts answer that many.
+  - A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data
+    matches the questions on the page.
 examples:
   - "<Faq />"
 forbidden:
   - an answer stating a price, hour or guarantee no fact carries
+  - FAQPage data on a page that does not show the questions
 source: generated

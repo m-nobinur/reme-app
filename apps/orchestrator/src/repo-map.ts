@@ -65,22 +65,42 @@ function describeFile(path: string, text: string): string {
   return bits.length > 0 ? `${head}: ${bits.join("; ")}` : head
 }
 
-/** The map, one line a file, cut at `REPO_MAP_MAX_CHARS` with a notice naming what was left out. */
+/** A component's manifest, beside it under its own folder. */
+const MANIFEST = /^src\/components\/[^/]+\/manifest\.yaml$/
+
+/**
+ * The map, one line a file, cut at `REPO_MAP_MAX_CHARS` with a notice naming
+ * what was left out. The component manifests share one line where the first
+ * would sit: their paths follow from the components the digest lists, and a
+ * line each said only their size.
+ */
 export function repoMap(files: Record<string, string>): string {
   const paths = Object.keys(files).sort()
-  const lines = paths.map((p) => describeFile(p, files[p] as string))
-  const whole = lines.join("\n")
+  const manifests = paths.filter((p) => MANIFEST.test(p))
+  // Each line with the files it stands for, so a cut map names what it left.
+  const entries = paths.flatMap((p) => {
+    if (!MANIFEST.test(p))
+      return [{ line: describeFile(p, files[p] as string), paths: [p] }]
+    if (p !== manifests[0]) return []
+    return [
+      {
+        line: `src/components/<Name>/manifest.yaml (${manifests.length} files): one beside each component, with its constraints and examples`,
+        paths: manifests,
+      },
+    ]
+  })
+  const whole = entries.map((e) => e.line).join("\n")
   if (whole.length <= REPO_MAP_MAX_CHARS) return whole
 
   const kept: string[] = []
   let size = 0
-  for (const line of lines) {
+  for (const { line } of entries) {
     const next = size + (kept.length > 0 ? 1 : 0) + line.length
     if (next > REPO_MAP_MAX_CHARS - NOTICE_CHARS) break
     kept.push(line)
     size = next
   }
-  const left = paths.slice(kept.length)
+  const left = entries.slice(kept.length).flatMap((e) => e.paths)
   let notice = `[Map cut at ${REPO_MAP_MAX_CHARS} characters: ${left.length} files not listed: `
   let named = 0
   for (const path of left) {

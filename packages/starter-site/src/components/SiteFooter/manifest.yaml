@@ -1,6 +1,7 @@
 component: SiteFooter
 path: src/components/SiteFooter/SiteFooter.astro
-summary: The footer with business name, contact details and navigation.
+summary: The footer in columns, the business with its line and quote link, the
+  pages, and the contact details.
 props: []
 constraints:
   - The Base layout renders it on every page.

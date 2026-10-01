@@ -1,42 +1,39 @@
 ---
 import CtaBand from "../components/CtaBand/CtaBand.astro"
+import Faq from "../components/Faq/Faq.astro"
 import Hero from "../components/Hero/Hero.astro"
 import Section from "../components/Section/Section.astro"
 import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
 import Steps from "../components/Steps/Steps.astro"
 import Base from "../layouts/Base.astro"
 import { site } from "../site-config"
+import { faqPage, services } from "../structured-data"
+
+const offerings = site.offerings
+  .split("\n")
+  .map((item) => item.trim())
+  .filter(Boolean)
 ---
 
-<Base title={site.servicesHeading} description={site.servicesIntro}>
-  <Hero
-    variant="compact"
-    heading={site.servicesHeading}
-    lede={site.servicesIntro}
-  />
-  <ServiceCards />
+<Base
+  title={site.servicesTitle || site.servicesHeading}
+  description={site.servicesDescription || site.servicesIntro}
+  jsonLd={[...services(Astro.site), ...faqPage()]}
+>
+  <Hero heading={site.servicesHeading} lede={site.servicesIntro} />
+  <ServiceCards variant="sections" />
   {
-    site.offerings && (
+    offerings.length > 0 && (
       <Section heading={site.offeringsHeading}>
         <ul class="offerings">
-          {site.offerings
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .map((item) => (
-              <li>{item}</li>
-            ))}
+          {offerings.map((item) => (
+            <li>{item}</li>
+          ))}
         </ul>
       </Section>
     )
   }
   <Steps />
-  {
-    (site.serviceAreaText || site.serviceArea) && (
-      <Section heading={site.serviceAreaHeading}>
-        <p>{site.serviceAreaText || site.serviceArea}</p>
-      </Section>
-    )
-  }
+  <Faq />
   <CtaBand />
 </Base>
