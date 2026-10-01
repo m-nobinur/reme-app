@@ -3319,6 +3319,28 @@ export interface components {
         }
       | {
           /** @constant */
+          outcome: "gated"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+            | "create_reminder"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
           outcome: "error"
           turn_id: string
           model: string

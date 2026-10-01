@@ -165,6 +165,8 @@ export const CosTurn = z.discriminatedUnion("outcome", [
     reason: z.enum(["provider", "budgetary", "resource"]),
     ...Ran,
   }),
+  /** An onboarding turn the script answered from Jev's decision, its planner stopped. */
+  z.strictObject({ outcome: z.literal("gated"), ...Ran }),
   z.strictObject({ outcome: z.literal("error"), ...Ran }),
   z.strictObject({ outcome: z.literal("integrity"), ...Ran }),
   z.strictObject({
