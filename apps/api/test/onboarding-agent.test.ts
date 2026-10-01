@@ -1047,6 +1047,25 @@ describe("a planned turn", () => {
     })
     expect(late).toMatchObject({ ok: false, reason: "timeout" })
     expect(Date.now() - started).toBeLessThan(1_500)
+
+    // Stopped from outside: it ends at once, shows nothing, and the call
+    // still counts at its worst.
+    const stop = new AbortController()
+    const held = planner(["hang"])
+    const said: string[] = []
+    const stopped = planTurn(
+      held.model,
+      PRICE,
+      typed("hello"),
+      undefined,
+      (text) => said.push(text),
+      stop.signal
+    )
+    setTimeout(() => stop.abort(), 20)
+    expect(await stopped).toMatchObject({ ok: false, shown: "" })
+    expect(said).toEqual([])
+    expect((await stopped).calls[0]?.costUsd).toBeGreaterThan(0)
+    expect(held.prompts).toHaveLength(1)
   })
 
   it("races a stalled call with a second one, and keeps the first to write", async () => {

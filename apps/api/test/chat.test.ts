@@ -2030,6 +2030,222 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(read.calls).toHaveLength(1)
     }, 60_000)
 
+    describe("racing Jev with the planner", () => {
+      /** An org at the layout card, with a typed reply's turn ready to send. */
+      const atTemplate = async (name: string) => {
+        const who = await owner(kit, url as string, name)
+        await who.call(stubOrchestrator(), "/facts", {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+        })
+        const id = await talker(who).onboarding()
+        const asked = await talker(who).say(id, `u_${name}_0`, "ok")
+        expect(pendingCall(asked.after).input).toMatchObject({
+          step: "template",
+        })
+        return { who, id, card: pendingCall(asked.after) }
+      }
+      /**
+       * A planner that streams `wrote` and holds its finish until `held`
+       * settles, or with no answer, waits until it is stopped. `started`
+       * settles once it is called.
+       */
+      const racer = (wrote: object | null, held?: Promise<unknown>) => {
+        const base = planner([wrote ?? {}])
+        let called = (): void => undefined
+        const started = new Promise<void>((resolve) => {
+          called = resolve
+        })
+        const model = new MockLanguageModelV4({
+          doStream: async (options) => {
+            called()
+            if (!wrote) {
+              base.calls.push(JSON.stringify(options.prompt))
+              await new Promise((_, reject) =>
+                options.abortSignal?.addEventListener("abort", () =>
+                  reject(options.abortSignal?.reason)
+                )
+              )
+            }
+            const { stream, ...rest } = await base.model.doStream(options)
+            return {
+              ...rest,
+              stream: stream.pipeThrough(
+                new TransformStream({
+                  async transform(part, out) {
+                    if (part.type === "finish") await held
+                    out.enqueue(part)
+                  },
+                })
+              ),
+            }
+          },
+        })
+        return { model, calls: base.calls, started }
+      }
+      const lastTurn = async (who: Owner, id: string) =>
+        (await logged(who, id)).filter((e) => e.type === "cos.turn").at(-1)
+          ?.payload as { outcome: string; cost_usd: number } | undefined
+
+      it("answers an exact option or a plain deferral in code, with no Jev and no planner", async () => {
+        const { who, id } = await atTemplate("chat-exact")
+        const asked: string[] = []
+        const unused = planner([plan({ say: "never sent" })])
+        const deps = {
+          planner: unused.model,
+          jev: async (_c: ToolPart, _q: string, reply: string) => {
+            asked.push(reply)
+            return null
+          },
+        }
+        const bold = await talker(who, undefined, deps).say(
+          id,
+          "u_ex_1",
+          "Bold."
+        )
+        expect(pendingCall(bold.after).input).toMatchObject({ step: "palette" })
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.template")?.value
+        ).toEqual({ id: "bold" })
+        const picked = await talker(who, undefined, deps).say(
+          id,
+          "u_ex_2",
+          "Up to you"
+        )
+        expect(pendingCall(picked.after).input).toMatchObject({ step: "font" })
+        expect(asked).toEqual([])
+        expect(unused.calls).toHaveLength(0)
+      }, 60_000)
+
+      it("stops the planner when Jev is sure before a word shows, and the script answers", async () => {
+        const { who, id, card } = await atTemplate("chat-gated")
+        const hung = racer(null)
+        const sent = await talker(who, undefined, {
+          planner: hung.model,
+          jev: async () => {
+            await hung.started
+            return { kind: "answer", option: "modern" }
+          },
+        }).say(id, "u_gated_1", "The modern one, please")
+        expect(hung.calls).toHaveLength(1)
+        expect(pendingCall(sent.after).input).toMatchObject({ step: "palette" })
+        expect(sent.chunks.filter((c) => c.type === "start-step")).toHaveLength(
+          1
+        )
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.template")
+        ).toMatchObject({
+          value: { id: "modern" },
+          provenance: { source: "owner_stated" },
+        })
+        const ended = await lastTurn(who, id)
+        expect(ended?.outcome).toBe("gated")
+        // The stopped call is charged at its worst, so the reservation closes.
+        expect(ended?.cost_usd).toBeGreaterThan(0)
+        expect(card.toolCallId).not.toBe(pendingCall(sent.after).toolCallId)
+      }, 60_000)
+
+      it("keeps the planner's answer once its words have shown, and when Jev is unsure", async () => {
+        const { who, id } = await atTemplate("chat-late")
+        const say = "Good question. Which layout suits you?"
+        let answered = (): void => undefined
+        const decided = new Promise<void>((resolve) => {
+          answered = resolve
+        })
+        const slow = racer(
+          plan({ pending_card: "unanswered", say }),
+          decided.then(() => new Promise((r) => setTimeout(r, 20)))
+        )
+        const late = await talker(who, undefined, {
+          planner: slow.model,
+          jev: async () => {
+            await slow.started
+            // Long enough for the first sentence to show.
+            await new Promise((r) => setTimeout(r, 100))
+            answered()
+            return { kind: "answer", option: "bold" }
+          },
+        }).say(id, "u_late_1", "Is bold the loud one? Bold then")
+        expect(slow.calls).toHaveLength(1)
+        expect(late.after.parts).toContainEqual(
+          expect.objectContaining({ type: "text", text: say })
+        )
+        expect(pendingCall(late.after).input).toMatchObject({
+          step: "template",
+        })
+        expect((await lastTurn(who, id))?.outcome).toBe("answered")
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.template")
+        ).toBeUndefined()
+        // Unsure, after the planner has started: the planner answers.
+        const read = racer(plan({ pending_card: "unanswered", say }))
+        await talker(who, undefined, {
+          planner: read.model,
+          jev: async () => {
+            await read.started
+            return null
+          },
+        }).say(id, "u_late_2", "what's the difference between them?")
+        expect(read.calls).toHaveLength(1)
+        expect((await lastTurn(who, id))?.outcome).toBe("answered")
+      }, 60_000)
+
+      it("ignores Jev's decision for a card another turn answered first", async () => {
+        const { who, id, card } = await atTemplate("chat-moved")
+        // The layout card is answered by a click after this turn read it,
+        // and before its transaction, so the palette card waits instead.
+        let opened = 0
+        const meddling: Tenancy = {
+          ...kit,
+          withOrg: async (scope, fn) => {
+            if (++opened === 2) {
+              await talker(who).turn(
+                id,
+                answer(await talker(who).tail(id), {
+                  answer: "chosen",
+                  ids: ["classic"],
+                  other: null,
+                })
+              )
+            }
+            return kit.withOrg(scope, fn)
+          },
+        }
+        const read = racer(
+          plan({
+            pending_card: "unanswered",
+            say: "Happy to help. Which colours suit you?",
+          })
+        )
+        const sent = await talker(who, undefined, {
+          planner: read.model,
+          jev: async (seen) => {
+            expect(seen.toolCallId).toBe(card.toolCallId)
+            await read.started
+            return { kind: "defer" }
+          },
+        }).send(
+          {
+            conversation_id: id,
+            mode: "act",
+            turn: { kind: "message", message_id: "u_moved_1", text: "hmm" },
+          },
+          stubOrchestrator(),
+          meddling
+        )
+        expect(sent.response.status).toBe(200)
+        expect(read.calls).toHaveLength(1)
+        expect((await lastTurn(who, id))?.outcome).toBe("answered")
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.palette")
+        ).toBeUndefined()
+        expect(pendingCall(await talker(who).tail(id)).input).toMatchObject({
+          step: "palette",
+        })
+      }, 60_000)
+    })
+
     it("prepares business-specific copy once in the background, and the photo step uses it", async () => {
       const who = await owner(kit, url as string, "chat-prepare")
       await who.call(stubOrchestrator(), "/facts", {

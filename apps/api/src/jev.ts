@@ -2,12 +2,13 @@ import { AskChoiceInput } from "@workspace/contracts"
 import type { ToolPart } from "./chat.ts"
 
 /**
- * The fast gate in front of the onboarding planner: TypeSafe's Jev decision
+ * The fast gate beside the onboarding planner: TypeSafe's Jev decision
  * model on OpenRouter reads a typed reply to a waiting choice or details
  * card and says whether it answers the card, leaves it to the assistant, or
  * is something else. Only a confident answer or deferral is taken, and code
  * then answers the turn with its own copy; everything else goes to the
- * planner. Jev writes no text.
+ * planner. Jev writes no text. A reply `matched` reads exactly never
+ * reaches Jev.
  *
  * Measured on 2026-10-01: about 0.4 s and $0.00002 a call; clear answers
  * come back at confidence 1, a reply mixing a question with an answer at
@@ -53,6 +54,83 @@ export function decisionOf(
   return num(option.confidence) >= JEV.option && options.includes(option.choice)
     ? { kind: "answer", option: option.choice }
     : null
+}
+
+/**
+ * Whole replies that leave the choice to the assistant, as `plain` reads
+ * them. Kept short: a phrase here is taken with no model reading it.
+ */
+const DEFERS = new Set([
+  "you choose",
+  "you pick",
+  "you decide",
+  "up to you",
+  "its up to you",
+  "whatever you think",
+  "surprise me",
+  "your call",
+  "dealers choice",
+])
+
+/** A reply or label as compared: lower case, words only, single spaces. */
+const plain = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[-_/]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+/**
+ * What code reads in a typed reply to `card` with no model: the whole reply
+ * is one option's label or id on a single choice card, or a phrase that
+ * leaves the choice to the assistant. Null for Jev. One log line when taken.
+ */
+export function matched(card: ToolPart, reply: string): JevDecision | null {
+  const said = plain(reply)
+  const choice =
+    card.type === "tool-ask_choice"
+      ? AskChoiceInput.safeParse(card.input)
+      : null
+  const option =
+    choice?.success && !choice.data.multiple
+      ? choice.data.options.find(
+          (o) => plain(o.label) === said || plain(o.id) === said
+        )
+      : undefined
+  const decision: JevDecision | null = option
+    ? { kind: "answer", option: option.id }
+    : DEFERS.has(said)
+      ? { kind: "defer" }
+      : null
+  if (decision) logged(card, 0, decision, null, null, "code")
+  return decision
+}
+
+/** The one `onboarding.jev` line for a typed reply read, by code or by Jev. */
+function logged(
+  card: ToolPart,
+  ms: number,
+  decision: JevDecision | null,
+  error: string | null,
+  cost: number | null,
+  source: "code" | "jev"
+) {
+  console.log(
+    JSON.stringify({
+      code: "onboarding.jev",
+      step: (card.input as { step?: string }).step ?? null,
+      ms,
+      decision: decision
+        ? decision.kind === "answer"
+          ? `answer:${decision.option}`
+          : "defer"
+        : "planner",
+      error,
+      cost_usd: cost,
+      source,
+    })
+  )
 }
 
 /**
@@ -116,7 +194,6 @@ export async function jev(
 ): Promise<JevDecision | null> {
   const began = Date.now()
   const { questions, options } = questionsFor(card)
-  const step = (card.input as { step?: string }).step ?? null
   let decision: JevDecision | null = null
   let cost: number | null = null
   let error: string | null = null
@@ -148,19 +225,6 @@ export async function jev(
         ? "timeout"
         : "fetch"
   }
-  console.log(
-    JSON.stringify({
-      code: "onboarding.jev",
-      step,
-      ms: Date.now() - began,
-      decision: decision
-        ? decision.kind === "answer"
-          ? `answer:${decision.option}`
-          : "defer"
-        : "planner",
-      error,
-      cost_usd: cost,
-    })
-  )
+  logged(card, Date.now() - began, decision, error, cost, "jev")
   return decision
 }

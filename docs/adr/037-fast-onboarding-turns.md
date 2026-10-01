@@ -22,6 +22,15 @@ the reply landed, so the view jumped back to the previous reply. The flow had ab
    writes no text. When a card waits, it asks whether the reply answers it, defers it or does
    something else, and which option it names. Both confidences must clear their thresholds for
    code to answer; anything else, an error, or more than 1 s goes to the planner.
+
+   Code reads the reply first. A whole reply that is one option's label or id on a single
+   choice card, or one of a short list of phrases such as "you pick" or "up to you", is
+   answered with no model call. Jev reads the rest while the planner runs, not before it. A
+   confident decision for the card still waiting, arriving before the planner has shown a
+   word, stops the planner call and the script answers; the turn ends `gated`, and the stopped
+   call counts at its worst. A later, unsure or failed decision is ignored. The planner no
+   longer waits 0.4 s for Jev, and no sentence the owner has read is taken back. Both paths
+   log `onboarding.jev` with `source` set to `code` or `jev`, so the take rate is measurable.
 3. **The planner streams.** It answers only typed messages that need understanding. Its JSON puts
    `say` last, so the facts and the next move are checked before the owner reads a word; the
    message then streams a sentence at a time, each sentence checked before it is shown, so no
