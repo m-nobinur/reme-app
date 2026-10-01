@@ -202,10 +202,6 @@ async function answer(page: Page, item: Locator) {
 }
 
 /**
- * Waits for version `n`'s approval, answering any question the build asks
- * first, and approves it.
- */
-/**
  * Approves the version waiting for review and returns its number. Only a
  * report that passes the gates takes the site's next number (ADR-031), so the
  * first version is v1 even when a gate refused the build's first report.
