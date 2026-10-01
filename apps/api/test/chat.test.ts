@@ -1,17 +1,22 @@
 import {
-  type AskFactInput,
   Conversation,
   ConversationHistory,
   ConversationList,
   ErrorEnvelope,
   FactList,
+  type FactRecord,
   type FactValue,
-  type FactValueKey,
+  StaffDirectory,
 } from "@workspace/contracts"
 import {
+  appendSessionEvent,
+  chiefStaffId,
   conversationMessages,
   conversations,
   eq,
+  events,
+  facts,
+  newUlid,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -23,10 +28,12 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   ASK_REPLY,
   CANCELLED,
+  type ChatDeps,
   chat,
   firstMessage,
   nextStep,
@@ -36,6 +43,13 @@ import {
   type Script,
   type ToolPart,
 } from "../src/chat.ts"
+import {
+  DEFAULT_QUOTE_FIELDS,
+  type Onboarding,
+  onboardingStep,
+  opening,
+  stepOf,
+} from "../src/onboarding.ts"
 import {
   type Owner,
   owner,
@@ -64,138 +78,83 @@ const uuids = () => {
   return () => `${NS}-0000-4000-8000-${String(++n).padStart(12, "0")}`
 }
 
-const REQUIRED: FactValueKey[] = [
-  "business.name",
-  "business.phone",
-  "business.email",
-  "hours.weekday",
-  "service_area.radius",
-  "pricing.standard_clean_hourly",
-]
-const script = (over: Partial<Script> = {}): Script => ({
-  kind: "onboarding",
-  missing: [...REQUIRED],
-  orgName: "Brightclean (fixture)",
-  skipped: [],
+const ORG = "0f1e2d3c-4b5a-4968-8776-655443322110"
+const state = (over: Partial<Onboarding> = {}): Onboarding => ({
+  orgId: ORG,
+  facts: [{ key: "business.name", value: { name: "Brightclean (fixture)" } }],
+  passed: [],
+  closed: [],
   offered: false,
+  builder: null,
+  orgName: "Brightclean (fixture)",
+  ownerName: "Probe Owner",
+  ...over,
+})
+const script = (over: Partial<Script> = {}): Script => ({
+  onboarding: state(),
   message: null,
   newId: counter(),
   ...over,
 })
 
-describe("the onboarding script", () => {
-  it("asks for the business name first, filled in with the org's name", () => {
-    expect(nextStep(script())).toEqual([
-      {
-        type: "tool-ask_fact",
-        toolCallId: "id1",
-        state: "input-available",
-        input: {
-          key: "business.name",
-          skippable: false,
-          prefill: { name: "Brightclean (fixture)" },
-        },
-      },
-    ])
+describe("the script's next step", () => {
+  it("is onboarding's while it runs, typed message or not", () => {
+    const expected = onboardingStep(state(), counter())
+    expect(nextStep(script())).toEqual(expected)
+    expect(
+      nextStep(script({ message: { mode: "act", text: "Just build it" } }))
+    ).toEqual(expected)
   })
 
-  it("prefills nothing when the org's name is not a business name", () => {
-    const [ask] = nextStep(script({ orgName: "   " })) as [ToolPart]
-    expect((ask.input as AskFactInput).prefill).toBeNull()
-  })
-
-  it("asks for the next missing key, and only pricing may be skipped", () => {
-    const asked = (held: string[]) =>
-      (
-        nextStep(
-          script({ missing: REQUIRED.filter((k) => !held.includes(k)) })
-        )[0] as ToolPart
-      ).input as AskFactInput
-    expect(asked(["business.name"])).toEqual({
-      key: "business.phone",
-      skippable: false,
-      prefill: null,
-    })
-    expect(asked(REQUIRED.slice(0, 5))).toEqual({
-      key: "pricing.standard_clean_hourly",
-      skippable: true,
-      prefill: null,
-    })
-  })
-
-  it("re-asks the missing key when the owner types instead", () => {
-    const [ask] = nextStep(
-      script({ message: { mode: "act", text: "Just build it" } })
-    ) as ToolPart[]
-    expect(ask?.type).toBe("tool-ask_fact")
-  })
-
-  it("offers the first build once every key is held or skipped", () => {
-    const held = script({
-      missing: ["pricing.standard_clean_hourly"],
-      skipped: ["pricing.standard_clean_hourly"],
-    })
-    expect(nextStep(held)).toEqual([
+  it("after onboarding, turns an Act message into a change and answers Ask with one line", () => {
+    const act = nextStep(
+      script({
+        onboarding: null,
+        message: { mode: "act", text: "Add Saturdays" },
+      })
+    )
+    expect(act).toMatchObject([
       {
         type: "tool-request_change",
-        toolCallId: "id1",
         state: "approval-requested",
-        input: { text: ONBOARDING_GOAL },
-        approval: { id: "id2" },
+        input: { text: "Add Saturdays" },
       },
     ])
-  })
-
-  it("offers the owner's own words when they type at the end in Act", () => {
-    const [offer] = nextStep(
-      script({
-        missing: [],
-        message: { mode: "act", text: "Make it green" },
-      })
-    ) as ToolPart[]
-    expect(offer?.input).toEqual({ text: "Make it green" })
-  })
-
-  it("never makes an Ask message a change, onboarding included", () => {
     expect(
       nextStep(
-        script({ missing: [], message: { mode: "ask", text: "Make it green" } })
+        script({ onboarding: null, message: { mode: "ask", text: "Why?" } })
       )
     ).toEqual([{ type: "text", text: ASK_REPLY, state: "done" }])
+    expect(nextStep(script({ onboarding: null }))).toEqual([])
   })
 
-  it.each([
-    ["an onboarding that offered its build", { offered: true }],
-    ["an assistant conversation", { kind: "assistant" as const }],
-  ])(
-    "after %s, turns an Act message into a change and answers Ask with one line",
-    (_name, over) => {
-      const act = nextStep(
-        script({ ...over, message: { mode: "act", text: "Add Saturdays" } })
-      )
-      expect(act).toMatchObject([
+  it("makes the first row from the same script: the opener, then the industry card", () => {
+    const row = firstMessage(
+      {
+        orgId: ORG,
+        orgName: "Brightclean (fixture)",
+        ownerName: "Probe Owner",
+      },
+      [
         {
-          type: "tool-request_change",
-          state: "approval-requested",
-          input: { text: "Add Saturdays" },
-        },
-      ])
-      expect(
-        nextStep(script({ ...over, message: { mode: "ask", text: "Why?" } }))
-      ).toEqual([{ type: "text", text: ASK_REPLY, state: "done" }])
-      expect(nextStep(script({ ...over, message: null }))).toEqual([])
-    }
-  )
-
-  it("makes the first row from the same script", () => {
-    expect(firstMessage("Brightclean (fixture)", [], counter())).toEqual({
+          key: "business.name",
+          value: { name: "Brightclean (fixture)" },
+        } as unknown as FactRecord,
+      ],
+      counter()
+    )
+    expect(row).toEqual({
       id: "id2",
       parentId: null,
       format: "ai-sdk/v6",
       content: {
         role: "assistant",
-        parts: [{ type: "step-start" }, ...nextStep(script())],
+        parts: [{ type: "step-start" }, ...opening(state(), counter())],
       },
+    })
+    expect(row.content.parts[2]).toMatchObject({
+      type: "tool-ask_choice",
+      input: { step: "industry" },
     })
   })
 })
@@ -281,14 +240,74 @@ const building = () =>
     )
   })
 
-const STATED: FactValue[] = [
-  { key: "business.phone", value: { e164: "+441632960001" } },
-  { key: "business.email", value: { address: "hello@brightclean.invalid" } },
-  { key: "hours.weekday", value: { open: "08:00", close: "18:00" } },
-  {
-    key: "service_area.radius",
-    value: { centre: "Fictional Town", radius_km: 12 },
+/** What the owner types or picks for each step of the script. */
+const FACTS: Record<string, FactValue> = {
+  "business.offerings": {
+    key: "business.offerings",
+    value: { items: ["Regular cleaning", "Deep cleans"] },
   },
+  "business.audience": {
+    key: "business.audience",
+    value: { text: "Busy families in Fictional Town." },
+  },
+  "business.overview": {
+    key: "business.overview",
+    value: { text: "We visit, agree the work, then clean every week." },
+  },
+  "service_area.text": {
+    key: "service_area.text",
+    value: { text: "Fictional Town and the villages around it" },
+  },
+  "business.phone": { key: "business.phone", value: { e164: "+441632960001" } },
+  "business.email": {
+    key: "business.email",
+    value: { address: "hello@brightclean.invalid" },
+  },
+  "assistant.name": { key: "assistant.name", value: { name: "Robin" } },
+  "owner.preferred_name": {
+    key: "owner.preferred_name",
+    value: { name: "Sam" },
+  },
+}
+const CHOSEN: Record<string, string[]> = {
+  industry: ["cleaning"],
+  pronouns: ["she_her"],
+  tone: ["friendly"],
+  build_for_me: ["yes"],
+  template: ["classic"],
+  palette: ["ocean"],
+  font: ["clean_sans"],
+  pages: ["services", "about"],
+}
+/** A card's answer as the web sends it; the tagline and the photos are skipped. */
+const answerFor = (card: ToolPart): unknown => {
+  const step = stepOf(card) as string
+  if (card.type === "tool-review_quote_form") {
+    return { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS }
+  }
+  if (card.type === "tool-ask_choice") {
+    return { answer: "chosen", ids: CHOSEN[step], other: null }
+  }
+  const fact = FACTS[step]
+  return fact ? { answer: "stated", fact } : { answer: "skipped" }
+}
+
+/** Every fact before the photos, as `/facts` takes them. */
+const UP_TO_PHOTOS: FactValue[] = [
+  { key: "business.name", value: { name: "Held (fixture)" } },
+  {
+    key: "business.industry",
+    value: { name: "Cleaning and home services", category: "cleaning" },
+  },
+  ...Object.values(FACTS),
+  { key: "business.tagline", value: { tagline: "Fresh homes" } },
+  { key: "assistant.pronouns", value: { id: "she_her" } },
+  { key: "assistant.tone", value: { id: "friendly" } },
+  { key: "site.build_mode", value: { mode: "assistant" } },
+  { key: "site.template", value: { id: "classic" } },
+  { key: "site.palette", value: { id: "ocean" } },
+  { key: "site.font", value: { id: "clean_sans" } },
+  { key: "site.pages", value: { ids: ["home", "quote"] } },
 ]
 
 describe.skipIf(!url)("POST /chat, on a live connection", () => {
@@ -308,7 +327,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
   /** The owner's side of a chat: turns sent with this id source. */
   const talker = (
     who: Owner,
-    newId: () => string = () => crypto.randomUUID()
+    newId: () => string = () => crypto.randomUUID(),
+    deps: Omit<ChatDeps, "newId"> = {}
   ) => {
     const session = {
       workosUserId: who.workosUserId,
@@ -334,7 +354,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         } as unknown as Env,
         using,
         { orgId: who.orgId, session },
-        { newId }
+        { newId, ...deps }
       )
       return { response, text: await response.text() }
     }
@@ -373,8 +393,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       } & Record<string, unknown>,
       stub?: Stub
     ) => {
+      // A typed message or a reply is the client's last message, so the
+      // stream opens a new one rather than continuing the tail.
       const before =
-        body.turn.kind === "message" ? undefined : await tail(conversationId)
+        body.turn.kind === "message" || body.turn.reply
+          ? undefined
+          : await tail(conversationId)
       const sent = await send(
         { conversation_id: conversationId, mode: "act", ...body },
         stub
@@ -396,67 +420,81 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     return { send, rows, tail, history, turn, onboarding }
   }
 
-  const pendingCall = (message: UIMessage) =>
+  /** The call the message waits on, if any. */
+  const waiting = (message: UIMessage) =>
     message.parts.find(
       (p) =>
         "toolCallId" in p &&
         (p.state === "input-available" || p.state === "approval-requested")
-    ) as unknown as ToolPart
+    ) as unknown as ToolPart | undefined
+  const pendingCall = (message: UIMessage) => waiting(message) as ToolPart
 
-  /** The whole script: four facts, skip pricing, approve. Sign-up gave the name. */
-  async function onboard(ids: () => string) {
+  /** Wording varies by org, so a run's bytes are compared with the words taken out. */
+  const wordless = (text: string) =>
+    text.replace(/"delta":"(?:[^"\\]|\\.)*"/g, '"delta":""')
+
+  /**
+   * The whole script through its cards: the build starts on the photo skip.
+   * With `replies`, every answer carries the owner's reply, as the web sends it.
+   */
+  async function onboard(ids: () => string, replies = false) {
     const who = await owner(kit, url as string, "chat-script", ids)
     const me = talker(who, ids)
     const id = await me.onboarding()
     const bodies: string[] = []
-    const answer = async (output: unknown) => {
+    const stub = building()
+    for (let i = 0; i < 30; i++) {
       const at = await me.tail(id)
-      const call = pendingCall(at)
-      const done = await me.turn(id, {
-        turn: {
-          kind: "results",
-          message_id: at.id,
-          results: [{ kind: "answer", tool_call_id: call.toolCallId, output }],
+      const call = waiting(at)
+      if (!call) break
+      const done = await me.turn(
+        id,
+        {
+          turn: {
+            kind: "results",
+            message_id: at.id,
+            results: [
+              {
+                kind: "answer",
+                tool_call_id: call.toolCallId,
+                output: answerFor(call),
+              },
+            ],
+            ...(replies
+              ? { reply: { message_id: ids(), text: `Answer ${i + 1}` } }
+              : {}),
+          },
         },
-      })
-      bodies.push(done.text)
-      return done
+        stub
+      )
+      bodies.push(wordless(done.text))
     }
-    for (const fact of STATED) await answer({ answer: "stated", fact })
-    await answer({ answer: "skipped" })
-    const offer = pendingCall(await me.tail(id))
-    const approved = await me.turn(
-      id,
-      {
-        turn: {
-          kind: "results",
-          message_id: (await me.tail(id)).id,
-          results: [
-            {
-              kind: "approval",
-              approval_id: offer.approval?.id,
-              approved: true,
-            },
-          ],
-        },
-      },
-      building()
-    )
-    bodies.push(approved.text)
     const history = await me.history(id)
     const hash = await sha256(
-      bodies.join("") +
+      // The colour card's first four are seeded by the org's id, which each
+      // run creates afresh; everything else is the same bytes.
+      (
+        bodies.join("") +
         JSON.stringify(
           history.messages.map(
             ({ content: { metadata: _, ...content }, ...m }) => ({
               ...m,
-              content,
+              content: {
+                ...content,
+                parts: content.parts.map((p) =>
+                  p.type === "text" ? { ...p, text: "" } : p
+                ),
+              },
             })
           )
         )
+      ).replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
     )
     const listed = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()
+    )
+    const team = StaffDirectory.parse(
+      await (await who.call(stubOrchestrator(), "/staff")).json()
     )
     // Gone, so the next run can make the same ids.
     await kit.withOrg({ orgId: who.orgId }, async (db) => {
@@ -465,42 +503,140 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         .where(eq(conversationMessages.conversationId, id))
       await db.delete(conversations).where(eq(conversations.id, id))
     })
-    return { id, hash, final: approved.after, facts: listed.facts }
+    return {
+      id,
+      hash,
+      final: await Promise.resolve(history.messages.at(-1)),
+      messages: history.messages,
+      facts: listed.facts,
+      chief: team.staff.find((m) => m.staff_code === "COS-001")?.display_name,
+      stub,
+    }
   }
 
-  it("runs the whole script to the same bytes twice", async () => {
+  it("runs the whole script to the same bytes twice, and starts the build itself", async () => {
     const first = await onboard(uuids())
     const second = await onboard(uuids())
     expect(second.hash).toBe(first.hash)
     // The conversation's id came from the same source as every other.
     expect(first.id).toBe(`${NS}-0000-4000-8000-000000000001`)
 
-    // The facts are the owner's, as the profile page will show them.
+    // Every answer is the owner's, as the profile page will show them.
     expect(first.facts.map((f) => [f.key, f.provenance.source]).sort()).toEqual(
       [
+        "assistant.name",
+        "assistant.pronouns",
+        "assistant.tone",
         "business.email",
+        "business.industry",
         "business.name",
+        "business.offerings",
+        "business.audience",
+        "business.overview",
         "business.phone",
-        "hours.weekday",
-        "service_area.radius",
-      ].map((key) => [key, "owner_stated"])
+        "owner.preferred_name",
+        "quote.form",
+        "service_area.text",
+        "site.build_mode",
+        "site.font",
+        "site.pages",
+        "site.palette",
+        "site.template",
+      ]
+        .sort()
+        .map((key) => [key, "owner_stated"])
     )
 
-    // The build started, and the transcript ends where no helper sends again.
-    const parts = first.final.parts
-    expect(parts.at(-1)).toEqual({ type: "step-start" })
-    expect(parts.at(-2)).toMatchObject({
-      type: "tool-request_change",
-      state: "output-available",
-      approval: { approved: true },
-      output: { outcome: "started", build: { assignment_id: FIXED_BUILD } },
+    // The staff directory shows the Chief of Staff by the name the owner gave it.
+    expect(first.chief).toBe("Robin")
+
+    // One build, keyed by the conversation, with no second approval.
+    expect(first.stub.calls).toHaveLength(1)
+    expect(first.stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+      `onboarding:${first.id}`
+    )
+    expect(first.stub.calls[0]?.body).toEqual({
+      kind: "site.build",
+      goal: ONBOARDING_GOAL,
     })
-    const messages = [first.final]
+
+    // The build card is resolved, and the transcript ends where no helper sends again.
+    const parts = (first.final?.content.parts ?? []) as unknown as Part[]
+    expect(parts.slice(-3)).toMatchObject([
+      {
+        type: "tool-request_change",
+        state: "output-available",
+        output: { outcome: "started", build: { assignment_id: FIXED_BUILD } },
+      },
+      { type: "step-start" },
+      { type: "text", state: "done" },
+    ])
+    const messages = [
+      { id: "m", role: "assistant", parts } as unknown as UIMessage,
+    ]
     expect(
       lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
         lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
     ).toBe(false)
-  }, 120_000)
+  }, 180_000)
+
+  it("with the owner's replies, gives every step and every reply a row of its own", async () => {
+    const legacy = await onboard(uuids())
+    const replied = await onboard(uuids(), true)
+    expect(replied.facts.map((f) => [f.key, f.value]).sort()).toEqual(
+      legacy.facts.map((f) => [f.key, f.value]).sort()
+    )
+    expect(replied.stub.calls).toHaveLength(1)
+    // The opening row, then a reply and a step for every answer.
+    const { messages } = replied
+    const roles = messages.map((m) => m.content.role)
+    const asked = legacy.messages
+      .flatMap((m) => m.content.parts)
+      .filter(
+        (p) =>
+          p.type.startsWith("tool-ask_") || p.type === "tool-review_quote_form"
+      ).length
+    expect(asked).toBeGreaterThan(10)
+    expect(roles.filter((role) => role === "user")).toHaveLength(asked)
+    expect(roles).toEqual([
+      "assistant",
+      ...Array.from({ length: (roles.length - 1) / 2 }, () => [
+        "user",
+        "assistant",
+      ]).flat(),
+    ])
+    for (const [i, m] of messages.entries()) {
+      if (m.content.role === "user") {
+        expect(m.parent_id).toBe(messages[i - 1]?.id)
+        expect(m.content.parts).toEqual([
+          { type: "text", text: `Answer ${(i + 1) / 2}` },
+        ])
+        continue
+      }
+      // Each step asks one card and ends on it, answered, bar the last.
+      const cards = m.content.parts.filter(
+        (p) =>
+          p.type.startsWith("tool-ask_") ||
+          p.type === "tool-review_quote_form" ||
+          p.type === "tool-request_change"
+      )
+      expect(cards).toHaveLength(1)
+      if (i < messages.length - 1) {
+        expect(m.content.parts.at(-1)).toMatchObject({
+          state: "output-available",
+        })
+      }
+    }
+    expect(replied.final?.content.parts.slice(-3)).toMatchObject([
+      {
+        type: "tool-request_change",
+        state: "output-available",
+        output: { outcome: "started" },
+      },
+      { type: "step-start" },
+      { type: "text", state: "done" },
+    ])
+  }, 180_000)
 
   describe("an answer", () => {
     let who: Owner
@@ -536,10 +672,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
     }
 
-    it("refuses a fact for another key, and a skip of a key the site needs", async () => {
+    it("refuses an option the card did not offer, a fact, and a skip of a step that needs an answer", async () => {
       const before = await me.rows(id)
       for (const output of [
-        { answer: "stated", fact: STATED[1] },
+        { answer: "chosen", ids: ["moon"], other: null },
+        { answer: "chosen", ids: ["cleaning", "legal"], other: null },
+        { answer: "stated", fact: FACTS["business.phone"] },
         { answer: "skipped" },
       ]) {
         const { response, text } = await answering(output)
@@ -622,7 +760,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       }
     })
 
-    it("states the fact as the owner's, replays a retry and refuses a change of mind", async () => {
+    it("states the choice as the owner's fact, replays a retry and refuses a change of mind", async () => {
       const at = await me.tail(id)
       const call = pendingCall(at)
       const body = {
@@ -635,7 +773,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             {
               kind: "answer",
               tool_call_id: call.toolCallId,
-              output: { answer: "stated", fact: STATED[0] },
+              output: { answer: "chosen", ids: ["cleaning"], other: null },
             },
           ],
         },
@@ -657,13 +795,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             {
               kind: "answer",
               tool_call_id: call.toolCallId,
-              output: {
-                answer: "stated",
-                fact: {
-                  key: "business.phone",
-                  value: { e164: "+441632960002" },
-                },
-              },
+              output: { answer: "chosen", ids: ["legal"], other: null },
             },
           ],
         },
@@ -672,10 +804,73 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       const listed = FactList.parse(
         await (await who.call(stubOrchestrator(), "/facts")).json()
       )
-      expect(listed.facts).toMatchObject([
-        { key: "business.name", provenance: { source: "owner_stated" } },
-        { ...STATED[0], provenance: { source: "owner_stated" } },
+      expect(
+        listed.facts.map((f) => [f.key, f.value, f.provenance.source]).sort()
+      ).toEqual([
+        [
+          "business.industry",
+          { name: "Cleaning and home services", category: "cleaning" },
+          "owner_stated",
+        ],
+        ["business.name", expect.any(Object), "owner_stated"],
       ])
+      // The next step is the next question, in the same row.
+      expect(pendingCall(await me.tail(id))).toMatchObject({
+        type: "tool-ask_fact",
+        input: { key: "business.offerings" },
+      })
+    })
+
+    it("with the owner's reply, stores it and the next step as rows of their own, once", async () => {
+      const at = await me.tail(id)
+      const call = pendingCall(at)
+      const turn = {
+        kind: "results",
+        message_id: at.id,
+        results: [
+          {
+            kind: "answer",
+            tool_call_id: call.toolCallId,
+            output: answerFor(call),
+          },
+        ],
+        reply: { message_id: "reply_offerings", text: "Regular cleaning" },
+      }
+      const done = await me.turn(id, { turn })
+      // The stream opens the step's row as a new message.
+      expect(done.chunks[0]).toEqual({
+        type: "start",
+        messageId: done.after.id,
+      })
+      const stored = await me.rows(id)
+      const [card, reply, step] = stored.slice(-3)
+      expect(card?.id).toBe(at.id)
+      // The card's row ends on its answer: no step opens after it.
+      const { parts } = (card as unknown as { content: { parts: Part[] } })
+        .content
+      expect(parts).toHaveLength(at.parts.length)
+      expect(parts.at(-1)).toEqual({
+        ...call,
+        state: "output-available",
+        output: answerFor(call),
+      })
+      expect(reply).toMatchObject({
+        id: "reply_offerings",
+        parentId: at.id,
+        content: {
+          role: "user",
+          parts: [{ type: "text", text: "Regular cleaning" }],
+        },
+      })
+      expect(step?.parentId).toBe("reply_offerings")
+      expect(pendingCall(done.after)).toMatchObject({ type: "tool-ask_fact" })
+
+      const again = await me.send({ conversation_id: id, mode: "act", turn })
+      expect(again.response.status, again.text).toBe(409)
+      expect(ErrorEnvelope.parse(JSON.parse(again.text)).code).toBe(
+        "chat.message_exists"
+      )
+      expect(await me.rows(id)).toEqual(stored)
     })
   })
 
@@ -687,11 +882,15 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       me = talker(who)
     }, 60_000)
 
-    it("cancels the pending question as assistant-ui does, then asks it again", async () => {
+    it("cancels the pending card as assistant-ui does, and answers it with the owner's words", async () => {
       const id = await me.onboarding()
       const [first] = await me.rows(id)
       const typed = await me.turn(id, {
-        turn: { kind: "message", message_id: "u_typed_1", text: "Hi there" },
+        turn: {
+          kind: "message",
+          message_id: "u_typed_1",
+          text: "Dog grooming",
+        },
       })
       const rows = await me.rows(id)
       expect(rows.map((r) => [r.id, r.parentId])).toEqual([
@@ -700,11 +899,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         [typed.after.id, "u_typed_1"],
       ])
       const cancelled = (rows[0]?.content as { parts: Part[] } | undefined)
-        ?.parts[1]
+        ?.parts[2]
       const asked = (first?.content as { parts: ToolPart[] } | undefined)
-        ?.parts[1]
+        ?.parts[2]
       expect(cancelled).toEqual({
-        type: "tool-ask_fact",
+        type: "tool-ask_choice",
         toolCallId: asked?.toolCallId,
         state: "output-error",
         input: asked?.input,
@@ -712,11 +911,59 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       expect(rows[1]?.content).toEqual({
         role: "user",
-        parts: [{ type: "text", text: "Hi there" }],
+        parts: [{ type: "text", text: "Dog grooming" }],
       })
-      expect(pendingCall(typed.after)).toMatchObject({
-        type: "tool-ask_fact",
+      const listed = FactList.parse(
+        await (await who.call(stubOrchestrator(), "/facts")).json()
+      )
+      expect(
+        listed.facts.find((f) => f.key === "business.industry")?.value
+      ).toEqual({ name: "Dog grooming", category: null })
+      expect(typed.after.parts.slice(1)).toMatchObject([
+        { type: "text", state: "done" },
+        { type: "tool-ask_fact", input: { key: "business.offerings" } },
+      ])
+    })
+
+    it("asks again with a gentle line when a typed answer does not fit", async () => {
+      const fresh = await owner(kit, url as string, "chat-retry")
+      const talk = talker(fresh)
+      const set = await fresh.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          facts: [
+            FACTS["business.offerings"],
+            FACTS["business.audience"],
+            FACTS["business.overview"],
+            FACTS["service_area.text"],
+          ],
+        }),
+      })
+      expect(set.status).toBe(200)
+      const id = await talk.onboarding()
+      const industry = await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_1", text: "cleaning" },
+      })
+      expect(pendingCall(industry.after)).toMatchObject({
         input: { key: "business.phone" },
+      })
+      const again = await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_2", text: "01632 960001" },
+      })
+      expect(again.after.parts.slice(1)).toMatchObject([
+        { type: "text", text: expect.stringContaining("country code") },
+        {
+          type: "tool-ask_fact",
+          state: "input-available",
+          input: pendingCall(industry.after).input,
+        },
+      ])
+      const fixed = await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_3", text: "+44 1632 960001" },
+      })
+      expect(pendingCall(fixed.after)).toMatchObject({
+        input: { key: "business.email" },
       })
     })
 
@@ -763,41 +1010,123 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect((await me.rows(id))[0]?.parentId).toBeNull()
     })
 
-    it("counts an offer the owner talked over as never made", async () => {
-      const fresh = await owner(kit, url as string, "chat-offer")
+    it("asks the quote form after a typed skip of the photos, and starts the build once it is confirmed", async () => {
+      const fresh = await owner(kit, url as string, "chat-photos")
       const talk = talker(fresh)
       const set = await fresh.call(stubOrchestrator(), "/facts", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({
-          facts: [
-            { key: "business.name", value: { name: "Offer (fixture)" } },
-            ...STATED,
-            {
-              key: "pricing.standard_clean_hourly",
-              value: { amount_minor: 3500, currency: "GBP" },
-            },
-          ],
-        }),
+        body: JSON.stringify({ facts: UP_TO_PHOTOS }),
       })
       expect(set.status).toBe(200)
       const id = await talk.onboarding()
-      const offered = () =>
+      const progress = () =>
         kit.withOrg({ orgId: fresh.orgId }, (db) => readScript(db, id))
-      await talk.turn(id, {
-        turn: { kind: "message", message_id: "u_go", text: "Build it" },
-      })
-      expect(pendingCall(await talk.tail(id)).type).toBe("tool-request_change")
       const asked = await talk.turn(id, {
-        mode: "ask",
-        turn: { kind: "message", message_id: "u_wait", text: "Wait" },
+        turn: {
+          kind: "message",
+          message_id: "u_kind",
+          text: "Cleaning and home services",
+        },
       })
-      expect(asked.after.parts.at(-1)).toEqual({
-        type: "text",
-        text: ASK_REPLY,
-        state: "done",
+      expect(pendingCall(asked.after).type).toBe("tool-ask_upload")
+      const stub = building()
+      const skippedPhotos = await talk.turn(
+        id,
+        {
+          mode: "ask",
+          turn: { kind: "message", message_id: "u_skip", text: "No thanks" },
+        },
+        stub
+      )
+      // No build yet: the quote form waits to be confirmed or declined.
+      expect(stub.calls).toHaveLength(0)
+      const form = pendingCall(skippedPhotos.after)
+      expect(form.type).toBe("tool-review_quote_form")
+      const skipped = await talk.turn(
+        id,
+        {
+          turn: {
+            kind: "results",
+            message_id: skippedPhotos.after.id,
+            results: [
+              {
+                kind: "answer",
+                tool_call_id: form.toolCallId,
+                output: { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS },
+              },
+            ],
+          },
+        },
+        stub
+      )
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `onboarding:${id}`
+      )
+      expect(skipped.after.parts.slice(-4)).toMatchObject([
+        { type: "step-start" },
+        {
+          type: "tool-request_change",
+          state: "output-available",
+          output: { outcome: "started" },
+        },
+        { type: "step-start" },
+        { type: "text", text: expect.stringContaining("Held (fixture)") },
+      ])
+      expect(await progress()).toEqual({
+        passed: ["upload"],
+        closed: ["industry", "upload", "quote_form"],
+        offered: true,
+        builder: null,
       })
-      expect(await offered()).toEqual({ skipped: [], offered: false })
+    })
+
+    it("ends on the Skip branch with the builder question and a closing line", async () => {
+      const fresh = await owner(kit, url as string, "chat-manual")
+      const talk = talker(fresh)
+      await fresh.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -5) }),
+      })
+      const id = await talk.onboarding()
+      const asked = await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_kind", text: "cleaning" },
+      })
+      const card = pendingCall(asked.after)
+      expect(card).toMatchObject({ input: { step: "build_for_me" } })
+      const skipped = await talk.turn(id, {
+        turn: {
+          kind: "results",
+          message_id: asked.after.id,
+          results: [
+            {
+              kind: "answer",
+              tool_call_id: card.toolCallId,
+              output: { answer: "chosen", ids: ["skip"], other: null },
+            },
+          ],
+        },
+      })
+      expect(pendingCall(skipped.after)).toMatchObject({
+        input: { step: "manual_builder" },
+      })
+      const done = await talk.turn(id, {
+        turn: { kind: "message", message_id: "u_no", text: "No" },
+      })
+      expect(done.after.parts).toEqual([
+        { type: "step-start" },
+        { type: "text", text: expect.any(String), state: "done" },
+      ])
+      expect(
+        await kit.withOrg({ orgId: fresh.orgId }, (db) => readScript(db, id))
+      ).toEqual({
+        passed: [],
+        closed: ["industry", "build_for_me", "manual_builder"],
+        offered: false,
+        builder: false,
+      })
     })
 
     it("refuses what a client may not send, and an unknown conversation", async () => {
@@ -1237,6 +1566,573 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(ErrorEnvelope.parse(JSON.parse(text)).code).toBe("chat.stale")
       expect((await me.rows(id)).at(-1)?.content).toEqual(moved)
     })
+  })
+
+  describe("the onboarding planner", () => {
+    /** A planner model that answers each call with the next plan, or throws. */
+    const planner = (answers: (object | Error)[]) => {
+      const calls: string[] = []
+      const model = new MockLanguageModelV4({
+        doGenerate: async (options) => {
+          const answer = answers[calls.length] ?? answers.at(-1)
+          calls.push(JSON.stringify(options.prompt))
+          if (answer instanceof Error) throw answer
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(answer) }],
+            finishReason: { unified: "stop" as const, raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 5000,
+                noCache: 5000,
+                cacheRead: undefined,
+                cacheWrite: undefined,
+              },
+              outputTokens: { total: 400, text: 400, reasoning: undefined },
+            },
+            warnings: [],
+          }
+        },
+      })
+      return { model, calls }
+    }
+    const plan = (over: object) => ({
+      facts: {},
+      chosen_for_owner: [],
+      pending_card: null,
+      say: "Thank you.",
+      next: { kind: "answer_only" },
+      ...over,
+    })
+    const logged = (who: Owner, id: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({
+            type: events.type,
+            payload: events.payload,
+            taint: events.taint,
+          })
+          .from(events)
+          .where(eq(events.sessionId, id))
+          .orderBy(events.seq)
+      )
+    const factsOf = async (who: Owner) =>
+      FactList.parse(
+        await (await who.call(stubOrchestrator(), "/facts")).json()
+      ).facts
+    const answer = (at: UIMessage, output: unknown) => ({
+      turn: {
+        kind: "results",
+        message_id: at.id,
+        results: [
+          {
+            kind: "answer",
+            tool_call_id: pendingCall(at).toolCallId,
+            output,
+          },
+        ],
+      },
+    })
+
+    it("reads a long first reply over the industry card, states its facts and logs the call as a turn", async () => {
+      const who = await owner(kit, url as string, "chat-planner")
+      const { model, calls } = planner([
+        plan({
+          facts: {
+            "business.industry": {
+              name: "Limousine hire",
+              category: "chauffeur",
+            },
+            "business.offerings": { items: ["Weddings", "Proms"] },
+            "business.phone": { e164: "+447700900412" },
+          },
+          pending_card: "answered",
+          say: "Weddings and proms, lovely. Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ])
+      const me = talker(who, undefined, { planner: model })
+      const id = await me.onboarding()
+      const [first] = await me.rows(id)
+      const text =
+        "We're a limo firm in Manchester, weddings and proms. Call 07700 900 412."
+      const done = await me.turn(id, {
+        turn: { kind: "message", message_id: "u_plan_1", text },
+      })
+      expect(calls).toHaveLength(1)
+      // The owner's words reach the model only inside the data block.
+      expect(calls[0]).toContain('data source=\\"onboarding\\"')
+      expect(calls[0]).not.toContain(who.orgId)
+      // The card is cancelled as assistant-ui cancels it; ask_open is text only.
+      const rows = await me.rows(id)
+      expect(rows.map((r) => r.id)).toEqual([
+        first?.id,
+        "u_plan_1",
+        done.after.id,
+      ])
+      const cancelled = rows[0]?.content as { parts: ToolPart[] } | undefined
+      expect(cancelled?.parts[2]?.state).toBe("output-error")
+      expect(done.after.parts).toEqual([
+        { type: "step-start" },
+        {
+          type: "text",
+          text: "Weddings and proms, lovely. Who books you most?",
+          state: "done",
+        },
+      ])
+      const stated = await factsOf(who)
+      expect(
+        stated
+          .filter((f) => f.key !== "business.name")
+          .map((f) => [f.key, f.provenance.source])
+          .sort()
+      ).toEqual([
+        ["business.industry", "owner_stated"],
+        ["business.offerings", "owner_stated"],
+        ["business.phone", "owner_stated"],
+      ])
+      // Logged as a CoS turn: its instructions, its data, the call, the answer, the close.
+      const log = await logged(who, id)
+      expect(log.map((e) => e.type)).toEqual([
+        "cos.prefix",
+        "cos.context",
+        "cos.call",
+        "cos.step",
+        "cos.turn",
+      ])
+      expect(log[1]?.payload).toMatchObject({
+        context_policy_version: "onboarding-1",
+        active_tools: [],
+        text: expect.stringContaining("limo firm"),
+      })
+      expect(log[1]?.taint).toEqual(["untrusted_input"])
+      expect(log[4]?.payload).toMatchObject({
+        outcome: "answered",
+        steps: 1,
+        cost_usd: expect.any(Number),
+      })
+      expect(
+        (log[4]?.payload as { cost_usd: number } | undefined)?.cost_usd
+      ).toBeGreaterThan(0)
+      // A text-only question is answered in words; nothing waits.
+      const next = planner([
+        plan({
+          facts: { "business.audience": { text: "Couples" } },
+          say: "Couples, got it.",
+          next: { kind: "ask_open", about: "business.overview" },
+        }),
+      ])
+      await talker(who, undefined, { planner: next.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_plan_2", text: "Couples" },
+      })
+      expect(next.calls[0]).toContain('\\"waiting_card\\":null')
+    }, 60_000)
+
+    it("shows the waiting card again after a side question, and answers a card by planning what follows", async () => {
+      const who = await owner(kit, url as string, "chat-side")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+      })
+      const opened = talker(who)
+      const id = await opened.onboarding()
+      // The script's card for the layout, from a typed industry.
+      const asked = await opened.turn(id, {
+        turn: { kind: "message", message_id: "u_side_0", text: "cleaning" },
+      })
+      const card = pendingCall(asked.after)
+      expect(card.input).toMatchObject({ step: "template" })
+      const side = planner([
+        plan({
+          pending_card: "unanswered",
+          say: "Yes, you can change it later. Which layout suits you?",
+        }),
+      ])
+      const aside = await talker(who, undefined, { planner: side.model }).turn(
+        id,
+        {
+          turn: {
+            kind: "message",
+            message_id: "u_side_1",
+            text: "can I change this later?",
+          },
+        }
+      )
+      const again = pendingCall(aside.after)
+      expect(again.toolCallId).not.toBe(card.toolCallId)
+      expect(again.input).toEqual(card.input)
+      // The card's answer is the script's; the planner says what comes next.
+      const next = planner([
+        plan({
+          say: "Bold it is. Now the colours.",
+          next: {
+            kind: "ask_choice",
+            step: "palette",
+            preselected: [],
+            initial: ["forest", "ocean", "sunset"],
+          },
+        }),
+      ])
+      const picked = await talker(who, undefined, { planner: next.model }).turn(
+        id,
+        answer(aside.after, { answer: "chosen", ids: ["bold"], other: null })
+      )
+      expect(next.calls[0]).toContain("picked Bold")
+      expect(picked.after.parts.slice(-4)).toMatchObject([
+        { type: "tool-ask_choice", state: "output-available" },
+        { type: "step-start" },
+        { type: "text", text: "Bold it is. Now the colours." },
+        {
+          type: "tool-ask_choice",
+          state: "input-available",
+          input: { step: "palette", initial: ["forest", "ocean", "sunset"] },
+        },
+      ])
+      expect(
+        (await factsOf(who)).find((f) => f.key === "site.template")?.value
+      ).toEqual({ id: "bold" })
+    }, 60_000)
+
+    it("proposes the quote form, takes changes as words, states the confirmed form and starts the build after it commits", async () => {
+      const who = await owner(kit, url as string, "chat-quote")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ facts: UP_TO_PHOTOS }),
+      })
+      const id = await talker(who).onboarding()
+      const fields = [
+        {
+          key: "rooms",
+          label: "Bedrooms",
+          type: "number",
+          required: true,
+          hint: null,
+          options: null,
+        },
+        {
+          key: "often",
+          label: "How often",
+          type: "select",
+          required: true,
+          hint: null,
+          options: ["Weekly", "Fortnightly"],
+        },
+      ]
+      const dated = [
+        ...fields,
+        {
+          key: "pets",
+          label: "Any pets?",
+          type: "text",
+          required: false,
+          hint: null,
+          options: null,
+        },
+      ]
+      const photos = planner([
+        plan({
+          pending_card: "answered",
+          say: "Do you have photos of your cleans, or a logo?",
+          next: { kind: "ask_upload" },
+        }),
+      ])
+      const t = (model: ReturnType<typeof planner>["model"]) =>
+        talker(who, undefined, { planner: model })
+      const asked = await t(photos.model).turn(id, {
+        turn: { kind: "message", message_id: "u_q_1", text: "Cleaning" },
+      })
+      expect(pendingCall(asked.after).type).toBe("tool-ask_upload")
+      const quote = planner([
+        plan({
+          say: "No photos, fine. What do you need to know to quote?",
+          next: { kind: "ask_open", about: "quote.form" },
+        }),
+      ])
+      await t(quote.model).turn(id, answer(asked.after, { answer: "skipped" }))
+      const proposal = planner([
+        plan({
+          say: "Here is the form.",
+          next: { kind: "review_quote_form", fields, note: null },
+        }),
+      ])
+      const proposed = await t(proposal.model).turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_q_2",
+          text: "rooms and how often",
+        },
+      })
+      expect(pendingCall(proposed.after)).toMatchObject({
+        type: "tool-review_quote_form",
+        input: { fields, note: null },
+      })
+      const changes = planner([
+        plan({
+          say: "Added pets.",
+          next: { kind: "review_quote_form", fields: dated, note: null },
+        }),
+      ])
+      const changed = await t(changes.model).turn(
+        id,
+        answer(proposed.after, {
+          answer: "changes",
+          text: "Ask about pets too",
+        })
+      )
+      expect(changes.calls[0]).toContain(
+        "asked for changes: Ask about pets too"
+      )
+      expect((await factsOf(who)).some((f) => f.key === "quote.form")).toBe(
+        false
+      )
+      // Confirmed: the form is stated, committed, and only then the build starts.
+      let seen: unknown[] = []
+      const stub = stubOrchestrator(async (request) => {
+        seen = await kit.withOrg({ orgId: who.orgId }, async (db) =>
+          (
+            await db.select().from(facts).where(eq(facts.key, "quote.form"))
+          ).map((f) => f.value)
+        )
+        return building().fetch(request)
+      })
+      const start = planner([
+        plan({
+          say: "That's everything. The build is under way.",
+          next: { kind: "start_build" },
+        }),
+      ])
+      const started = await talker(who, undefined, {
+        planner: start.model,
+      }).turn(
+        id,
+        {
+          ...answer(changed.after, { answer: "confirmed", fields: dated }),
+          turn: {
+            ...answer(changed.after, { answer: "confirmed", fields: dated })
+              .turn,
+            reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+          },
+        },
+        stub
+      )
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `onboarding:${id}`
+      )
+      expect(seen).toEqual([{ fields: dated }])
+      // The reply path: the card's row ends with the card, then the owner's
+      // reply and the build each have a row of their own.
+      const rows = await talker(who).rows(id)
+      expect(rows.slice(-3).map((r) => r.id)).toEqual([
+        changed.after.id,
+        "u_q_ok",
+        started.after.id,
+      ])
+      expect(
+        (rows.at(-3)?.content as { parts: ToolPart[] } | undefined)?.parts.at(
+          -1
+        )
+      ).toMatchObject({
+        type: "tool-review_quote_form",
+        state: "output-available",
+      })
+      expect(started.after.parts).toMatchObject([
+        { type: "step-start" },
+        {
+          type: "tool-request_change",
+          state: "output-available",
+          output: { outcome: "started" },
+        },
+        { type: "step-start" },
+        { type: "text", text: "That's everything. The build is under way." },
+      ])
+      expect(
+        await kit.withOrg({ orgId: who.orgId }, (db) => readScript(db, id))
+      ).toMatchObject({ offered: true })
+      // The same reply again is refused, and writes nothing.
+      const again = await talker(who).send({
+        conversation_id: id,
+        mode: "act",
+        turn: {
+          ...answer(changed.after, { answer: "confirmed", fields: dated }).turn,
+          reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+        },
+      })
+      expect(again.response.status).toBe(409)
+      expect(ErrorEnvelope.parse(JSON.parse(again.text)).code).toBe(
+        "chat.message_exists"
+      )
+      const closes = (await logged(who, id)).filter(
+        (e) => e.type === "cos.turn"
+      )
+      expect(
+        closes.map((e) => (e.payload as { outcome: string }).outcome)
+      ).toEqual(Array(5).fill("answered"))
+    }, 90_000)
+
+    it("asks the slogan once before the website, counting a question asked in words", async () => {
+      // Everything for the website but the audience and the slogan. The
+      // opening card is the industry's, so nothing has asked the slogan.
+      const before = UP_TO_PHOTOS.filter(
+        (f) =>
+          f.key !== "business.audience" &&
+          f.key !== "business.tagline" &&
+          !f.key.startsWith("site.")
+      )
+      const website = plan({
+        say: "Shall I build your website?",
+        next: {
+          kind: "ask_choice",
+          step: "build_for_me",
+          preselected: [],
+          initial: [],
+        },
+      })
+      const audience = {
+        facts: { "business.audience": { text: "Busy families" } },
+        pending_card: "answered",
+      }
+      const setUp = async (tag: string) => {
+        const who = await owner(kit, url as string, tag)
+        await who.call(stubOrchestrator(), "/facts", {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ facts: before }),
+        })
+        const id = await talker(who).onboarding()
+        return { who, id }
+      }
+      const typedTurn = (message_id: string, text: string) => ({
+        turn: { kind: "message", message_id, text },
+      })
+
+      // The slogan never asked: the website question is refused twice, and
+      // the script answers with its own next step, the slogan.
+      const early = await setUp("chat-slogan-early")
+      const refused = planner([
+        { ...website, ...audience },
+        { ...website, ...audience },
+      ])
+      const fell = await talker(early.who, undefined, {
+        planner: refused.model,
+      }).turn(
+        early.id,
+        typedTurn("u_sl_1", "Cleaning and home services, mostly busy families")
+      )
+      expect(refused.calls).toHaveLength(2)
+      // The script's own next step: the audience, then the slogan in turn.
+      expect(pendingCall(fell.after).input).toMatchObject({
+        key: "business.audience",
+      })
+
+      // Asked in words once, "no slogan" is the answer: the website follows.
+      const asked = await setUp("chat-slogan-asked")
+      const slogan = planner([
+        plan({
+          ...audience,
+          say: "Busy families, lovely. Do you have a slogan?",
+          next: { kind: "ask_open", about: "business.tagline" },
+        }),
+      ])
+      await talker(asked.who, undefined, { planner: slogan.model }).turn(
+        asked.id,
+        typedTurn("u_sl_2", "Cleaning and home services, mostly busy families")
+      )
+      const next = planner([website])
+      const site = await talker(asked.who, undefined, {
+        planner: next.model,
+      }).turn(asked.id, typedTurn("u_sl_3", "No slogan, thanks"))
+      expect(next.calls).toHaveLength(1)
+      expect(next.calls[0]).toContain(
+        'business.tagline\\":\\"optional, missing'
+      )
+      expect(pendingCall(site.after).input).toMatchObject({
+        step: "build_for_me",
+      })
+    }, 60_000)
+
+    it("lets the script answer a turn the planner cannot: a failing model, and a spent budget", async () => {
+      const who = await owner(kit, url as string, "chat-fallback")
+      const broken = planner([new Error("provider down")])
+      const me = talker(who, undefined, { planner: broken.model })
+      const id = await me.onboarding()
+      const done = await me.turn(id, {
+        turn: { kind: "message", message_id: "u_fb_1", text: "Dog grooming" },
+      })
+      expect(broken.calls).toHaveLength(1)
+      // The script's own answer: the industry stated, then its next card.
+      expect(done.after.parts.slice(1)).toMatchObject([
+        { type: "text", state: "done" },
+        { type: "tool-ask_fact", input: { key: "business.offerings" } },
+      ])
+      const log = await logged(who, id)
+      expect(log.at(-1)?.payload).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+
+      // Over the day's cap: no model call at all.
+      await kit.withOrg({ orgId: who.orgId }, async (db) => {
+        const chief = await chiefStaffId(db)
+        const turnId = newUlid()
+        for (const [type, payload] of [
+          [
+            "cos.context",
+            {
+              turn_id: turnId,
+              prefix_sha256: "a".repeat(64),
+              context_policy_version: "4",
+              mode: "ask",
+              active_tools: [],
+              text: "x",
+              reserved_usd: 0,
+            },
+          ],
+          [
+            "cos.turn",
+            {
+              outcome: "answered",
+              turn_id: turnId,
+              model: "m",
+              usage: {
+                input_tokens: 0,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+              },
+              cost_usd: 1,
+              tools: [],
+              steps: 1,
+              first_chunk_ms: 1,
+            },
+          ],
+        ] as const) {
+          await appendSessionEvent(db, {
+            orgId: who.orgId,
+            staffId: chief as string,
+            assignmentId: null,
+            sessionId: id,
+            type,
+            payload,
+            taint: [],
+          })
+        }
+      })
+      const spent = planner([plan({ say: "never sent" })])
+      const capped = await talker(who, undefined, {
+        planner: spent.model,
+      }).turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_fb_2",
+          text: "Full grooms and nail clips",
+        },
+      })
+      expect(spent.calls).toHaveLength(0)
+      expect(pendingCall(capped.after).input).toMatchObject({
+        key: "business.audience",
+      })
+    }, 60_000)
   })
 
   it("answers through the worker, as the web calls it", async () => {

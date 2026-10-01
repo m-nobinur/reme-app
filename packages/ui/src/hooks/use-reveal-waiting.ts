@@ -3,7 +3,7 @@ import {
   useAuiState,
   useThreadViewport,
 } from "@assistant-ui/react"
-import { useEffect } from "react"
+import { type RefObject, useEffect } from "react"
 
 /**
  * Brings a card that waits on the owner into view once no turn is running.
@@ -22,4 +22,33 @@ export function useRevealWaiting(waiting: boolean): boolean {
     if (waiting && !running) scrollToBottom?.()
   }, [waiting, running, scrollToBottom])
   return running
+}
+
+/**
+ * Gives an open card the focus once no turn is running, so the answer goes
+ * straight in and Enter cannot send the composer's text over it. Only from
+ * nowhere or an empty composer, never from something the owner is typing.
+ * Deferred a task, because the composer refocuses itself when a run ends.
+ */
+export function useFocusWhenIdle(
+  waiting: boolean,
+  running: boolean,
+  card: RefObject<HTMLElement | null>
+): void {
+  useEffect(() => {
+    if (running || !waiting) return
+    const timer = setTimeout(() => {
+      const held = document.activeElement
+      const idle =
+        !held ||
+        held === document.body ||
+        (held instanceof HTMLTextAreaElement && held.value === "")
+      if (idle) {
+        card.current
+          ?.querySelector<HTMLElement>("input")
+          ?.focus({ preventScroll: true })
+      }
+    })
+    return () => clearTimeout(timer)
+  }, [running, waiting, card])
 }

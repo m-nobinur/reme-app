@@ -38,14 +38,6 @@ const SHAPES: [FactValue, string, string][] = [
   ],
   [
     {
-      key: "pricing.standard_clean_hourly",
-      value: { amount_minor: 3500, currency: "GBP" },
-    },
-    "Hourly price for a standard clean",
-    "£35.00 an hour",
-  ],
-  [
-    {
       key: "business.tagline",
       value: { tagline: "Clean homes, fictional town" },
     },
@@ -144,7 +136,41 @@ const SHAPES: [FactValue, string, string][] = [
     "Your photos",
     "fleet-front.jpg",
   ],
+  [
+    {
+      key: "quote.form",
+      value: {
+        fields: [
+          {
+            key: "pickup",
+            label: "Pick-up address",
+            type: "text",
+            required: true,
+            hint: null,
+            options: null,
+          },
+          {
+            key: "passengers",
+            label: "Passengers",
+            type: "number",
+            required: true,
+            hint: null,
+            options: null,
+          },
+        ],
+      },
+    },
+    "Quote request questions",
+    "Pick-up address, Passengers",
+  ],
 ]
+
+it("shows the owner's own words or colour, not the word custom", () => {
+  expect(
+    factText("site.palette", { id: "custom", custom: "Navy and gold" })
+  ).toBe("Navy and gold")
+  expect(factText("site.palette", { id: "custom", brand: "x" })).toBe("x")
+})
 
 it("has a sample for every FactValue branch", () => {
   expect(SHAPES.map(([fact]) => fact.key)).toEqual(

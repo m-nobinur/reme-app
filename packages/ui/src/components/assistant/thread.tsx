@@ -47,6 +47,11 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
+import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import {
+  QUOTE_CHANGES_PLACEHOLDER,
+  waitsOnQuoteForm,
+} from "@workspace/ui/lib/quote-form"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
@@ -130,9 +135,14 @@ export type ThreadProps = {
   quickActions?: readonly ThreadQuickAction[] | undefined
   /** A new mode object focuses the composer, so each press lands there. */
   mode?: ThreadMode | undefined
+  /**
+   * Drawn after the last message, from app state rather than the thread,
+   * such as the card that says a build is ready. Announced when it appears.
+   */
+  after?: ReactNode
 }
 
-type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus">
+type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus" | "after">
 
 const EMPTY_COMPONENTS: ThreadComponents = {}
 const EMPTY_SETTINGS: ThreadSettings = {}
@@ -212,17 +222,27 @@ export const Thread: FC<ThreadProps> = ({
   briefing,
   quickActions,
   mode,
+  after,
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
     () => ({ placeholder, briefing, quickActions, mode }),
     [placeholder, briefing, quickActions, mode]
   )
+  // The composer's input, which a card can hand the owner to.
+  const input = useRef<HTMLTextAreaElement>(null)
 
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ThreadRoot autoFocus={autoFocus} isEmpty={isEmpty} stored={stored} />
+        <ComposerInputContext.Provider value={input}>
+          <ThreadRoot
+            after={after}
+            autoFocus={autoFocus}
+            isEmpty={isEmpty}
+            stored={stored}
+          />
+        </ComposerInputContext.Provider>
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
@@ -232,7 +252,8 @@ const ThreadRoot: FC<{
   isEmpty: boolean
   autoFocus: boolean
   stored: boolean
-}> = ({ isEmpty, autoFocus, stored }) => {
+  after: ReactNode
+}> = ({ isEmpty, autoFocus, stored, after }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
 
   return (
@@ -273,6 +294,10 @@ const ThreadRoot: FC<{
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+          </div>
+          {/* Always in the page, so a card that appears in it is read out. */}
+          <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
+            {after}
           </div>
 
           <ThreadPrimitive.ViewportFooter
@@ -431,10 +456,15 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { placeholder = "Send a message", mode } = useContext(
     ThreadSettingsContext
   )
-  const input = useRef<HTMLTextAreaElement>(null)
+  const input = useContext(ComposerInputContext)
+  // A proposed quote form waits on the owner: what they type next is their
+  // change to it, and the placeholder says so.
+  const reviewing = useAuiState((s) =>
+    waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
+  )
   useEffect(() => {
     if (mode) input.current?.focus()
-  }, [mode])
+  }, [mode, input])
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       {/* A one-pixel ring on top of the border: the composer holds focus
@@ -445,7 +475,10 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
       >
         <ComposerPrimitive.Input
           ref={input}
-          placeholder={mode?.placeholder ?? placeholder}
+          placeholder={
+            mode?.placeholder ??
+            (reviewing ? QUOTE_CHANGES_PLACEHOLDER : placeholder)
+          }
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}

@@ -97,9 +97,13 @@ export async function owner(
   const call = async (
     stub: Stub,
     path: string,
-    init: RequestInit & { cookie?: CookieOptions } = {}
+    init: RequestInit & {
+      cookie?: CookieOptions
+      /** Bindings beside the database and the orchestrator, such as `SITES`. */
+      bindings?: Record<string, unknown>
+    } = {}
   ) => {
-    const { cookie, headers, ...rest } = init
+    const { cookie, headers, bindings, ...rest } = init
     const session = await cookieHeader(
       { sub: workosUserId, org_id: workosOrganizationId, role: "owner" },
       cookie
@@ -113,6 +117,7 @@ export async function owner(
         ...env(url),
         ORCHESTRATOR: stub,
         SITE_HOST_SUFFIX: SUFFIX,
+        ...bindings,
       } as unknown as Env,
       ctx
     )

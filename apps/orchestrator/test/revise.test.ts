@@ -26,7 +26,9 @@ vi.mock("../src/sandbox.ts", () => ({
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
-const { publishedSource, restoreAndMap } = await import("../src/revise.ts")
+const { photoKey, placePhotos, publishedSource, restoreAndMap } = await import(
+  "../src/revise.ts"
+)
 const { activate } = await import("../src/publish.ts")
 const { default: app } = await import("../src/app.ts")
 const { addRevision, eventsOf, GOOD_HTML, kit, previewed, storage } =
@@ -86,6 +88,77 @@ describe("restoring the published snapshot into the container", () => {
     await expect(
       restoreAndMap(sandbox, sites, "sites/x/z/source.tar.zst")
     ).rejects.toThrow("no source snapshot")
+  })
+})
+
+describe("the owner's photos in the container", () => {
+  const photo = (id: string, type: string) => ({
+    id,
+    name: "p.jpg",
+    content_type: type,
+    bytes: 3,
+  })
+  const facts = [
+    {
+      fact_id: "10000001-0000-4000-8000-000000000001",
+      org_id: "10000001-0000-4000-8000-000000000000",
+      key: "media.uploads",
+      fact_type: "media",
+      value: {
+        items: [
+          photo("3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c", "image/jpeg"),
+          photo("3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d", "image/webp"),
+        ],
+      },
+      version: 1,
+      provenance: {
+        source: "owner_stated" as const,
+        confidence: 1,
+        verified_by_staff_id: null,
+        verified_at: null,
+      },
+      valid_from: "2026-09-18T12:00:00.000Z",
+      valid_to: null,
+      superseded_by_fact_id: null,
+    },
+  ]
+
+  it("copies each from the org's uploads into public/uploads, and names the ones it cannot find", async () => {
+    const commands: string[] = []
+    const written: [string, number][] = []
+    const sandbox = {
+      exec: async (command: string) => {
+        commands.push(command)
+      },
+      writeFile: async (path: string, content: Uint8Array) => {
+        written.push([path, content.byteLength])
+      },
+    }
+    const asked: string[] = []
+    const sites = {
+      get: async (key: string) => {
+        asked.push(key)
+        return key.endsWith("b0c")
+          ? { arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }
+          : null
+      },
+    }
+    const missing = await placePhotos(sandbox, sites, "org-1", facts)
+    expect(commands).toEqual(["mkdir -p /workspace/site/public/uploads"])
+    expect(asked).toEqual([
+      photoKey("org-1", "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c"),
+      photoKey("org-1", "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d"),
+    ])
+    expect(asked[0]).toBe("uploads/org-1/3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c")
+    expect(written).toEqual([
+      [
+        "/workspace/site/public/uploads/3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c.jpg",
+        3,
+      ],
+    ])
+    expect(missing).toEqual(["3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d"])
+    expect(await placePhotos(sandbox, sites, "org-1", [])).toEqual([])
+    expect(commands).toHaveLength(1)
   })
 })
 

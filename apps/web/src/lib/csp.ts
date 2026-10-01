@@ -12,7 +12,8 @@ import { createMiddleware } from "@tanstack/react-start"
  * server-rendered markup, which a nonce cannot cover, and a stylesheet cannot
  * run code.
  *
- * Images: the app, data URLs (the MFA QR code) and any host on remeai.co.uk,
+ * Images: the app, data URLs (the MFA QR code), blob URLs (the previews of
+ * photos an owner picks before uploading them) and any host on remeai.co.uk,
  * which holds the signed preview hosts the screenshots come from but also
  * every tenant site and the api hosts, all ours. A backstop for the chat's
  * markdown, which drops images itself. Unsafe once a tenant site answers
@@ -29,7 +30,7 @@ export function contentSecurityPolicy(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://*.remeai.co.uk",
+    "img-src 'self' data: blob: https://*.remeai.co.uk",
     "font-src 'self' data:",
     "connect-src 'self'",
     "object-src 'none'",

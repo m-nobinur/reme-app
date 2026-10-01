@@ -9,9 +9,13 @@ export const FILLED: Record<string, string> = {
   businessName: "BrightClean",
   phone: "+15550142",
   email: "hello@brightclean.invalid",
+  industry: "Cleaning and home services",
+  offerings: "Weekly cleaning\nDeep cleaning\nEnd of tenancy cleaning",
+  serviceAreaText: "Fairhaven and the villages around it",
+  audience: "Households with busy weeks and pets underfoot.",
+  overview: "One cleaner keeps each home, on the same day every week.",
   weekdayHours: "08:00 to 17:00",
   serviceArea: "Within 25 km of Fairhaven",
-  standardCleanHourly: "$35.00 an hour",
   openingHours: "Mo-Fr 08:00-17:00",
   areaServed: "Fairhaven",
   testimonial1Quote: "They have never missed a week.",
@@ -27,6 +31,10 @@ export const FILLED: Record<string, string> = {
   photo2Alt: "A hallway floor after a clean",
   photo3Src: "/photos/three.jpg",
   photo3Alt: "A bathroom mirror after a clean",
+  logo: "/uploads/logo.png",
+  logoAlt: "BrightClean",
+  heroImage: "/uploads/hero.jpg",
+  heroImageAlt: "A living room after a weekly clean",
   heroHeading: "A home you come back to",
   tagline: "Weekly cleaning for homes in Fairhaven",
   homeIntro: "We clean homes on a schedule the household picks.",
@@ -59,4 +67,62 @@ export const FILLED: Record<string, string> = {
   faq3Answer: "Yes, by telephone.",
   ctaHeading: "Ready for a clean home?",
   ctaBody: "Tell us about the home and we take it from there.",
+}
+
+/**
+ * A chauffeur firm's own questions, as the owner might approve them in
+ * onboarding: every kind of input the form renders, so a build with it shows
+ * the form following the data rather than the starter's defaults.
+ */
+export const LIMOUSINE_FORM = {
+  fields: [
+    {
+      key: "pickup",
+      label: "Pick-up address",
+      type: "text",
+      required: true,
+      hint: "Street and town",
+      options: null,
+    },
+    {
+      key: "dropoff",
+      label: "Drop-off address",
+      type: "text",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "pickup_date",
+      label: "Date of the journey",
+      type: "date",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "passengers",
+      label: "Passengers",
+      type: "number",
+      required: true,
+      hint: null,
+      options: null,
+    },
+    {
+      key: "occasion",
+      label: "Occasion",
+      type: "select",
+      required: false,
+      hint: null,
+      options: ["Wedding", "Airport transfer", "Night out", "Business"],
+    },
+    {
+      key: "notes",
+      label: "Anything else",
+      type: "textarea",
+      required: false,
+      hint: "Luggage, child seats or stops on the way",
+      options: null,
+    },
+  ],
 }

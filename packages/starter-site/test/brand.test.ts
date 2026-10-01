@@ -39,7 +39,7 @@ describe("a theme derived from the owner's colour", () => {
   test("the theme is one rule naming the three properties", () => {
     const first = Object.values(colours.chosen)[0] as string
     const css = brandTheme(first)
-    expect(css.startsWith(":root{")).toBe(true)
+    expect(css.startsWith("html:root{")).toBe(true)
     for (const property of ["--brand:", "--brand-foreground:", "--brand-text:"])
       expect(css).toContain(property)
   })

@@ -81,15 +81,6 @@ export interface components {
               }
             | {
                 /** @constant */
-                key: "pricing.standard_clean_hourly"
-                value: {
-                  amount_minor: number
-                  /** @enum {string} */
-                  currency: "GBP" | "USD" | "EUR"
-                }
-              }
-            | {
-                /** @constant */
                 key: "business.tagline"
                 value: {
                   tagline: string
@@ -198,9 +189,27 @@ export interface components {
                 key: "site.palette"
                 value: {
                   id:
-                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | (
+                        | "ocean"
+                        | "classic_blue"
+                        | "harbour"
+                        | "lagoon"
+                        | "forest"
+                        | "sage"
+                        | "sunset"
+                        | "mocha"
+                        | "cardinal"
+                        | "berry"
+                        | "burgundy"
+                        | "midnight"
+                        | "damson"
+                        | "ultra_violet"
+                        | "graphite"
+                        | "onyx"
+                      )
                     | "custom"
                   custom?: string
+                  brand?: string
                 }
               }
             | {
@@ -243,6 +252,28 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                  }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "quote.form"
+                value: {
+                  fields: {
+                    key: string
+                    label: string
+                    /** @enum {string} */
+                    type:
+                      | "text"
+                      | "textarea"
+                      | "number"
+                      | "date"
+                      | "select"
+                      | "tel"
+                      | "email"
+                    required: boolean
+                    hint: string | null
+                    options: string[] | null
                   }[]
                 }
               }
@@ -412,6 +443,8 @@ export interface components {
         placeholder: string
       } | null
       skippable: boolean
+      initial?: string[]
+      color?: boolean
     }
     AskChoiceOutput:
       | {
@@ -466,16 +499,6 @@ export interface components {
           prefill: {
             centre: string
             radius_km: number
-          } | null
-        }
-      | {
-          /** @constant */
-          key: "pricing.standard_clean_hourly"
-          skippable: boolean
-          prefill: {
-            amount_minor: number
-            /** @enum {string} */
-            currency: "GBP" | "USD" | "EUR"
           } | null
         }
       | {
@@ -601,9 +624,27 @@ export interface components {
           skippable: boolean
           prefill: {
             id:
-              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | (
+                  | "ocean"
+                  | "classic_blue"
+                  | "harbour"
+                  | "lagoon"
+                  | "forest"
+                  | "sage"
+                  | "sunset"
+                  | "mocha"
+                  | "cardinal"
+                  | "berry"
+                  | "burgundy"
+                  | "midnight"
+                  | "damson"
+                  | "ultra_violet"
+                  | "graphite"
+                  | "onyx"
+                )
               | "custom"
             custom?: string
+            brand?: string
           } | null
         }
       | {
@@ -650,6 +691,29 @@ export interface components {
             }[]
           } | null
         }
+      | {
+          /** @constant */
+          key: "quote.form"
+          skippable: boolean
+          prefill: {
+            fields: {
+              key: string
+              label: string
+              /** @enum {string} */
+              type:
+                | "text"
+                | "textarea"
+                | "number"
+                | "date"
+                | "select"
+                | "tel"
+                | "email"
+              required: boolean
+              hint: string | null
+              options: string[] | null
+            }[]
+          } | null
+        }
     AskFactOutput:
       | {
           /** @constant */
@@ -691,15 +755,6 @@ export interface components {
                 value: {
                   centre: string
                   radius_km: number
-                }
-              }
-            | {
-                /** @constant */
-                key: "pricing.standard_clean_hourly"
-                value: {
-                  amount_minor: number
-                  /** @enum {string} */
-                  currency: "GBP" | "USD" | "EUR"
                 }
               }
             | {
@@ -812,9 +867,27 @@ export interface components {
                 key: "site.palette"
                 value: {
                   id:
-                    | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                    | (
+                        | "ocean"
+                        | "classic_blue"
+                        | "harbour"
+                        | "lagoon"
+                        | "forest"
+                        | "sage"
+                        | "sunset"
+                        | "mocha"
+                        | "cardinal"
+                        | "berry"
+                        | "burgundy"
+                        | "midnight"
+                        | "damson"
+                        | "ultra_violet"
+                        | "graphite"
+                        | "onyx"
+                      )
                     | "custom"
                   custom?: string
+                  brand?: string
                 }
               }
             | {
@@ -857,6 +930,28 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                  }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "quote.form"
+                value: {
+                  fields: {
+                    key: string
+                    label: string
+                    /** @enum {string} */
+                    type:
+                      | "text"
+                      | "textarea"
+                      | "number"
+                      | "date"
+                      | "select"
+                      | "tel"
+                      | "email"
+                    required: boolean
+                    hint: string | null
+                    options: string[] | null
                   }[]
                 }
               }
@@ -1168,15 +1263,6 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
-                                  key: "pricing.standard_clean_hourly"
-                                  value: {
-                                    amount_minor: number
-                                    /** @enum {string} */
-                                    currency: "GBP" | "USD" | "EUR"
-                                  }
-                                }
-                              | {
-                                  /** @constant */
                                   key: "business.tagline"
                                   value: {
                                     tagline: string
@@ -1287,13 +1373,25 @@ export interface components {
                                     id:
                                       | (
                                           | "ocean"
+                                          | "classic_blue"
+                                          | "harbour"
+                                          | "lagoon"
                                           | "forest"
+                                          | "sage"
                                           | "sunset"
+                                          | "mocha"
+                                          | "cardinal"
+                                          | "berry"
+                                          | "burgundy"
                                           | "midnight"
+                                          | "damson"
+                                          | "ultra_violet"
                                           | "graphite"
+                                          | "onyx"
                                         )
                                       | "custom"
                                     custom?: string
+                                    brand?: string
                                   }
                                 }
                               | {
@@ -1346,6 +1444,28 @@ export interface components {
                                     }[]
                                   }
                                 }
+                              | {
+                                  /** @constant */
+                                  key: "quote.form"
+                                  value: {
+                                    fields: {
+                                      key: string
+                                      label: string
+                                      /** @enum {string} */
+                                      type:
+                                        | "text"
+                                        | "textarea"
+                                        | "number"
+                                        | "date"
+                                        | "select"
+                                        | "tel"
+                                        | "email"
+                                      required: boolean
+                                      hint: string | null
+                                      options: string[] | null
+                                    }[]
+                                  }
+                                }
                           }
                         | {
                             /** @constant */
@@ -1386,6 +1506,33 @@ export interface components {
                             answer: "skipped"
                           }
                       )
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "confirmed"
+                            fields: {
+                              key: string
+                              label: string
+                              /** @enum {string} */
+                              type:
+                                | "text"
+                                | "textarea"
+                                | "number"
+                                | "date"
+                                | "select"
+                                | "tel"
+                                | "email"
+                              required: boolean
+                              hint: string | null
+                              options: string[] | null
+                            }[]
+                          }
+                        | {
+                            /** @constant */
+                            answer: "changes"
+                            text: string
+                          }
+                      )
                 }
               | {
                   /** @constant */
@@ -1395,6 +1542,10 @@ export interface components {
                   reason?: string
                 }
             )[]
+            reply?: {
+              message_id: string
+              text: string
+            }
           }
     }
     CompletionReport: {
@@ -1583,15 +1734,6 @@ export interface components {
           }
         | {
             /** @constant */
-            key: "pricing.standard_clean_hourly"
-            value: {
-              amount_minor: number
-              /** @enum {string} */
-              currency: "GBP" | "USD" | "EUR"
-            }
-          }
-        | {
-            /** @constant */
             key: "business.tagline"
             value: {
               tagline: string
@@ -1700,9 +1842,27 @@ export interface components {
             key: "site.palette"
             value: {
               id:
-                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | (
+                    | "ocean"
+                    | "classic_blue"
+                    | "harbour"
+                    | "lagoon"
+                    | "forest"
+                    | "sage"
+                    | "sunset"
+                    | "mocha"
+                    | "cardinal"
+                    | "berry"
+                    | "burgundy"
+                    | "midnight"
+                    | "damson"
+                    | "ultra_violet"
+                    | "graphite"
+                    | "onyx"
+                  )
                 | "custom"
               custom?: string
+              brand?: string
             }
           }
         | {
@@ -1743,6 +1903,28 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+              }[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "quote.form"
+            value: {
+              fields: {
+                key: string
+                label: string
+                /** @enum {string} */
+                type:
+                  | "text"
+                  | "textarea"
+                  | "number"
+                  | "date"
+                  | "select"
+                  | "tel"
+                  | "email"
+                required: boolean
+                hint: string | null
+                options: string[] | null
               }[]
             }
           }
@@ -1856,7 +2038,6 @@ export interface components {
               | "business.email"
               | "hours.weekday"
               | "service_area.radius"
-              | "pricing.standard_clean_hourly"
               | "business.tagline"
               | "business.industry"
               | "business.offerings"
@@ -1873,6 +2054,7 @@ export interface components {
               | "site.font"
               | "site.pages"
               | "media.uploads"
+              | "quote.form"
             )[]
           }
         }
@@ -1919,15 +2101,6 @@ export interface components {
                   value: {
                     centre: string
                     radius_km: number
-                  }
-                }
-              | {
-                  /** @constant */
-                  key: "pricing.standard_clean_hourly"
-                  value: {
-                    amount_minor: number
-                    /** @enum {string} */
-                    currency: "GBP" | "USD" | "EUR"
                   }
                 }
               | {
@@ -2042,13 +2215,25 @@ export interface components {
                     id:
                       | (
                           | "ocean"
+                          | "classic_blue"
+                          | "harbour"
+                          | "lagoon"
                           | "forest"
+                          | "sage"
                           | "sunset"
+                          | "mocha"
+                          | "cardinal"
+                          | "berry"
+                          | "burgundy"
                           | "midnight"
+                          | "damson"
+                          | "ultra_violet"
                           | "graphite"
+                          | "onyx"
                         )
                       | "custom"
                     custom?: string
+                    brand?: string
                   }
                 }
               | {
@@ -2091,6 +2276,28 @@ export interface components {
                       content_type: "image/jpeg" | "image/png" | "image/webp"
                       bytes: number
                       alt?: string
+                    }[]
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "quote.form"
+                  value: {
+                    fields: {
+                      key: string
+                      label: string
+                      /** @enum {string} */
+                      type:
+                        | "text"
+                        | "textarea"
+                        | "number"
+                        | "date"
+                        | "select"
+                        | "tel"
+                        | "email"
+                      required: boolean
+                      hint: string | null
+                      options: string[] | null
                     }[]
                   }
                 }
@@ -2403,7 +2610,6 @@ export interface components {
         | "business.email"
         | "hours.weekday"
         | "service_area.radius"
-        | "pricing.standard_clean_hourly"
         | "business.tagline"
         | "business.industry"
         | "business.offerings"
@@ -2420,6 +2626,7 @@ export interface components {
         | "site.font"
         | "site.pages"
         | "media.uploads"
+        | "quote.form"
       )[]
     }
     CreateOrgRequest: {
@@ -2511,7 +2718,6 @@ export interface components {
             | "business.email"
             | "hours.weekday"
             | "service_area.radius"
-            | "pricing.standard_clean_hourly"
             | "business.tagline"
             | "business.industry"
             | "business.offerings"
@@ -2528,6 +2734,7 @@ export interface components {
             | "site.font"
             | "site.pages"
             | "media.uploads"
+            | "quote.form"
           )[]
         }
     ErrorEnvelope: {
@@ -2696,15 +2903,6 @@ export interface components {
         }
       | {
           /** @constant */
-          key: "pricing.standard_clean_hourly"
-          value: {
-            amount_minor: number
-            /** @enum {string} */
-            currency: "GBP" | "USD" | "EUR"
-          }
-        }
-      | {
-          /** @constant */
           key: "business.tagline"
           value: {
             tagline: string
@@ -2813,9 +3011,27 @@ export interface components {
           key: "site.palette"
           value: {
             id:
-              | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+              | (
+                  | "ocean"
+                  | "classic_blue"
+                  | "harbour"
+                  | "lagoon"
+                  | "forest"
+                  | "sage"
+                  | "sunset"
+                  | "mocha"
+                  | "cardinal"
+                  | "berry"
+                  | "burgundy"
+                  | "midnight"
+                  | "damson"
+                  | "ultra_violet"
+                  | "graphite"
+                  | "onyx"
+                )
               | "custom"
             custom?: string
+            brand?: string
           }
         }
       | {
@@ -2856,6 +3072,28 @@ export interface components {
               content_type: "image/jpeg" | "image/png" | "image/webp"
               bytes: number
               alt?: string
+            }[]
+          }
+        }
+      | {
+          /** @constant */
+          key: "quote.form"
+          value: {
+            fields: {
+              key: string
+              label: string
+              /** @enum {string} */
+              type:
+                | "text"
+                | "textarea"
+                | "number"
+                | "date"
+                | "select"
+                | "tel"
+                | "email"
+              required: boolean
+              hint: string | null
+              options: string[] | null
             }[]
           }
         }
@@ -3017,6 +3255,15 @@ export interface components {
         [key: string]: number
       }
     }
+    QuoteField: {
+      key: string
+      label: string
+      /** @enum {string} */
+      type: "text" | "textarea" | "number" | "date" | "select" | "tel" | "email"
+      required: boolean
+      hint: string | null
+      options: string[] | null
+    }
     Reminder: {
       /** Format: uuid */
       id: string
@@ -3090,6 +3337,51 @@ export interface components {
             code: string
             message: string
           }
+        }
+    ReviewQuoteFormInput: {
+      fields: {
+        key: string
+        label: string
+        /** @enum {string} */
+        type:
+          | "text"
+          | "textarea"
+          | "number"
+          | "date"
+          | "select"
+          | "tel"
+          | "email"
+        required: boolean
+        hint: string | null
+        options: string[] | null
+      }[]
+      note: string | null
+    }
+    ReviewQuoteFormOutput:
+      | {
+          /** @constant */
+          answer: "confirmed"
+          fields: {
+            key: string
+            label: string
+            /** @enum {string} */
+            type:
+              | "text"
+              | "textarea"
+              | "number"
+              | "date"
+              | "select"
+              | "tel"
+              | "email"
+            required: boolean
+            hint: string | null
+            options: string[] | null
+          }[]
+        }
+      | {
+          /** @constant */
+          answer: "changes"
+          text: string
         }
     RuntimeSpec: {
       /** Format: uuid */
@@ -3187,15 +3479,6 @@ export interface components {
             value: {
               centre: string
               radius_km: number
-            }
-          }
-        | {
-            /** @constant */
-            key: "pricing.standard_clean_hourly"
-            value: {
-              amount_minor: number
-              /** @enum {string} */
-              currency: "GBP" | "USD" | "EUR"
             }
           }
         | {
@@ -3308,9 +3591,27 @@ export interface components {
             key: "site.palette"
             value: {
               id:
-                | ("ocean" | "forest" | "sunset" | "midnight" | "graphite")
+                | (
+                    | "ocean"
+                    | "classic_blue"
+                    | "harbour"
+                    | "lagoon"
+                    | "forest"
+                    | "sage"
+                    | "sunset"
+                    | "mocha"
+                    | "cardinal"
+                    | "berry"
+                    | "burgundy"
+                    | "midnight"
+                    | "damson"
+                    | "ultra_violet"
+                    | "graphite"
+                    | "onyx"
+                  )
                 | "custom"
               custom?: string
+              brand?: string
             }
           }
         | {
@@ -3351,6 +3652,28 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+              }[]
+            }
+          }
+        | {
+            /** @constant */
+            key: "quote.form"
+            value: {
+              fields: {
+                key: string
+                label: string
+                /** @enum {string} */
+                type:
+                  | "text"
+                  | "textarea"
+                  | "number"
+                  | "date"
+                  | "select"
+                  | "tel"
+                  | "email"
+                required: boolean
+                hint: string | null
+                options: string[] | null
               }[]
             }
           }
@@ -3650,7 +3973,6 @@ export interface components {
         | "business.email"
         | "hours.weekday"
         | "service_area.radius"
-        | "pricing.standard_clean_hourly"
         | "business.tagline"
         | "business.industry"
         | "business.offerings"
@@ -3667,6 +3989,7 @@ export interface components {
         | "site.font"
         | "site.pages"
         | "media.uploads"
+        | "quote.form"
       )[]
       reminders: {
         notes: {
@@ -3715,7 +4038,6 @@ export interface components {
                 | "business.email"
                 | "hours.weekday"
                 | "service_area.radius"
-                | "pricing.standard_clean_hourly"
                 | "business.tagline"
                 | "business.industry"
                 | "business.offerings"
@@ -3732,6 +4054,7 @@ export interface components {
                 | "site.font"
                 | "site.pages"
                 | "media.uploads"
+                | "quote.form"
               )[]
             }
         )[]

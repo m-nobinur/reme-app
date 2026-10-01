@@ -1,0 +1,44 @@
+{
+  "fields": [
+    {
+      "key": "service",
+      "label": "What you need",
+      "type": "text",
+      "required": true,
+      "hint": null,
+      "options": null
+    },
+    {
+      "key": "location",
+      "label": "Location",
+      "type": "text",
+      "required": true,
+      "hint": "A town, postcode or address",
+      "options": null
+    },
+    {
+      "key": "date",
+      "label": "Preferred date",
+      "type": "date",
+      "required": false,
+      "hint": null,
+      "options": null
+    },
+    {
+      "key": "details",
+      "label": "Details",
+      "type": "textarea",
+      "required": true,
+      "hint": "Anything that helps us understand the request",
+      "options": null
+    },
+    {
+      "key": "source",
+      "label": "How did you hear about us?",
+      "type": "text",
+      "required": false,
+      "hint": null,
+      "options": null
+    }
+  ]
+}

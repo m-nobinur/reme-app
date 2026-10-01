@@ -1,0 +1,22 @@
+component: QuoteForm
+path: src/components/QuoteForm/QuoteForm.astro
+summary: The quote request form, the visitor's contact details and then the
+  owner's own questions.
+props: []
+constraints:
+  - Asks for name, email and phone, labelled by quoteNameLabel, quoteEmailLabel
+    and quotePhoneLabel, then the questions in src/quote-form.json under
+    quoteRequestLegend.
+  - src/quote-form.json is the list the owner approved. The platform writes it;
+    never edit it or this file to change the questions.
+  - Sends to quoteFormAction when set, else by email to site.email; renders
+    nothing with neither. Leave quoteFormAction empty until the platform gives
+    an endpoint.
+  - On the quote page, after its Hero.
+examples:
+  - "<QuoteForm />"
+forbidden:
+  - a price, a range or a promise of how soon a reply comes
+  - a field asking for payment or card details
+  - a script or a third-party form service
+source: generated

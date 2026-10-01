@@ -95,9 +95,13 @@ export function brandRamp(value: string): BrandRamp | undefined {
   }
 }
 
-/** The ramp as one CSS rule for the page head, or an empty string. */
+/**
+ * The ramp as one CSS rule for the page head, or an empty string. `html:root`,
+ * not `:root`: the linked stylesheet comes after this rule in the built page
+ * and declares the defaults on `:root`, which would win a tie.
+ */
 export function brandTheme(value: string): string {
   const ramp = brandRamp(value)
   if (!ramp) return ""
-  return `:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${ramp.text}}`
+  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${ramp.text}}`
 }

@@ -11,6 +11,7 @@ import {
   SetFactsRequest,
 } from "@workspace/contracts"
 import { approvals, assignments, type Tenancy } from "@workspace/db"
+import { uploadAssets } from "./assets.ts"
 import {
   bridge,
   holds,
@@ -42,7 +43,7 @@ import {
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
+  /^\/(workspace|facts|assets|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -174,6 +175,9 @@ export async function ownerRoute(
   }
   if (pathname === "/facts" && method === "POST") {
     return setFacts(request, kit, owner)
+  }
+  if (pathname === "/assets" && method === "POST") {
+    return uploadAssets(request, env, kit, owner)
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)

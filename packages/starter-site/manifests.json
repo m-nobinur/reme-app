@@ -43,7 +43,7 @@
     "summary": "Phone, email, weekday hours and service area as a labelled list.",
     "props": [],
     "constraints": [
-      "Reads site.phone, site.email, site.weekdayHours and site.serviceArea itself; each row renders only when its field is set."
+      "Reads site.phone, site.email, site.weekdayHours and site.serviceAreaText (else site.serviceArea) itself; each row renders only when its field is set."
     ],
     "examples": ["<ContactDetails />"],
     "forbidden": ["passing contact details as props or children"],
@@ -55,7 +55,7 @@
     "summary": "A closing band with a heading, a line and the site's main action.",
     "props": [],
     "constraints": [
-      "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact.",
+      "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact. An empty ctaLabel takes the label of the page it links to, which is the quote page when there is one.",
       "Last on a page, after everything else."
     ],
     "examples": ["<CtaBand />"],
@@ -82,7 +82,8 @@
     "summary": "The owner's photos, each with the alt text its fact gives.",
     "props": [],
     "constraints": [
-      "Path and alt text are both fact fields; a photo renders only when it has both. The site ships with none."
+      "Path and alt text are both fact fields; a photo renders only when it has both. The site ships with none.",
+      "Two or more photos are cropped tiles in a grid; one photo is a single contained figure, never a full-width image."
     ],
     "examples": ["<Gallery />"],
     "forbidden": ["a path or alt text written here", "a stock or remote image"],
@@ -106,17 +107,31 @@
         "description": "One sentence under the heading, read from a site field."
       },
       {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "A short line above the heading, such as the industry, from a site field."
+      },
+      {
         "name": "variant",
         "type": "\"split\" | \"centered\" | \"compact\"",
         "required": false,
         "description": "split for the home page, compact for a page header, centered otherwise."
+      },
+      {
+        "name": "image",
+        "type": "{ src: string; alt: string }",
+        "required": false,
+        "description": "The owner's photo, shown only with a path and alt text: in place of the split panel, a cropped banner otherwise."
       }
     ],
     "constraints": [
       "One per page, first inside the layout.",
       "Children are ActionLink elements only.",
       "split for the home page, compact for a page under it, centered otherwise.",
-      "Renders nothing when the heading, the lede and the actions are all empty."
+      "Renders nothing when the heading, the lede and the actions are all empty.",
+      "eyebrow is for the home page, with site.industry.",
+      "image is the home page's, from site.heroImage and site.heroImageAlt; it renders only with both, and the same photo is not used again on the page."
     ],
     "examples": [
       "<Hero heading={site.servicesHeading} lede={site.servicesIntro} variant=\"compact\" />"
@@ -125,30 +140,21 @@
     "source": "generated"
   },
   {
-    "component": "PriceCard",
-    "path": "src/components/PriceCard/PriceCard.astro",
-    "summary": "One priced service, its name and its price as the fact states it.",
-    "props": [
-      {
-        "name": "name",
-        "type": "string",
-        "required": true,
-        "description": "The service's name, read from a site field."
-      },
-      {
-        "name": "price",
-        "type": "string",
-        "required": true,
-        "description": "A pricing fact's field as the site config renders it."
-      }
+    "component": "QuoteForm",
+    "path": "src/components/QuoteForm/QuoteForm.astro",
+    "summary": "The quote request form, the visitor's contact details and then the owner's own questions.",
+    "props": [],
+    "constraints": [
+      "Asks for name, email and phone, labelled by quoteNameLabel, quoteEmailLabel and quotePhoneLabel, then the questions in src/quote-form.json under quoteRequestLegend.",
+      "src/quote-form.json is the list the owner approved. The platform writes it; never edit it or this file to change the questions.",
+      "Sends to quoteFormAction when set, else by email to site.email; renders nothing with neither. Leave quoteFormAction empty until the platform gives an endpoint.",
+      "On the quote page, after its Hero."
     ],
-    "constraints": ["Renders nothing unless both name and price are set."],
-    "examples": [
-      "<PriceCard name={site.standardCleanName} price={site.standardCleanHourly} />"
-    ],
+    "examples": ["<QuoteForm />"],
     "forbidden": [
-      "a price no pricing fact states",
-      "discounts, from-prices or ranges"
+      "a price, a range or a promise of how soon a reply comes",
+      "a field asking for payment or card details",
+      "a script or a third-party form service"
     ],
     "source": "generated"
   },
@@ -224,7 +230,7 @@
     "props": [],
     "constraints": [
       "Reads service1Name to service3Body itself; a card renders only when one of its two fields is set.",
-      "Prices stay in PriceCard, which renders the pricing fact."
+      "No prices anywhere. The site quotes on request, through the quote page."
     ],
     "examples": ["<ServiceCards />"],
     "forbidden": ["a price", "a service the facts give no sign of"],
@@ -237,7 +243,8 @@
     "props": [],
     "constraints": [
       "The Base layout renders it on every page.",
-      "Every part comes from a field and vanishes when that field is empty."
+      "Every part comes from a field and vanishes when that field is empty.",
+      "Shows the owner's logo in place of the business name when site.logo and site.logoAlt are both set, as the header does."
     ],
     "examples": ["<SiteFooter />"],
     "forbidden": ["using it in a page"],
@@ -250,7 +257,8 @@
     "props": [],
     "constraints": [
       "The Base layout renders it on every page.",
-      "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set."
+      "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set.",
+      "The owner's logo (site.logo with site.logoAlt) replaces the business name at a fixed height; with no logo the name shows as text."
     ],
     "examples": ["<SiteHeader />"],
     "forbidden": ["using it in a page", "a hard-coded navigation link"],

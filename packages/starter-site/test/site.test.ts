@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { QUOTE_FIELD_TYPES, quoteFields } from "../src/quote-form"
 import { fields, site } from "../src/site-config"
 import {
   type Built,
@@ -20,9 +21,9 @@ const REQUIRED_FACTS = [
   "business.name",
   "business.phone",
   "business.email",
-  "hours.weekday",
-  "service_area.radius",
-  "pricing.standard_clean_hourly",
+  "business.industry",
+  "business.offerings",
+  "service_area.text",
 ]
 
 // The planted page carries an empty Hero, which the starter's own pages cannot
@@ -40,6 +41,19 @@ import Base from "../layouts/Base.astro"
 const MARKED = Object.fromEntries(
   Object.keys(site).map((key) => [key, `«${key}»`])
 )
+// The quote form's own questions are data too, the file the platform writes
+// from the owner's approved list: marked the same way, one question of every
+// type, so a word the form's template adds around them is caught as well.
+const MARKED_FORM = {
+  fields: QUOTE_FIELD_TYPES.map((type, i) => ({
+    key: `q_${type}`,
+    label: `«q${i}label»`,
+    type,
+    required: i % 2 === 0,
+    hint: `«q${i}hint»`,
+    options: type === "select" ? [`«q${i}a»`, `«q${i}b»`] : null,
+  })),
+}
 
 let filled: Built | undefined
 let planted: Built | undefined
@@ -53,7 +67,7 @@ beforeAll(async () => {
       pages: { "planted.astro": PLANTED },
       remove: ["quote.astro", "booking.astro"],
     }),
-    build({ site: MARKED }),
+    build({ site: MARKED, quoteForm: MARKED_FORM }),
   ])
 }, 120_000)
 
@@ -130,7 +144,6 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
   { name: "ValueProps", selector: "value-props", shows: "The same cleaner" },
   { name: "ServiceCards", selector: "service-cards", shows: "Weekly clean" },
   { name: "Steps", selector: "steps", shows: "Tell us about the home" },
-  { name: "PriceCard", selector: "price-card", shows: "$35.00 an hour" },
   {
     name: "Testimonials",
     selector: "testimonials",
@@ -147,6 +160,12 @@ const SECTIONS: { name: string; selector: string; shows: string }[] = [
     name: "ContactDetails",
     selector: "contact-details",
     shows: "+15550142",
+  },
+  { name: "QuoteForm", selector: "quote-form", shows: "Send quote request" },
+  {
+    name: "Section",
+    selector: "section",
+    shows: "One cleaner keeps each home, on the same day every week.",
   },
 ]
 
@@ -190,6 +209,91 @@ describe("a component with its fields filled", () => {
     const pages = pagesOf(filled)
     expect(hasClass(pages, "hero")).toBe(true)
     expect(visible(pages)).toContain("A home you come back to")
+  })
+})
+
+describe("the quote form", () => {
+  const page = () => {
+    const found = pagesOf(filled).find((p) => p.file === "quote/index.html")
+    if (!found) throw new Error("no quote page")
+    return found
+  }
+
+  test("asks for the contact details, then every question in quote-form.json", () => {
+    const { elements, texts } = page()
+    const expected = [
+      {
+        id: "quote-name",
+        name: "name",
+        label: FILLED.quoteNameLabel,
+        required: true,
+        hint: null,
+      },
+      {
+        id: "quote-email",
+        name: "email",
+        label: FILLED.quoteEmailLabel,
+        required: true,
+        hint: null,
+      },
+      {
+        id: "quote-phone",
+        name: "phone",
+        label: FILLED.quotePhoneLabel,
+        required: false,
+        hint: null,
+      },
+      ...quoteFields.map((field) => ({
+        id: `quote-q-${field.key}`,
+        name: field.key,
+        label: field.label,
+        required: field.required,
+        hint: field.hint,
+      })),
+    ]
+    for (const field of expected) {
+      const control = elements.find((el) => el.attrs.id === field.id)
+      expect(control, field.id).toBeDefined()
+      expect(control?.attrs.name, field.id).toBe(field.name)
+      expect("required" in (control?.attrs ?? {}), field.id).toBe(
+        field.required
+      )
+      expect(
+        elements.some((el) => el.tag === "label" && el.attrs.for === field.id),
+        field.id
+      ).toBe(true)
+      expect(texts, field.id).toContain(field.label)
+      if (field.hint) {
+        expect(control?.attrs["aria-describedby"], field.id).toBe(
+          `${field.id}-hint`
+        )
+        expect(texts, field.id).toContain(field.hint)
+      }
+    }
+    expect(texts).toContain(FILLED.quoteContactLegend)
+    expect(texts).toContain(FILLED.quoteRequestLegend)
+  })
+
+  test("sends by email until there is an endpoint", () => {
+    const form = page().elements.find((el) => el.tag === "form")
+    expect(form?.attrs.action).toBe(
+      "mailto:hello@brightclean.invalid?subject=Quote%20request"
+    )
+    expect(form?.attrs.enctype).toBe("text/plain")
+  })
+
+  test("is the primary action in the header, the hero and the closing band", () => {
+    const home = pagesOf(filled).find((p) => p.file === "index.html")
+    const primary = (home?.elements ?? []).filter(
+      (el) =>
+        (el.attrs.class ?? "").split(" ").includes("action-primary") &&
+        el.tag === "a"
+    )
+    expect(primary.map((el) => el.attrs.href)).toEqual([
+      "/quote/",
+      "/quote/",
+      "/quote/",
+    ])
   })
 })
 
@@ -252,7 +356,7 @@ describe("structured data", () => {
 
     expect(items.length).toBeGreaterThan(0)
     expect(new Set(items.map((item) => item.value["@type"]))).toEqual(
-      new Set(["WebSite", "LocalBusiness", "Service"])
+      new Set(["WebSite", "LocalBusiness"])
     )
     for (const { value } of items) {
       expect(ALLOWED).toContain(value["@type"])

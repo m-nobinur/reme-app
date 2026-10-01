@@ -5,6 +5,8 @@ props: []
 constraints:
   - Path and alt text are both fact fields; a photo renders only when it has
     both. The site ships with none.
+  - Two or more photos are cropped tiles in a grid; one photo is a single
+    contained figure, never a full-width image.
 examples:
   - "<Gallery />"
 forbidden:

@@ -1,0 +1,138 @@
+---
+import { type QuoteField, quoteFields } from "../../quote-form"
+import { site } from "../../site-config"
+
+// A request goes to site.quoteFormAction once the platform has an endpoint
+// for it; that is where the endpoint plugs in. Until then it goes by email:
+// a mailto action with text/plain opens the visitor's mail app with each
+// field on its own line. With neither there is nowhere to send it, so the
+// form is left out rather than posting to itself.
+const byEmail = !site.quoteFormAction
+const action =
+  site.quoteFormAction ||
+  (site.email
+    ? `mailto:${site.email}?subject=${encodeURIComponent(site.quoteEmailSubject)}`
+    : "")
+
+/** Longest answer per input type; date and number take no maxlength. */
+const MAX: Record<string, number> = { text: 200, email: 254, tel: 40 }
+/** The browser's autofill token, where the type alone says what it is. */
+const AUTOCOMPLETE: Record<string, string> = { email: "email", tel: "tel" }
+
+type Control = {
+  id: string
+  name: string
+  type: QuoteField["type"]
+  label: string
+  required: boolean
+  hint: string
+  options: string[]
+  autocomplete: string | undefined
+}
+
+// The contact details every request needs, in the site's words.
+const person = (
+  name: string,
+  type: QuoteField["type"],
+  label: string,
+  required: boolean
+) => ({
+  id: `quote-${name}`,
+  name,
+  type,
+  label,
+  required,
+  hint: "",
+  options: [],
+  autocomplete: AUTOCOMPLETE[type] ?? name,
+})
+const contact: Control[] = [
+  person("name", "text", site.quoteNameLabel, true),
+  person("email", "email", site.quoteEmailLabel, true),
+  person("phone", "tel", site.quotePhoneLabel, false),
+].filter((field) => field.label)
+
+// The owner's questions from src/quote-form.json, exactly as approved. Their
+// ids carry a prefix of their own, so a question keyed `email` never shares
+// an id with the contact field above.
+const questions: Control[] = quoteFields.map((field) => ({
+  id: `quote-q-${field.key}`,
+  name: field.key,
+  type: field.type,
+  label: field.label,
+  required: field.required,
+  hint: field.hint ?? "",
+  options: field.options ?? [],
+  autocomplete: AUTOCOMPLETE[field.type],
+}))
+
+const groups = [
+  { legend: site.quoteContactLegend, fields: contact },
+  { legend: site.quoteRequestLegend, fields: questions },
+].filter((group) => group.fields.length > 0)
+---
+
+{
+  action && (
+    <form
+      class="quote-form"
+      action={action}
+      method="post"
+      enctype={byEmail ? "text/plain" : undefined}
+    >
+      {groups.map((group) => (
+        <fieldset>
+          {group.legend && <legend>{group.legend}</legend>}
+          {group.fields.map((field) => {
+            const hint = field.hint ? `${field.id}-hint` : undefined
+            const common = {
+              id: field.id,
+              name: field.name,
+              required: field.required,
+              autocomplete: field.autocomplete,
+              "aria-describedby": hint,
+            }
+            return (
+              <div class="quote-field">
+                <label for={field.id}>
+                  {field.label}
+                  {!field.required && site.quoteOptional && (
+                    <span class="quote-optional">{site.quoteOptional}</span>
+                  )}
+                </label>
+                {field.hint && (
+                  <p class="quote-hint" id={hint}>
+                    {field.hint}
+                  </p>
+                )}
+                {field.type === "textarea" ? (
+                  <textarea {...common} rows="5" maxlength="2000" />
+                ) : field.type === "select" ? (
+                  <select {...common}>
+                    <option value="">{site.quoteChoose}</option>
+                    {field.options.map((option) => (
+                      <option>{option}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    {...common}
+                    type={field.type}
+                    maxlength={MAX[field.type]}
+                    min={field.type === "number" ? "0" : undefined}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </fieldset>
+      ))}
+      <div class="quote-submit">
+        <button class="action action-primary" type="submit">
+          {site.quoteSubmit}
+        </button>
+        {site.quoteNextSteps && <p>{site.quoteNextSteps}</p>}
+      </div>
+    </form>
+  )
+}

@@ -42,7 +42,7 @@ describe("the content security policy header", () => {
       "default-src 'self'",
       `script-src 'self' 'nonce-${handed}'`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https://*.remeai.co.uk",
+      "img-src 'self' data: blob: https://*.remeai.co.uk",
       "font-src 'self' data:",
       "connect-src 'self'",
       "object-src 'none'",

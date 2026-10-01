@@ -1,6 +1,6 @@
 /**
  * The accessibility gate for a tenant site: axe against the built pages of the
- * golden fixture, in a real browser, at WCAG 2.2 AA.
+ * golden fixture, in a real browser, at WCAG 2.2 AA, once per template.
  *
  * It is vitest rather than a Playwright runner so that scripts/floor.mjs can
  * count it, and it lives outside `test/` so that `pnpm test` stays browser-free
@@ -17,11 +17,12 @@ import { createServer, type Server } from "node:http"
 import { join } from "node:path"
 import AxeBuilder from "@axe-core/playwright"
 import { type Browser, chromium, type Page } from "@playwright/test"
+import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
 import { type Built, build, clean } from "../test/build"
-import { FILLED } from "../test/fixture"
+import { FILLED, LIMOUSINE_FORM } from "../test/fixture"
 
-const PAGES = ["/", "/services/", "/contact/"]
+const PAGES = ["/", "/services/", "/contact/", "/quote/"]
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -30,16 +31,32 @@ const TYPES: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 }
 
-let built: Built | undefined
-let server: Server | undefined
+/** Each template, each in a palette and a font of its own. */
+const brand = (id: string) =>
+  PALETTES.find((each) => each.id === id)?.brand ?? ""
+const VARIANTS: Record<string, Record<string, string>> = {
+  classic: { ...FILLED, template: "classic", brandColor: brand("forest") },
+  modern: {
+    ...FILLED,
+    template: "modern",
+    brandColor: brand("sunset"),
+    font: "classic_serif",
+  },
+  bold: {
+    ...FILLED,
+    template: "bold",
+    brandColor: brand("midnight"),
+    font: "soft_rounded",
+  },
+}
+
+const sites: { name: string; built: Built; server: Server; origin: string }[] =
+  []
 let browser: Browser | undefined
 let page: Page | undefined
-let origin = ""
 
-beforeAll(async () => {
-  built = await build({ site: FILLED })
-  const dist = built.dist
-  server = createServer((request, response) => {
+function serve(dist: string): Server {
+  return createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://site.invalid").pathname
     const file = join(dist, path.endsWith("/") ? `${path}index.html` : path)
     if (
@@ -54,28 +71,47 @@ beforeAll(async () => {
     response.writeHead(200, type ? { "Content-Type": type } : {})
     response.end(readFileSync(file))
   })
-  await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve))
-  const address = server.address()
-  origin = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`
+}
+
+beforeAll(async () => {
+  for (const [name, site] of Object.entries(VARIANTS)) {
+    // The bold build asks a chauffeur firm's questions, so a select, a
+    // number and a date are scanned as well as the default text inputs.
+    const built = await build({
+      site,
+      ...(name === "bold" ? { quoteForm: LIMOUSINE_FORM } : {}),
+    })
+    const server = serve(built.dist)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    const port = typeof address === "object" && address ? address.port : 0
+    sites.push({ name, built, server, origin: `http://127.0.0.1:${port}` })
+  }
   browser = await chromium.launch()
   // A context of its own: axe refuses a page made straight off the browser.
   page = await (await browser.newContext()).newPage()
-}, 180_000)
+}, 300_000)
 
 afterAll(async () => {
   await browser?.close()
-  server?.close()
-  clean(built)
+  for (const site of sites) {
+    site.server.close()
+    clean(site.built)
+  }
 })
 
-for (const path of PAGES) {
-  test(`${path} has no accessibility violations`, async () => {
-    if (!page) throw new Error("the browser did not start")
-    await page.goto(`${origin}${path}`)
-    const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
-    expect(
-      results.violations.map((violation) => violation.id),
-      JSON.stringify(results.violations, null, 2)
-    ).toEqual([])
-  }, 60_000)
+for (const name of Object.keys(VARIANTS)) {
+  for (const path of PAGES) {
+    test(`${name} ${path} has no accessibility violations`, async () => {
+      const site = sites.find((each) => each.name === name)
+      if (!page || !site)
+        throw new Error("the browser or the build did not start")
+      await page.goto(`${site.origin}${path}`)
+      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
+      expect(
+        results.violations.map((violation) => violation.id),
+        JSON.stringify(results.violations, null, 2)
+      ).toEqual([])
+    }, 60_000)
+  }
 }

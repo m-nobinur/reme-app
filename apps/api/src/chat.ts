@@ -1,14 +1,11 @@
 import {
-  AskFactInput,
-  AskFactOutput,
   BuildSummary,
   ChatRequest,
   type ChatResult,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
-  FactValue,
-  type FactValueKey,
+  OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -17,6 +14,7 @@ import {
   conversationMessages,
   conversations,
   eq,
+  events,
   newUlid,
   type OrgScopedDb,
   orgs,
@@ -42,6 +40,7 @@ import {
   messageTaint,
   newRunState,
   openrouterModel,
+  personaOf,
   priceOf,
   reservation,
 } from "./cos/agent.ts"
@@ -49,6 +48,7 @@ import {
   CONTEXT_POLICY,
   deriveCosMessages,
   readSession,
+  sha256,
 } from "./cos/history.ts"
 import {
   closeTurn,
@@ -80,15 +80,58 @@ import {
   titleFrom,
   withoutProviderData,
 } from "./http.ts"
+import {
+  type Answer,
+  again,
+  buildCall,
+  built,
+  cardAnswer,
+  factValue,
+  isCard,
+  ONBOARDING_GOAL,
+  type Onboarding,
+  OUTPUTS,
+  onboardingStep,
+  opening as openingParts,
+  type Progress,
+  progressOf,
+  type ScriptRow,
+  ended as scriptEnded,
+  text as textPart,
+  typedAnswer,
+  voiceOf,
+  applied as withAnswer,
+} from "./onboarding.ts"
+import {
+  askedSoFar,
+  checkPlan,
+  DEFAULT_ONBOARDING_MODEL,
+  PLANNER,
+  PLANNER_VERSION,
+  type PlanCall,
+  type PlanInput,
+  type PlanOutcome,
+  type Row as PlanRow,
+  type PlanState,
+  plannerModel,
+  plannerPrefix,
+  planParts,
+  planReservation,
+  planTurn,
+  turnData,
+} from "./onboarding-agent.ts"
+import { notStarted } from "./onboarding-copy.ts"
 import { ownerStaffId } from "./staff.ts"
-import { missingFacts, readFacts } from "./workspace.ts"
+import { readFacts } from "./workspace.ts"
 
 /**
  * `POST /chat`: a turn, answered by the Chief of Staff (ADR-034) or by the
- * script. The script owns the onboarding conversation until its build offer
- * is approved or refused, and every results turn on a call it made: it asks
- * for each missing fact with `ask_fact`, then offers the first build with a
- * `request_change` the owner approves. Every other turn goes to the CoS,
+ * script. The script owns the onboarding conversation until it has started
+ * the first build or the owner chose to build the site themselves, and
+ * every results turn on a call it made: it asks each step of
+ * `onboarding.ts` with a question and a card (`ask_fact`, `ask_choice` or
+ * `ask_upload`), and a typed reply answers the card it overtook. Every
+ * other turn goes to the CoS,
  * whose history is the event log; when the CoS has no model, no budget, a
  * frozen conversation or a provider that fails before any content, the
  * script's step stands in for it: a change card in Act mode and one fixed
@@ -97,15 +140,14 @@ import { missingFacts, readFacts } from "./workspace.ts"
  * The client sends only what the owner just did (`ChatRequest`). The stored
  * rows are what assistant-ui reads, written in the same transactions as the
  * log, so a reload shows what the stream showed. A continued message is one
- * row that grows: ai 7 continues the last assistant message, so an answer or
- * an approval updates that row and never appends a second one.
+ * row that grows: ai 7 continues the last assistant message, so an approval,
+ * or an answer sent without the owner's reply, updates that row and never
+ * appends a second one. An answer sent with the owner's reply is a message of
+ * theirs, as a typed one is: it and the next step each get a row, so every
+ * onboarding step is a message of its own.
  */
 
-/** The facts an owner may skip. Pricing only: the rest the site needs. */
-const SKIPPABLE: readonly FactValueKey[] = ["pricing.standard_clean_hourly"]
-
-/** The first build's goal, when the owner has not typed one. */
-export const ONBOARDING_GOAL = "Build my website from the details I gave you."
+export { ONBOARDING_GOAL }
 
 /** Ask mode's one line when the Chief of Staff cannot answer: the script's, or the fallback's. */
 export const ASK_REPLY =
@@ -118,7 +160,12 @@ export const CANCELLED = TOOL_CALL_CANCELLED
 const FORMAT = "ai-sdk/v6"
 
 export type ToolPart = {
-  type: "tool-ask_fact" | "tool-request_change"
+  type:
+    | "tool-ask_fact"
+    | "tool-ask_choice"
+    | "tool-ask_upload"
+    | "tool-review_quote_form"
+    | "tool-request_change"
   toolCallId: string
   state:
     | "input-available"
@@ -142,55 +189,20 @@ const pending = (part: ToolPart) =>
   part.state === "input-available" || part.state === "approval-requested"
 
 export type Script = {
-  kind: "onboarding" | "assistant"
-  /** The required facts the org does not hold, in asking order (`missingFacts`). */
-  missing: readonly FactValueKey[]
-  /** `orgs.name`, the business name's prefill. Read only when that is the ask. */
-  orgName: string
-  /** Keys the owner skipped in this conversation. */
-  skipped: readonly FactValueKey[]
-  /** Whether the owner approved or refused an offer in this conversation. */
-  offered: boolean
+  /** The onboarding script's state while it runs, or null once it has ended or elsewhere. */
+  onboarding: Onboarding | null
   /** A typed message, or null when a resolved call asks what comes next. */
   message: { mode: "ask" | "act"; text: string } | null
   newId: () => string
 }
 
-/** The key onboarding asks for next, if any. */
-const nextKey = (s: Pick<Script, "missing" | "skipped">) =>
-  s.missing.find((k) => !s.skipped.includes(k))
-
 /**
  * The next step's parts. Pure: the same input and ids give the same parts.
- * An Ask message never becomes a change, onboarding included.
+ * While onboarding runs, its next step; after it, an Ask message is one
+ * fixed line and an Act message a change card.
  */
 export function nextStep(s: Script): Part[] {
-  if (s.kind === "onboarding" && !s.offered) {
-    const key = nextKey(s)
-    if (key) {
-      const name = FactValue.safeParse({
-        key: "business.name",
-        value: { name: s.orgName },
-      })
-      const input = AskFactInput.parse({
-        key,
-        skippable: SKIPPABLE.includes(key),
-        prefill:
-          key === "business.name" && name.success ? name.data.value : null,
-      })
-      return [
-        {
-          type: "tool-ask_fact",
-          toolCallId: s.newId(),
-          state: "input-available",
-          input,
-        },
-      ]
-    }
-    if (s.message?.mode !== "ask") {
-      return [changeCall(s.message?.text ?? ONBOARDING_GOAL, s.newId)]
-    }
-  }
+  if (s.onboarding) return onboardingStep(s.onboarding, s.newId)
   if (!s.message) return []
   if (s.message.mode === "ask") {
     return [{ type: "text", text: ASK_REPLY, state: "done" }]
@@ -232,7 +244,8 @@ function made(part: Part): UIMessageChunk[] {
       toolCallId,
     })
   }
-  return call
+  // A call the script made already answered, such as the build it started.
+  return pending(part) ? call : [...call, ...resolved(part)]
 }
 
 /** The chunks that move a pending call to how it was resolved. */
@@ -357,56 +370,57 @@ async function readTail(db: OrgScopedDb, id: string): Promise<Tail | null> {
 }
 
 /**
- * What the script reads from an onboarding conversation: the keys the owner
- * skipped, and whether they approved or refused an offer. An offer talked
- * over by a typed message was cancelled, not made, so it does not count.
+ * What the script reads from an onboarding conversation: every card it
+ * made, how each was resolved, and the owner's typed message for a card one
+ * overtook (`progressOf` reads them). A build offer talked over by a typed
+ * message was cancelled, not made, so it does not count.
  */
 export async function readScript(
   db: OrgScopedDb,
   id: string
-): Promise<{ skipped: FactValueKey[]; offered: boolean }> {
-  const [found] = await db.execute<{
-    skipped: FactValueKey[]
-    offered: boolean
-  }>(
+): Promise<Progress> {
+  const rows = await db.execute<ScriptRow>(
     sql`select
-      coalesce(jsonb_agg(distinct p->'input'->>'key') filter (where p->>'type' = 'tool-ask_fact' and p->>'state' = 'output-available' and p->'output'->>'answer' = 'skipped'), '[]'::jsonb) as skipped,
-      coalesce(bool_or(p->>'type' = 'tool-request_change' and p->>'state' in ('output-available', 'output-denied')), false) as offered
+      p->>'type' as type,
+      p->>'state' as state,
+      coalesce(p->'input'->>'key', p->'input'->>'step') as step,
+      p->'output'->>'answer' as answer,
+      p->'output'->'ids'->>0 as choice,
+      case when p->>'state' = 'output-error' then (
+        select u.content->'parts'->0->>'text' from ${conversationMessages} u
+        where u.conversation_id = m.conversation_id and u.parent_id = m.id and u.content->>'role' = 'user'
+        limit 1
+      ) end as reply
     from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
-    where m.conversation_id = ${id} and m.content->>'role' = 'assistant'`
+    where m.conversation_id = ${id} and m.content->>'role' = 'assistant' and p->>'type' like 'tool-%'
+    order by m.seq`
   )
-  return { skipped: found?.skipped ?? [], offered: found?.offered ?? false }
+  return progressOf([...rows])
 }
 
 /**
- * The next step for this conversation, reading only what it needs: the
- * script's state for onboarding, and the org's name only when the step asks
- * for the business name.
+ * The onboarding script's state for this turn, or null when the
+ * conversation is not onboarding or the script has ended there.
  */
-async function next(
+async function onboardingOf(
   db: OrgScopedDb,
   held: Read,
   id: string,
-  input: Pick<Script, "missing" | "message" | "newId">
-): Promise<Part[]> {
-  const { skipped, offered } =
-    held.kind === "onboarding"
-      ? await readScript(db, id)
-      : { skipped: [], offered: true }
-  const asking =
-    !offered && nextKey({ missing: input.missing, skipped }) === "business.name"
-  return nextStep({
-    ...input,
-    kind: held.kind,
-    skipped,
-    offered,
-    orgName: asking ? await readOrgName(db) : "",
-  })
-}
-
-async function readOrgName(db: OrgScopedDb): Promise<string> {
+  owner: Owner
+): Promise<Onboarding | null> {
+  if (held.kind !== "onboarding") return null
+  const progress = await readScript(db, id)
+  if (scriptEnded(progress)) return null
+  const facts = await readFacts(db)
   const [org] = await db.select({ name: orgs.name }).from(orgs).limit(1)
-  return org?.name ?? ""
+  return {
+    ...progress,
+    orgId: owner.orgId,
+    facts,
+    orgName: org?.name ?? "",
+    ownerName: owner.session.name ?? "",
+    ownerEmail: owner.session.email,
+  }
 }
 
 /**
@@ -470,6 +484,11 @@ export type ChatDeps = {
   model?: LanguageModel | null
   /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
   waitUntil?: (promise: Promise<unknown>) => void
+  /**
+   * The onboarding planner's model, as `model` is the CoS's: left out, it is
+   * OpenRouter's `ONBOARDING_MODEL` when the api holds a key. Tests pass one.
+   */
+  planner?: LanguageModel | null
 }
 
 export async function chat(
@@ -502,7 +521,15 @@ export async function chat(
       : env.OPENROUTER_API_KEY
         ? openrouterModel(env.OPENROUTER_API_KEY, modelId)
         : null
-  let opened: Opened | Response
+  const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+  const planPrice = priceOf(plannerId)
+  const planner =
+    deps.planner !== undefined
+      ? deps.planner
+      : env.OPENROUTER_API_KEY
+        ? plannerModel(env.OPENROUTER_API_KEY, plannerId)
+        : null
+  let opened: Opened | Response | { plan: PlanJob }
   try {
     opened = await kit.withOrg(scope, async (db) => {
       const held = await read(db, id)
@@ -522,10 +549,27 @@ export async function chat(
       const scripted =
         !session ||
         !log ||
-        (held.kind === "onboarding" && !(await readScript(db, id)).offered) ||
+        (held.kind === "onboarding" &&
+          !scriptEnded(await readScript(db, id))) ||
         (turn.kind === "results" && !log.named)
-      if (scripted)
+      if (scripted) {
+        // Onboarding turns go to the planner when it can run; the script
+        // answers the rest, and every turn the planner cannot.
+        const job =
+          session && log && !log.frozen && planner && planPrice
+            ? await openPlan(
+                db,
+                held,
+                id,
+                parsed.data,
+                owner,
+                session,
+                planPrice
+              )
+            : null
+        if (job) return { plan: job }
         return scriptTurn(db, env, kit, owner, held, id, parsed.data, newId)
+      }
       const reserve = model && price && !log.frozen ? reservation(price) : 0
       const fallback: Fallback | null =
         log.frozen || !model || !price
@@ -541,7 +585,8 @@ export async function chat(
         workspace,
         zone ?? null,
         new Date(),
-        turn.kind === "message" ? parsed.data.intent : undefined
+        turn.kind === "message" ? parsed.data.intent : undefined,
+        personaOf(await readFacts(db))
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -579,6 +624,19 @@ export async function chat(
     throw error
   }
   if (opened instanceof Response) return opened
+  if ("plan" in opened) {
+    return planned(opened.plan, {
+      env,
+      kit,
+      owner,
+      id,
+      request: parsed.data,
+      newId,
+      model: planner as LanguageModel,
+      modelId: plannerId,
+      price: planPrice as NonNullable<typeof planPrice>,
+    })
+  }
   const run: AgentTurn = {
     turn: opened.turn,
     kit,
@@ -646,6 +704,8 @@ function scriptTurn(
   if (turn.kind === "message") {
     return typed(
       db,
+      env,
+      kit,
       owner,
       held,
       id,
@@ -661,7 +721,7 @@ function scriptTurn(
   if (!result || more.length > 0) return Promise.resolve(stale())
   const one = { message_id: turn.message_id, ...result }
   if (one.kind === "answer") {
-    return answer(db, owner, held, id, one, newId)
+    return answer(db, env, kit, owner, held, id, one, turn.reply, newId)
   }
   return approve(db, env, kit, owner, held, id, one)
 }
@@ -987,11 +1047,7 @@ async function fallbackTurn(
 ): Promise<Response> {
   if (a.turn.kind === "message") {
     const step = nextStep({
-      kind: "assistant",
-      missing: [],
-      orgName: "",
-      skipped: [],
-      offered: true,
+      onboarding: null,
       message: { mode: a.mode, text: a.turn.text },
       newId: a.newId,
     })
@@ -1103,10 +1159,14 @@ async function cancelPending(
 /**
  * A typed message: the owner's row, then a new assistant row with the next
  * step. A call the tail left pending is cancelled first, the way
- * assistant-ui's `cancelPendingToolCallsOnSend` cancels it on screen.
+ * assistant-ui's `cancelPendingToolCallsOnSend` cancels it on screen. While
+ * onboarding runs, the message answers the card it cancelled: its fact is
+ * stated, or the same card comes back after a line saying what was missing.
  */
 async function typed(
   db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
   owner: Owner,
   held: Read,
   id: string,
@@ -1116,22 +1176,56 @@ async function typed(
 ): Promise<Response> {
   if (await messageTaken(db, id, messageId)) return messageExists()
   const { tail } = held
+  const onboarding = await onboardingOf(db, held, id, owner)
+  const card = onboarding ? waitingCard(tail) : undefined
   await cancelPending(db, id, tail)
-  const step = await next(db, held, id, {
-    missing: missingFacts(await readFacts(db)),
-    message,
-    newId,
-  })
+  const reply = card && typedAnswer(card, message.text)
+  const step =
+    onboarding && card && reply?.kind === "retry"
+      ? again(card, reply.reason, onboarding, newId)
+      : onboarding
+        ? await advance(db, env, kit, owner, id, onboarding, reply, newId)
+        : nextStep({ onboarding, message, newId })
+  const assistantId = await ownerThenStep(
+    db,
+    owner,
+    id,
+    tail?.id ?? null,
+    { id: messageId, text: message.text },
+    step,
+    newId
+  )
+  await nameConversation(db, held, id, message.text)
+  await db
+    .update(conversations)
+    .set({ updatedAt: sql`now()` })
+    .where(eq(conversations.id, id))
+  return stream(assistantId, step)
+}
+
+/**
+ * The owner's message as a row, then the step in an assistant row of its
+ * own after it. The new row's id.
+ */
+async function ownerThenStep(
+  db: OrgScopedDb,
+  owner: Owner,
+  id: string,
+  parentId: string | null,
+  message: { id: string; text: string },
+  step: Part[],
+  newId: () => string
+): Promise<string> {
   const assistantId = newId()
   const rows = [
     {
-      id: messageId,
-      parentId: tail?.id ?? null,
+      id: message.id,
+      parentId,
       content: { role: "user", parts: [{ type: "text", text: message.text }] },
     },
     {
       id: assistantId,
-      parentId: messageId,
+      parentId: message.id,
       content: { role: "assistant", parts: [{ type: "step-start" }, ...step] },
     },
   ]
@@ -1144,12 +1238,50 @@ async function typed(
       ...row,
     })
   }
-  await nameConversation(db, held, id, message.text)
-  await db
-    .update(conversations)
-    .set({ updatedAt: sql`now()` })
-    .where(eq(conversations.id, id))
-  return stream(assistantId, step)
+  return assistantId
+}
+
+/** The card the tail's last step waits on, if it waits on one. */
+function waitingCard(tail: Tail | null): ToolPart | undefined {
+  if (tail?.content.role !== "assistant") return undefined
+  const { parts } = tail.content
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  return last.find((p): p is ToolPart => isTool(p) && isCard(p) && pending(p))
+}
+
+/**
+ * Onboarding after an answer, or after none: its fact stated, then the next
+ * step. When that step is the build, the change starts here, as the
+ * approval path starts it, keyed by the conversation so a retry finishes
+ * what the first attempt began. An outcome nobody knows rolls the turn back,
+ * so the owner's retry runs it again.
+ */
+async function advance(
+  db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  id: string,
+  onboarding: Onboarding,
+  reply: Answer | undefined,
+  newId: () => string
+): Promise<Part[]> {
+  if (reply?.kind === "facts") {
+    await stateFacts(db, owner, reply.facts, onboarding.facts as FactRecord[])
+  }
+  const next = reply ? withAnswer(onboarding, reply) : onboarding
+  const step = nextStep({ onboarding: next, message: null, newId })
+  const build = buildCall(step)
+  if (!build) return step
+  const output = await changed(
+    env,
+    kit,
+    owner,
+    ONBOARDING_GOAL,
+    `onboarding:${id}`
+  )
+  if (output instanceof Response) throw new Refusal(output)
+  return built(next, build, output)
 }
 
 /** The tail's call this turn names, or a response saying why not. */
@@ -1179,58 +1311,81 @@ type Resolved<K extends ChatResult["kind"]> = Extract<
   { kind: K }
 > & { message_id: string }
 
-/** An answer to `ask_fact`: the fact is stated, or the key skipped. */
+type Reply = Extract<ChatRequest["turn"], { kind: "results" }>["reply"]
+
+/**
+ * An answer to one of the script's cards: its fact stated, a skip, or the
+ * photos the owner sent, checked against the card the api made. Then the
+ * next step: with the owner's reply, the reply and the step each get a row
+ * of their own after the card's, and the stream opens the step's row as a
+ * new message; without one, the step continues the card's row.
+ */
 async function answer(
   db: OrgScopedDb,
+  env: Env,
+  kit: Tenancy,
   owner: Owner,
   held: Read,
   id: string,
   turn: Resolved<"answer">,
+  reply: Reply,
   newId: () => string
 ): Promise<Response> {
+  // A reply is written once, as a typed message is: a retry is refused.
+  if (reply && (await messageTaken(db, id, reply.message_id))) {
+    return messageExists()
+  }
   const found = callIn(
     held.tail,
     turn.message_id,
-    (p) => p.type === "tool-ask_fact" && p.toolCallId === turn.tool_call_id
+    (p) => isCard(p) && p.toolCallId === turn.tool_call_id
   )
   if (found instanceof Response) return found
   const { tail, call } = found
-  const output = JSON.stringify(turn.output)
+  const schema = OUTPUTS[call.type as keyof typeof OUTPUTS]
+  const output = schema.safeParse(turn.output)
   if (!pending(call)) {
-    const given = AskFactOutput.safeParse(call.output)
+    const given = schema.safeParse(call.output)
     // The same answer again is a retry, and gets the first one's stream.
-    return given.success && JSON.stringify(given.data) === output
+    return given.success &&
+      output.success &&
+      JSON.stringify(given.data) === JSON.stringify(output.data)
       ? stream(tail.id, stepAfter(tail.content.parts, call), resolved(call))
       : stale()
   }
-  const { key } = call.input as AskFactInput
-  if (
-    turn.output.answer === "stated"
-      ? turn.output.fact.key !== key
-      : !SKIPPABLE.includes(key)
-  ) {
-    return answerInvalid()
-  }
-  const current = await readFacts(db)
-  if (turn.output.answer === "stated") {
-    await stateFacts(db, owner, [turn.output.fact], current)
-  }
+  const onboarding = await onboardingOf(db, held, id, owner)
+  if (!onboarding) return stale()
+  const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
+  const meant = output.success ? cardAnswer(call, output.data, uploads) : null
+  if (!meant || meant.kind === "retry") return answerInvalid()
   const done: ToolPart = {
     ...call,
     state: "output-available",
-    output: turn.output,
+    output: output.data,
   }
-  const step = await next(db, held, id, {
-    // The key just answered is held now, or skipped.
-    missing: missingFacts(current).filter((k) => k !== key),
-    message: null,
-    newId,
-  })
-  const parts = [
-    ...tail.content.parts.map((p) => (p === call ? done : p)),
-    { type: "step-start" } as const,
-    ...step,
-  ]
+  const step = await advance(db, env, kit, owner, id, onboarding, meant, newId)
+  const answered = tail.content.parts.map((p) => (p === call ? done : p))
+  if (reply) {
+    if (
+      !(await swapTail(db, id, tail, {
+        ...tail.content,
+        parts: shown(answered),
+      }))
+    ) {
+      throw new Refusal(stale())
+    }
+    const assistantId = await ownerThenStep(
+      db,
+      owner,
+      id,
+      tail.id,
+      { id: reply.message_id, text: reply.text },
+      step,
+      newId
+    )
+    return stream(assistantId, step)
+  }
+  const parts = [...answered, { type: "step-start" } as const, ...step]
   if (
     !(await swapTail(db, id, tail, { ...tail.content, parts: shown(parts) }))
   ) {
@@ -1330,24 +1485,503 @@ async function changed(
 }
 
 /**
+ * An onboarding turn the planner answers, from its first transaction to
+ * its model call: the turn's state, and the turn it opened in the session's
+ * log, whose `cos.context` holds the reservation and the data the model
+ * reads, so a second turn meanwhile is busy and the day's cap counts it.
+ */
+type PlanJob = {
+  turn: Turn
+  state: PlanState
+  /** The tail as the plan read it: the turn is stale if it moved. */
+  tail: Tail | null
+}
+
+/** The newest rows of the conversation, oldest first, as the planner reads them. */
+async function recentRows(db: OrgScopedDb, id: string): Promise<PlanRow[]> {
+  const rows = await db
+    .select({ content: conversationMessages.content })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.conversationId, id))
+    .orderBy(sql`${conversationMessages.seq} desc`)
+    .limit(PLANNER.rows)
+  return rows.reverse().map((row) => row.content as Content)
+}
+
+/**
+ * How often each fact has been asked here: the cards in every row, and the
+ * questions in words the planner's answered turns sent, read from each such
+ * turn's last logged step, the plan the owner saw.
+ */
+async function askedOf(
+  db: OrgScopedDb,
+  id: string
+): Promise<Record<string, number>> {
+  const cards = await db.execute<{ type: string; step: string | null }>(
+    sql`select p->>'type' as type,
+      coalesce(p->'input'->>'key', p->'input'->>'step') as step
+    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and p->>'type' in ('tool-ask_fact', 'tool-ask_choice')`
+  )
+  const steps = await db.execute<{ text: string | null }>(
+    sql`select s.payload->'messages'->0->'content'->0->>'text' as text
+    from ${events} s
+    join ${events} t on t.session_id = s.session_id and t.type = 'cos.turn'
+      and t.payload->>'turn_id' = s.payload->>'turn_id'
+      and t.payload->>'outcome' = 'answered'
+      and (t.payload->>'steps')::int - 1 = (s.payload->>'step')::int
+    join ${events} c on c.session_id = s.session_id and c.type = 'cos.context'
+      and c.payload->>'turn_id' = s.payload->>'turn_id'
+      and c.payload->>'context_policy_version' = ${PLANNER_VERSION}
+    where s.session_id = ${id} and s.type = 'cos.step'`
+  )
+  const plans = [...steps].flatMap((row) => {
+    try {
+      const plan = OnboardingPlan.safeParse(JSON.parse(row.text ?? ""))
+      return plan.success ? [plan.data] : []
+    } catch {
+      return []
+    }
+  })
+  return askedSoFar([...cards], plans)
+}
+
+/**
+ * For the first transaction: the planner's turn, or null when the script
+ * answers this one. The script keeps every turn that is not a typed message
+ * or one valid answer to the waiting card (a retry, a stale id, an invalid
+ * answer, an approval), and every turn over the day's cap. The answer is
+ * read exactly as the script reads it; the planner only plans what follows.
+ */
+async function openPlan(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  request: ChatRequest,
+  owner: Owner,
+  session: Omit<Turn, "turnId">,
+  price: NonNullable<ReturnType<typeof priceOf>>
+): Promise<PlanJob | null> {
+  const onboarding = await onboardingOf(db, held, id, owner)
+  if (!onboarding) return null
+  const { turn } = request
+  let input: PlanInput
+  let waitingOn: ToolPart | null = null
+  let current = onboarding
+  if (turn.kind === "message") {
+    if (await messageTaken(db, id, turn.message_id)) return null
+    waitingOn = waitingCard(held.tail) ?? null
+    input = { kind: "message", text: turn.text }
+  } else {
+    // A reply already written is the script's to refuse.
+    if (turn.reply && (await messageTaken(db, id, turn.reply.message_id))) {
+      return null
+    }
+    const answered = answerOf(held, turn, onboarding)
+    if (!answered) return null
+    current = withAnswer(onboarding, answered.meant)
+    input = { kind: "card", card: answered.call, output: answered.output }
+  }
+  const state: PlanState = {
+    onboarding: current,
+    pending: waitingOn,
+    input,
+    rows: await recentRows(db, id),
+    asked: await askedOf(db, id),
+  }
+  const data = turnData(state)
+  const reserved = await planReservation(price, data)
+  if (!(await withinCap(db, owner.orgId, reserved))) {
+    console.log(
+      JSON.stringify({ code: "onboarding.fallback", reason: "budgetary" })
+    )
+    return null
+  }
+  const prefix = await plannerPrefix()
+  const logged = await sessionState(db, id, prefix.sha256, null)
+  const planTurnId: Turn = { ...session, turnId: newUlid() }
+  await beginTurn(db, planTurnId, {
+    prefix: logged.prefixLogged ? null : prefix,
+    messages: [],
+    context: {
+      turn_id: planTurnId.turnId,
+      prefix_sha256: prefix.sha256,
+      context_policy_version: PLANNER_VERSION,
+      mode: request.mode,
+      active_tools: [],
+      text: data,
+      reserved_usd: reserved,
+    },
+    contextTaint: ["untrusted_input"],
+  })
+  return { turn: planTurnId, state, tail: held.tail }
+}
+
+/** A results turn's one answer to the waiting card, read as the script reads it, or null. */
+function answerOf(
+  held: Read,
+  turn: Extract<ChatRequest["turn"], { kind: "results" }>,
+  onboarding: Onboarding
+) {
+  const [result, ...more] = turn.results
+  if (!result || more.length > 0 || result.kind !== "answer") return null
+  const found = callIn(
+    held.tail,
+    turn.message_id,
+    (p) => isCard(p) && p.toolCallId === result.tool_call_id
+  )
+  if (found instanceof Response || !pending(found.call)) return null
+  const output = OUTPUTS[found.call.type as keyof typeof OUTPUTS].safeParse(
+    result.output
+  )
+  if (!output.success) return null
+  const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
+  const meant = cardAnswer(found.call, output.data, uploads)
+  if (!meant || meant.kind === "retry") return null
+  return { ...found, output: output.data, meant }
+}
+
+type Planning = {
+  env: Env
+  kit: Tenancy
+  owner: Owner
+  id: string
+  request: ChatRequest
+  newId: () => string
+  model: LanguageModel
+  modelId: string
+  price: NonNullable<ReturnType<typeof priceOf>>
+}
+
+/** A planned turn's rows, before a build it starts is known. */
+type Staged = {
+  /** The assistant message this turn wrote or continued, and its stored content. */
+  id: string
+  content: Content
+  step: Part[]
+  lead: UIMessageChunk[]
+  /** The build's pending call, when the plan starts it. */
+  build: ToolPart | null
+  said: string
+  onboarding: Onboarding
+}
+
+/**
+ * The model's calls as the log keeps a CoS turn's steps: each call's
+ * message hash, then its answer with its usage and cost.
+ */
+async function callEvents(turn: Turn, calls: PlanCall[]) {
+  const written = await Promise.all(
+    calls.map(async (c, step) => [
+      {
+        type: "cos.call" as const,
+        payload: {
+          turn_id: turn.turnId,
+          step,
+          sha256: await sha256(c.messages),
+        },
+      },
+      {
+        type: "cos.step" as const,
+        payload: {
+          turn_id: turn.turnId,
+          step,
+          messages: [
+            { role: "assistant", content: [{ type: "text", text: c.raw }] },
+          ],
+          usage: c.usage,
+          cost_usd: c.costUsd,
+        },
+        // The plan quotes the owner's words back.
+        taint: ["untrusted_input" as const],
+      },
+    ])
+  )
+  return written.flat()
+}
+
+/** The planner turn's `cos.turn`: `fallback` when the script answered it. */
+function planEnd(
+  turn: Turn,
+  modelId: string,
+  outcome: PlanOutcome,
+  ended: "answered" | "fallback" | "error"
+): CosTurn {
+  const sum = (pick: (c: PlanCall) => number) =>
+    outcome.calls.reduce((total, c) => total + pick(c), 0)
+  const ran = {
+    turn_id: turn.turnId,
+    model: modelId,
+    usage: {
+      input_tokens: sum((c) => c.usage.input_tokens),
+      cached_input_tokens: sum((c) => c.usage.cached_input_tokens),
+      output_tokens: sum((c) => c.usage.output_tokens),
+    },
+    cost_usd: sum((c) => c.costUsd),
+    tools: [],
+    steps: outcome.calls.length,
+    // A plan is not streamed, so this is the first call's whole time.
+    first_chunk_ms: outcome.calls[0]?.ms ?? null,
+  }
+  return ended === "fallback"
+    ? { ...ran, outcome: "fallback", reason: "provider" }
+    : { ...ran, outcome: ended }
+}
+
+/**
+ * The planner's turn after its first transaction: the model call, outside
+ * any transaction, then one transaction that writes the turn as the plan
+ * says, or as the script says when there is no plan. A build the plan starts
+ * runs after that commit, so the orchestrator's snapshot sees this turn's
+ * facts, and its outcome is added to the same message under the same turn,
+ * which stays open until then so no other turn can interleave.
+ */
+async function planned(job: PlanJob, p: Planning): Promise<Response> {
+  const outcome = await planTurn(p.model, p.price, job.state)
+  console.log(
+    JSON.stringify({
+      code: "onboarding.plan",
+      turn_id: job.turn.turnId,
+      ok: outcome.ok,
+      reason: outcome.ok ? null : outcome.reason,
+      calls: outcome.calls.length,
+      ms: outcome.calls.reduce((total, c) => total + c.ms, 0),
+      cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
+    })
+  )
+  const scope = {
+    orgId: p.owner.orgId,
+    workosUserId: p.owner.session.workosUserId,
+  }
+  const steps = await callEvents(job.turn, outcome.calls)
+  let logged = false
+  const close = (db: OrgScopedDb, ended: "answered" | "fallback" | "error") =>
+    writeAsTurn(db, job.turn, [
+      ...(logged ? [] : steps),
+      {
+        type: "cos.turn",
+        payload: planEnd(job.turn, p.modelId, outcome, ended),
+      },
+    ])
+  try {
+    const staged = await p.kit.withOrg(scope, async (db) => {
+      const held = await read(db, p.id)
+      if (held instanceof Response) throw new Refusal(held)
+      if (JSON.stringify(held.tail) !== JSON.stringify(job.tail)) {
+        throw new Refusal(stale())
+      }
+      const done = outcome.ok
+        ? await commitPlan(db, held, job, outcome, p)
+        : null
+      if (!done) {
+        const response = await scriptTurn(
+          db,
+          p.env,
+          p.kit,
+          p.owner,
+          held,
+          p.id,
+          p.request,
+          p.newId
+        )
+        await close(db, "fallback")
+        return response
+      }
+      if (done.build) await writeAsTurn(db, job.turn, steps)
+      else await close(db, "answered")
+      return done
+    })
+    logged = true
+    if (staged instanceof Response) return staged
+    if (!staged.build) return stream(staged.id, staged.step, staged.lead)
+    return await startPlannedBuild(staged, p, (db) => close(db, "answered"))
+  } catch (error) {
+    await p.kit
+      .withOrg(scope, (db) => close(db, "error"))
+      .catch(() => undefined)
+    if (error instanceof Refusal) return error.response
+    if (error instanceof SessionBusy) return busy()
+    if (error instanceof NoSuchSession) return notFound()
+    throw error
+  }
+}
+
+/**
+ * The build a plan started: begun as the script begins it, keyed by the
+ * conversation, then shown in place of its pending call. A refusal or an
+ * outcome nobody knows leaves the owner a line saying it did not start;
+ * the next turn can start it again under the same key.
+ */
+async function startPlannedBuild(
+  staged: Staged,
+  p: Planning,
+  close: (db: OrgScopedDb) => Promise<unknown>
+): Promise<Response> {
+  const build = staged.build as ToolPart
+  const output = await changed(
+    p.env,
+    p.kit,
+    p.owner,
+    ONBOARDING_GOAL,
+    `onboarding:${p.id}`
+  )
+  const shownBuild =
+    output instanceof Response
+      ? [textPart(notStarted(voiceOf(staged.onboarding)))]
+      : built(staged.onboarding, build, output, staged.said)
+  // By id: the stored parts are copies (`shown`), not the step's objects.
+  const swap = (parts: Part[]) =>
+    parts.flatMap((part) =>
+      isTool(part) && part.toolCallId === build.toolCallId ? shownBuild : [part]
+    )
+  const content = { ...staged.content, parts: swap(staged.content.parts) }
+  const step = swap(staged.step)
+  await p.kit.withOrg({ orgId: p.owner.orgId }, async (db) => {
+    const row = { id: staged.id, content: staged.content } as unknown as Row
+    if (!(await swapTail(db, p.id, row, content))) throw new Refusal(stale())
+    await close(db)
+  })
+  return stream(staged.id, step, staged.lead)
+}
+
+/**
+ * The plan's turn written, in the same shapes the script writes: a typed
+ * message cancels the waiting card and adds the owner's row and a new
+ * assistant row; a card answer resolves the card and continues its row. The
+ * card's own facts are stated as the script states them, then the plan's,
+ * the ones the assistant chose for the owner as `inferred`. The plan is
+ * checked again on what this transaction reads, and null (the script
+ * answers) when it no longer holds.
+ */
+async function commitPlan(
+  db: OrgScopedDb,
+  held: Read,
+  job: PlanJob,
+  outcome: Extract<PlanOutcome, { ok: true }>,
+  p: Planning
+): Promise<Staged | null> {
+  const onboarding = await onboardingOf(db, held, p.id, p.owner)
+  if (!onboarding) throw new Refusal(stale())
+  const { turn } = p.request
+  const answered =
+    turn.kind === "results" ? answerOf(held, turn, onboarding) : null
+  if (turn.kind === "results" && !answered) throw new Refusal(stale())
+  const state: PlanState = {
+    ...job.state,
+    onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
+  }
+  const rechecked = checkPlan(outcome.checked.plan, state)
+  if (!rechecked.ok) return null
+  const c = rechecked.checked
+  const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
+  const byKey = new Map(
+    [...card, ...c.stated].map((fact) => [fact.key, fact] as const)
+  )
+  await stateFacts(
+    db,
+    p.owner,
+    [...byKey.values()],
+    onboarding.facts as FactRecord[]
+  )
+  if (c.chosen.length > 0) {
+    await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
+  }
+  const step = planParts(c, state, p.newId)
+  const build =
+    c.plan.next.kind === "start_build" ? (step[0] as ToolPart) : null
+  const base = {
+    step,
+    build,
+    said: c.plan.say.trim(),
+    onboarding: c.after,
+  }
+  if (turn.kind === "message") {
+    if (await messageTaken(db, p.id, turn.message_id)) {
+      throw new Refusal(messageExists())
+    }
+    await cancelPending(db, p.id, held.tail)
+    const assistantId = await ownerThenStep(
+      db,
+      p.owner,
+      p.id,
+      held.tail?.id ?? null,
+      { id: turn.message_id, text: turn.text },
+      step,
+      p.newId
+    )
+    const content: Content = {
+      role: "assistant",
+      parts: [{ type: "step-start" }, ...step],
+    }
+    await db
+      .update(conversations)
+      .set({ updatedAt: sql`now()` })
+      .where(eq(conversations.id, p.id))
+    return { ...base, id: assistantId, content, lead: [] }
+  }
+  const {
+    tail,
+    call: waitingCall,
+    output,
+  } = answered as NonNullable<typeof answered>
+  const done: ToolPart = { ...waitingCall, state: "output-available", output }
+  const answeredParts = tail.content.parts.map((part) =>
+    part === waitingCall ? done : part
+  )
+  // With the owner's reply, as the script does it: the card's row ends with
+  // the card, and the reply and the plan's step each get a row of their own.
+  const { reply } = turn
+  if (reply) {
+    if (await messageTaken(db, p.id, reply.message_id)) {
+      throw new Refusal(messageExists())
+    }
+    const finished = { ...tail.content, parts: shown(answeredParts) }
+    if (!(await swapTail(db, p.id, tail, finished))) {
+      throw new Refusal(stale())
+    }
+    const assistantId = await ownerThenStep(
+      db,
+      p.owner,
+      p.id,
+      tail.id,
+      { id: reply.message_id, text: reply.text },
+      step,
+      p.newId
+    )
+    const content: Content = {
+      role: "assistant",
+      parts: [{ type: "step-start" }, ...step],
+    }
+    return { ...base, id: assistantId, content, lead: [] }
+  }
+  const content = {
+    ...tail.content,
+    parts: shown([...answeredParts, { type: "step-start" } as const, ...step]),
+  }
+  if (!(await swapTail(db, p.id, tail, content))) throw new Refusal(stale())
+  return { ...base, id: tail.id, content, lead: resolved(done) }
+}
+
+/**
  * The onboarding conversation's first row, for `createOrg` to insert: the
- * script's first step for the facts the org holds, which ask for the first
- * one missing.
+ * opener, then the script's first step for the facts the org holds.
  */
 export function firstMessage(
-  orgName: string,
+  org: { orgId: string; orgName: string; ownerName: string },
   current: FactRecord[],
   newId: () => string
 ) {
-  const step = nextStep({
-    kind: "onboarding",
-    missing: missingFacts(current),
-    orgName,
-    skipped: [],
-    offered: false,
-    message: null,
-    newId,
-  })
+  const step = openingParts(
+    {
+      ...org,
+      facts: current,
+      passed: [],
+      closed: [],
+      offered: false,
+      builder: null,
+    },
+    newId
+  )
   return {
     id: newId(),
     parentId: null,

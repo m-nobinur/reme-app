@@ -54,8 +54,33 @@ published or live. It needs `COS_API_URL`, staging's WorkOS values and
 the run fails when that key's usage cannot be read or never moves. It skips
 without `COS_API_URL`, so the nightly does not run it yet. Both it and `pnpm
 record` start by running the e2e reapers, which delete probe owners and orgs
-older than an hour. Tier 3 has none yet; an absent tier reads as zero rather
-than as an error.
+older than an hour.
+
+`tier-2/onboarding-planner.eval.mjs` runs the api's onboarding planner
+against the real model, over the owners in `onboarding-personas.mjs`: a
+limousine firm, a family lawyer, a mobile dog groomer and ten more, one of
+them skipping the website. The conversation is simulated in memory with the
+api's own functions, the ones `chat.ts` calls, so no database or deploy is
+involved. Cards are answered by rule from each owner's sheet; open questions
+by a second, cheaper model (`z-ai/glm-5.3-flash`, seeded) playing the owner.
+Scripted turns land whatever the planner asks: a long first reply, a
+correction, a side question, "you choose", an injection. Each owner passes
+when the build started (or the manual path closed), the phone, email and
+names are the owner's exactly, every required fact is held, the quote form
+asks at least two of the owner's own questions and none of the contact
+details, and it took at most 24 owner turns. It prints every transcript and
+a table per model: owners passed, fallback turns, first plans refused, cost
+per onboarding and call latency. `ONBOARDING_EVAL_MODELS` takes a comma list
+of priced ids, each optionally `@none`, `@minimal`, `@low` or `@medium` for
+the reasoning effort; `ONBOARDING_EVAL_PERSONAS` narrows the owners and
+`ONBOARDING_EVAL_CAP_USD` (default 3) stops a run that spends past it. It
+skips without `OPENROUTER_API_KEY`. A run of all owners on the default model
+costs about $0.07.
+
+    node --env-file=.env.local --experimental-transform-types \
+      evals/tier-2/onboarding-planner.eval.mjs
+
+Tier 3 has none yet; an absent tier reads as zero rather than as an error.
 
 | Tier | What it covers |
 | --- | --- |

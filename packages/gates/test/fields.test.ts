@@ -7,11 +7,7 @@ const FIELDS: SiteFields = {
   tagline: { kind: "composed" },
   hours: { kind: "fact", fact_key: "hours.weekday", required: true },
   openingHours: { kind: "fact", fact_key: "hours.weekday", required: true },
-  price: {
-    kind: "fact",
-    fact_key: "pricing.standard_clean_hourly",
-    required: true,
-  },
+  area: { kind: "fact", fact_key: "service_area.text", required: true },
   fax: { kind: "fact", fact_key: "business.fax", required: false },
 }
 
@@ -36,17 +32,15 @@ const hidden = (value: unknown): FactRecord => ({
 describe("factsToAsk", () => {
   it("asks for each required fact once, in declaration order", () => {
     expect(factsToAsk(FIELDS, [])).toEqual({
-      ask: ["business.name", "hours.weekday", "pricing.standard_clean_hourly"],
+      ask: ["business.name", "hours.weekday", "service_area.text"],
       hidden: [],
     })
   })
 
   it("does not ask for a fact the owner left off the site", () => {
-    expect(
-      factsToAsk(FIELDS, [hidden(["pricing.standard_clean_hourly"])])
-    ).toEqual({
+    expect(factsToAsk(FIELDS, [hidden(["service_area.text"])])).toEqual({
       ask: ["business.name", "hours.weekday"],
-      hidden: ["pricing.standard_clean_hourly"],
+      hidden: ["service_area.text"],
     })
   })
 

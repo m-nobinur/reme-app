@@ -8,7 +8,6 @@ const LABEL: Record<FactValueKey, string> = {
   "business.email": "Email address",
   "hours.weekday": "Weekday hours",
   "service_area.radius": "Service area",
-  "pricing.standard_clean_hourly": "Hourly price for a standard clean",
   "business.tagline": "Tagline",
   "business.industry": "Industry",
   "business.offerings": "Products and services",
@@ -25,6 +24,7 @@ const LABEL: Record<FactValueKey, string> = {
   "site.font": "Website font",
   "site.pages": "Website pages",
   "media.uploads": "Your photos",
+  "quote.form": "Quote request questions",
 }
 
 /** `service_area` to `Service area`. */
@@ -55,6 +55,8 @@ export function factText(key: string, raw: unknown): string {
     "e164",
     "address",
     "text",
+    "custom",
+    "brand",
     "id",
     "mode",
   ]) {
@@ -63,13 +65,15 @@ export function factText(key: string, raw: unknown): string {
       return text
     }
   }
-  const list = value.items ?? value.ids
+  const list = value.items ?? value.ids ?? value.fields
   if (Array.isArray(list)) {
     return list
       .map((each) =>
         typeof each === "string"
           ? each
-          : ((each as { name?: string }).name ?? "")
+          : ((each as { name?: string; label?: string }).name ??
+            (each as { label?: string }).label ??
+            "")
       )
       .join(", ")
   }

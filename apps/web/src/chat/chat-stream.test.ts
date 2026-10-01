@@ -73,7 +73,7 @@ const FIXTURE = JSON.parse(
   list: unknown
   conversation: { id: string }
   histories: Record<
-    "start" | "typed" | "name" | "pricing" | "offered" | "denied" | "change",
+    "start" | "typed" | "name" | "tagline" | "offered" | "denied" | "change",
     unknown
   >
   streams: Record<"typed" | "name" | "skip" | "deny" | "change", Stream>
@@ -377,29 +377,47 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
       "What number should customers ring?"
     )
   )
-  // Only the turn went out, and it is the one the api was sent.
+  // Only the turn went out, and it is the one the api was sent, with the
+  // owner's reply under the id the chat gave it.
+  const request = FIXTURE.streams.name.request as {
+    turn: { reply: object }
+  }
   expect(sent).toEqual([
     {
-      ...(FIXTURE.streams.name.request as object),
+      ...request,
       time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      turn: {
+        ...request.turn,
+        reply: { ...request.turn.reply, message_id: expect.any(String) },
+      },
     },
   ])
+  // The answer reads as the owner's reply, and the next question as a
+  // message of its own, with its own time.
+  expect(transcript(chat).slice(-2)).toEqual([
+    "Fixture Cleaning Co",
+    "What number should customers ring?Phone numberSave",
+  ])
+  expect(
+    chat.querySelectorAll('[data-slot="aui_assistant-message-root"]')
+  ).toHaveLength(3)
   await matches(chat, FIXTURE.histories.name)
 })
 
 it("offers the build, keeps a not now, and a typed change after it", async () => {
-  const chat = await open(FIXTURE.histories.pricing)
-  // Every answer stays on screen in its place: the overtaken question, the
-  // owner's message, four answers and the open price question.
+  const chat = await open(FIXTURE.histories.tagline)
+  // Every answer stays on screen in its place, as the owner's reply: the
+  // overtaken question, the owner's message, five replies and the open
+  // tagline question.
   expect(transcript(chat)).toEqual([
     "What is your business called?Not answered. You sent a message instead.",
     "Hello",
-    "What is your business called?Fixture Cleaning Co",
-    "What number should customers ring?+447700900123",
-    "Which email address should enquiries go to?hello@example.net",
-    "What are your hours on weekdays?08:00 to 18:00",
-    "Where do you work from, and how far do you travel?Leeds, within 15 km",
-    "What do you charge an hour for a standard clean?Hourly price, in poundsSaveSkip for now",
+    "Fixture Cleaning Co",
+    "+447700900123",
+    "hello@example.net",
+    "08:00 to 18:00",
+    "Leeds, within 15 km",
+    "How would you sum up your business in one line?TaglineSaveSkip for now",
   ])
   turns.push(sse(FIXTURE.streams.skip))
   await press(chat, "Skip for now")
@@ -466,6 +484,8 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
       ).toBeTruthy()
     )
     expect(chat.querySelector("form button")?.textContent).toBe("Save")
+    // The answer goes back to the card, never into the composer.
+    expect(chat.querySelector("textarea")?.value).toBe("")
 
     // A typed message after the failure lands as the api stores it.
     turns.push(sse(FIXTURE.streams.typed))

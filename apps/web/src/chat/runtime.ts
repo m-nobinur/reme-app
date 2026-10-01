@@ -13,7 +13,15 @@ import { useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
-import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
+import {
+  cancelOvertaken,
+  chatFetch,
+  quoteChanges,
+  replyTo,
+  sendsOn,
+  textOf,
+  turnBody,
+} from "./turn"
 
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
@@ -24,6 +32,19 @@ import { cancelOvertaken, chatFetch, sendsOn, textOf, turnBody } from "./turn"
  * disagreed with what the owner had just seen. `cancelOvertaken` cancels what
  * `apps/api` cancels and nothing else.
  */
+
+/** The words of a message the composer sends. */
+function typedText(message: unknown): string {
+  if (!message || typeof message !== "object") return ""
+  if ("text" in message && typeof message.text === "string") return message.text
+  const parts =
+    "parts" in message && Array.isArray(message.parts) ? message.parts : []
+  return parts
+    .flatMap((part: { type?: string; text?: string }) =>
+      part.type === "text" && part.text ? [part.text] : []
+    )
+    .join("\n")
+}
 
 export function useConversationRuntime({
   onFinish,
@@ -83,7 +104,13 @@ export function useConversationRuntime({
       .then((rows) => {
         const stored = rows.map(toUIMessage)
         chat.setMessages(stored)
-        if (last?.role === "user" && !stored.some((m) => m.id === last.id)) {
+        // A reply to a card goes with it: the card is open again instead.
+        // Words the owner typed, such as changes to a quote form, go back.
+        if (
+          last?.role === "user" &&
+          (!last.metadata?.reply || last.metadata.typed) &&
+          !stored.some((m) => m.id === last.id)
+        ) {
           runtime.thread.composer.setText(textOf(last))
         }
       })
@@ -118,12 +145,26 @@ export function useConversationRuntime({
       }).catch(() => undefined)
     },
   }
+  // An answer to an onboarding card goes out as the owner's reply, so the
+  // answer reads as theirs and the next step is a message of its own.
+  const addToolOutput = async (
+    given: Parameters<typeof chat.addToolOutput>[0]
+  ) => {
+    const reply = replyTo(chat.messages, given)
+    await chat.addToolOutput(given)
+    if (reply) await chat.sendMessage(reply)
+  }
   const runtime = useAISDKRuntime(
     {
       ...chat,
+      addToolOutput,
       sendMessage: (message, options) => {
-        chat.setMessages(cancelOvertaken)
         const carried = intent?.current
+        // Typed while a proposed quote form waits: the words answer it, and
+        // go out as the owner's reply.
+        const changes = quoteChanges(chat.messages, typedText(message), carried)
+        if (changes) return addToolOutput(changes)
+        chat.setMessages(cancelOvertaken)
         if (!carried) return chat.sendMessage(message, options)
         onIntentSent?.()
         return chat.sendMessage(message, {

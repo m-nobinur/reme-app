@@ -1,15 +1,16 @@
 ---
-// No form yet. The quote endpoint does not exist, so this page offers the
-// business's own contact routes and posts nothing. The orchestrator leaves it
-// out of a tenant's seed until the endpoint lands, and navigation and the
-// sitemap follow the page files, so it disappears from both.
+// The quote form sends by email until the platform has an endpoint for it;
+// see QuoteForm. The business's own phone and email sit under it for anyone
+// who would rather call or write.
 import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
 import Hero from "../components/Hero/Hero.astro"
+import QuoteForm from "../components/QuoteForm/QuoteForm.astro"
 import Base from "../layouts/Base.astro"
 import { site } from "../site-config"
 ---
 
 <Base title={site.quoteHeading} description={site.quoteIntro}>
   <Hero variant="compact" heading={site.quoteHeading} lede={site.quoteIntro} />
+  <QuoteForm />
   <ContactDetails />
 </Base>

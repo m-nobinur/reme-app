@@ -1,20 +1,14 @@
 ---
 import CtaBand from "../components/CtaBand/CtaBand.astro"
 import Hero from "../components/Hero/Hero.astro"
-import PriceCard from "../components/PriceCard/PriceCard.astro"
 import Section from "../components/Section/Section.astro"
 import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
 import Steps from "../components/Steps/Steps.astro"
 import Base from "../layouts/Base.astro"
 import { site } from "../site-config"
-import { service } from "../structured-data"
 ---
 
-<Base
-  title={site.servicesHeading}
-  description={site.servicesIntro}
-  jsonLd={service(Astro.site)}
->
+<Base title={site.servicesHeading} description={site.servicesIntro}>
   <Hero
     variant="compact"
     heading={site.servicesHeading}
@@ -22,20 +16,25 @@ import { service } from "../structured-data"
   />
   <ServiceCards />
   {
-    site.standardCleanHourly && (
-      <Section heading={site.priceHeading}>
-        <PriceCard
-          name={site.standardCleanName}
-          price={site.standardCleanHourly}
-        />
+    site.offerings && (
+      <Section heading={site.offeringsHeading}>
+        <ul class="offerings">
+          {site.offerings
+            .split("\n")
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => (
+              <li>{item}</li>
+            ))}
+        </ul>
       </Section>
     )
   }
   <Steps />
   {
-    site.serviceArea && (
+    (site.serviceAreaText || site.serviceArea) && (
       <Section heading={site.serviceAreaHeading}>
-        <p>{site.serviceArea}</p>
+        <p>{site.serviceAreaText || site.serviceArea}</p>
       </Section>
     )
   }

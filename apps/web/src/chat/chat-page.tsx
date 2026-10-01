@@ -12,6 +12,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
   OWNER_QUICK_ACTIONS,
@@ -33,6 +34,8 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
 import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
+import { SiteReadyCard } from "./site-ready"
+import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
 
@@ -170,14 +173,17 @@ export function ChatPage() {
           </div>
         ) : (
           <CosToolsProvider value={tools}>
-            <Thread
-              briefing={briefing.line}
-              components={{ ToolFallback: Approval }}
-              mode={mode}
-              placeholder="Ask Reme anything…"
-              quickActions={OWNER_QUICK_ACTIONS}
-              stored={Boolean(id)}
-            />
+            <UploadPhotosProvider value={uploadPhotos}>
+              <Thread
+                after={<SiteReadyCard />}
+                briefing={briefing.line}
+                components={{ ToolFallback: Approval }}
+                mode={mode}
+                placeholder="Ask Reme anything…"
+                quickActions={OWNER_QUICK_ACTIONS}
+                stored={Boolean(id)}
+              />
+            </UploadPhotosProvider>
           </CosToolsProvider>
         )}
       </div>

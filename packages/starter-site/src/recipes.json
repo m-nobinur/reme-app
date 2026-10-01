@@ -1,31 +1,33 @@
 {
-  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside home-services and its own pages; nothing here is a template engine.",
+  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside service-business and its own pages; nothing here is a template engine.",
   "packs": {
-    "home-services": {
-      "label": "Home services, cleaning first",
+    "service-business": {
+      "label": "Service businesses, any industry",
       "recipes": [
         {
           "name": "home",
           "page": "src/pages/index.astro",
-          "purpose": "The one page a visitor lands on: what the business does, why to call it, and how to.",
+          "purpose": "The one page a visitor lands on: what the business does, who it serves and how to ask for a quote. The layout follows site.template.",
           "components": [
             "Hero",
             "ActionLink",
-            "Stats",
-            "ValueProps",
-            "ServiceCards",
-            "Steps",
-            "Section",
-            "PriceCard",
-            "Testimonials",
             "Gallery",
+            "Stats",
+            "ServiceCards",
+            "ValueProps",
+            "Section",
+            "Steps",
+            "Testimonials",
             "Faq",
             "CtaBand"
           ],
           "fields": [
+            "industry",
             "heroHeading",
             "tagline",
             "homeIntro",
+            "overview",
+            "audience",
             "statYearsValue",
             "statClientsValue",
             "statRatingValue",
@@ -47,7 +49,6 @@
             "step2Body",
             "step3Title",
             "step3Body",
-            "standardCleanHourly",
             "testimonial1Quote",
             "testimonial1Author",
             "faq1Question",
@@ -64,24 +65,17 @@
           "name": "services",
           "page": "src/pages/services.astro",
           "purpose": "What the business does, in more words than the home page gives it.",
-          "components": [
-            "Hero",
-            "ServiceCards",
-            "Section",
-            "PriceCard",
-            "Steps",
-            "CtaBand"
-          ],
+          "components": ["Hero", "ServiceCards", "Section", "Steps", "CtaBand"],
           "fields": [
             "servicesHeading",
             "servicesIntro",
+            "offerings",
             "service1Name",
             "service1Body",
             "service2Name",
             "service2Body",
             "service3Name",
             "service3Body",
-            "standardCleanHourly",
             "step1Title",
             "step1Body"
           ]
@@ -94,6 +88,7 @@
           "fields": [
             "serviceAreaHeading",
             "serviceAreaIntro",
+            "serviceAreaText",
             "serviceArea",
             "ctaHeading",
             "ctaBody"
@@ -111,6 +106,20 @@
             "email",
             "weekdayHours",
             "serviceArea"
+          ]
+        },
+        {
+          "name": "quote",
+          "page": "src/pages/quote.astro",
+          "purpose": "How a visitor asks for a quote: a short form, with the phone and email beside it.",
+          "components": ["Hero", "QuoteForm", "ContactDetails"],
+          "fields": [
+            "quoteHeading",
+            "quoteIntro",
+            "quoteSubmit",
+            "quoteNextSteps",
+            "phone",
+            "email"
           ]
         }
       ]

@@ -1,5 +1,5 @@
 {
-  "recorded": "apps/api POST /chat and GET /conversations/:id/messages on local dev, 2026-09-27, one throwaway owner signing up as a fictional business",
+  "recorded": "apps/api POST /chat and GET /conversations/:id/messages on local dev, 2026-09-27, one throwaway owner signing up as a fictional business. Answer turns reshaped on 2026-10-01 to what apps/api writes when an answer carries the owner's reply: the card's row ends on its answer, then a reply row and a row for the next step (apps/api/test/chat.test.ts checks that shape against the stream).",
   "org": {
     "org_id": "3c1f8a84-1fef-42ad-a9e8-46446b18fa31",
     "slug": "fixture-cleaning-co-3c1f8a84",
@@ -233,7 +233,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-1",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Fixture Cleaning Co"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-1",
+          "parent_id": "reply-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -258,7 +294,7 @@
         }
       ]
     },
-    "pricing": {
+    "tagline": {
       "messages": [
         {
           "id": "fd8475a3-8f99-4c37-8be9-b55b8afacdf5",
@@ -342,7 +378,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-1",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Fixture Cleaning Co"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-1",
+          "parent_id": "reply-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -364,7 +436,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-2",
+          "parent_id": "step-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "+447700900123"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-2",
+          "parent_id": "reply-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -386,7 +494,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-3",
+          "parent_id": "step-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "hello@example.net"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-3",
+          "parent_id": "reply-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -409,7 +553,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-4",
+          "parent_id": "step-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "08:00 to 18:00"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-4",
+          "parent_id": "reply-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -432,14 +612,50 @@
                   "answer": "stated"
                 },
                 "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-5",
+          "parent_id": "step-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Leeds, within 15 km"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-5",
+          "parent_id": "reply-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -541,7 +757,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-1",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Fixture Cleaning Co"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-1",
+          "parent_id": "reply-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -563,7 +815,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-2",
+          "parent_id": "step-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "+447700900123"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-2",
+          "parent_id": "reply-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -585,7 +873,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-3",
+          "parent_id": "step-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "hello@example.net"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-3",
+          "parent_id": "reply-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -608,7 +932,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-4",
+          "parent_id": "step-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "08:00 to 18:00"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-4",
+          "parent_id": "reply-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -631,14 +991,50 @@
                   "answer": "stated"
                 },
                 "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-5",
+          "parent_id": "step-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Leeds, within 15 km"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-5",
+          "parent_id": "reply-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -647,7 +1043,43 @@
                   "answer": "skipped"
                 },
                 "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-6",
+          "parent_id": "step-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Skip for now"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-6",
+          "parent_id": "reply-6",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -757,7 +1189,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-1",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Fixture Cleaning Co"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-1",
+          "parent_id": "reply-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -779,7 +1247,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-2",
+          "parent_id": "step-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "+447700900123"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-2",
+          "parent_id": "reply-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -801,7 +1305,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-3",
+          "parent_id": "step-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "hello@example.net"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-3",
+          "parent_id": "reply-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -824,7 +1364,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-4",
+          "parent_id": "step-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "08:00 to 18:00"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-4",
+          "parent_id": "reply-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -847,14 +1423,50 @@
                   "answer": "stated"
                 },
                 "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-5",
+          "parent_id": "step-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Leeds, within 15 km"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-5",
+          "parent_id": "reply-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -863,7 +1475,43 @@
                   "answer": "skipped"
                 },
                 "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-6",
+          "parent_id": "step-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Skip for now"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-6",
+          "parent_id": "reply-6",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -977,7 +1625,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "24190632-9fdb-4b63-b42c-08df82bff496"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-1",
+          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Fixture Cleaning Co"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-1",
+          "parent_id": "reply-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -999,7 +1683,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "757d0820-4934-4faa-b188-2f4c6bff9282"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-2",
+          "parent_id": "step-1",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "+447700900123"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-2",
+          "parent_id": "reply-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -1021,7 +1741,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "17a04ef0-8ab0-4b86-9b4c-2ceb8e82b8d7"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-3",
+          "parent_id": "step-2",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "hello@example.net"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-3",
+          "parent_id": "reply-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -1044,7 +1800,43 @@
                   "answer": "stated"
                 },
                 "toolCallId": "0eb5ee8e-8bf9-46a1-9383-a329808028e0"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-4",
+          "parent_id": "step-3",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "08:00 to 18:00"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-4",
+          "parent_id": "reply-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -1067,14 +1859,50 @@
                   "answer": "stated"
                 },
                 "toolCallId": "f5c44fa2-3d84-4699-a117-368bb035cfdc"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-5",
+          "parent_id": "step-4",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Leeds, within 15 km"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-5",
+          "parent_id": "reply-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
               {
                 "type": "tool-ask_fact",
                 "input": {
-                  "key": "pricing.standard_clean_hourly",
+                  "key": "business.tagline",
                   "prefill": null,
                   "skippable": true
                 },
@@ -1083,7 +1911,43 @@
                   "answer": "skipped"
                 },
                 "toolCallId": "6decf863-fd2b-48dc-948e-e395299d91a8"
-              },
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "reply-6",
+          "parent_id": "step-5",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Skip for now"
+              }
+            ],
+            "metadata": {
+              "custom": {
+                "createdAt": "2026-09-26T19:31:12.576Z"
+              }
+            }
+          },
+          "feedback": null
+        },
+        {
+          "id": "step-6",
+          "parent_id": "reply-6",
+          "format": "ai-sdk/v6",
+          "content": {
+            "role": "assistant",
+            "parts": [
               {
                 "type": "step-start"
               },
@@ -1113,7 +1977,7 @@
         },
         {
           "id": "nyJaqEdvLq3JuzpF",
-          "parent_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "parent_id": "step-6",
           "format": "ai-sdk/v6",
           "content": {
             "role": "user",
@@ -1198,10 +2062,14 @@
                 }
               }
             }
-          ]
+          ],
+          "reply": {
+            "message_id": "reply-sent-here",
+            "text": "Fixture Cleaning Co"
+          }
         }
       },
-      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"stated\",\"fact\":{\"key\":\"business.name\",\"value\":{\"name\":\"Fixture Cleaning Co\"}}},\"toolCallId\":\"24190632-9fdb-4b63-b42c-08df82bff496\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"key\":\"business.phone\",\"prefill\":null,\"skippable\":false},\"toolCallId\":\"757d0820-4934-4faa-b188-2f4c6bff9282\",\"toolName\":\"ask_fact\",\"type\":\"tool-input-available\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+      "response": "data: {\"messageId\":\"step-1\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"input\":{\"key\":\"business.phone\",\"prefill\":null,\"skippable\":false},\"toolCallId\":\"757d0820-4934-4faa-b188-2f4c6bff9282\",\"toolName\":\"ask_fact\",\"type\":\"tool-input-available\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
     },
     "skip": {
       "request": {
@@ -1209,7 +2077,7 @@
         "mode": "act",
         "turn": {
           "kind": "results",
-          "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "message_id": "step-5",
           "results": [
             {
               "kind": "answer",
@@ -1218,10 +2086,14 @@
                 "answer": "skipped"
               }
             }
-          ]
+          ],
+          "reply": {
+            "message_id": "reply-sent-here",
+            "text": "Skip for now"
+          }
         }
       },
-      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"output\":{\"answer\":\"skipped\"},\"toolCallId\":\"6decf863-fd2b-48dc-948e-e395299d91a8\",\"type\":\"tool-output-available\"}\n\ndata: {\"input\":{\"text\":\"Build my website from the details I gave you.\"},\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"toolName\":\"request_change\",\"type\":\"tool-input-available\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-approval-request\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+      "response": "data: {\"messageId\":\"step-6\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"input\":{\"text\":\"Build my website from the details I gave you.\"},\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"toolName\":\"request_change\",\"type\":\"tool-input-available\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-approval-request\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
     },
     "deny": {
       "request": {
@@ -1229,7 +2101,7 @@
         "mode": "act",
         "turn": {
           "kind": "results",
-          "message_id": "04d6deb3-4da2-4f1e-9834-cb9f650e1340",
+          "message_id": "step-6",
           "results": [
             {
               "kind": "approval",
@@ -1239,7 +2111,7 @@
           ]
         }
       },
-      "response": "data: {\"messageId\":\"04d6deb3-4da2-4f1e-9834-cb9f650e1340\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"approved\":false,\"type\":\"tool-approval-response\"}\n\ndata: {\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-output-denied\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
+      "response": "data: {\"messageId\":\"step-6\",\"type\":\"start\"}\n\ndata: {\"type\":\"start-step\"}\n\ndata: {\"approvalId\":\"5488c5b4-43a2-4134-9f45-8901ab8404c0\",\"approved\":false,\"type\":\"tool-approval-response\"}\n\ndata: {\"toolCallId\":\"3999feec-aaa7-4850-9a8b-aa656d811079\",\"type\":\"tool-output-denied\"}\n\ndata: {\"type\":\"finish-step\"}\n\ndata: {\"type\":\"finish\"}\n\ndata: [DONE]\n\n"
     },
     "change": {
       "request": {

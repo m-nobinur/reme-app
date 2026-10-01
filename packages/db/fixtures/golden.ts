@@ -340,9 +340,9 @@ export const brightclean: GoldenOrg = {
     {
       id: bc(44),
       orgId: bc(0),
-      key: "pricing.standard_clean_hourly",
-      factType: "pricing",
-      value: { amount_minor: 3500, currency: "USD" },
+      key: "service_area.text",
+      factType: "service_area",
+      value: { text: "Fairhaven and the villages within 25 km" },
       version: 2,
       provenanceSource: "owner_stated",
       provenanceConfidence: 1,
@@ -357,9 +357,9 @@ export const brightclean: GoldenOrg = {
     {
       id: bc(45),
       orgId: bc(0),
-      key: "pricing.standard_clean_hourly",
-      factType: "pricing",
-      value: { amount_minor: 3200, currency: "USD" },
+      key: "service_area.text",
+      factType: "service_area",
+      value: { text: "Fairhaven" },
       version: 1,
       provenanceSource: "owner_stated",
       provenanceConfidence: 1,
@@ -677,7 +677,7 @@ export const mopandbucket: GoldenOrg = {
       status: "active",
     },
   ],
-  // Deliberately a different price and a different phone from brightclean's.
+  // Deliberately a different area and a different phone from brightclean's.
   // A cross-org leak that shows the wrong number is then visible as a wrong
   // number rather than as a plausible one. Thin on purpose, and it stays thin:
   // the marketing facts brightclean carries would stop a build here asking.
@@ -709,9 +709,9 @@ export const mopandbucket: GoldenOrg = {
     {
       id: mb(41),
       orgId: mb(0),
-      key: "pricing.standard_clean_hourly",
-      factType: "pricing",
-      value: { amount_minor: 2900, currency: "GBP" },
+      key: "service_area.text",
+      factType: "service_area",
+      value: { text: "Harbourside and the old town" },
       provenanceSource: "owner_stated",
       provenanceConfidence: 1,
       verifiedByStaffId: MB_ROOT,

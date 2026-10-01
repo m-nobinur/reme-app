@@ -4,6 +4,8 @@ import { ConversationMessage } from "./conversation.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
+  HexColour,
+  QuoteFields,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -15,6 +17,20 @@ import { Text } from "./text.ts"
 const MessageId = ConversationMessage.shape.id
 /** The AI SDK or the api makes these. Named apart from `MessageId` so tightening one never moves the other. */
 const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
+
+/**
+ * The most an onboarding turn waits on its planner, every attempt included,
+ * before the script answers it instead (`apps/api`'s `PLANNER.totalMs`).
+ */
+export const PLANNER_TURN_MS = 30_000
+
+/**
+ * How long `POST /chat` may take to start answering, for the web's proxy to
+ * wait: the planner's turn, then the script's step and a build start (the
+ * orchestrator bridge's 10 s), and 5 s for the database on either side.
+ * Every other call keeps the web's ordinary bound.
+ */
+export const CHAT_TURN_MS = PLANNER_TURN_MS + 10_000 + 5_000
 
 /**
  * The error text of a call a typed message overtook: assistant-ui's own
@@ -100,10 +116,7 @@ export const ChoiceStep = z.enum([
 const ChoiceVisual = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("swatches"),
-    colors: z
-      .array(z.string().regex(/^#[0-9a-f]{6}$/))
-      .min(1)
-      .max(4),
+    colors: z.array(HexColour).min(1).max(4),
   }),
   z.strictObject({ kind: z.literal("font"), family: Text(80) }),
   z.strictObject({ kind: z.literal("template"), id: Text(20) }),
@@ -115,26 +128,48 @@ const ChoiceVisual = z.discriminatedUnion("kind", [
  * null when the list is closed. The question itself is the text part before
  * the card, written by the api.
  */
-export const AskChoiceInput = z.strictObject({
-  step: ChoiceStep,
-  options: z
-    .array(
-      z.strictObject({
-        id: Text(40),
-        label: Text(80),
-        hint: Text(120).nullable(),
-        visual: ChoiceVisual.nullable(),
-      })
-    )
-    .min(2)
-    .max(16),
-  /** Whether more than one may be picked. */
-  multiple: z.boolean(),
-  /** Options ticked when the card opens. */
-  preselected: z.array(Text(40)).max(16),
-  other: z.strictObject({ label: Text(60), placeholder: Text(120) }).nullable(),
-  skippable: z.boolean(),
-})
+export const AskChoiceInput = z
+  .strictObject({
+    step: ChoiceStep,
+    options: z
+      .array(
+        z.strictObject({
+          id: Text(40),
+          label: Text(80),
+          hint: Text(120).nullable(),
+          visual: ChoiceVisual.nullable(),
+        })
+      )
+      .min(2)
+      .max(24),
+    /** Whether more than one may be picked. */
+    multiple: z.boolean(),
+    /** Options ticked when the card opens. */
+    preselected: z.array(Text(40)).max(16),
+    other: z
+      .strictObject({ label: Text(60), placeholder: Text(120) })
+      .nullable(),
+    skippable: z.boolean(),
+    /**
+     * The options the card shows first, when the list is long. The owner
+     * reaches the rest with a Show others button, as many at a time.
+     * Absent, the card shows every option.
+     */
+    initial: z.array(Text(40)).min(3).max(4).optional(),
+    /** Whether Other offers a colour picker, whose answer is a `#rrggbb` in `other`. */
+    color: z.boolean().optional(),
+  })
+  .refine(
+    (card) =>
+      (card.initial ?? []).every((id) =>
+        card.options.some((option) => option.id === id)
+      ),
+    { path: ["initial"], message: "initial names only offered ids" }
+  )
+  .refine((card) => !card.color || card.other !== null, {
+    path: ["color"],
+    message: "a colour picker needs Other",
+  })
 
 /**
  * `ask_choice`'s output. The api refuses an id that is not in the call's
@@ -174,6 +209,29 @@ export const AskUploadOutput = z.discriminatedUnion("answer", [
 ])
 
 /**
+ * `review_quote_form`'s input: the questions the assistant proposes for the
+ * site's quote request form, drawn from what the owner said they need to
+ * know to quote a job. The owner keeps, drops or marks each as required, or
+ * asks for something else in their own words. `note` is one short line on
+ * why these questions.
+ */
+export const ReviewQuoteFormInput = z.strictObject({
+  fields: QuoteFields,
+  note: Text(300).nullable(),
+})
+
+/**
+ * `review_quote_form`'s output. `confirmed` carries the list the owner
+ * settled on, which the api checks as `QuoteFields` and stores as the
+ * `quote.form` fact. `changes` is what the owner wants different, as data for
+ * the assistant's next proposal.
+ */
+export const ReviewQuoteFormOutput = z.discriminatedUnion("answer", [
+  z.strictObject({ answer: z.literal("confirmed"), fields: QuoteFields }),
+  z.strictObject({ answer: z.literal("changes"), text: Text(ANSWER_TEXT_MAX) }),
+])
+
+/**
  * `request_change`'s output once the owner said yes: the build it started,
  * or why it was refused. Its input is `OwnerChangeRequest`. A no is the AI
  * SDK's `output-denied`, with no output.
@@ -185,14 +243,20 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
 
 /**
  * The owner's resolution of one pending call: an answer to `ask_fact`,
- * `ask_choice` or `ask_upload`, or a yes or no on a call that needs approval.
+ * `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
+ * call that needs approval.
  * The api reads `output` against the call's own tool.
  */
 const ChatResult = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("answer"),
     tool_call_id: ToolCallId,
-    output: z.union([AskFactOutput, AskChoiceOutput, AskUploadOutput]),
+    output: z.union([
+      AskFactOutput,
+      AskChoiceOutput,
+      AskUploadOutput,
+      ReviewQuoteFormOutput,
+    ]),
   }),
   z.strictObject({
     kind: z.literal("approval"),
@@ -250,6 +314,18 @@ export const ChatRequest = z.strictObject({
        * `chat.stale`.
        */
       results: z.array(ChatResult).min(1),
+      /**
+       * An answer to an onboarding card as the owner's own message. The api
+       * stores it after the card's message and gives the next step a message
+       * of its own. Without it the next step continues the card's message.
+       */
+      reply: z
+        .strictObject({
+          message_id: MessageId,
+          /** What the owner picked or wrote, in their words: data, never instructions. */
+          text: Text(GOAL_MAX),
+        })
+        .optional(),
     }),
   ]),
 })
@@ -257,6 +333,8 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
+export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
 export type AskUploadInput = z.infer<typeof AskUploadInput>
 export type AskUploadOutput = z.infer<typeof AskUploadOutput>
 export type AskFactInput = z.infer<typeof AskFactInput>

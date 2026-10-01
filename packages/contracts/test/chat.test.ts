@@ -9,6 +9,8 @@ import {
   ChatRequest,
   type ChatResult,
   RequestChangeOutput,
+  ReviewQuoteFormInput,
+  ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
   TOOL_FAILED,
   TOOL_UNKNOWN,
@@ -70,8 +72,8 @@ describe("AskFactInput", () => {
   it.each([
     ["a prefilled name", samples.AskFactInput],
     [
-      "a skippable price with nothing prefilled",
-      { key: "pricing.standard_clean_hourly", skippable: true, prefill: null },
+      "a skippable tagline with nothing prefilled",
+      { key: "business.tagline", skippable: true, prefill: null },
     ],
   ])("accepts %s", (_name, input) => {
     expect(verdict("AskFactInput", AskFactInput, input)).toEqual(ACCEPTED)
@@ -193,6 +195,11 @@ describe("ChatRequest", () => {
     ...extra,
   })
 
+  const replied = (reply: unknown) => {
+    const request = results(answer("call_abc123"))
+    return { ...request, turn: { ...request.turn, reply } }
+  }
+
   const zone = (time_zone: string) => ({
     ...text("Add Saturday hours"),
     time_zone,
@@ -203,6 +210,10 @@ describe("ChatRequest", () => {
     ["every result of a step", samples.ChatRequest],
     ["one answer", results(answer("call_abc123"))],
     ["one approval", results(approval())],
+    [
+      "an answer with the owner's reply",
+      replied({ message_id: "u_9Xc4Vb2N", text: "Skip for now" }),
+    ],
     ["a provider's call id", results(answer("functions.ask_fact:0"))],
     ["a call id at 128 characters", results(answer("c".repeat(128)))],
     [
@@ -245,6 +256,12 @@ describe("ChatRequest", () => {
       { ...turn, conversation_id: "c1" },
     ],
     ["no results", results()],
+    ["a reply with no id", replied({ text: "Skip for now" })],
+    ["a blank reply", replied({ message_id: "u_9Xc4Vb2N", text: "  " })],
+    [
+      "a reply over the goal cap",
+      replied({ message_id: "u_9Xc4Vb2N", text: "a".repeat(GOAL_MAX + 1) }),
+    ],
     ["a call id with a space", results(answer("call abc"))],
     ["a call id over 128 characters", results(answer("c".repeat(129)))],
     ["a blank reason", results(approval({ reason: "   " }))],
@@ -324,6 +341,21 @@ describe("the onboarding cards", () => {
         ],
       },
     ],
+    [
+      "a long list shown a few at a time, with a colour picker",
+      {
+        ...choice,
+        options: PALETTES.map((p) => ({
+          id: p.id,
+          label: p.label,
+          hint: p.hint,
+          visual: { kind: "swatches", colors: p.swatches },
+        })),
+        initial: PALETTES.slice(2, 6).map((p) => p.id),
+        other: { label: "Your own colour", placeholder: "Describe it" },
+        color: true,
+      },
+    ],
   ])("accepts %s", (_name, input) => {
     expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(ACCEPTED)
   })
@@ -348,6 +380,28 @@ describe("the onboarding cards", () => {
     ],
   ])("refuses %s", (_name, input) => {
     expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual(REFUSED)
+  })
+
+  // JSON Schema cannot check one field against another, so only Zod holds these.
+  it.each([
+    [
+      "an initial id it does not offer",
+      { ...choice, initial: ["friendly", "casual", "gone"] },
+    ],
+    ["a colour picker with no Other", { ...choice, color: true }],
+  ])("refuses %s in Zod", (_name, input) => {
+    expect(verdict("AskChoiceInput", AskChoiceInput, input)).toEqual({
+      zod: false,
+      json: true,
+    })
+  })
+
+  it("refuses fewer than three or more than four shown first", () => {
+    for (const initial of [["friendly"], ["a", "b", "c", "d", "e"]]) {
+      expect(
+        verdict("AskChoiceInput", AskChoiceInput, { ...choice, initial })
+      ).toEqual(REFUSED)
+    }
   })
 
   it.each([
@@ -398,5 +452,90 @@ describe("the onboarding cards", () => {
         ACCEPTED
       )
     }
+  })
+})
+
+describe("the quote form review", () => {
+  const field = (over: object) => ({
+    key: "rooms",
+    label: "Rooms",
+    type: "number",
+    required: true,
+    hint: null,
+    options: null,
+    ...over,
+  })
+  const two = [field({}), field({ key: "access", label: "Access" })]
+
+  it("takes the sample proposal and a confirmed or changed answer", () => {
+    expect(
+      verdict(
+        "ReviewQuoteFormInput",
+        ReviewQuoteFormInput,
+        samples.ReviewQuoteFormInput
+      )
+    ).toEqual(ACCEPTED)
+    expect(
+      verdict(
+        "ReviewQuoteFormOutput",
+        ReviewQuoteFormOutput,
+        samples.ReviewQuoteFormOutput
+      )
+    ).toEqual(ACCEPTED)
+    expect(
+      verdict("ReviewQuoteFormOutput", ReviewQuoteFormOutput, {
+        answer: "changes",
+        text: "Ask for the floor too",
+      })
+    ).toEqual(ACCEPTED)
+  })
+
+  // Only the published JSON Schema cannot say these two rules (a select has
+  // options and a text has none; keys are unique), so Zod alone is asked.
+  it.each([
+    ["one question", [field({})]],
+    [
+      "nine questions",
+      Array.from({ length: 9 }, (_, i) => field({ key: `q${i}x` })),
+    ],
+    ["a key with capitals", [field({ key: "Rooms" }), field({ key: "other" })]],
+    ["an unknown type", [field({ type: "file" }), field({ key: "b_b" })]],
+  ])("refuses %s", (_name, fields) => {
+    expect(
+      verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
+        fields,
+        note: null,
+      })
+    ).toEqual(REFUSED)
+  })
+
+  it.each([
+    ["a repeated key", [field({}), field({})]],
+    [
+      "a select with no options",
+      [field({ type: "select" }), field({ key: "b_b" })],
+    ],
+    [
+      "options on a text",
+      [field({ options: ["a", "b"] }), field({ key: "b_b" })],
+    ],
+  ])("refuses %s in Zod", (_name, fields) => {
+    expect(ReviewQuoteFormInput.safeParse({ fields, note: null }).success).toBe(
+      false
+    )
+  })
+
+  it("accepts a select with its options", () => {
+    const select = field({
+      key: "frequency",
+      type: "select",
+      options: ["Weekly", "One-off"],
+    })
+    expect(
+      verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
+        fields: [select, ...two],
+        note: null,
+      })
+    ).toEqual(ACCEPTED)
   })
 })

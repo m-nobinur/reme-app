@@ -290,4 +290,15 @@ export type OwnerDataSource = {
    * passed back whole. Null when there is no session.
    */
   chat: (body: string) => Promise<Response | null>
+  /**
+   * The owner's photos, the multipart body streamed through as the browser
+   * sent it, answered as `apps/api`'s `POST /assets` answers. Null when
+   * there is no session.
+   */
+  assets: (upload: {
+    body: ReadableStream<Uint8Array>
+    type: string
+    length: number
+    key: string
+  }) => Promise<Response | null>
 }

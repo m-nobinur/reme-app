@@ -52,9 +52,9 @@ const url = process.env.DATABASE_URL
 const REQUIRED = [
   "business.phone",
   "business.email",
-  "hours.weekday",
-  "service_area.radius",
-  "pricing.standard_clean_hourly",
+  "business.industry",
+  "business.offerings",
+  "service_area.text",
 ]
 
 const json = (body: unknown, key = crypto.randomUUID()) => ({

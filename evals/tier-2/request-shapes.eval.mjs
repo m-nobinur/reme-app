@@ -37,7 +37,7 @@ const TIMEOUT_MS = 15 * 60 * 1000
 /** The most one run may spend, every shape together. */
 const SPEND_CAP_USD = 1.5
 /** The fact the hide and show-again shapes are about. */
-const PRICE_KEY = "pricing.standard_clean_hourly"
+const HOURS_KEY = "hours.weekday"
 /** The two section headings the reorder shape moves past each other. */
 const FAQ_HEADING = "Common questions"
 const SERVICES_HEADING = "What we do"
@@ -70,13 +70,12 @@ async function call(method, path, org, body) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const SYMBOL = { USD: "$", GBP: "£", EUR: "€" }
-/** The price as the starter renders it, from the fact rather than from a literal. */
-function priceText(facts) {
-  const value = facts.find((f) => f.key === PRICE_KEY)?.value ?? {}
-  const symbol = SYMBOL[String(value.currency).toUpperCase()]
-  if (!symbol || typeof value.amount_minor !== "number") return null
-  return `${symbol}${(value.amount_minor / 100).toFixed(2)}`
+/** The hours as the starter renders them, from the fact rather than from a literal. */
+function hoursText(facts) {
+  const value = facts.find((f) => f.key === HOURS_KEY)?.value ?? {}
+  if (typeof value.open !== "string" || typeof value.close !== "string")
+    return null
+  return `${value.open} to ${value.close}`
 }
 
 /** Every stylesheet the page links, as one string. */
@@ -169,18 +168,15 @@ const failedGates = (gates) =>
 const SHAPES = [
   {
     name: "hide",
-    hide: [PRICE_KEY],
-    request: "Remove all pricing.",
-    check: ({ state, html, price }) => {
+    hide: [HOURS_KEY],
+    request: "Take the opening hours off the site.",
+    check: ({ state, html, hours }) => {
       if (state !== "preview_ready") throw new Error(`settled in ${state}`)
-      const text = visibleText(html)
-      if (price && text.includes(price))
-        throw new Error(`the preview still shows ${price}`)
-      if (/[$£€]\s?\d/.test(text))
-        throw new Error("the preview still shows a price")
+      if (hours && visibleText(html).includes(hours))
+        throw new Error(`the preview still shows ${hours}`)
       // The structured data is inside a script, so this one reads the source.
-      if (/"(priceRange|offers)"/.test(html))
-        throw new Error("the structured data still carries a price")
+      if (/"openingHours"/.test(html))
+        throw new Error("the structured data still carries the hours")
     },
   },
   {
@@ -232,14 +228,14 @@ const SHAPES = [
   {
     name: "show-again",
     hide: [],
-    request: "Show the price again.",
-    check: ({ state, html, price, gates }) => {
+    request: "Show the opening hours again.",
+    check: ({ state, html, hours, gates }) => {
       if (state !== "preview_ready") throw new Error(`settled in ${state}`)
-      if (!price) throw new Error(`the org holds no ${PRICE_KEY} fact`)
-      if (!html.includes(price))
-        throw new Error(`the preview does not show ${price}`)
+      if (!hours) throw new Error(`the org holds no ${HOURS_KEY} fact`)
+      if (!html.includes(hours))
+        throw new Error(`the preview does not show ${hours}`)
       if (failedGates(gates)) throw new Error(failedGates(gates))
-      return price
+      return hours
     },
   },
   {
@@ -351,7 +347,7 @@ export default async function requestShapes() {
   const { facts } = await call("GET", "/assignments/facts", ORG)
   const context = {
     baseline: await fetchPublished(site.host),
-    price: priceText(facts),
+    hours: hoursText(facts),
   }
 
   const rows = []

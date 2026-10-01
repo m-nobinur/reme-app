@@ -6,6 +6,8 @@ constraints:
   - The Base layout renders it on every page.
   - Navigation and the action come from src/routes.ts, so a link shows only when
     its page exists and its label field is set.
+  - The owner's logo (site.logo with site.logoAlt) replaces the business name at
+    a fixed height; with no logo the name shows as text.
 examples:
   - "<SiteHeader />"
 forbidden:

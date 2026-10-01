@@ -24,11 +24,14 @@ export type Built = { dir: string; dist: string }
  * Builds a throwaway copy of the site: the same files the orchestrator seeds
  * (astro.config.mjs, tsconfig.json, src/), with node_modules linked rather
  * than installed, the way the sandbox does it. `site` replaces the config's
- * values, `pages` plants page files and `remove` deletes them.
+ * values, `quoteForm` replaces src/quote-form.json the way the seed writes
+ * it from the owner's fact, `pages` plants page files and `remove` deletes
+ * them.
  */
 export async function build(
   options: {
     site?: Record<string, string>
+    quoteForm?: unknown
     pages?: Record<string, string>
     remove?: string[]
   } = {}
@@ -43,6 +46,12 @@ export async function build(
       join(dir, "src/site-config.ts"),
       `export const site = ${JSON.stringify(options.site, null, 2)}\n\n` +
         `export const fields = ${JSON.stringify(fields, null, 2)}\n`
+    )
+  }
+  if (options.quoteForm !== undefined) {
+    writeFileSync(
+      join(dir, "src/quote-form.json"),
+      JSON.stringify(options.quoteForm, null, 2)
     )
   }
   for (const [name, source] of Object.entries(options.pages ?? {})) {
@@ -69,6 +78,8 @@ export async function build(
     child.on("close", (code) => resolve({ code, output }))
   })
   if (result.code !== 0) {
+    // A build expected to fail runs every time, so it leaves nothing behind.
+    rmSync(dir, { recursive: true, force: true })
     throw new Error(`astro build failed in ${dir}\n${result.output}`)
   }
   return { dir, dist: join(dir, "dist") }

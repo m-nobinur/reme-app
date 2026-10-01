@@ -5,9 +5,24 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
-import { TOOL_CALL_CANCELLED } from "@workspace/contracts"
+import {
+  type AskChoiceInput,
+  FONTS,
+  INDUSTRIES,
+  PALETTES,
+  PRONOUNS,
+  TEMPLATES,
+  TONES,
+  TOOL_CALL_CANCELLED,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
+  UPLOAD_TYPES,
+} from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
+import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
@@ -70,7 +85,7 @@ const COS_TOOLS_FIXTURE = {
   zone: "Europe/London",
   question: (requestId: string) =>
     requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
-      ? "Hourly price for a standard clean"
+      ? "Service area"
       : null,
 }
 
@@ -281,21 +296,55 @@ const stated = (key: string, value: object) => ({
   result: { answer: "stated", fact: { key, value } },
 })
 
+const question = (text: string) => ({ text, type: "text" as const })
+
+/** The owner's reply to a card, as the app sends it once they answer. */
+const reply = (text: string): ThreadMessageLike => ({
+  content: [{ text, type: "text" }],
+  role: "user",
+})
+
+/**
+ * One step a card asked and the owner answered: the question, the card,
+ * which shows nothing once answered, and the owner's reply.
+ */
+const answeredStep = (
+  asked: string,
+  card: Exclude<ThreadMessageLike["content"], string>[number],
+  said: string
+): ThreadMessageLike[] => [
+  {
+    content: [question(asked), card],
+    role: "assistant",
+    status: DONE,
+  },
+  reply(said),
+]
+
 const ASK_FACT_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "What is your business called?",
+    askFact("business.name", stated("business.name", { name: "Brightclean" })),
+    "Brightclean"
+  ),
+  ...answeredStep(
+    "What number should customers ring?",
+    askFact(
+      "business.phone",
+      stated("business.phone", { e164: "+447700900123" })
+    ),
+    "+447700900123"
+  ),
+  ...answeredStep(
+    "How would you sum up Brightclean in one line?",
+    askFact("business.tagline", {
+      result: { answer: "skipped" },
+      skippable: true,
+    }),
+    "Skip for now"
+  ),
   {
     content: [
-      askFact(
-        "business.name",
-        stated("business.name", { name: "Brightclean" })
-      ),
-      askFact(
-        "business.phone",
-        stated("business.phone", { e164: "+447700900123" })
-      ),
-      askFact("pricing.standard_clean_hourly", {
-        result: { answer: "skipped" },
-        skippable: true,
-      }),
       askFact("hours.weekday", {
         isError: true,
         result: { error: TOOL_CALL_CANCELLED },
@@ -316,11 +365,384 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
     status: WAITING,
   },
   {
-    content: [askFact("pricing.standard_clean_hourly", { skippable: true })],
+    content: [askFact("business.tagline", { skippable: true })],
     role: "assistant",
     status: WAITING,
   },
 ]
+
+type Choice = {
+  id: string
+  label: string
+  hint?: string
+  visual?: { kind: string; colors?: string[]; family?: string; id?: string }
+}
+
+/** An `ask_choice` call in one of its states, from a contract preset list. */
+const askChoice = (
+  step: string,
+  options: readonly Choice[],
+  extra: {
+    result?: unknown
+    isError?: boolean
+    multiple?: boolean
+    preselected?: string[]
+    other?: { label: string; placeholder: string } | null
+    skippable?: boolean
+    initial?: string[]
+    color?: boolean
+  } = {}
+) => ({
+  args: {
+    step,
+    options: options.map((each) => ({
+      id: each.id,
+      label: each.label,
+      hint: each.hint ?? null,
+      visual: each.visual ?? null,
+    })),
+    multiple: extra.multiple ?? false,
+    preselected: extra.preselected ?? [],
+    other: extra.other ?? null,
+    skippable: extra.skippable ?? false,
+    ...(extra.initial ? { initial: extra.initial } : {}),
+    ...(extra.color ? { color: true } : {}),
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `choice_${step}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_choice",
+  type: "tool-call" as const,
+})
+
+const chosen = (ids: string[], other: string | null = null) => ({
+  result: { answer: "chosen", ids, other },
+})
+
+const PALETTE_OPTIONS = PALETTES.map((each) => ({
+  ...each,
+  visual: { kind: "swatches", colors: [...each.swatches] },
+}))
+/** The colour card as the api sends it: the whole pool, four first, a picker behind Other. */
+const COLOUR_CARD = {
+  other: {
+    label: "Your own colour",
+    placeholder: "A colour code, or describe your colours",
+  },
+  initial: ["ocean", "lagoon", "sunset", "damson"],
+  color: true,
+}
+const FONT_OPTIONS = FONTS.map((each) => ({
+  ...each,
+  visual: { kind: "font", family: each.family },
+}))
+const TEMPLATE_OPTIONS = TEMPLATES.map((each) => ({
+  ...each,
+  visual: { kind: "template", id: each.id },
+}))
+
+/** The colour card on its own, in each state the owner can put it in. */
+const COLOUR_INPUT: AskChoiceInput = {
+  step: "palette",
+  options: PALETTES.map((each) => ({
+    id: each.id,
+    label: each.label,
+    hint: each.hint ?? null,
+    visual: { kind: "swatches", colors: each.swatches },
+  })),
+  multiple: false,
+  preselected: [],
+  skippable: false,
+  ...COLOUR_CARD,
+}
+const brandOf = (id: string) =>
+  PALETTES.find((each) => each.id === id)?.brand ?? ""
+const COLOUR_STATES: [string, Parameters<typeof ChoiceForm>[0]["start"]][] = [
+  ["Four first", undefined],
+  [
+    "After Show other colours",
+    { shown: ["harbour", "sage", "cardinal", "graphite"] },
+  ],
+  ["Own colour, picked", { other: brandOf("harbour") }],
+  [
+    "Own colour, too light for white text",
+    {
+      other:
+        PALETTES.find((each) => each.id === "sunset")?.swatches[1] ??
+        brandOf("sunset"),
+    },
+  ],
+  ["Own colour, in words", { other: "Navy and gold, like our vans" }],
+]
+
+const ASK_CHOICE_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Which pronouns should Sam use?",
+    askChoice("pronouns", PRONOUNS, chosen(["they_them"])),
+    "they/them"
+  ),
+  ...answeredStep(
+    "Which colours feel like Brightclean?",
+    askChoice("palette", PALETTE_OPTIONS, chosen([], "Navy and gold")),
+    "Navy and gold"
+  ),
+  ...answeredStep(
+    "And the type?",
+    askChoice("font", FONT_OPTIONS, {
+      result: { answer: "skipped" },
+      skippable: true,
+    }),
+    "Skip for now"
+  ),
+  {
+    content: [
+      askChoice("tone", TONES, {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      askChoice("pages", TONES, { isError: true, result: { error: BROKEN } }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      question("What kind of business is Brightclean?"),
+      askChoice("industry", INDUSTRIES.slice(0, 6), {
+        other: { label: "Something else", placeholder: "Your industry" },
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("How should Sam sound when talking to your customers?"),
+      askChoice("tone", TONES, { preselected: ["friendly"] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Which colours feel like Brightclean?"),
+      askChoice("palette", PALETTE_OPTIONS, COLOUR_CARD),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("And the type?"),
+      askChoice("font", FONT_OPTIONS, { skippable: true }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Which layout suits you best?"),
+      askChoice("template", TEMPLATE_OPTIONS, { preselected: ["modern"] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** An `ask_upload` call in one of its states. */
+const askUpload = (
+  label: string,
+  extra: { result?: unknown; isError?: boolean } = {}
+) => ({
+  args: {
+    accept: [...UPLOAD_TYPES],
+    max_files: UPLOAD_MAX_FILES,
+    max_bytes: UPLOAD_MAX_BYTES,
+    skippable: true,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `upload_${label}`,
+  toolName: "ask_upload",
+  type: "tool-call" as const,
+})
+
+const PHOTO = {
+  id: "0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+  name: "kitchen.jpg",
+  content_type: "image/jpeg" as const,
+  bytes: 812_000,
+}
+
+const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Do you have a photo of your van?",
+    askUpload("one", {
+      result: { answer: "uploaded", assets: [PHOTO] },
+    }),
+    "Uploaded kitchen.jpg"
+  ),
+  ...answeredStep(
+    "Any photos of a room after a clean?",
+    askUpload("two", {
+      result: {
+        answer: "uploaded",
+        assets: [
+          PHOTO,
+          { ...PHOTO, id: "1b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+        ],
+      },
+    }),
+    "Uploaded 2 photos"
+  ),
+  ...answeredStep(
+    "And one of your team at work?",
+    askUpload("skipped", { result: { answer: "skipped" } }),
+    "Skip for now"
+  ),
+  {
+    content: [
+      askUpload("cancelled", {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      question(
+        "Do you have photos of a kitchen or bathroom after a clean? Real rooms help visitors picture the result."
+      ),
+      askUpload("open"),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** A question a chauffeur firm's quote form might ask. */
+const quoteField = (
+  key: string,
+  label: string,
+  type: string,
+  extra: { required?: boolean; hint?: string; options?: string[] } = {}
+) => ({
+  key,
+  label,
+  type,
+  required: extra.required ?? true,
+  hint: extra.hint ?? null,
+  options: extra.options ?? null,
+})
+
+const LIMOUSINE_QUESTIONS = [
+  quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
+  quoteField("dropoff", "Drop-off address", "text"),
+  quoteField("journey_date", "Date of the journey", "date"),
+  quoteField("passengers", "Passengers", "number"),
+  quoteField("occasion", "Occasion", "select", {
+    required: false,
+    options: ["Wedding", "Airport transfer", "Night out", "Business"],
+  }),
+  quoteField("notes", "Anything else", "textarea", { required: false }),
+]
+
+/** A `review_quote_form` call in one of its states. */
+const reviewQuote = (
+  label: string,
+  fields: ReturnType<typeof quoteField>[],
+  extra: { result?: unknown; isError?: boolean; note?: string | null } = {}
+) => ({
+  args: {
+    fields,
+    note:
+      extra.note === undefined
+        ? "To quote a ride you need the route, the date and how many are travelling."
+        : extra.note,
+  },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `quote_${label}`,
+  toolName: "review_quote_form",
+  type: "tool-call" as const,
+})
+
+const PROPOSED =
+  "Here is what I would ask someone who wants a quote. Change anything that does not fit."
+
+const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    PROPOSED,
+    reviewQuote("confirmed", LIMOUSINE_QUESTIONS, {
+      result: {
+        answer: "confirmed",
+        fields: LIMOUSINE_QUESTIONS.slice(0, 4),
+      },
+    }),
+    "Your quote form asks 4 questions: Pick-up address, Drop-off address, Date of the journey, Passengers."
+  ),
+  ...answeredStep(
+    PROPOSED,
+    reviewQuote("changes", LIMOUSINE_QUESTIONS, {
+      result: {
+        answer: "changes",
+        text: "Ask about luggage too, and drop the occasion.",
+      },
+    }),
+    "Ask about luggage too, and drop the occasion."
+  ),
+  {
+    content: [
+      reviewQuote("cancelled", LIMOUSINE_QUESTIONS, {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      reviewQuote("error", LIMOUSINE_QUESTIONS, {
+        isError: true,
+        result: { error: BROKEN },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [question(PROPOSED), reviewQuote("open", LIMOUSINE_QUESTIONS)],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Two questions is the least a quote form can ask."),
+      reviewQuote(
+        "minimum",
+        [
+          quoteField("rooms", "How many rooms", "number"),
+          quoteField("access", "How we get in", "textarea", {
+            required: false,
+            hint: "A key safe, a neighbour or someone at home",
+          }),
+        ],
+        { note: null }
+      ),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** Stands in for the web's upload: a moment's wait, then the one photo stored. */
+const fakeUpload = async (files: File[]) => {
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  return {
+    assets: files.map((file, index) => ({
+      ...PHOTO,
+      id: `0b6c1e5d-8d2a-4f3b-9c4d-2e1a7b6c5d${String(index).padStart(2, "0")}`,
+      name: file.name,
+    })),
+  }
+}
 
 const ONBOARDING_GOAL = "Build my website from the details I gave you."
 const BUILD_AT = "2026-09-27T10:00:00.000Z"
@@ -540,8 +962,8 @@ const WORKSPACE_READ = {
   questions: [
     {
       request_id: "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c",
-      field: "pricing.standard_clean_hourly",
-      why: "The prices page needs an hourly rate.",
+      field: "service_area.radius",
+      why: "The areas page needs how far you travel.",
       options: null,
       blocking: true,
     },
@@ -696,26 +1118,47 @@ const RATED: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
-  ask("And the prices page?"),
+  ask("And the services page?"),
   {
-    content: [{ text: "It shows the hourly rate you gave.", type: "text" }],
+    content: [{ text: "It lists the services you gave.", type: "text" }],
     role: "assistant",
     status: DONE,
   },
 ]
 
 /** A new owner's onboarding, two answers in and waiting on the third. */
+/**
+ * Onboarding as the app stores it: every step a message of its own, with
+ * its own time and thumbs, and every answer the owner's reply.
+ */
 const ONBOARDING: ThreadMessageLike[] = [
   on("27T09:00:00.000", {
     content: [
+      question("Hi Sam, I'm Reme. What is your business called?"),
       askFact(
         "business.name",
         stated("business.name", { name: "Brightclean" })
       ),
+    ],
+    role: "assistant",
+    status: DONE,
+  }),
+  on("27T09:00:40.000", reply("Brightclean")),
+  on("27T09:00:41.000", {
+    content: [
+      question("Brightclean, got it. What number should customers ring?"),
       askFact(
         "business.phone",
         stated("business.phone", { e164: "+447700900123" })
       ),
+    ],
+    role: "assistant",
+    status: DONE,
+  }),
+  on("27T09:02:10.000", reply("+447700900123")),
+  on("27T09:02:11.000", {
+    content: [
+      question("Thanks. What are your hours on weekdays?"),
       askFact("hours.weekday", {}),
     ],
     role: "assistant",
@@ -1028,6 +1471,100 @@ const assistantCatalog = [
     name: "AskFact",
     render: () => (
       <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+    ),
+  },
+  {
+    name: "AskChoice",
+    render: () => (
+      <FixtureThread height="h-[150rem]" messages={ASK_CHOICE_STATES} />
+    ),
+  },
+  {
+    name: "ChoiceForm",
+    render: () => (
+      <div className="flex max-w-2xl flex-col gap-8">
+        {COLOUR_STATES.map(([title, start]) => (
+          <section className="flex flex-col gap-3" key={title}>
+            <h3 className="font-medium text-muted-foreground text-xs">
+              {title}
+            </h3>
+            <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+          </section>
+        ))}
+      </div>
+    ),
+  },
+  {
+    name: "ReviewQuoteForm",
+    render: () => (
+      <FixtureThread height="h-[150rem]" messages={REVIEW_QUOTE_STATES} />
+    ),
+  },
+  // The upload card and the provider that gives it the app's upload.
+  ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
+    name,
+    render: () => (
+      <UploadPhotosProvider value={fakeUpload}>
+        <FixtureThread height="h-[60rem]" messages={ASK_UPLOAD_STATES} />
+      </UploadPhotosProvider>
+    ),
+  })),
+  // At the end of an open thread, then its other states on their own:
+  // approving, refused and approved.
+  {
+    name: "SiteReady",
+    render: () => (
+      <div className="flex flex-col gap-6">
+        <FixtureThread
+          height="h-[30rem]"
+          messages={[
+            ask("Can you add a line about pets?"),
+            {
+              content: [
+                {
+                  text: "Noted. I will add it once the first version is ready.",
+                  type: "text",
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+          ]}
+          settings={{
+            after: (
+              <SiteReady
+                onApprove={noop}
+                onMakeChanges={noop}
+                onSeePreview={noop}
+                version={1}
+              />
+            ),
+          }}
+        />
+        <div className="flex max-w-xl flex-col gap-6">
+          <SiteReady
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            pending
+            version={2}
+          />
+          <SiteReady
+            error="A newer version replaced that one. Check the latest before you decide."
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={2}
+          />
+          <SiteReady
+            approved
+            onApprove={noop}
+            onMakeChanges={noop}
+            onSeePreview={noop}
+            version={3}
+          />
+        </div>
+      </div>
     ),
   },
   {

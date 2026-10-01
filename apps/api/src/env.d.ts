@@ -18,4 +18,6 @@ interface Env {
   OPENROUTER_API_KEY?: string
   /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */
   COS_MODEL?: string
+  /** The onboarding planner's model id, when not `DEFAULT_ONBOARDING_MODEL`. Same table. */
+  ONBOARDING_MODEL?: string
 }
