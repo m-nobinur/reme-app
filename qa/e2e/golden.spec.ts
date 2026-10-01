@@ -206,9 +206,9 @@ async function answer(page: Page, item: Locator) {
  * first, and approves it.
  */
 /**
- * Approves the version waiting for review and returns its number. A build
- * whose first report a gate refused reports again, and each report takes
- * the site's next number (ADR-031), so the first version may not be v1.
+ * Approves the version waiting for review and returns its number. Only a
+ * report that passes the gates takes the site's next number (ADR-031), so the
+ * first version is v1 even when a gate refused the build's first report.
  */
 async function approveVersion(page: Page): Promise<number> {
   const approve = panel(page).getByRole("button", {
@@ -376,6 +376,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   let second = 0
   await step("v1 approved, live with the quote action", async () => {
     first = await approveVersion(page)
+    expect(first).toBe(1)
     const workspace = await readJson<Workspace>("/workspace")
     expect(workspace.site.live?.version).toBe(first)
     host = workspace.site.host ?? ""
@@ -436,7 +437,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       panel(page).getByRole("heading", { name: "Working on" })
     ).toBeVisible()
     second = await approveVersion(page)
-    expect(second).toBeGreaterThan(first)
+    expect(second).toBe(first + 1)
     await expectLive(page, host, [HERO])
     await expectQuote(page, host)
   })

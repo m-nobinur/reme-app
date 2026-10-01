@@ -20,6 +20,7 @@ import {
   toFactRecord,
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
+import { lockSite } from "./publish.ts"
 import { type Ids, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
@@ -221,13 +222,20 @@ export async function validateRevision(
       revision_id: input.revision_id,
     }
     // Every revision carries the Developer's own summary from here on, the
-    // ones that never publish included (ADR-031); a pass also makes it the
-    // preview.
+    // ones that never publish included (ADR-031). A pass also makes it the
+    // preview and gives it the site's next number, under the site's lock, so
+    // the versions the owner sees count only what passed and have no gaps.
+    if (failed.length === 0) await lockSite(db, revision.siteId)
     await db
       .update(siteRevisions)
       .set({
         summary: summaryOf(report),
-        ...(failed.length === 0 ? { status: "preview" as const } : {}),
+        ...(failed.length === 0
+          ? {
+              status: "preview" as const,
+              version: sql`(select coalesce(max(${siteRevisions.version}), 0) + 1 from ${siteRevisions} where ${siteRevisions.siteId} = ${revision.siteId})`,
+            }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(siteRevisions.id, input.revision_id))

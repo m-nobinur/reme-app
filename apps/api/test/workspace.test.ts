@@ -187,6 +187,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       31 * 24
     )
     const parked = await s.assignment("paused")
+    // Refused by the gates before the budget ran out: no number, so no ref.
+    await s.revision(parked, null)
     const budget = await s.event(parked, "budget.exhausted", {
       cap_usd: 5,
       spent_usd: 5,

@@ -44,9 +44,13 @@ const GOOD = page(
   "<p>$35 an hour</p><p>Weekdays 08:00 to 17:00</p><p>Call +15550142</p>"
 )
 
-/** An org, briefed and built, waiting in `validating` with one revision in a fake R2. */
-async function built(html: string, withhold: string[] = []) {
-  const orgId = await freshOrg(kit)
+/**
+ * An org, briefed and built, waiting in `validating` with one revision in a
+ * fake R2. `report` writes another revision and its report on the same build;
+ * passing `org` builds again on an existing org.
+ */
+async function built(html: string, withhold: string[] = [], org?: string) {
+  const orgId = org ?? (await freshOrg(kit))
   const ids = await newAssignment(kit, orgId)
   const objects = new Map<string, Uint8Array>()
   const sites = {
@@ -80,63 +84,67 @@ async function built(html: string, withhold: string[] = []) {
   ] as const) {
     await advance(kit, ids, to)
   }
-  const revisionId = crypto.randomUUID()
-  const prefix = `sites/${orgId}/${revisionId}/`
-  const body = new TextEncoder().encode(html)
-  objects.set(`${prefix}dist/index.html`, body)
-  objects.set(
-    `${prefix}manifest.json`,
-    new TextEncoder().encode(
-      JSON.stringify({
-        revision_id: revisionId,
-        site_id: orgId,
-        org_id: orgId,
-        routes: [{ path: "/", file: "index.html" }],
-        headers: {},
-        files: {
-          "index.html": createHash("sha256").update(body).digest("hex"),
-        },
-        built_at: new Date().toISOString(),
-      })
+  const report = async (served: string) => {
+    const revisionId = crypto.randomUUID()
+    const prefix = `sites/${orgId}/${revisionId}/`
+    const body = new TextEncoder().encode(served)
+    objects.set(`${prefix}dist/index.html`, body)
+    objects.set(
+      `${prefix}manifest.json`,
+      new TextEncoder().encode(
+        JSON.stringify({
+          revision_id: revisionId,
+          site_id: orgId,
+          org_id: orgId,
+          routes: [{ path: "/", file: "index.html" }],
+          headers: {},
+          files: {
+            "index.html": createHash("sha256").update(body).digest("hex"),
+          },
+          built_at: new Date().toISOString(),
+        })
+      )
     )
-  )
-  const reportId = crypto.randomUUID()
-  await kit.withOrg({ orgId }, async (db) => {
-    await db.insert(siteRevisions).values({
-      id: revisionId,
-      orgId,
-      siteId: orgId,
-      assignmentId: ids.assignmentId,
-      version: 1,
-      sourceKey: `${prefix}source.tar.zst`,
-      artifactPrefix: `${prefix}dist/`,
-      manifestKey: `${prefix}manifest.json`,
+    const reportId = crypto.randomUUID()
+    await kit.withOrg({ orgId }, async (db) => {
+      await db.insert(siteRevisions).values({
+        id: revisionId,
+        orgId,
+        siteId: orgId,
+        assignmentId: ids.assignmentId,
+        sourceKey: `${prefix}source.tar.zst`,
+        artifactPrefix: `${prefix}dist/`,
+        manifestKey: `${prefix}manifest.json`,
+      })
+      await appendEvent(db, {
+        orgId,
+        assignmentId: ids.assignmentId,
+        staffId: null,
+        type: "assignment.completion_reported",
+        payload: CompletionReport.parse({
+          report_id: reportId,
+          org_id: orgId,
+          assignment_id: ids.assignmentId,
+          session_id: crypto.randomUUID(),
+          revision_id: revisionId,
+          summary: "Built the site",
+          changes: [
+            { path: "src/site-config.ts", reason: "Filled from facts" },
+          ],
+          screenshots: [],
+          checks: [
+            { check: "astro check", exit_code: 0, output_key: null },
+            { check: "astro build", exit_code: 0, output_key: null },
+          ],
+          risks: [],
+          decisions_needed: [],
+          reported_at: new Date().toISOString(),
+        }),
+      })
     })
-    await appendEvent(db, {
-      orgId,
-      assignmentId: ids.assignmentId,
-      staffId: null,
-      type: "assignment.completion_reported",
-      payload: CompletionReport.parse({
-        report_id: reportId,
-        org_id: orgId,
-        assignment_id: ids.assignmentId,
-        session_id: crypto.randomUUID(),
-        revision_id: revisionId,
-        summary: "Built the site",
-        changes: [{ path: "src/site-config.ts", reason: "Filled from facts" }],
-        screenshots: [],
-        checks: [
-          { check: "astro check", exit_code: 0, output_key: null },
-          { check: "astro build", exit_code: 0, output_key: null },
-        ],
-        risks: [],
-        decisions_needed: [],
-        reported_at: new Date().toISOString(),
-      }),
-    })
-  })
-  const input = { report_id: reportId, revision_id: revisionId }
+    return { input: { report_id: reportId, revision_id: revisionId }, prefix }
+  }
+  const { input, prefix } = await report(html)
   const state = async () =>
     kit.withOrg({ orgId }, async (db) => {
       const [row] = await db
@@ -145,7 +153,7 @@ async function built(html: string, withhold: string[] = []) {
         .where(eq(assignments.id, ids.assignmentId))
       return row?.state
     })
-  return { orgId, ids, sites, objects, input, prefix, factIds, state }
+  return { orgId, ids, sites, objects, input, prefix, factIds, state, report }
 }
 
 live("the gates step", () => {
@@ -232,6 +240,42 @@ live("the gates step", () => {
     if (verdict.outcome !== "repairing") throw new Error("unreachable")
     expect(verdict.failed.map((g) => g.gate)).toEqual(["content"])
     expect(verdict.failed[0]?.offending_node).toContain("html>body>main>p")
+  })
+
+  it("numbers a revision only when it passes, so the owner's first version is v1", async () => {
+    const b = await built(page("<p>$49 an hour</p>"))
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, b.input, SUFFIX)).outcome
+    ).toBe("repairing")
+    await advance(kit, b.ids, "validating")
+    const fixed = await b.report(GOOD)
+    expect(
+      (await validateRevision(kit, b.sites, b.ids, fixed.input, SUFFIX)).outcome
+    ).toBe("preview_ready")
+    // A site has one writer, so the first build ends before the next starts.
+    await advance(kit, b.ids, "cancelled")
+    const later = await built(GOOD, [], b.orgId)
+    expect(
+      (await validateRevision(kit, later.sites, later.ids, later.input, SUFFIX))
+        .outcome
+    ).toBe("preview_ready")
+    const rows = await kit.withOrg({ orgId: b.orgId }, (db) =>
+      db
+        .select({
+          id: siteRevisions.id,
+          version: siteRevisions.version,
+          summary: siteRevisions.summary,
+        })
+        .from(siteRevisions)
+        .orderBy(siteRevisions.createdAt)
+    )
+    expect(rows.map((r) => [r.id, r.version])).toEqual([
+      [b.input.revision_id, null],
+      [fixed.input.revision_id, 1],
+      [later.input.revision_id, 2],
+    ])
+    // The refused attempt stays on record with its summary, just unnumbered.
+    expect(rows[0]?.summary).toBe("Filled from facts")
   })
 
   it("ends a fourth failure in failed", async () => {

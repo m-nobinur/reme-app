@@ -582,12 +582,7 @@ const reportComplete = (current: Session) =>
 
       const revisionId = await step.do("revision", async () =>
         current.kit.withOrg({ orgId }, async (db) => {
-          const [latest] = await db
-            .select({
-              max: sql<number>`coalesce(max(${siteRevisions.version}), 0)::int`,
-            })
-            .from(siteRevisions)
-            .where(sql`${siteRevisions.siteId} = ${orgId}`)
+          // No version yet: the gates step numbers the revision if it passes.
           const id = crypto.randomUUID()
           const prefix = `sites/${orgId}/${id}/`
           await db.insert(siteRevisions).values({
@@ -595,7 +590,6 @@ const reportComplete = (current: Session) =>
             orgId,
             siteId: orgId,
             assignmentId,
-            version: (latest?.max ?? 0) + 1,
             sourceKey: `${prefix}source.tar.zst`,
             artifactPrefix: `${prefix}dist/`,
             manifestKey: `${prefix}manifest.json`,

@@ -55,7 +55,9 @@ const iso = (at: Date) => at.toISOString()
 
 /**
  * Site builds that have not finished, newest first, each with its latest
- * revision. The panel caps the list; routing a change reads all of them.
+ * numbered revision: none until a report passes the gates, since a refused
+ * one never takes a version. The panel caps the list; routing a change reads
+ * all of them.
  */
 export async function readBuilds(
   db: OrgScopedDb,
@@ -71,7 +73,7 @@ export async function readBuilds(
       updatedAt: assignments.updatedAt,
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
-      revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id order by r.version desc limit 1)`,
+      revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
     })
     .from(assignments)
     .where(
@@ -101,12 +103,14 @@ export async function readApprovals(
   db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "approval" }>[]> {
   const rows = await db
-    .select({ row: approvals, version: siteRevisions.version })
+    // A review opens only on a revision that passed the gates, which is
+    // numbered by then; the filter says so to the type.
+    .select({ row: approvals, version: sql<number>`${siteRevisions.version}` })
     .from(approvals)
     .innerJoin(siteRevisions, eq(siteRevisions.id, approvals.revisionId))
     .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
     .where(
-      sql`${approvals.decision} is null and ((${assignments.state} = 'awaiting_review' and ${approvals.expiresAt} > now()) or ${assignments.state} = 'blocked_on_approval')`
+      sql`${approvals.decision} is null and ${siteRevisions.version} is not null and ((${assignments.state} = 'awaiting_review' and ${approvals.expiresAt} > now()) or ${assignments.state} = 'blocked_on_approval')`
     )
     .orderBy(approvals.expiresAt)
   return rows.map(({ row, version }) => ({

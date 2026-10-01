@@ -71,7 +71,7 @@ export async function latestRevision(db: OrgScopedDb, assignmentId: string) {
     .select()
     .from(siteRevisions)
     .where(eq(siteRevisions.assignmentId, assignmentId))
-    .orderBy(sql`${siteRevisions.version} desc`)
+    .orderBy(sql`${siteRevisions.createdAt} desc`)
     .limit(1)
   return row ?? null
 }
@@ -354,9 +354,10 @@ export async function activeDeployment(
 /**
  * Activations and the checks of what is live take one transaction lock per
  * site, so a check and the event it writes see one state: an activation
- * either committed before the check or waits until after its write.
+ * either committed before the check or waits until after its write. The gates
+ * step takes it too, so two passing revisions never read the same next version.
  */
-const lockSite = (db: OrgScopedDb, siteId: string) =>
+export const lockSite = (db: OrgScopedDb, siteId: string) =>
   db.execute(sql`select pg_advisory_xact_lock(hashtext(${siteId}))`)
 
 export type Activation = {
