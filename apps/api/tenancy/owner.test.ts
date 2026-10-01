@@ -391,7 +391,10 @@ describe("another org's conversation is 404 and never written to", () => {
     const theirId = onboarding?.id as string
     const before = await history(theirs, theirId)
     const tail = before.at(-1)
-    const call = tail?.content.parts[1] as { toolCallId: string }
+    // The card, wherever it sits: the opener's text comes before it.
+    const call = tail?.content.parts.find((p) =>
+      p.type.startsWith("tool-")
+    ) as unknown as { toolCallId: string }
     for (const turn of [
       { kind: "message", message_id: "u_cross", text: "Build it" },
       {
