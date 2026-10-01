@@ -19,6 +19,20 @@ const MessageId = ConversationMessage.shape.id
 const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
 
 /**
+ * The most an onboarding turn waits on its planner, every attempt included,
+ * before the script answers it instead (`apps/api`'s `PLANNER.totalMs`).
+ */
+export const PLANNER_TURN_MS = 30_000
+
+/**
+ * How long `POST /chat` may take to start answering, for the web's proxy to
+ * wait: the planner's turn, then the script's step and a build start (the
+ * orchestrator bridge's 10 s), and 5 s for the database on either side.
+ * Every other call keeps the web's ordinary bound.
+ */
+export const CHAT_TURN_MS = PLANNER_TURN_MS + 10_000 + 5_000
+
+/**
  * The error text of a call a typed message overtook: assistant-ui's own
  * words, stored by the api and read by the web, so a reload matches.
  */
