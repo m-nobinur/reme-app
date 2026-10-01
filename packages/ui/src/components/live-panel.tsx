@@ -814,20 +814,31 @@ function ApprovalItem({
 
 /* Coming up, your website, first steps -------------------------------- */
 
-/** What closes next, soonest first. Nothing renders when nothing is due. */
+/**
+ * Things with a time, in the order given: what closes or is due next under
+ * "Coming up", or what just happened under another title. Times are in
+ * `zone` once the reader's is known, UTC before. Nothing renders when the
+ * list is empty.
+ */
 function ComingUp({
   items,
+  title = "Coming up",
+  zone,
 }: {
   items: { id: string; text: string; at: string }[]
+  title?: string
+  zone?: string | null
 }) {
   if (items.length === 0) return null
   return (
-    <PanelSection title="Coming up">
+    <PanelSection title={title}>
       <ul className="flex flex-col divide-y divide-border">
         {items.map((item) => (
           <li className="flex flex-col py-2" key={item.id}>
-            <span className="text-sm">{item.text}</span>
-            <span className={META}>{formatDateTime(item.at)}</span>
+            <span className="wrap-break-word text-sm">{item.text}</span>
+            <span className={META}>
+              {formatDateTime(item.at, zone ?? undefined)}
+            </span>
           </li>
         ))}
       </ul>
@@ -1113,18 +1124,18 @@ function LiveLine({
  */
 function PanelBlank({
   steps,
-  description,
+  description = null,
   action = null,
 }: {
   steps: { label: string; done: boolean }[]
   /** What to do next, in the words of the steps below it. */
-  description: string
+  description?: string | null
   /** Where the next step is taken: a link, from the app. */
   action?: ReactNode
 }) {
   return (
     <PanelSection title="First steps">
-      <p className={META}>{description}</p>
+      {description ? <p className={META}>{description}</p> : null}
       <ul className="flex flex-col gap-1">
         {steps.map((step) => (
           <li className="flex items-center gap-2 text-sm" key={step.label}>
@@ -1150,6 +1161,28 @@ function PanelBlank({
   )
 }
 
+/**
+ * What the owner can do next, from the app: links and buttons drawn as
+ * outline buttons, side by side and wrapping on a narrow panel. No heading,
+ * since each one names its action; a list named for a screen reader. With
+ * nothing in it, it renders nothing.
+ */
+function NextSteps({ children }: { children?: ReactNode }) {
+  const items = Children.toArray(children).filter(isValidElement)
+  if (!items.length) return null
+  return (
+    <ul
+      aria-label="Next steps"
+      className="flex flex-wrap gap-2"
+      data-slot="next-steps"
+    >
+      {items.map((item) => (
+        <li key={item.key}>{item}</li>
+      ))}
+    </ul>
+  )
+}
+
 export type { Preview, Thumbnail }
 export {
   AnswerInputs,
@@ -1158,6 +1191,7 @@ export {
   BUILD_STAGES,
   ComingUp,
   LiveLine,
+  NextSteps,
   PanelBlank,
   PanelDigest,
   QuestionItem,

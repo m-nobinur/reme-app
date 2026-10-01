@@ -278,6 +278,27 @@ function ActionMenuSample() {
 const workspaceCatalog: Entry[] = [
   { name: "WorkspaceShell", render: () => <ShellSample /> },
   {
+    // A page with nothing for the panel to say: no card, no space kept.
+    name: "WorkspaceShell without a panel",
+    render: () => (
+      <WorkspaceShell
+        actions={<TopActions />}
+        className="h-[24rem] border border-border"
+        notifications={<BellSample unread={0} />}
+        panel={null}
+        panelLine={null}
+        rail={<Rail />}
+      >
+        <WorkspacePage>
+          <h1 className="mb-6 font-semibold text-2xl">Staff</h1>
+          <p className="text-muted-foreground text-sm">
+            The page starts under the top bar, at every width.
+          </p>
+        </WorkspacePage>
+      </WorkspaceShell>
+    ),
+  },
+  {
     name: "HistoryMenu",
     render: () => (
       <div className="flex justify-end">

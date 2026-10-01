@@ -4,13 +4,13 @@ import { AXE_TAGS } from "./axe"
 import { visit } from "./visit"
 
 /**
- * The notifications page and the panel's blank-state action, signed in as
- * the session `auth.setup.ts` sealed. That owner has no organisation, so
- * the only blank section it can reach is "First steps", whose action is
- * naming the business, and its notifications are empty. The other
- * blank-state actions ("Start your website", "Continue getting
- * started" with an onboarding chat, "Try again" on a panel that did not
- * load) need an organisation or a failed read. They are clicked in
+ * The notifications page and the panel's next step, signed in as the
+ * session `auth.setup.ts` sealed. That owner has no organisation, so the
+ * only next step the panel offers is naming the business, on Home and in a
+ * chat, and its notifications are empty. With nothing under way, a page like
+ * this one has no panel at all. The other next steps ("Start your website",
+ * "Continue getting started" with an onboarding chat) and "Try again" on a
+ * panel that did not load need an organisation or a failed read. They are clicked in
  * `packages/ui/test/notifications.spec.ts` against the catalog, and
  * `apps/web/src/panel/workspace-panel.test.ts` checks the destinations the
  * app wires into them. `golden.spec.ts` clicks them live as an owner with
@@ -44,8 +44,14 @@ test("the bell opens a menu that links to every notification", async ({
 })
 
 test("an account with no business is sent to name one", async ({ page }) => {
+  // Nothing is under way, so this page has no panel to send it from.
   await visit(page, "/app/notifications")
-  await panel(page).getByRole("link", { name: "Name your business" }).click()
+  await expect(panel(page)).toHaveCount(0)
+  await visit(page, "/app")
+  await panel(page)
+    .getByRole("list", { name: "Next steps" })
+    .getByRole("link", { name: "Name your business" })
+    .click()
   await expect(page).toHaveURL(/\/name-your-business$/)
   await expect(
     page.getByRole("heading", { name: "What's your business called?" })

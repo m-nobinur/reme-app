@@ -58,7 +58,12 @@ test("a sign-in clicked before hydration still signs in", async ({ page }) => {
   await page.click('button[type="submit"]')
 
   await expect(page).toHaveURL(/\/app$/)
+  // A new account has no organisation: the panel hydrated with its one next
+  // step, naming the business.
   await expect(
-    page.getByRole("heading", { name: "First steps", level: 2 })
+    page
+      .getByRole("complementary", { name: "Panel" })
+      .getByRole("list", { name: "Next steps" })
+      .getByRole("link", { name: "Name your business" })
   ).toBeVisible()
 })

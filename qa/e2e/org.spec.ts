@@ -136,6 +136,13 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   await expect(steps).toHaveCount(workspace.missing_facts.length + 1)
   await expect(steps.last()).toHaveText("To do: Build your first version")
   await expect(steps.filter({ hasText: "Phone number" })).toHaveCount(0)
+  // Worded for this business, and no link to the chat the owner is in.
+  await expect(
+    panel(page).getByText(`Getting ${name} ready for its first website.`)
+  ).toBeVisible()
+  await expect(
+    panel(page).getByRole("link", { name: "Continue getting started" })
+  ).toHaveCount(0)
 
   // The starting team: the owner, the Chief of Staff and the Developer.
   await visit(page, "/app/staff")
