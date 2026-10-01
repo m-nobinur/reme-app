@@ -123,7 +123,7 @@ In just a few short minutes, we'll talk through what your business does and how 
   )
 }
 
-type Asked = Exclude<StepId, "upload" | "build">
+type Asked = Exclude<StepId, "upload" | "quote_form" | "build">
 
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [

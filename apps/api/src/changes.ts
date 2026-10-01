@@ -340,7 +340,8 @@ const canon = (value: unknown) =>
   )
 
 /**
- * Writes each stated fact as the owner's (`owner_stated`), inside a `withOrg`
+ * Writes each stated fact as the owner's (`owner_stated`, unless `source`
+ * says the assistant chose it for them), inside a `withOrg`
  * that carries the owner's WorkOS user. A repeat of what the owner already
  * said writes nothing, which is what makes a retry safe (R5). The same value
  * from another source is restated, so it becomes the owner's.
@@ -349,7 +350,9 @@ export async function stateFacts(
   db: OrgScopedDb,
   owner: Owner,
   stated: FactValue[],
-  current?: FactRecord[]
+  current?: FactRecord[],
+  /** `inferred` for a choice the assistant made because the owner left it to them. */
+  source: "owner_stated" | "inferred" = "owner_stated"
 ) {
   const { orgId, session } = owner
   const held = current ?? (await readFacts(db))
@@ -361,7 +364,7 @@ export async function stateFacts(
   for (const fact of stated) {
     const was = held.find((f) => f.key === fact.key)
     if (
-      was?.provenance.source === "owner_stated" &&
+      was?.provenance.source === source &&
       canon(was.value) === canon(fact.value)
     ) {
       continue
@@ -372,7 +375,7 @@ export async function stateFacts(
       factType: was?.fact_type ?? fact.key.split(".")[0] ?? "fact",
       value: fact.value,
       provenance: {
-        source: "owner_stated",
+        source,
         confidence: 1,
         verifiedByStaffId: root,
       },

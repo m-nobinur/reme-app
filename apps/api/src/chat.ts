@@ -46,6 +46,7 @@ import {
   CONTEXT_POLICY,
   deriveCosMessages,
   readSession,
+  sha256,
 } from "./cos/history.ts"
 import {
   closeTurn,
@@ -94,9 +95,29 @@ import {
   progressOf,
   type ScriptRow,
   ended as scriptEnded,
+  text as textPart,
   typedAnswer,
+  voiceOf,
   applied as withAnswer,
 } from "./onboarding.ts"
+import {
+  checkPlan,
+  DEFAULT_ONBOARDING_MODEL,
+  PLANNER,
+  PLANNER_VERSION,
+  type PlanCall,
+  type PlanInput,
+  type PlanOutcome,
+  type Row as PlanRow,
+  type PlanState,
+  plannerModel,
+  plannerPrefix,
+  planParts,
+  planReservation,
+  planTurn,
+  turnData,
+} from "./onboarding-agent.ts"
+import { notStarted } from "./onboarding-copy.ts"
 import { ownerStaffId } from "./staff.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -140,6 +161,7 @@ export type ToolPart = {
     | "tool-ask_fact"
     | "tool-ask_choice"
     | "tool-ask_upload"
+    | "tool-review_quote_form"
     | "tool-request_change"
   toolCallId: string
   state:
@@ -394,6 +416,7 @@ async function onboardingOf(
     facts,
     orgName: org?.name ?? "",
     ownerName: owner.session.name ?? "",
+    ownerEmail: owner.session.email,
   }
 }
 
@@ -458,6 +481,11 @@ export type ChatDeps = {
   model?: LanguageModel | null
   /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
   waitUntil?: (promise: Promise<unknown>) => void
+  /**
+   * The onboarding planner's model, as `model` is the CoS's: left out, it is
+   * OpenRouter's `ONBOARDING_MODEL` when the api holds a key. Tests pass one.
+   */
+  planner?: LanguageModel | null
 }
 
 export async function chat(
@@ -490,7 +518,15 @@ export async function chat(
       : env.OPENROUTER_API_KEY
         ? openrouterModel(env.OPENROUTER_API_KEY, modelId)
         : null
-  let opened: Opened | Response
+  const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+  const planPrice = priceOf(plannerId)
+  const planner =
+    deps.planner !== undefined
+      ? deps.planner
+      : env.OPENROUTER_API_KEY
+        ? plannerModel(env.OPENROUTER_API_KEY, plannerId)
+        : null
+  let opened: Opened | Response | { plan: PlanJob }
   try {
     opened = await kit.withOrg(scope, async (db) => {
       const held = await read(db, id)
@@ -513,8 +549,24 @@ export async function chat(
         (held.kind === "onboarding" &&
           !scriptEnded(await readScript(db, id))) ||
         (turn.kind === "results" && !log.named)
-      if (scripted)
+      if (scripted) {
+        // Onboarding turns go to the planner when it can run; the script
+        // answers the rest, and every turn the planner cannot.
+        const job =
+          session && log && !log.frozen && planner && planPrice
+            ? await openPlan(
+                db,
+                held,
+                id,
+                parsed.data,
+                owner,
+                session,
+                planPrice
+              )
+            : null
+        if (job) return { plan: job }
         return scriptTurn(db, env, kit, owner, held, id, parsed.data, newId)
+      }
       const reserve = model && price && !log.frozen ? reservation(price) : 0
       const fallback: Fallback | null =
         log.frozen || !model || !price
@@ -569,6 +621,19 @@ export async function chat(
     throw error
   }
   if (opened instanceof Response) return opened
+  if ("plan" in opened) {
+    return planned(opened.plan, {
+      env,
+      kit,
+      owner,
+      id,
+      request: parsed.data,
+      newId,
+      model: planner as LanguageModel,
+      modelId: plannerId,
+      price: planPrice as NonNullable<typeof planPrice>,
+    })
+  }
   const run: AgentTurn = {
     turn: opened.turn,
     kit,
@@ -1417,6 +1482,423 @@ async function changed(
 }
 
 /**
+ * An onboarding turn the planner answers, from its first transaction to
+ * its model call: the turn's state, and the turn it opened in the session's
+ * log, whose `cos.context` holds the reservation and the data the model
+ * reads, so a second turn meanwhile is busy and the day's cap counts it.
+ */
+type PlanJob = {
+  turn: Turn
+  state: PlanState
+  /** The tail as the plan read it: the turn is stale if it moved. */
+  tail: Tail | null
+}
+
+/** The newest rows of the conversation, oldest first, as the planner reads them. */
+async function recentRows(db: OrgScopedDb, id: string): Promise<PlanRow[]> {
+  const rows = await db
+    .select({ content: conversationMessages.content })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.conversationId, id))
+    .orderBy(sql`${conversationMessages.seq} desc`)
+    .limit(PLANNER.rows)
+  return rows.reverse().map((row) => row.content as Content)
+}
+
+/**
+ * For the first transaction: the planner's turn, or null when the script
+ * answers this one. The script keeps every turn that is not a typed message
+ * or one valid answer to the waiting card (a retry, a stale id, an invalid
+ * answer, an approval), and every turn over the day's cap. The answer is
+ * read exactly as the script reads it; the planner only plans what follows.
+ */
+async function openPlan(
+  db: OrgScopedDb,
+  held: Read,
+  id: string,
+  request: ChatRequest,
+  owner: Owner,
+  session: Omit<Turn, "turnId">,
+  price: NonNullable<ReturnType<typeof priceOf>>
+): Promise<PlanJob | null> {
+  const onboarding = await onboardingOf(db, held, id, owner)
+  if (!onboarding) return null
+  const { turn } = request
+  let input: PlanInput
+  let waitingOn: ToolPart | null = null
+  let current = onboarding
+  if (turn.kind === "message") {
+    if (await messageTaken(db, id, turn.message_id)) return null
+    waitingOn = waitingCard(held.tail) ?? null
+    input = { kind: "message", text: turn.text }
+  } else {
+    const answered = answerOf(held, turn, onboarding)
+    if (!answered) return null
+    current = withAnswer(onboarding, answered.meant)
+    input = { kind: "card", card: answered.call, output: answered.output }
+  }
+  const state: PlanState = {
+    onboarding: current,
+    pending: waitingOn,
+    input,
+    rows: await recentRows(db, id),
+  }
+  const data = turnData(state)
+  const reserved = await planReservation(price, data)
+  if (!(await withinCap(db, owner.orgId, reserved))) {
+    console.log(
+      JSON.stringify({ code: "onboarding.fallback", reason: "budgetary" })
+    )
+    return null
+  }
+  const prefix = await plannerPrefix()
+  const logged = await sessionState(db, id, prefix.sha256, null)
+  const planTurnId: Turn = { ...session, turnId: newUlid() }
+  await beginTurn(db, planTurnId, {
+    prefix: logged.prefixLogged ? null : prefix,
+    messages: [],
+    context: {
+      turn_id: planTurnId.turnId,
+      prefix_sha256: prefix.sha256,
+      context_policy_version: PLANNER_VERSION,
+      mode: request.mode,
+      active_tools: [],
+      text: data,
+      reserved_usd: reserved,
+    },
+    contextTaint: ["untrusted_input"],
+  })
+  return { turn: planTurnId, state, tail: held.tail }
+}
+
+/** A results turn's one answer to the waiting card, read as the script reads it, or null. */
+function answerOf(
+  held: Read,
+  turn: Extract<ChatRequest["turn"], { kind: "results" }>,
+  onboarding: Onboarding
+) {
+  const [result, ...more] = turn.results
+  if (!result || more.length > 0 || result.kind !== "answer") return null
+  const found = callIn(
+    held.tail,
+    turn.message_id,
+    (p) => isCard(p) && p.toolCallId === result.tool_call_id
+  )
+  if (found instanceof Response || !pending(found.call)) return null
+  const output = OUTPUTS[found.call.type as keyof typeof OUTPUTS].safeParse(
+    result.output
+  )
+  if (!output.success) return null
+  const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
+  const meant = cardAnswer(found.call, output.data, uploads)
+  if (!meant || meant.kind === "retry") return null
+  return { ...found, output: output.data, meant }
+}
+
+type Planning = {
+  env: Env
+  kit: Tenancy
+  owner: Owner
+  id: string
+  request: ChatRequest
+  newId: () => string
+  model: LanguageModel
+  modelId: string
+  price: NonNullable<ReturnType<typeof priceOf>>
+}
+
+/** A planned turn's rows, before a build it starts is known. */
+type Staged = {
+  /** The assistant message this turn wrote or continued, and its stored content. */
+  id: string
+  content: Content
+  step: Part[]
+  lead: UIMessageChunk[]
+  /** The build's pending call, when the plan starts it. */
+  build: ToolPart | null
+  said: string
+  onboarding: Onboarding
+}
+
+/**
+ * The model's calls as the log keeps a CoS turn's steps: each call's
+ * message hash, then its answer with its usage and cost.
+ */
+async function callEvents(turn: Turn, calls: PlanCall[]) {
+  const events = await Promise.all(
+    calls.map(async (c, step) => [
+      {
+        type: "cos.call" as const,
+        payload: {
+          turn_id: turn.turnId,
+          step,
+          sha256: await sha256(c.messages),
+        },
+      },
+      {
+        type: "cos.step" as const,
+        payload: {
+          turn_id: turn.turnId,
+          step,
+          messages: [
+            { role: "assistant", content: [{ type: "text", text: c.raw }] },
+          ],
+          usage: c.usage,
+          cost_usd: c.costUsd,
+        },
+        // The plan quotes the owner's words back.
+        taint: ["untrusted_input" as const],
+      },
+    ])
+  )
+  return events.flat()
+}
+
+/** The planner turn's `cos.turn`: `fallback` when the script answered it. */
+function planEnd(
+  turn: Turn,
+  modelId: string,
+  outcome: PlanOutcome,
+  ended: "answered" | "fallback" | "error"
+): CosTurn {
+  const sum = (pick: (c: PlanCall) => number) =>
+    outcome.calls.reduce((total, c) => total + pick(c), 0)
+  const ran = {
+    turn_id: turn.turnId,
+    model: modelId,
+    usage: {
+      input_tokens: sum((c) => c.usage.input_tokens),
+      cached_input_tokens: sum((c) => c.usage.cached_input_tokens),
+      output_tokens: sum((c) => c.usage.output_tokens),
+    },
+    cost_usd: sum((c) => c.costUsd),
+    tools: [],
+    steps: outcome.calls.length,
+    // A plan is not streamed, so this is the first call's whole time.
+    first_chunk_ms: outcome.calls[0]?.ms ?? null,
+  }
+  return ended === "fallback"
+    ? { ...ran, outcome: "fallback", reason: "provider" }
+    : { ...ran, outcome: ended }
+}
+
+/**
+ * The planner's turn after its first transaction: the model call, outside
+ * any transaction, then one transaction that writes the turn as the plan
+ * says, or as the script says when there is no plan. A build the plan starts
+ * runs after that commit, so the orchestrator's snapshot sees this turn's
+ * facts, and its outcome is added to the same message under the same turn,
+ * which stays open until then so no other turn can interleave.
+ */
+async function planned(job: PlanJob, p: Planning): Promise<Response> {
+  const outcome = await planTurn(p.model, p.price, job.state)
+  console.log(
+    JSON.stringify({
+      code: "onboarding.plan",
+      turn_id: job.turn.turnId,
+      ok: outcome.ok,
+      reason: outcome.ok ? null : outcome.reason,
+      calls: outcome.calls.length,
+      ms: outcome.calls.reduce((total, c) => total + c.ms, 0),
+      cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
+    })
+  )
+  const scope = {
+    orgId: p.owner.orgId,
+    workosUserId: p.owner.session.workosUserId,
+  }
+  const steps = await callEvents(job.turn, outcome.calls)
+  let logged = false
+  const close = (db: OrgScopedDb, ended: "answered" | "fallback" | "error") =>
+    writeAsTurn(db, job.turn, [
+      ...(logged ? [] : steps),
+      {
+        type: "cos.turn",
+        payload: planEnd(job.turn, p.modelId, outcome, ended),
+      },
+    ])
+  try {
+    const staged = await p.kit.withOrg(scope, async (db) => {
+      const held = await read(db, p.id)
+      if (held instanceof Response) throw new Refusal(held)
+      if (JSON.stringify(held.tail) !== JSON.stringify(job.tail)) {
+        throw new Refusal(stale())
+      }
+      const done = outcome.ok
+        ? await commitPlan(db, held, job, outcome, p)
+        : null
+      if (!done) {
+        const response = await scriptTurn(
+          db,
+          p.env,
+          p.kit,
+          p.owner,
+          held,
+          p.id,
+          p.request,
+          p.newId
+        )
+        await close(db, "fallback")
+        return response
+      }
+      if (done.build) await writeAsTurn(db, job.turn, steps)
+      else await close(db, "answered")
+      return done
+    })
+    logged = true
+    if (staged instanceof Response) return staged
+    if (!staged.build) return stream(staged.id, staged.step, staged.lead)
+    return await startPlannedBuild(staged, p, (db) => close(db, "answered"))
+  } catch (error) {
+    await p.kit
+      .withOrg(scope, (db) => close(db, "error"))
+      .catch(() => undefined)
+    if (error instanceof Refusal) return error.response
+    if (error instanceof SessionBusy) return busy()
+    if (error instanceof NoSuchSession) return notFound()
+    throw error
+  }
+}
+
+/**
+ * The build a plan started: begun as the script begins it, keyed by the
+ * conversation, then shown in place of its pending call. A refusal or an
+ * outcome nobody knows leaves the owner a line saying it did not start;
+ * the next turn can start it again under the same key.
+ */
+async function startPlannedBuild(
+  staged: Staged,
+  p: Planning,
+  close: (db: OrgScopedDb) => Promise<unknown>
+): Promise<Response> {
+  const build = staged.build as ToolPart
+  const output = await changed(
+    p.env,
+    p.kit,
+    p.owner,
+    ONBOARDING_GOAL,
+    `onboarding:${p.id}`
+  )
+  const shownBuild =
+    output instanceof Response
+      ? [textPart(notStarted(voiceOf(staged.onboarding)))]
+      : built(staged.onboarding, build, output, staged.said)
+  // By id: the stored parts are copies (`shown`), not the step's objects.
+  const swap = (parts: Part[]) =>
+    parts.flatMap((part) =>
+      isTool(part) && part.toolCallId === build.toolCallId ? shownBuild : [part]
+    )
+  const content = { ...staged.content, parts: swap(staged.content.parts) }
+  const step = swap(staged.step)
+  await p.kit.withOrg({ orgId: p.owner.orgId }, async (db) => {
+    const row = { id: staged.id, content: staged.content } as unknown as Row
+    if (!(await swapTail(db, p.id, row, content))) throw new Refusal(stale())
+    await close(db)
+  })
+  return stream(staged.id, step, staged.lead)
+}
+
+/**
+ * The plan's turn written, in the same shapes the script writes: a typed
+ * message cancels the waiting card and adds the owner's row and a new
+ * assistant row; a card answer resolves the card and continues its row. The
+ * card's own facts are stated as the script states them, then the plan's,
+ * the ones the assistant chose for the owner as `inferred`. The plan is
+ * checked again on what this transaction reads, and null (the script
+ * answers) when it no longer holds.
+ */
+async function commitPlan(
+  db: OrgScopedDb,
+  held: Read,
+  job: PlanJob,
+  outcome: Extract<PlanOutcome, { ok: true }>,
+  p: Planning
+): Promise<Staged | null> {
+  const onboarding = await onboardingOf(db, held, p.id, p.owner)
+  if (!onboarding) throw new Refusal(stale())
+  const { turn } = p.request
+  const answered =
+    turn.kind === "results" ? answerOf(held, turn, onboarding) : null
+  if (turn.kind === "results" && !answered) throw new Refusal(stale())
+  const state: PlanState = {
+    ...job.state,
+    onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
+  }
+  const rechecked = checkPlan(outcome.checked.plan, state)
+  if (!rechecked.ok) return null
+  const c = rechecked.checked
+  const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
+  const byKey = new Map(
+    [...card, ...c.stated].map((fact) => [fact.key, fact] as const)
+  )
+  await stateFacts(
+    db,
+    p.owner,
+    [...byKey.values()],
+    onboarding.facts as FactRecord[]
+  )
+  if (c.chosen.length > 0) {
+    await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
+  }
+  const step = planParts(c, state, p.newId)
+  const build =
+    c.plan.next.kind === "start_build" ? (step[0] as ToolPart) : null
+  const base = {
+    step,
+    build,
+    said: c.plan.say.trim(),
+    onboarding: c.after,
+  }
+  if (turn.kind === "message") {
+    if (await messageTaken(db, p.id, turn.message_id)) {
+      throw new Refusal(messageExists())
+    }
+    await cancelPending(db, p.id, held.tail)
+    const assistantId = p.newId()
+    const content: Content = {
+      role: "assistant",
+      parts: [{ type: "step-start" }, ...step],
+    }
+    for (const row of [
+      {
+        id: turn.message_id,
+        parentId: held.tail?.id ?? null,
+        content: { role: "user", parts: [{ type: "text", text: turn.text }] },
+      },
+      { id: assistantId, parentId: turn.message_id, content },
+    ]) {
+      await db.insert(conversationMessages).values({
+        conversationId: p.id,
+        orgId: p.owner.orgId,
+        format: FORMAT,
+        ...row,
+      })
+    }
+    await db
+      .update(conversations)
+      .set({ updatedAt: sql`now()` })
+      .where(eq(conversations.id, p.id))
+    return { ...base, id: assistantId, content, lead: [] }
+  }
+  const {
+    tail,
+    call: waitingCall,
+    output,
+  } = answered as NonNullable<typeof answered>
+  const done: ToolPart = { ...waitingCall, state: "output-available", output }
+  const content = {
+    ...tail.content,
+    parts: shown([
+      ...tail.content.parts.map((part) => (part === waitingCall ? done : part)),
+      { type: "step-start" } as const,
+      ...step,
+    ]),
+  }
+  if (!(await swapTail(db, p.id, tail, content))) throw new Refusal(stale())
+  return { ...base, id: tail.id, content, lead: resolved(done) }
+}
+
+/**
  * The onboarding conversation's first row, for `createOrg` to insert: the
  * opener, then the script's first step for the facts the org holds.
  */
@@ -1426,7 +1908,14 @@ export function firstMessage(
   newId: () => string
 ) {
   const step = openingParts(
-    { ...org, facts: current, passed: [], offered: false, builder: null },
+    {
+      ...org,
+      facts: current,
+      passed: [],
+      closed: [],
+      offered: false,
+      builder: null,
+    },
     newId
   )
   return {

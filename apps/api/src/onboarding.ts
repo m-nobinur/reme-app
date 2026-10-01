@@ -15,7 +15,9 @@ import {
   PALETTES,
   PaletteId,
   PRONOUNS,
+  type QuoteField,
   type RequestChangeOutput,
+  ReviewQuoteFormOutput,
   TEMPLATES,
   type TemplateId,
   TONES,
@@ -60,6 +62,7 @@ export type StepId =
   | "owner.preferred_name"
   | ChoiceStep
   | "upload"
+  | "quote_form"
   | "build"
 
 /** The first build's goal: the owner's details are in the facts. */
@@ -78,6 +81,15 @@ export type Progress = {
   offered: boolean
   /** The answer to "use the builder yourself?", once given. */
   builder: boolean | null
+  /**
+   * Steps whose latest card is no longer waiting: answered, skipped, or
+   * talked over by a typed message and not asked again. A card talked over
+   * is asked again whenever the typed reply did not settle it, by the script
+   * (`again`) or by the planner (`unanswered`), so a talked-over card that
+   * stays closed was settled. A quote form the owner asked to change is not
+   * closed: a new proposal follows it.
+   */
+  closed: readonly string[]
 }
 
 export type Onboarding = Progress & {
@@ -88,10 +100,13 @@ export type Onboarding = Progress & {
   orgName: string
   /** The session's name for the owner, or "". */
   ownerName: string
+  /** The session's email, whose local part stands in for a name the session lacks. */
+  ownerEmail?: string
 }
 
 /** Whether the script has finished: the build is under way or the owner went their own way. */
-export const ended = (p: Progress) => p.offered || p.builder !== null
+export const ended = (p: Progress) =>
+  p.offered || p.builder !== null || p.closed.includes("manual_builder")
 
 type Values = { [F in FactValue as F["key"]]: F["value"] }
 
@@ -107,9 +122,10 @@ export function factValue<K extends FactValueKey>(
     : undefined
 }
 
-const has = (o: Onboarding, key: FactValueKey) =>
+export const has = (o: Onboarding, key: FactValueKey) =>
   o.facts.some((f) => f.key === key)
-const mode = (o: Onboarding) => factValue(o.facts, "site.build_mode")?.mode
+export const mode = (o: Onboarding) =>
+  factValue(o.facts, "site.build_mode")?.mode
 
 const label = (list: readonly { id: string; label: string }[], id?: string) =>
   list.find((each) => each.id === id)?.label ?? null
@@ -278,21 +294,32 @@ const CHOICES: Record<
   }),
 }
 
-const call = (type: ToolPart["type"], input: unknown, newId: () => string) =>
+export const call = (
+  type: ToolPart["type"],
+  input: unknown,
+  newId: () => string
+) =>
   ({ type, toolCallId: newId(), state: "input-available", input }) as ToolPart
 
-const text = (words: string): Part => ({
+export const text = (words: string): Part => ({
   type: "text",
   text: words,
   state: "done",
 })
 
-const factCard = (o: Onboarding, key: FactValueKey, newId: () => string) => {
+export const factCard = (
+  o: Onboarding,
+  key: FactValueKey,
+  newId: () => string
+) => {
   const prefill =
     key === "business.name"
       ? { key, value: { name: o.orgName } }
       : key === "owner.preferred_name"
-        ? { key, value: { name: o.ownerName } }
+        ? {
+            key,
+            value: { name: o.ownerName || (o.ownerEmail?.split("@")[0] ?? "") },
+          }
         : null
   const parsed = prefill && FactValue.safeParse(prefill)
   return call(
@@ -306,14 +333,36 @@ const factCard = (o: Onboarding, key: FactValueKey, newId: () => string) => {
   )
 }
 
-const choiceCard = (step: ChoiceStep, o: Onboarding, newId: () => string) =>
+/**
+ * A choice card from the contracts' lists. The planner may replace the
+ * step's own ticks (`preselected`) and the palettes shown first (`initial`).
+ */
+export const choiceCard = (
+  step: ChoiceStep,
+  o: Onboarding,
+  newId: () => string,
+  over: { preselected?: string[]; initial?: string[] } = {}
+) =>
   call(
     "tool-ask_choice",
-    AskChoiceInput.parse({ step, ...CHOICES[step](o) }),
+    AskChoiceInput.parse({
+      step,
+      ...CHOICES[step](o),
+      ...(over.preselected ? { preselected: over.preselected } : {}),
+      ...(over.initial ? { initial: over.initial } : {}),
+    }),
     newId
   )
 
-const uploadCard = (newId: () => string) =>
+/** The option ids a choice step's card offers. */
+export const choiceIds = (step: ChoiceStep, o: Onboarding) =>
+  CHOICES[step](o).options.map((each) => each.id)
+
+/** Whether a step's card lets the owner pick more than one. */
+export const choiceMultiple = (step: ChoiceStep, o: Onboarding) =>
+  CHOICES[step](o).multiple
+
+export const uploadCard = (newId: () => string) =>
   call(
     "tool-ask_upload",
     AskUploadInput.parse({
@@ -380,7 +429,10 @@ export const STEPS: readonly Step[] = [
   askChoice("build_for_me", "site.build_mode"),
   {
     id: "manual_builder",
-    done: (o) => mode(o) !== "manual" || o.builder !== null,
+    done: (o) =>
+      mode(o) !== "manual" ||
+      o.builder !== null ||
+      o.closed.includes("manual_builder"),
     ask: (o, newId) => [
       text(question("manual_builder", voiceOf(o))),
       choiceCard("manual_builder", o, newId),
@@ -392,7 +444,7 @@ export const STEPS: readonly Step[] = [
   askChoice("pages", "site.pages", building),
   {
     id: "upload",
-    done: (o) => !building(o) || o.passed.includes("upload"),
+    done: (o) => !building(o) || o.closed.includes("upload"),
     ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
   },
   {
@@ -435,7 +487,9 @@ export const buildCall = (parts: Part[]) =>
 export function built(
   o: Onboarding,
   pending: ToolPart,
-  output: RequestChangeOutput
+  output: RequestChangeOutput,
+  /** The planner's own words for a build that started. */
+  said?: string
 ): Part[] {
   const v = voiceOf(o)
   return [
@@ -443,7 +497,7 @@ export function built(
     { type: "step-start" },
     text(
       output.outcome === "started"
-        ? started(v, has(o, "media.uploads"))
+        ? (said ?? started(v, has(o, "media.uploads")))
         : notStarted(v)
     ),
   ]
@@ -471,6 +525,7 @@ export function applied(o: Onboarding, answer: Answer): Onboarding {
     return {
       ...o,
       passed: [...o.passed, answer.step],
+      closed: [...o.closed, answer.step],
       builder: answer.builder ?? o.builder,
     }
   }
@@ -480,6 +535,7 @@ export function applied(o: Onboarding, answer: Answer): Onboarding {
 /** The step a card asks, from its input. */
 export function stepOf(part: ToolPart): StepId | null {
   if (part.type === "tool-ask_upload") return "upload"
+  if (part.type === "tool-review_quote_form") return "quote_form"
   const input = part.input as { key?: StepId; step?: StepId } | null
   if (part.type === "tool-ask_fact") return input?.key ?? null
   if (part.type === "tool-ask_choice") return input?.step ?? null
@@ -490,6 +546,7 @@ const CARDS: readonly ToolPart["type"][] = [
   "tool-ask_fact",
   "tool-ask_choice",
   "tool-ask_upload",
+  "tool-review_quote_form",
 ]
 export const isCard = (part: { type: string }) =>
   CARDS.includes(part.type as ToolPart["type"])
@@ -499,7 +556,29 @@ export const OUTPUTS = {
   "tool-ask_fact": AskFactOutput,
   "tool-ask_choice": AskChoiceOutput,
   "tool-ask_upload": AskUploadOutput,
+  "tool-review_quote_form": ReviewQuoteFormOutput,
 } as const
+
+/**
+ * The contact details the starter's quote form always asks, by the key or
+ * the label a proposal would give them, or by an input type only they use.
+ * A question about the customer's pet's name or the phone to be repaired
+ * keeps its own key and label, so it passes.
+ */
+const CONTACT_KEYS =
+  /^(your_|customer_|client_|full_|first_|last_|contact_)?(name|email|email_address|e_mail|phone|phone_number|telephone|tel|mobile|mobile_number|contact|contact_number|contact_details)$/
+const CONTACT_LABELS =
+  /^(your |full |first |last |contact )*(name|e-?mail( address)?|phone( number)?|telephone( number)?|mobile( number)?|contact (number|details))\??$/i
+
+/** The fields of a quote form that repeat the contact details. */
+export const contactFields = (fields: readonly QuoteField[]) =>
+  fields.filter(
+    (f) =>
+      f.type === "tel" ||
+      f.type === "email" ||
+      CONTACT_KEYS.test(f.key) ||
+      CONTACT_LABELS.test(f.label.trim())
+  )
 
 // ponytail: a keyword table, not a classifier. Anything it misses keeps the
 // owner's words in `custom`, which the Developer reads.
@@ -619,6 +698,18 @@ export function cardAnswer(
     }
     return chosen(input.data, answer.data.ids, answer.data.other)
   }
+  if (part.type === "tool-review_quote_form") {
+    const answer = ReviewQuoteFormOutput.safeParse(output)
+    if (!answer.success) return null
+    // Changes are the owner's words for the next proposal, so no fact yet.
+    if (answer.data.answer === "changes") return { kind: "facts", facts: [] }
+    if (contactFields(answer.data.fields).length > 0) return null
+    const fact = FactValue.safeParse({
+      key: "quote.form",
+      value: { fields: answer.data.fields },
+    })
+    return fact.success ? { kind: "facts", facts: [fact.data] } : null
+  }
   const answer = AskUploadOutput.safeParse(output)
   if (!answer.success) return null
   if (answer.data.answer === "skipped") return { kind: "passed", step }
@@ -736,7 +827,9 @@ function typedChoice(input: AskChoiceInput, words: string): Answer {
  */
 export function typedAnswer(part: ToolPart, words: string): Answer {
   const step = stepOf(part)
-  if (!step) return { kind: "retry", reason: "unclear" }
+  // Without a model nothing can read a proposal's changes from words.
+  if (!step || step === "quote_form")
+    return { kind: "retry", reason: "unclear" }
   if (part.type === "tool-ask_upload") {
     return saysSkip(words)
       ? { kind: "passed", step }
@@ -782,6 +875,7 @@ export type ScriptRow = {
  */
 export function progressOf(rows: readonly ScriptRow[]): Progress {
   const passed = new Set<string>()
+  const closed = new Set<string>()
   let offered = false
   let builder: boolean | null = null
   for (const row of rows) {
@@ -791,8 +885,22 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
       }
       continue
     }
-    const step = row.type === "tool-ask_upload" ? "upload" : row.step
+    const step =
+      row.type === "tool-ask_upload"
+        ? "upload"
+        : row.type === "tool-review_quote_form"
+          ? "quote_form"
+          : row.step
     if (!step) continue
+    // Rows come in order, so each step ends as its latest card left it.
+    if (
+      row.state === "input-available" ||
+      (step === "quote_form" && row.answer === "changes")
+    ) {
+      closed.delete(step)
+    } else {
+      closed.add(step)
+    }
     if (row.state === "output-available") {
       if (row.answer === "skipped" || row.answer === "uploaded")
         passed.add(step)
@@ -809,5 +917,5 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
       }
     }
   }
-  return { passed: [...passed], offered, builder }
+  return { passed: [...passed], closed: [...closed], offered, builder }
 }
