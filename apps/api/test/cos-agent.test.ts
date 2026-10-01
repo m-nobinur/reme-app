@@ -65,7 +65,7 @@ import {
   toolErrorText,
 } from "../src/cos/agent.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
-import { GRACE_MS, withinCap } from "../src/cos/turns.ts"
+import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
 import staging from "./cos-staging-turn.json" with { type: "json" }
 import {
@@ -286,12 +286,15 @@ describe("the CoS's model and price", () => {
     expect(PRICE).not.toBeNull()
   })
 
-  it("routes every table model at its cap, off China-based hosts and hosts that keep prompts", () => {
+  it("routes every table model at its cap, off China-based hosts and hosts that keep prompts, fastest first", () => {
     for (const { id, compat } of models) {
       const model = openrouterModel("k", id) as unknown as {
         settings: { provider?: unknown }
       }
-      expect(model.settings.provider, id).toEqual(compat.openRouterRouting)
+      expect(model.settings.provider, id).toEqual({
+        ...compat.openRouterRouting,
+        sort: "latency",
+      })
       expect(model.settings.provider, id).toMatchObject({
         max_price: expect.any(Object),
         ignore: expect.arrayContaining(["deepseek", "alibaba", "z-ai"]),
@@ -309,8 +312,8 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-09-30's table and limits: about $0.16 a turn.
-    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(0.16, 2)
+    // On 2026-10-01's table and limits: about $1.15 a turn.
+    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(1.15, 2)
   })
 
   it("prices cached input at the cache rate, as pi-ai does", () => {
@@ -1855,15 +1858,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
             ${admin.json({ outcome: "answered", turn_id: turnId, model: DEFAULT_MODEL, usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 }, cost_usd: cost, tools: [], steps: 1, first_chunk_ms: 1 })}, '{}')`
     }
     // The Worker's clock says today, the database recorded it yesterday.
-    await spent("01K6A00000000000000000DAY1", 0.9, "0 days", "-1 day", 0)
+    await spent("01K6A00000000000000000DAY1", 0.9 * CAP, "0 days", "-1 day", 0)
     // The Worker's clock says yesterday, the database recorded it today.
-    await spent("01K6A00000000000000000DAY2", 0.5, "-1 day", "0 days", 2)
+    await spent("01K6A00000000000000000DAY2", 0.5 * CAP, "-1 day", "0 days", 2)
     const check = (amount: number) =>
       kit.withOrg({ orgId: who.orgId }, (db) =>
         withinCap(db, who.orgId, amount)
       )
-    expect(await check(0.4)).toBe(true)
-    expect(await check(0.6)).toBe(false)
+    expect(await check(0.4 * CAP)).toBe(true)
+    expect(await check(0.6 * CAP)).toBe(false)
   })
 
   it("sends a declined card to the model as the owner's denial", async () => {
@@ -2066,13 +2069,13 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 0, 'cos.context', now(), ${ulid()},
           ${admin.json({ turn_id: turnId, prefix_sha256: "a".repeat(64), context_policy_version: "2", mode: "ask", active_tools: [], text: "x", reserved_usd: 0.02 })}, '{}'),
         (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 1, 'cos.turn', now(), ${ulid()},
-          ${admin.json({ outcome: "abandoned", turn_id: turnId, logged_usd: 0.5, reserved_usd: 0.02 })}, '{}')`
+          ${admin.json({ outcome: "abandoned", turn_id: turnId, logged_usd: 0.5 * CAP, reserved_usd: 0.02 })}, '{}')`
     const check = (amount: number) =>
       kit.withOrg({ orgId: who.orgId }, (db) =>
         withinCap(db, who.orgId, amount)
       )
-    expect(await check(0.5)).toBe(true)
-    expect(await check(0.51)).toBe(false)
+    expect(await check(0.5 * CAP)).toBe(true)
+    expect(await check(0.51 * CAP)).toBe(false)
   })
 
   it("counts a Worker killed after one step at its full reservation", async () => {
@@ -2083,17 +2086,17 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
       values
         (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 0, 'cos.context', now(), ${ulid()},
-          ${admin.json({ turn_id: turnId, prefix_sha256: "a".repeat(64), context_policy_version: "2", mode: "ask", active_tools: [], text: "x", reserved_usd: 0.3 })}, '{}'),
+          ${admin.json({ turn_id: turnId, prefix_sha256: "a".repeat(64), context_policy_version: "2", mode: "ask", active_tools: [], text: "x", reserved_usd: 0.3 * CAP })}, '{}'),
         (${ulid()}, ${who.orgId}, ${who.chiefId}, ${room}, 1, 'cos.turn', now(), ${ulid()},
-          ${admin.json({ outcome: "abandoned", turn_id: turnId, logged_usd: 0.001, reserved_usd: 0.3 })}, '{}')`
+          ${admin.json({ outcome: "abandoned", turn_id: turnId, logged_usd: 0.001, reserved_usd: 0.3 * CAP })}, '{}')`
     const check = (amount: number) =>
       kit.withOrg({ orgId: who.orgId }, (db) =>
         withinCap(db, who.orgId, amount)
       )
     // Its last step's usage is lost, so the reservation stands, not the
     // one step it logged.
-    expect(await check(0.7)).toBe(true)
-    expect(await check(0.71)).toBe(false)
+    expect(await check(0.7 * CAP)).toBe(true)
+    expect(await check(0.71 * CAP)).toBe(false)
   })
 
   it("makes a second reservation wait for the first and count it", async () => {
@@ -2102,7 +2105,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const reserved = gate()
     const release = gate()
     const first = kit.withOrg({ orgId: who.orgId }, async (db) => {
-      expect(await withinCap(db, who.orgId, 0.6)).toBe(true)
+      expect(await withinCap(db, who.orgId, 0.6 * CAP)).toBe(true)
       await appendSessionEvent(db, {
         orgId: who.orgId,
         staffId: who.chiefId,
@@ -2116,7 +2119,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           mode: "ask",
           active_tools: [],
           text: "x",
-          reserved_usd: 0.6,
+          reserved_usd: 0.6 * CAP,
         },
       })
       reserved.resolve()
@@ -2125,7 +2128,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await reserved.promise
     // Sums only after the first commits, so it sees the first's 0.6.
     const second = kit.withOrg({ orgId: who.orgId }, (db) =>
-      withinCap(db, who.orgId, 0.6)
+      withinCap(db, who.orgId, 0.6 * CAP)
     )
     await new Promise((r) => setTimeout(r, 200))
     release.resolve()
@@ -2274,7 +2277,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const who = await owner(kit, url as string, "cos-cap")
     const each = reservation(PRICE as NonNullable<typeof PRICE>)
     // Spend so far leaves room for two reservations, not three.
-    const spent = 1 - 2.5 * each
+    const spent = CAP - 2.5 * each
     const first = await conversation(who)
     await admin`
       insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
@@ -2300,7 +2303,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         count(*) filter (where (payload->>'reserved_usd')::float8 > 0) as reserving
       from events where org_id = ${who.orgId} and type = 'cos.context'`
     expect(Number(row?.reserving)).toBe(2)
-    expect(spent + Number(row?.reserved)).toBeLessThanOrEqual(1)
+    expect(spent + Number(row?.reserved)).toBeLessThanOrEqual(CAP)
     const outcomes = (
       await admin<{ payload: { outcome: string; reason?: string } }[]>`
         select payload from events where org_id = ${who.orgId} and type = 'cos.turn'`

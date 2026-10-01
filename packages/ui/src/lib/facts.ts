@@ -13,6 +13,7 @@ const LABEL: Record<FactValueKey, string> = {
   "business.offerings": "Products and services",
   "business.audience": "Who you serve",
   "business.overview": "How you work",
+  "business.proof": "What sets you apart",
   "service_area.text": "Area you cover",
   "assistant.name": "Assistant's name",
   "assistant.pronouns": "Assistant's pronouns",

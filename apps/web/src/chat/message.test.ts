@@ -1,5 +1,6 @@
 import type {
   AnswerQuestionOutput,
+  AskDetailsOutput,
   AskFactOutput,
   CosWorkspace,
   CreateReminderOutput,
@@ -29,6 +30,9 @@ it("types each tool part's input and output from its contract", () => {
     Done<"create_reminder">["output"]
   >().toEqualTypeOf<CreateReminderOutput>()
   expectTypeOf<Done<"ask_fact">["output"]>().toEqualTypeOf<AskFactOutput>()
+  expectTypeOf<
+    Done<"ask_details">["output"]
+  >().toEqualTypeOf<AskDetailsOutput>()
   // A tool the contracts do not name has no part.
   expectTypeOf<Done<"publish">>().toBeNever()
 })

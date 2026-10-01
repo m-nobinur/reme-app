@@ -11,9 +11,10 @@ type ModelRoute = RuntimeSpec["model_routing"][string]
  * The two selectable coding defaults and the one fallback (plan, decided
  * 2026-09-14). `REME_MODEL_DEFAULT` overrides A; `REME_MODEL_FALLBACK`
  * overrides the fallback. B is the other default and `--model B` picks it.
+ * A is Claude Sonnet 5.5 from 2026-10-01, the owner's call.
  */
 export const MODELS = {
-  A: "openrouter/deepseek/deepseek-v4.1-flash",
+  A: "openrouter/anthropic/claude-sonnet-5.5",
   B: "openrouter/z-ai/glm-5.3-flash",
   fallback: "openrouter/x-ai/grok-4.6",
 } as const

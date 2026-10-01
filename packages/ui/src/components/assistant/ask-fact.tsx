@@ -7,7 +7,9 @@ import {
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
 import { askFactView } from "@workspace/ui/lib/tool-state"
+import { cn } from "@workspace/ui/lib/utils"
 import { type FormEvent, useId, useRef, useState } from "react"
 
 /**
@@ -60,7 +62,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
       {view.state === "pending" ? (
         <form
           aria-labelledby={`${id}-question`}
-          className="flex flex-col gap-3"
+          className={cn(CARD_SURFACE, "flex flex-col gap-3")}
           noValidate
           onSubmit={submit}
           ref={formRef}
@@ -73,7 +75,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
             title={question}
           />
           {invalid ? (
-            <p className="text-[0.8125rem] text-destructive" role="alert">
+            <p className={FIELD_ERROR} role="alert">
               {invalid}
             </p>
           ) : null}

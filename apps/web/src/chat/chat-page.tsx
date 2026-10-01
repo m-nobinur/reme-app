@@ -29,7 +29,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react"
-import { briefingOf } from "@/lib/briefing"
+import { assistantOf, briefingOf } from "@/lib/briefing"
+import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { conversationList, unstored } from "./conversations"
 import { asked, missingConversations, startsNewChat } from "./history"
@@ -51,7 +52,11 @@ export function ChatPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
   const router = useRouter()
-  const { active } = frame.useLoaderData()
+  const { active, conversations } = frame.useLoaderData()
+  // Onboarding's opening message plays in, the first time it is seen.
+  const onboarding = conversations?.some(
+    (each) => each.id === id && each.kind === "onboarding"
+  )
   // The polled workspace, not the loader's: a build that goes live after the
   // turn ends would otherwise leave the line above the composer a version
   // behind the panel until a reload.
@@ -179,8 +184,9 @@ export function ChatPage() {
                 briefing={briefing.line}
                 components={{ ToolFallback: Approval }}
                 mode={mode}
-                placeholder="Ask Reme anything…"
+                placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
                 quickActions={OWNER_QUICK_ACTIONS}
+                reveal={onboarding ? OPENING_REVEAL : undefined}
                 stored={Boolean(id)}
               />
             </UploadPhotosProvider>

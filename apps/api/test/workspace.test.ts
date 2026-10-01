@@ -255,6 +255,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
+      assistant_name: null,
       reminders: {
         notes: [],
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
@@ -412,6 +413,17 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(after.headers.get("etag")).not.toBe(tag)
     const body = WorkspaceStatus.parse(await after.json())
     expect(body.missing_facts).toEqual(REQUIRED.slice(1))
+  })
+
+  it("names the assistant once the owner chose a name", async () => {
+    const set = await fresh.call(
+      stubOrchestrator(),
+      "/facts",
+      json({ facts: [{ key: "assistant.name", value: { name: "Ava" } }] })
+    )
+    expect(set.status).toBe(200)
+    const body = WorkspaceStatus.parse(await (await workspace(fresh)).json())
+    expect(body.assistant_name).toBe("Ava")
   })
 
   it("changes the tag when a reminder comes due, with no row changed", async () => {

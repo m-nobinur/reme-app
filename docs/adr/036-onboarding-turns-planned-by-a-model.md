@@ -1,6 +1,6 @@
 # ADR-036: A model plans each onboarding turn, and code checks the plan
 
-Status: accepted, 2026-10-01. Applies to `apps/api`, `packages/contracts`, the chat in
+Status: accepted, 2026-10-01; amended by ADR-037 the same day. Applies to `apps/api`, `packages/contracts`, the chat in
 `apps/web`, `packages/ui`, `packages/starter-site` and `apps/orchestrator`. Amends ADR-033 on
 pricing and ADR-034 on who answers an onboarding turn.
 

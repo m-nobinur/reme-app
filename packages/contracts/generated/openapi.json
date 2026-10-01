@@ -422,6 +422,30 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.proof"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 600,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["text"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "service_area.text"
                       },
                       "value": {
@@ -1492,6 +1516,1584 @@
           }
         ]
       },
+      "AskDetailsInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": ["contact", "assistant"]
+          },
+          "prefill": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.name"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["name"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.phone"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "e164": {
+                          "type": "string",
+                          "pattern": "^\\+[1-9]\\d{6,14}$"
+                        }
+                      },
+                      "required": ["e164"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.email"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string",
+                          "maxLength": 254,
+                          "format": "email",
+                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        }
+                      },
+                      "required": ["address"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "hours.weekday"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "open": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                        },
+                        "close": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                        }
+                      },
+                      "required": ["open", "close"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "service_area.radius"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "centre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "radius_km": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 200
+                        }
+                      },
+                      "required": ["centre", "radius_km"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.tagline"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "tagline": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["tagline"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.industry"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "category": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "cleaning",
+                                "chauffeur",
+                                "legal",
+                                "health",
+                                "beauty",
+                                "food",
+                                "trades",
+                                "automotive",
+                                "property",
+                                "education",
+                                "events",
+                                "retail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["name", "category"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.offerings"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          }
+                        }
+                      },
+                      "required": ["items"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.audience"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.overview"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 800,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.proof"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "service_area.text"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "assistant.name"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["name"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "assistant.pronouns"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": ["he_him", "she_her", "they_them"]
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "assistant.tone"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": ["friendly", "professional", "casual"]
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.preferred_name"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["name"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.build_mode"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["assistant", "manual"]
+                        }
+                      },
+                      "required": ["mode"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.template"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": ["classic", "modern", "bold"]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.palette"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "ocean",
+                                "classic_blue",
+                                "harbour",
+                                "lagoon",
+                                "forest",
+                                "sage",
+                                "sunset",
+                                "mocha",
+                                "cardinal",
+                                "berry",
+                                "burgundy",
+                                "midnight",
+                                "damson",
+                                "ultra_violet",
+                                "graphite",
+                                "onyx"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "const": "custom"
+                            }
+                          ]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        },
+                        "brand": {
+                          "type": "string",
+                          "pattern": "^#[0-9a-f]{6}$"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.font"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "clean_sans",
+                                "classic_serif",
+                                "soft_rounded"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "const": "custom"
+                            }
+                          ]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.pages"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "ids": {
+                          "minItems": 1,
+                          "maxItems": 9,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "home",
+                              "services",
+                              "about",
+                              "gallery",
+                              "testimonials",
+                              "faq",
+                              "service_area",
+                              "contact",
+                              "quote"
+                            ]
+                          }
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["ids"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "media.uploads"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "content_type": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/webp"
+                                ]
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 5242880
+                              },
+                              "alt": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "pattern": "\\S"
+                              }
+                            },
+                            "required": ["id", "name", "content_type", "bytes"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["items"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "quote.form"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "fields": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "pattern": "\\S"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "textarea",
+                                  "number",
+                                  "date",
+                                  "select",
+                                  "tel",
+                                  "email"
+                                ]
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "hint": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "options": {
+                                "anyOf": [
+                                  {
+                                    "minItems": 2,
+                                    "maxItems": 12,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 60,
+                                      "pattern": "\\S"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "label",
+                              "type",
+                              "required",
+                              "hint",
+                              "options"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["fields"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "skippable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["step", "prefill", "skippable"],
+        "additionalProperties": false
+      },
+      "AskDetailsOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "stated"
+              },
+              "facts": {
+                "minItems": 1,
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.name"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["name"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.phone"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "e164": {
+                              "type": "string",
+                              "pattern": "^\\+[1-9]\\d{6,14}$"
+                            }
+                          },
+                          "required": ["e164"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.email"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": "string",
+                              "maxLength": 254,
+                              "format": "email",
+                              "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                            }
+                          },
+                          "required": ["address"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "hours.weekday"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "open": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            },
+                            "close": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            }
+                          },
+                          "required": ["open", "close"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "service_area.radius"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "centre": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "radius_km": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 200
+                            }
+                          },
+                          "required": ["centre", "radius_km"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.tagline"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "tagline": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["tagline"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.industry"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "category": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "cleaning",
+                                    "chauffeur",
+                                    "legal",
+                                    "health",
+                                    "beauty",
+                                    "food",
+                                    "trades",
+                                    "automotive",
+                                    "property",
+                                    "education",
+                                    "events",
+                                    "retail"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["name", "category"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.offerings"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "minItems": 1,
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          "required": ["items"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.audience"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["text"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.overview"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 800,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["text"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.proof"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 600,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["text"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "service_area.text"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["text"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "assistant.name"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["name"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "assistant.pronouns"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "enum": ["he_him", "she_her", "they_them"]
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "assistant.tone"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "enum": ["friendly", "professional", "casual"]
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "owner.preferred_name"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 60,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["name"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.build_mode"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": ["assistant", "manual"]
+                            }
+                          },
+                          "required": ["mode"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.template"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "enum": ["classic", "modern", "bold"]
+                            },
+                            "custom": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.palette"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "ocean",
+                                    "classic_blue",
+                                    "harbour",
+                                    "lagoon",
+                                    "forest",
+                                    "sage",
+                                    "sunset",
+                                    "mocha",
+                                    "cardinal",
+                                    "berry",
+                                    "burgundy",
+                                    "midnight",
+                                    "damson",
+                                    "ultra_violet",
+                                    "graphite",
+                                    "onyx"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "const": "custom"
+                                }
+                              ]
+                            },
+                            "custom": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            },
+                            "brand": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.font"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "clean_sans",
+                                    "classic_serif",
+                                    "soft_rounded"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "const": "custom"
+                                }
+                              ]
+                            },
+                            "custom": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.pages"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "ids": {
+                              "minItems": 1,
+                              "maxItems": 9,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "home",
+                                  "services",
+                                  "about",
+                                  "gallery",
+                                  "testimonials",
+                                  "faq",
+                                  "service_area",
+                                  "contact",
+                                  "quote"
+                                ]
+                              }
+                            },
+                            "custom": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["ids"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "media.uploads"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "minItems": 1,
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  "content_type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image/jpeg",
+                                      "image/png",
+                                      "image/webp"
+                                    ]
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 5242880
+                                  },
+                                  "alt": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200,
+                                    "pattern": "\\S"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "content_type",
+                                  "bytes"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": ["items"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "quote.form"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "fields": {
+                              "minItems": 2,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80,
+                                    "pattern": "\\S"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text",
+                                      "textarea",
+                                      "number",
+                                      "date",
+                                      "select",
+                                      "tel",
+                                      "email"
+                                    ]
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "hint": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "options": {
+                                    "anyOf": [
+                                      {
+                                        "minItems": 2,
+                                        "maxItems": 12,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 60,
+                                          "pattern": "\\S"
+                                        }
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "label",
+                                  "type",
+                                  "required",
+                                  "hint",
+                                  "options"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": ["fields"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["answer", "facts"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "skipped"
+              }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "AskFactInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "oneOf": [
@@ -1854,6 +3456,40 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 800,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": ["text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.proof"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 600,
                         "pattern": "\\S"
                       }
                     },
@@ -2722,6 +4358,30 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 800,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["text"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.proof"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 600,
                             "pattern": "\\S"
                           }
                         },
@@ -4397,6 +6057,30 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "business.proof"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 600,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": ["text"],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": ["key", "value"],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "service_area.text"
                                                 },
                                                 "value": {
@@ -4875,6 +6559,827 @@
                                         }
                                       },
                                       "required": ["answer", "fact"],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "skipped"
+                                        }
+                                      },
+                                      "required": ["answer"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "stated"
+                                        },
+                                        "facts": {
+                                          "minItems": 1,
+                                          "maxItems": 3,
+                                          "type": "array",
+                                          "items": {
+                                            "oneOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.name"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 120,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["name"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.phone"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "e164": {
+                                                        "type": "string",
+                                                        "pattern": "^\\+[1-9]\\d{6,14}$"
+                                                      }
+                                                    },
+                                                    "required": ["e164"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.email"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "address": {
+                                                        "type": "string",
+                                                        "maxLength": 254,
+                                                        "format": "email",
+                                                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                                                      }
+                                                    },
+                                                    "required": ["address"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "hours.weekday"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "open": {
+                                                        "type": "string",
+                                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                                      },
+                                                      "close": {
+                                                        "type": "string",
+                                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "open",
+                                                      "close"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "service_area.radius"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "centre": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 80,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "radius_km": {
+                                                        "type": "number",
+                                                        "exclusiveMinimum": 0,
+                                                        "maximum": 200
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "centre",
+                                                      "radius_km"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.tagline"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "tagline": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 120,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["tagline"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.industry"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 80,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "category": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "cleaning",
+                                                              "chauffeur",
+                                                              "legal",
+                                                              "health",
+                                                              "beauty",
+                                                              "food",
+                                                              "trades",
+                                                              "automotive",
+                                                              "property",
+                                                              "education",
+                                                              "events",
+                                                              "retail"
+                                                            ]
+                                                          },
+                                                          {
+                                                            "type": "null"
+                                                          }
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "name",
+                                                      "category"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.offerings"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "minItems": 1,
+                                                        "maxItems": 12,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 120,
+                                                          "pattern": "\\S"
+                                                        }
+                                                      }
+                                                    },
+                                                    "required": ["items"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.audience"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 500,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["text"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.overview"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 800,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["text"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.proof"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 600,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["text"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "service_area.text"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["text"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "assistant.name"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 40,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["name"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "assistant.pronouns"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "he_him",
+                                                          "she_her",
+                                                          "they_them"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "assistant.tone"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "friendly",
+                                                          "professional",
+                                                          "casual"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "owner.preferred_name"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 60,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["name"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.build_mode"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "mode": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "assistant",
+                                                          "manual"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": ["mode"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.template"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "classic",
+                                                          "modern",
+                                                          "bold"
+                                                        ]
+                                                      },
+                                                      "custom": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.palette"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "ocean",
+                                                              "classic_blue",
+                                                              "harbour",
+                                                              "lagoon",
+                                                              "forest",
+                                                              "sage",
+                                                              "sunset",
+                                                              "mocha",
+                                                              "cardinal",
+                                                              "berry",
+                                                              "burgundy",
+                                                              "midnight",
+                                                              "damson",
+                                                              "ultra_violet",
+                                                              "graphite",
+                                                              "onyx"
+                                                            ]
+                                                          },
+                                                          {
+                                                            "type": "string",
+                                                            "const": "custom"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "custom": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "brand": {
+                                                        "type": "string",
+                                                        "pattern": "^#[0-9a-f]{6}$"
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.font"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "clean_sans",
+                                                              "classic_serif",
+                                                              "soft_rounded"
+                                                            ]
+                                                          },
+                                                          {
+                                                            "type": "string",
+                                                            "const": "custom"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "custom": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.pages"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "ids": {
+                                                        "minItems": 1,
+                                                        "maxItems": 9,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "home",
+                                                            "services",
+                                                            "about",
+                                                            "gallery",
+                                                            "testimonials",
+                                                            "faq",
+                                                            "service_area",
+                                                            "contact",
+                                                            "quote"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "custom": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["ids"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "media.uploads"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "minItems": 1,
+                                                        "maxItems": 12,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "id": {
+                                                              "type": "string",
+                                                              "format": "uuid",
+                                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                                            },
+                                                            "name": {
+                                                              "type": "string",
+                                                              "minLength": 1,
+                                                              "maxLength": 120,
+                                                              "pattern": "\\S"
+                                                            },
+                                                            "content_type": {
+                                                              "type": "string",
+                                                              "enum": [
+                                                                "image/jpeg",
+                                                                "image/png",
+                                                                "image/webp"
+                                                              ]
+                                                            },
+                                                            "bytes": {
+                                                              "type": "integer",
+                                                              "exclusiveMinimum": 0,
+                                                              "maximum": 5242880
+                                                            },
+                                                            "alt": {
+                                                              "type": "string",
+                                                              "minLength": 1,
+                                                              "maxLength": 200,
+                                                              "pattern": "\\S"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "id",
+                                                            "name",
+                                                            "content_type",
+                                                            "bytes"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      }
+                                                    },
+                                                    "required": ["items"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "quote.form"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "fields": {
+                                                        "minItems": 2,
+                                                        "maxItems": 8,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "key": {
+                                                              "type": "string",
+                                                              "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                                            },
+                                                            "label": {
+                                                              "type": "string",
+                                                              "minLength": 1,
+                                                              "maxLength": 80,
+                                                              "pattern": "\\S"
+                                                            },
+                                                            "type": {
+                                                              "type": "string",
+                                                              "enum": [
+                                                                "text",
+                                                                "textarea",
+                                                                "number",
+                                                                "date",
+                                                                "select",
+                                                                "tel",
+                                                                "email"
+                                                              ]
+                                                            },
+                                                            "required": {
+                                                              "type": "boolean"
+                                                            },
+                                                            "hint": {
+                                                              "anyOf": [
+                                                                {
+                                                                  "type": "string",
+                                                                  "minLength": 1,
+                                                                  "maxLength": 120,
+                                                                  "pattern": "\\S"
+                                                                },
+                                                                {
+                                                                  "type": "null"
+                                                                }
+                                                              ]
+                                                            },
+                                                            "options": {
+                                                              "anyOf": [
+                                                                {
+                                                                  "minItems": 2,
+                                                                  "maxItems": 12,
+                                                                  "type": "array",
+                                                                  "items": {
+                                                                    "type": "string",
+                                                                    "minLength": 1,
+                                                                    "maxLength": 60,
+                                                                    "pattern": "\\S"
+                                                                  }
+                                                                },
+                                                                {
+                                                                  "type": "null"
+                                                                }
+                                                              ]
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "key",
+                                                            "label",
+                                                            "type",
+                                                            "required",
+                                                            "hint",
+                                                            "options"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      }
+                                                    },
+                                                    "required": ["fields"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      "required": ["answer", "facts"],
                                       "additionalProperties": false
                                     },
                                     {
@@ -6082,6 +8587,30 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.proof"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -6917,6 +9446,7 @@
                         "business.offerings",
                         "business.audience",
                         "business.overview",
+                        "business.proof",
                         "service_area.text",
                         "assistant.name",
                         "assistant.pronouns",
@@ -7232,6 +9762,30 @@
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 800,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": ["text"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.proof"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 600,
                                   "pattern": "\\S"
                                 }
                               },
@@ -8698,6 +11252,7 @@
                 "business.offerings",
                 "business.audience",
                 "business.overview",
+                "business.proof",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -9011,6 +11566,7 @@
                     "business.offerings",
                     "business.audience",
                     "business.overview",
+                    "business.proof",
                     "service_area.text",
                     "assistant.name",
                     "assistant.pronouns",
@@ -9882,6 +12438,30 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 800,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.proof"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 600,
                     "pattern": "\\S"
                   }
                 },
@@ -11588,7 +14168,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 22,
+            "maxItems": 23,
             "type": "array",
             "items": {
               "oneOf": [
@@ -11856,6 +14436,30 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 800,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.proof"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600,
                           "pattern": "\\S"
                         }
                       },
@@ -13410,6 +16014,7 @@
                 "business.offerings",
                 "business.audience",
                 "business.overview",
+                "business.proof",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -13424,6 +16029,19 @@
                 "quote.form"
               ]
             }
+          },
+          "assistant_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reminders": {
             "type": "object",
@@ -13604,6 +16222,7 @@
                               "business.offerings",
                               "business.audience",
                               "business.overview",
+                              "business.proof",
                               "service_area.text",
                               "assistant.name",
                               "assistant.pronouns",
@@ -13636,6 +16255,7 @@
           "builds",
           "attention",
           "missing_facts",
+          "assistant_name",
           "reminders"
         ],
         "additionalProperties": false

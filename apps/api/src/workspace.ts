@@ -5,6 +5,7 @@ import {
   type BuildSummary,
   type DerivedReminder,
   type FactRecord,
+  FactValue,
   FactValueKey,
   InformationRequest,
   SiteFields,
@@ -241,6 +242,16 @@ export function missingFacts(current: FactRecord[]): FactValueKey[] {
   )
 }
 
+/** The name the owner gave their assistant, when the fact still parses. */
+export function assistantName(current: FactRecord[]): string | null {
+  const held = current.find((fact) => fact.key === "assistant.name")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "assistant.name"
+    ? parsed.data.value.name
+    : null
+}
+
 /** §7.3's order: approvals, questions, then alerts and reports, each list as read. */
 export function orderAttention(
   approvalItems: AttentionItem[],
@@ -355,6 +366,7 @@ export async function readWorkspace(
       builds,
       attention: orderAttention(approvalItems, questions, feed),
       missing_facts: missing,
+      assistant_name: assistantName(current),
       reminders: {
         notes,
         derived: deriveReminders(

@@ -381,7 +381,7 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(calls).toBe(1)
   })
 
-  it("keeps the business name as the owner's fact and lands the owner in onboarding, asked what kind of business it is", async () => {
+  it("keeps the business name as the owner's fact and lands the owner in onboarding, asked what the business does", async () => {
     const [held, rows, name] = await kit.withOrg({ orgId }, (db) =>
       Promise.all([
         db.select().from(conversations),
@@ -404,7 +404,7 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     expect(rows).toHaveLength(1)
     const [first] = rows
     expect(first?.parentId).toBeNull()
-    // The opener with the first question, then the industry card.
+    // The opener alone, text only: it asks what the business does.
     expect(first?.content).toEqual({
       role: "assistant",
       parts: [
@@ -413,12 +413,6 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
           type: "text",
           text: expect.stringContaining(input.name),
           state: "done",
-        },
-        {
-          type: "tool-ask_choice",
-          toolCallId: expect.any(String),
-          state: "input-available",
-          input: expect.objectContaining({ step: "industry" }),
         },
       ],
     })

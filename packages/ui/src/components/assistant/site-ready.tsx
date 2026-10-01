@@ -4,6 +4,8 @@ import {
   SpinnerGapIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { CARD_SURFACE } from "@workspace/ui/lib/card"
+import { cn } from "@workspace/ui/lib/utils"
 import { useId } from "react"
 
 /**
@@ -49,7 +51,7 @@ export function SiteReady({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-3 px-2"
+      className={cn(CARD_SURFACE, "mx-2 flex max-w-2xl flex-col gap-3")}
       data-slot="site-ready"
     >
       <div className="flex flex-col gap-1">

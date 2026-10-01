@@ -11,10 +11,12 @@ import {
   MessagePrimitive,
   type PartState,
   SuggestionPrimitive,
+  TextMessagePartProvider,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
+  useThreadViewportStore,
 } from "@assistant-ui/react"
 import {
   ArrowBendDownRightIcon,
@@ -140,6 +142,18 @@ export type ThreadProps = {
    * such as the card that says a build is ready. Announced when it appears.
    */
   after?: ReactNode
+  /**
+   * Plays the conversation's opening message in the first time it is seen,
+   * as a reply being written: the typing dot, then the words, then its
+   * cards. `unseen` says whether this browser has shown that message;
+   * `seen` records that it now has.
+   */
+  reveal?: ThreadReveal | undefined
+}
+
+export type ThreadReveal = {
+  unseen: (messageId: string, createdAt: string | null) => boolean
+  seen: (messageId: string) => void
 }
 
 type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus" | "after">
@@ -223,11 +237,12 @@ export const Thread: FC<ThreadProps> = ({
   quickActions,
   mode,
   after,
+  reveal,
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
-    () => ({ placeholder, briefing, quickActions, mode }),
-    [placeholder, briefing, quickActions, mode]
+    () => ({ placeholder, briefing, quickActions, mode, reveal }),
+    [placeholder, briefing, quickActions, mode, reveal]
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
@@ -246,6 +261,40 @@ export const Thread: FC<ThreadProps> = ({
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
+}
+
+/**
+ * Keeps the turn the viewport pins at the top when the reply's id changes as
+ * the run ends. While it waits the runtime shows a placeholder reply, and a
+ * reply that arrives in one piece replaces it in the same update that ends
+ * the run. assistant-ui 0.15.22 then drops the turn as stale and takes away
+ * the space it held below the reply, so the view scrolled back up over the
+ * previous reply. The turn moves to the reply that replaced the placeholder.
+ */
+const KeepTurnAnchor: FC = () => {
+  const viewport = useThreadViewportStore()
+  const aui = useAui()
+  useEffect(
+    () =>
+      viewport.subscribe((state, previous) => {
+        const turn = previous.topAnchorTurn
+        if (state.topAnchorTurn || !turn) return
+        const messages = aui.thread().getState().messages
+        const reply = messages.at(-1)
+        if (
+          messages.at(-2)?.id === turn.anchorId &&
+          reply?.role === "assistant" &&
+          reply.id !== turn.targetId
+        ) {
+          state.setTopAnchorTurn({
+            anchorId: turn.anchorId,
+            targetId: reply.id,
+          })
+        }
+      }),
+    [viewport, aui]
+  )
+  return null
 }
 
 const ThreadRoot: FC<{
@@ -269,8 +318,11 @@ const ThreadRoot: FC<{
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        // Clear of the workspace's floating panel, where there is one; the
+        // padding sits inside the scroller, so its bar stays at the edge.
+        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
       >
+        <KeepTurnAnchor />
         <div
           className={cn(
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
@@ -380,6 +432,9 @@ const localDay = (at: string | null): number | null => {
   return Number.isNaN(date.getTime()) ? null : localMidnight(date)
 }
 
+// It shows only after a short delay: on each send the viewport leaves the
+// bottom for the moment it takes to glide the sent message up, and without
+// the delay the button blinked on every send.
 const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom
@@ -388,7 +443,7 @@ const ThreadScrollToBottom: FC = () => {
           tooltip="Scroll to bottom"
           variant="outline"
           size="icon"
-          className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full disabled:invisible"
+          className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 duration-150 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
         />
       }
     >
@@ -643,6 +698,90 @@ const MessageError: FC = () => {
   )
 }
 
+/** The dot a reply shows until its first words arrive. */
+const TypingIndicator: FC = () => (
+  <span data-slot="aui_assistant-message-indicator" role="status">
+    <span
+      aria-hidden
+      className="animate-pulse font-sans motion-reduce:animate-none"
+    >
+      {"●"}
+    </span>
+    <span className="sr-only">Working</span>
+  </span>
+)
+
+/** How long a played-in message shows the typing dot, then takes over its words. */
+const REVEAL_TYPING_MS = 700
+const REVEAL_TYPING_REDUCED_MS = 300
+const REVEAL_WRITING_MS = 1100
+
+/** Each word with the space after it, so a prefix reads as the text so far. */
+const wordsOf = (text: string) => text.match(/\S+\s*/g) ?? []
+
+type Reveal =
+  /** Not played in: the message as it stands. */
+  | { phase: "still" }
+  | { phase: "typing" }
+  | { phase: "writing"; text: string }
+  /** Played in, and done: the whole message, its cards fading in. */
+  | { phase: "played" }
+
+/**
+ * Plays in the opening message, alone in the thread, the first time this
+ * browser shows it. Decided once, when the message first renders, so a
+ * history that loads later never replays it. The owner typing or sending
+ * ends it at once, and less motion skips the words.
+ */
+const useReveal = (): Reveal => {
+  const { reveal } = useContext(ThreadSettingsContext)
+  const aui = useAui()
+  const [words] = useState(() => {
+    const message = aui.message().getState()
+    const opening =
+      message.role === "assistant" &&
+      message.index === 0 &&
+      aui.thread().getState().messages.length === 1
+    if (!reveal || !opening || !reveal.unseen(message.id, createdAt(message)))
+      return null
+    return wordsOf(
+      message.parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n\n")
+    )
+  })
+  const id = useAuiState((s) => s.message.id)
+  const [shown, setShown] = useState<number | null>(null)
+  const [over, setOver] = useState(false)
+  const interrupted = useAuiState(
+    (s) => !s.thread.composer.isEmpty || s.thread.messages.length > 1
+  )
+  useEffect(() => {
+    if (interrupted) setOver(true)
+  }, [interrupted])
+  useEffect(() => {
+    if (!words) return
+    reveal?.seen(id)
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+    // About a second for the words whatever their number, within reason.
+    const step = Math.min(60, Math.max(12, REVEAL_WRITING_MS / words.length))
+    const write = (count: number) => {
+      if (count >= words.length) return setOver(true)
+      setShown(count)
+      timer = setTimeout(() => write(count + 1), step)
+    }
+    let timer = setTimeout(
+      () => (reduced ? setOver(true) : write(1)),
+      reduced ? REVEAL_TYPING_REDUCED_MS : REVEAL_TYPING_MS
+    )
+    return () => clearTimeout(timer)
+  }, [words, reveal, id])
+  if (!words) return { phase: "still" }
+  if (over) return { phase: "played" }
+  if (shown === null) return { phase: "typing" }
+  return { phase: "writing", text: words.slice(0, shown).join("") }
+}
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
@@ -654,6 +793,9 @@ const AssistantMessage: FC = () => {
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
 
+  const reveal = useReveal()
+  const writing = reveal.phase === "typing" || reveal.phase === "writing"
+
   return (
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
@@ -663,44 +805,56 @@ const AssistantMessage: FC = () => {
       <div
         data-slot="aui_assistant-message-content"
         className="wrap-break-word px-2 text-foreground leading-relaxed"
+        // A played-in message is read out once, whole, when it is done.
+        aria-live={reveal.phase === "still" ? undefined : "polite"}
       >
-        <MessagePrimitive.GroupedParts groupBy={groupThreadParts}>
-          {({ part, children }) => {
-            switch (part.type) {
-              case "group-chainOfThought":
-                return <div data-slot="aui_chain-of-thought">{children}</div>
-              case "group-tool":
-                return <ToolGroup group={part}>{children}</ToolGroup>
-              case "group-reasoning":
-                return <ReasoningGroup group={part}>{children}</ReasoningGroup>
-              case "text":
-                return <MarkdownText />
-              case "reasoning":
-                return <Reasoning {...part} />
-              case "tool-call":
-                return part.toolUI ?? <ToolFallbackComponent {...part} />
-              case "data":
-                return part.dataRendererUI
-              case "indicator":
-                return (
-                  <span
-                    data-slot="aui_assistant-message-indicator"
-                    role="status"
-                  >
-                    <span
-                      aria-hidden
-                      className="animate-pulse font-sans motion-reduce:animate-none"
-                    >
-                      {"\u25cf"}
-                    </span>
-                    <span className="sr-only">Working</span>
-                  </span>
-                )
-              default:
-                return null
-            }
-          }}
-        </MessagePrimitive.GroupedParts>
+        {reveal.phase === "typing" ? (
+          <TypingIndicator />
+        ) : reveal.phase === "writing" ? (
+          <div aria-hidden>
+            <TextMessagePartProvider isRunning text={reveal.text}>
+              <MarkdownText />
+            </TextMessagePartProvider>
+          </div>
+        ) : (
+          <MessagePrimitive.GroupedParts groupBy={groupThreadParts}>
+            {({ part, children }) => {
+              switch (part.type) {
+                case "group-chainOfThought":
+                  return <div data-slot="aui_chain-of-thought">{children}</div>
+                case "group-tool":
+                  return <ToolGroup group={part}>{children}</ToolGroup>
+                case "group-reasoning":
+                  return (
+                    <ReasoningGroup group={part}>{children}</ReasoningGroup>
+                  )
+                case "text":
+                  return <MarkdownText />
+                case "reasoning":
+                  return <Reasoning {...part} />
+                case "tool-call": {
+                  const card = part.toolUI ?? (
+                    <ToolFallbackComponent {...part} />
+                  )
+                  // Played in: the cards follow the words.
+                  return reveal.phase === "played" ? (
+                    <div className="fade-in animate-in duration-200 motion-reduce:animate-none">
+                      {card}
+                    </div>
+                  ) : (
+                    card
+                  )
+                }
+                case "data":
+                  return part.dataRendererUI
+                case "indicator":
+                  return <TypingIndicator />
+                default:
+                  return null
+              }
+            }}
+          </MessagePrimitive.GroupedParts>
+        )}
         <MessageError />
       </div>
 
@@ -708,7 +862,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center gap-2", ACTION_BAR_HEIGHT)}
       >
-        <MessageTime />
+        <MessageTime held={writing} />
         {/* A message of cards alone has no words to rate. */}
         <AuiIf
           condition={(s) =>
@@ -783,11 +937,19 @@ const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
   hour12: true,
 })
 
-const MessageTime: FC = () => {
+/**
+ * Held back, in its place, while the reply is still being written, so
+ * nothing under the words moves but the words.
+ */
+const MessageTime: FC<{ held?: boolean }> = ({ held = false }) => {
   const at = useAuiState((s) => sentAt(s.message))
+  const running = useAuiState((s) => s.message.status?.type === "running")
   return (
     <time
-      className="text-[0.6875rem] text-muted-foreground tabular-nums"
+      className={cn(
+        "text-[0.6875rem] text-muted-foreground tabular-nums",
+        (running || held) && "invisible"
+      )}
       dateTime={at}
     >
       {LOCAL_TIME.format(new Date(at))}

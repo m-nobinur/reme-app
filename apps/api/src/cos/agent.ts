@@ -59,8 +59,11 @@ import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
  * it takes is logged before the next.
  */
 
-/** The model when `COS_MODEL` is unset. A test keeps it in the facade's list. */
-export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
+/**
+ * The model when `COS_MODEL` is unset, at its own default reasoning effort
+ * (the owner's call, 2026-10-01). A test keeps it in the facade's list.
+ */
+export const DEFAULT_MODEL = "openai/gpt-6.1-sol"
 
 /**
  * The run's limits, from every CoS turn staging ran on main d626d0f, the
@@ -97,13 +100,18 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "5"
+const PREFIX_VERSION = "6"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
 Who you are:
 - The context of each turn gives the name the owner chose for you, your pronouns, what to call the owner and your tone, once the owner has set them. Use that name for yourself and that name for the owner. Before a name is set, say you are their assistant and don't make one up.
 - Tone friendly: warm and approachable. Tone professional: polished and precise, full sentences, no exclamation marks. Tone casual: relaxed and brief, with contractions. With no tone given, be friendly.
+
+How you write:
+- Talk like a capable colleague in a chat, in plain British English. Most replies are one to three short sentences; go longer only when the owner asks for detail or a list of steps.
+- No headings, no bold, and no bullet lists unless you are listing steps or options. No preamble ("Great question"), no sign-off, no repeating back what the owner just said.
+- Lead with the answer or what you did, then the one thing the owner needs to know or do next.
 
 What you can do:
 - Read the workspace (site, builds, the Developer's open questions, reviews waiting on the owner, missing facts), the business facts, and a build's preview.
@@ -200,7 +208,7 @@ export function priceOf(modelId: string): Price | null {
 /**
  * The CoS's model through OpenRouter, with the table's routing: capped at
  * its price so no provider can bill more than the reservation assumes, and
- * kept off the hosts the table excludes. Asks for the billed cost on each
+ * kept off the hosts the table excludes, fastest host first. Asks for the billed cost on each
  * finish part. Null for a model the table does not hold, which the chat
  * treats as no model at all.
  */
@@ -214,7 +222,10 @@ export function openrouterModel(
   return createOpenRouter({ apiKey }).chat(modelId, {
     ...settings,
     usage: { include: true },
-    provider: { ...settings.provider, ...routing },
+    // Someone waits on every call here, so the fastest host under the cap
+    // answers. Measured 2026-10-01 for Gemini 3.8 Flash: Vertex flex at p50
+    // 12.6 s and p90 114 s, AI Studio at p50 1.6 s.
+    provider: { ...settings.provider, ...routing, sort: "latency" },
   })
 }
 
@@ -681,6 +692,23 @@ export function cosAgent(
       },
     ],
     maxOutputTokens: LIMITS.maxOutputTokens,
+    // The instructions and tools come first and never change, and only the
+    // turn's context and the owner's newest message follow the history, so
+    // each call repeats the last one's prefix. Both keys name the
+    // conversation: OpenRouter keeps its calls on one provider, and OpenAI
+    // routes them to the machine holding its history. A key per org would
+    // share nothing more, since every org's instructions are the same. The
+    // key is the id's hash, so no tenancy id leaves for the provider.
+    prepareCall: async (call) => {
+      const key = await sha256(run.turn.sessionId)
+      return {
+        ...call,
+        providerOptions: {
+          ...call.providerOptions,
+          openrouter: { session_id: key, prompt_cache_key: key },
+        },
+      }
+    },
     prepareStep: async ({ messages, stepNumber }) => {
       // A failed read is not a mismatch: the turn ends as an error and the
       // conversation stays open.

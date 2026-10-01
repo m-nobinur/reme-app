@@ -159,6 +159,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
             },
           })),
           missing_facts: [],
+          assistant_name: null,
           reminders: { notes: [], derived: [] },
         }
         const workspace = await apiSource.pollWorkspace(null)

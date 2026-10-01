@@ -9,11 +9,14 @@ import {
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   askChoiceView,
+  askDetailsView,
   askFactView,
   askUploadView,
   choiceText,
   decisionView,
+  detailsText,
   isHeld,
+  phoneText,
   readView,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
@@ -342,4 +345,68 @@ it("reads a card for the retired hourly price as skipped, answered or not", () =
       },
     })
   ).toEqual(skipped)
+})
+
+it("reads every ask_details state, and the answer in the owner's words", () => {
+  const contact = {
+    step: "contact",
+    prefill: [{ key: "business.email", value: { address: "a@b.example" } }],
+    skippable: false,
+  }
+  expect(askDetailsView({ args: contact })).toEqual({
+    state: "pending",
+    input: contact,
+  })
+  const stated = {
+    answer: "stated",
+    facts: [
+      { key: "business.phone", value: { e164: "+447700900123" } },
+      { key: "business.email", value: { address: "a@b.example" } },
+    ],
+  }
+  const answered = askDetailsView({ args: contact, result: stated })
+  expect(answered).toEqual({
+    state: "answered",
+    input: contact,
+    output: stated,
+  })
+  if (answered.state === "answered") {
+    expect(detailsText(answered.output.facts)).toBe("07700 900123, a@b.example")
+  }
+  expect(
+    detailsText([
+      { key: "assistant.name", value: { name: "Ava" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ])
+  ).toBe("Ava, she/her, Friendly")
+  expect(
+    askDetailsView({ args: contact, result: { answer: "skipped" } }).state
+  ).toBe("skipped")
+  expect(
+    askDetailsView({
+      args: contact,
+      isError: true,
+      result: { error: CANCELLED },
+    }).state
+  ).toBe("cancelled")
+  // A prefill outside the step, and an answer with no facts, are broken.
+  expect(
+    askDetailsView({
+      args: {
+        ...contact,
+        prefill: [{ key: "assistant.name", value: { name: "Ava" } }],
+      },
+    }).state
+  ).toBe("error")
+  expect(
+    askDetailsView({ args: contact, result: { answer: "stated", facts: [] } })
+      .state
+  ).toBe("error")
+})
+
+it("writes a UK number the way it is written at home, and leaves others", () => {
+  expect(phoneText("+447700900123")).toBe("07700 900123")
+  expect(phoneText("+442079460000")).toBe("020 7946 0000")
+  expect(phoneText("+14155550100")).toBe("+14155550100")
 })

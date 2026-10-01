@@ -147,6 +147,7 @@ function waitingCard(tail) {
     (p) =>
       [
         "tool-ask_fact",
+        "tool-ask_details",
         "tool-ask_choice",
         "tool-ask_upload",
         "tool-review_quote_form",
@@ -176,21 +177,9 @@ async function onboard(persona, spec) {
     facts: [{ key: "business.name", value: { name: persona.signIn.orgName } }],
   }
   const email = `${persona.id}@owner.invalid`
-  const onboardingOf = () => ({
-    ...progressOf(scriptRows(sim.rows)),
-    orgId: `00000000-0000-4000-8000-${String(persona.id.length).padStart(12, "0")}`,
-    facts: sim.facts,
-    orgName: persona.signIn.orgName,
-    ownerName: persona.signIn.ownerName,
-    ownerEmail: email,
-  })
-  const state = (o, pending, input) => ({
-    onboarding: o,
-    pending: pending ?? null,
-    input,
-    rows: sim.rows.slice(-PLANNER.rows),
-    // As `chat.ts` counts them: every card in the rows, and the planned questions in words.
-    asked: askedSoFar(
+  // As `chat.ts` counts them: every card in the rows, and the planned questions in words.
+  const askedNow = () =>
+    askedSoFar(
       sim.rows.flatMap((r) =>
         r.parts
           .filter(
@@ -202,7 +191,22 @@ async function onboard(persona, spec) {
           }))
       ),
       plans
-    ),
+    )
+  const onboardingOf = () => ({
+    ...progressOf(scriptRows(sim.rows)),
+    orgId: `00000000-0000-4000-8000-${String(persona.id.length).padStart(12, "0")}`,
+    facts: sim.facts,
+    orgName: persona.signIn.orgName,
+    ownerName: persona.signIn.ownerName,
+    ownerEmail: email,
+    asked: askedNow(),
+  })
+  const state = (o, pending, input) => ({
+    onboarding: o,
+    pending: pending ?? null,
+    input,
+    rows: sim.rows.slice(-PLANNER.rows),
+    asked: askedNow(),
   })
   const put = (facts) => {
     for (const fact of facts) {
@@ -210,6 +214,7 @@ async function onboard(persona, spec) {
     }
   }
   const calls = []
+  const firsts = []
   const plans = []
   const problems = []
   const says = []
@@ -242,7 +247,9 @@ async function onboard(persona, spec) {
 
   /** The planner's turn, or the script's when it falls back. */
   const plan = async (s) => {
-    const outcome = await planTurn(model, price, s)
+    // Streamed as the api streams it, so the first words' time is measured.
+    const outcome = await planTurn(model, price, s, undefined, () => undefined)
+    if (outcome.firstChunkMs !== null) firsts.push(outcome.firstChunkMs)
     if (process.env.ONBOARDING_EVAL_VERBOSE) {
       for (const c of outcome.calls)
         console.log(
@@ -268,12 +275,12 @@ async function onboard(persona, spec) {
       return null
     }
     const { checked } = outcome
+    const parts = planParts(checked, s, newId)
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
     plans.push(checked.plan)
     for (const problem of sayProblems(checked.plan.say))
       problems.push(`say: ${problem}`)
-    const parts = planParts(checked, s, newId)
     if (checked.plan.next.kind === "review_quote_form") {
       const contact = contactFields(checked.plan.next.fields)
       if (contact.length > 0)
@@ -322,7 +329,12 @@ async function onboard(persona, spec) {
       return false
     }
     const current = applied(o, meant)
-    let step = await plan(state(current, null, { kind: "card", card, output }))
+    // As `chat.ts` routes them: a card answer is the script's, with no
+    // model call, except a quote form sent back with changes in words.
+    let step =
+      output.answer === "changes"
+        ? await plan(state(current, null, { kind: "card", card, output }))
+        : null
     Object.assign(card, { state: "output-available", output })
     if (meant.kind === "facts") put(meant.facts)
     if (!step)
@@ -385,11 +397,14 @@ async function onboard(persona, spec) {
     if (!ended(end)) problems.push("the manual path did not close")
     if (factOf(sim.facts, "site.build_mode")?.mode !== "manual")
       problems.push("site.build_mode is not manual")
+    // Whoever said it: the builder answer is a card, which code answers.
     if (
-      !says.some((s) =>
-        /not (yet )?(in|part of) the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet/i.test(
-          s
-        )
+      !lines().some(
+        (l) =>
+          l.from === "Assistant" &&
+          /not (yet )?(in|part of) the app|not ready in the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet/i.test(
+            l.text
+          )
       )
     ) {
       problems.push("never said the builder is not in the app yet")
@@ -483,6 +498,7 @@ async function onboard(persona, spec) {
     modelId: spec,
     problems,
     calls,
+    firsts,
     fallbacks,
     refusedFirst,
     turns,
@@ -498,6 +514,10 @@ function describe(card) {
   if (card.type === "tool-ask_fact")
     return `form for ${input.key}${input.prefill ? `, prefilled ${JSON.stringify(input.prefill)}` : ""}`
   if (card.type === "tool-ask_upload") return "photo upload, skippable"
+  if (card.type === "tool-ask_details")
+    return input.step === "contact"
+      ? "form for the phone number and the email"
+      : "form for the assistant's name, pronouns and tone"
   if (card.type === "tool-review_quote_form")
     return `quote form proposal: ${input.fields.map((f) => `${f.label} (${f.type}${f.required ? ", required" : ""})`).join("; ")}`
   return card.type
@@ -555,6 +575,38 @@ function cardAction(persona, card, { quoteChanged }) {
           kind: "answer",
           output: { answer: "stated", fact: { key: input.key, value } },
         }
+      : null
+  }
+  if (card.type === "tool-ask_details") {
+    // Filled in as the owner's sheet has it; an owner with no name for the
+    // assistant types instead, which is the planner's to read.
+    const truth = { ...persona.truth, ...(persona.truthAfter ?? {}) }
+    const preset = (rule) => (rule && !rule.startsWith("type:") ? rule : null)
+    const named = truth.assistant?.source.replace(/^\w/, (c) => c.toUpperCase())
+    const facts =
+      input.step === "contact"
+        ? [
+            { key: "business.phone", value: { e164: truth.phone } },
+            { key: "business.email", value: { address: truth.email } },
+          ]
+        : named
+          ? [
+              { key: "assistant.name", value: { name: named } },
+              ...(preset(persona.cards.pronouns)
+                ? [
+                    {
+                      key: "assistant.pronouns",
+                      value: { id: persona.cards.pronouns },
+                    },
+                  ]
+                : []),
+              ...(preset(persona.cards.tone)
+                ? [{ key: "assistant.tone", value: { id: persona.cards.tone } }]
+                : []),
+            ]
+          : []
+    return facts.length > 0
+      ? { kind: "answer", output: { answer: "stated", facts } }
       : null
   }
   if (card.type === "tool-ask_upload") {
@@ -625,8 +677,8 @@ export default async function run() {
   }
   const table = [
     "",
-    "| Model | Owners passed | Fallback turns | First plans refused | Planner calls | $ per onboarding | Call p50 / p95 ms | Owner turns (median) |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Model | Owners passed | Fallback turns | First plans refused | Planner calls | $ per onboarding | Call p50 / p95 ms | First words p50 / p95 ms | Cached input | Owner turns (median) |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ]
   for (const modelId of ids) {
     const mine = results.filter((r) => r.modelId === modelId)
@@ -634,8 +686,11 @@ export default async function run() {
     const cost =
       calls.reduce((t, c) => t + c.costUsd, 0) / Math.max(1, mine.length)
     const ms = calls.map((c) => c.ms)
+    const firsts = mine.flatMap((r) => r.firsts)
+    const input = calls.reduce((t, c) => t + c.usage.input_tokens, 0)
+    const cached = calls.reduce((t, c) => t + c.usage.cached_input_tokens, 0)
     table.push(
-      `| ${modelId} | ${mine.filter((r) => r.problems.length === 0).length} of ${mine.length} | ${mine.reduce((t, r) => t + r.fallbacks, 0)} | ${mine.reduce((t, r) => t + r.refusedFirst, 0)} | ${calls.length} | ${cost.toFixed(4)} | ${percentile(ms, 50)} / ${percentile(ms, 95)} | ${percentile(
+      `| ${modelId} | ${mine.filter((r) => r.problems.length === 0).length} of ${mine.length} | ${mine.reduce((t, r) => t + r.fallbacks, 0)} | ${mine.reduce((t, r) => t + r.refusedFirst, 0)} | ${calls.length} | ${cost.toFixed(4)} | ${percentile(ms, 50)} / ${percentile(ms, 95)} | ${percentile(firsts, 50)} / ${percentile(firsts, 95)} | ${Math.round((100 * cached) / Math.max(1, input))}% | ${percentile(
         mine.map((r) => r.turns),
         50
       )} |`

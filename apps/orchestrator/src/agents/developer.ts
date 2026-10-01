@@ -269,7 +269,14 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
   return created
 }
 
-/** The stable prompt segment: role, rules, the fact snapshot, the starter's shape. Volatile things stay out of it so the provider's cache holds. */
+/**
+ * The stable prompt segment, ordered from what every build shares to what
+ * only this one has, so a provider that caches the longest repeated prefix
+ * reuses it across builds: the role and the rules that never change, the
+ * starter's components, then this business's rules and facts, the site map,
+ * and last the assignment's goal and budget. The whole segment is fixed for
+ * a build, so its calls reuse all of it.
+ */
 function instructions(brief: Brief, runtime: ResolvedRuntime): string {
   const facts = brief.snapshot.facts
     .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
@@ -281,8 +288,7 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
       : "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
     "",
     "Rules:",
-    ...siteRules(revising, brief.snapshot.facts, goalTainted(brief, revising)),
-    "- Build pages from the components below, as their manifests say, and never in a way a manifest forbids.",
+    "- Build pages from the components listed below, as their manifests say, and never in a way a manifest forbids.",
     "- Read every file you need in one turn; reads run together.",
     "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
     "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
@@ -291,9 +297,11 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
     "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
     "",
-    assignmentGoal(brief, revising),
-    "Acceptance criteria:",
-    ...brief.acceptance_criteria.map((c) => `- ${c}`),
+    "Components (name, file, props, never):",
+    SEED_DIGEST,
+    "",
+    "Rules for this site:",
+    ...siteRules(revising, brief.snapshot.facts, goalTainted(brief, revising)),
     "",
     `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
     facts || "- (none)",
@@ -304,8 +312,9 @@ function instructions(brief: Brief, runtime: ResolvedRuntime): string {
     // own map in the brief, built from the container by the Workflow.
     brief.map ?? repoMap(seedFiles(brief.snapshot.facts)),
     "",
-    "Components (name, file, props, never):",
-    SEED_DIGEST,
+    assignmentGoal(brief, revising),
+    "Acceptance criteria:",
+    ...brief.acceptance_criteria.map((c) => `- ${c}`),
     "",
     `Budget: ${runtime.budget.model_usd_cap} USD of model spend for this assignment. Be brief.`,
   ].join("\n")
@@ -340,7 +349,9 @@ export function Developer({ id }: AgentProps) {
     (onFallback || askedForFallback) && runtime.fallback
       ? runtime.fallback
       : runtime.model
-  useModel(model, { thinkingLevel: "low" })
+  // Sonnet 5.5's own default is adaptive thinking at effort high. pi-ai sends
+  // effort "none" when no level is given, so the default is named here.
+  useModel(model, { thinkingLevel: "high" })
   const stub = getSandbox(env.SANDBOX as never, id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(

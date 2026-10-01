@@ -22,7 +22,11 @@ export function SiteReadyCard() {
   const [approved, setApproved] = useState<ReadyReview | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const card = readyCard(readyForReview(live.workspace), approved)
+  const card = readyCard(
+    readyForReview(live.workspace),
+    approved,
+    live.workspace?.live ?? null
+  )
   if (!card) return null
   if (card.kind === "approved") {
     return (

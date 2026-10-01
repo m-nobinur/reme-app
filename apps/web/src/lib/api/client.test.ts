@@ -147,6 +147,7 @@ const workspace = {
   builds: [],
   attention: [approval, question, alert, report],
   missing_facts: [],
+  assistant_name: null,
   reminders: { notes: [], derived: [] },
 }
 const staff = {
@@ -518,6 +519,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
       builds: [building],
       attention: [],
       missing_facts: ["business.phone"],
+      assistant_name: "Ava",
       reminders: {
         notes: [],
         derived: [{ rule: "facts_missing", keys: ["business.phone"] }],
@@ -532,6 +534,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     builds: [building],
     host: "fictional.example.invalid",
     missingFacts: ["business.phone"],
+    assistantName: "Ava",
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
   })
   // Nothing to name, so the directory is not read.

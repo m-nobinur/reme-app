@@ -113,7 +113,7 @@ describe("the runtime spec", () => {
   it("resolves to a frozen hook set with the routing the spec carries", () => {
     const spec = signSpec(unsigned(), KEY)
     const runtime = resolveRuntime(spec, KEY)
-    expect(runtime.model).toBe("openrouter/deepseek/deepseek-v4.1-flash")
+    expect(runtime.model).toBe("openrouter/anthropic/claude-sonnet-5.5")
     expect(runtime.fallback).toBe("openrouter/x-ai/grok-4.6")
     expect(runtime.tools).toEqual(["site.edit", "site.checkpoint"])
     expect(Object.isFrozen(runtime)).toBe(true)
@@ -124,7 +124,7 @@ describe("the runtime spec", () => {
 describe("the routing table", () => {
   it("reads its defaults from the environment and B from the fixed pair", () => {
     expect(modelRouting({}, "A").implement?.model).toBe(
-      "openrouter/deepseek/deepseek-v4.1-flash"
+      "openrouter/anthropic/claude-sonnet-5.5"
     )
     expect(modelRouting({}, "B").implement?.model).toBe(
       "openrouter/z-ai/glm-5.3-flash"

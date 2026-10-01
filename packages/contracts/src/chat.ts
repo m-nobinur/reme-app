@@ -208,6 +208,48 @@ export const AskUploadOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
+/** The onboarding step a details card is for: a few related facts asked together. */
+export const DetailsStep = z.enum(["contact", "assistant"])
+
+/** The facts each details card asks for, in the order the card shows them. */
+export const DETAILS_KEYS = {
+  contact: ["business.phone", "business.email"],
+  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+} as const satisfies Record<z.infer<typeof DetailsStep>, readonly string[]>
+
+/**
+ * `ask_details`'s input: one card for a few related facts, such as the phone
+ * and email together. `prefill` holds the values to start from, such as the
+ * sign-in email, only for the step's own keys. The copy, the inputs and the
+ * pronoun and tone options are the web's, by key, as for `ask_fact`.
+ */
+export const AskDetailsInput = z
+  .strictObject({
+    step: DetailsStep,
+    prefill: z.array(FactValue).max(3),
+    skippable: z.boolean(),
+  })
+  .refine(
+    (card) =>
+      card.prefill.every((fact) =>
+        (DETAILS_KEYS[card.step] as readonly string[]).includes(fact.key)
+      ),
+    { path: ["prefill"], message: "prefill holds only the step's own keys" }
+  )
+
+/**
+ * `ask_details`'s output: the facts the owner stated, at least one. The api
+ * refuses a key outside the call's step, a key stated twice, and a skip of a
+ * card that is not skippable.
+ */
+export const AskDetailsOutput = z.discriminatedUnion("answer", [
+  z.strictObject({
+    answer: z.literal("stated"),
+    facts: z.array(FactValue).min(1).max(3),
+  }),
+  z.strictObject({ answer: z.literal("skipped") }),
+])
+
 /**
  * `review_quote_form`'s input: the questions the assistant proposes for the
  * site's quote request form, drawn from what the owner said they need to
@@ -243,7 +285,7 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
 
 /**
  * The owner's resolution of one pending call: an answer to `ask_fact`,
- * `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
+ * `ask_details`, `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
  * call that needs approval.
  * The api reads `output` against the call's own tool.
  */
@@ -253,6 +295,7 @@ const ChatResult = z.discriminatedUnion("kind", [
     tool_call_id: ToolCallId,
     output: z.union([
       AskFactOutput,
+      AskDetailsOutput,
       AskChoiceOutput,
       AskUploadOutput,
       ReviewQuoteFormOutput,
@@ -338,6 +381,9 @@ export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
 export type AskUploadInput = z.infer<typeof AskUploadInput>
 export type AskUploadOutput = z.infer<typeof AskUploadOutput>
 export type AskFactInput = z.infer<typeof AskFactInput>
+export type DetailsStep = z.infer<typeof DetailsStep>
+export type AskDetailsInput = z.infer<typeof AskDetailsInput>
+export type AskDetailsOutput = z.infer<typeof AskDetailsOutput>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>
 export type ChatRequest = z.infer<typeof ChatRequest>

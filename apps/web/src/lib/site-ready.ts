@@ -37,8 +37,9 @@ export function readyForReview(
 
 /**
  * What the card shows: the review to answer; a quiet line once the owner
- * approved it here, until a newer version asks again; or nothing, when the
- * review went some other way (the panel, an expiry, a replacement).
+ * approved it here, until that version is live or a newer one asks again; or
+ * nothing, when the review went some other way (the panel, an expiry, a
+ * replacement).
  */
 export type ReadyCard =
   | { kind: "review"; review: ReadyReview }
@@ -47,12 +48,13 @@ export type ReadyCard =
 
 export function readyCard(
   ready: ReadyReview | null,
-  approvedHere: ReadyReview | null
+  approvedHere: ReadyReview | null,
+  live: number | null
 ): ReadyCard {
   if (ready && ready.approvalId !== approvedHere?.approvalId) {
     return { kind: "review", review: ready }
   }
-  return approvedHere
+  return approvedHere && (live ?? 0) < approvedHere.version
     ? { kind: "approved", version: approvedHere.version }
     : null
 }

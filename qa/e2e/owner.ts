@@ -195,7 +195,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
   const assistant = page.locator('[data-slot="aui_assistant-message-root"]')
   const pending = page
     .locator(
-      '[data-slot="ask-fact"], [data-slot="ask-choice"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
+      '[data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
     )
     .filter({ has: page.locator("form, input[type=file], button") })
   const started = page
@@ -251,6 +251,22 @@ export async function answerOnboarding(page: Page): Promise<void> {
       )
     } else if (slot === "review-quote-form") {
       await step(() => card.getByRole("button", { name: "Looks good" }).click())
+    } else if (slot === "ask-details") {
+      // Empty text fields from the sheet, by their label; a prefilled email
+      // stays. Each set of chips takes its first option.
+      for (const field of await card.getByRole("textbox").all()) {
+        if (await field.inputValue()) continue
+        const label = await field.evaluate(
+          (el) => (el as HTMLInputElement).labels?.[0]?.textContent ?? ""
+        )
+        await field.fill(reply(label))
+      }
+      for (const set of await card.locator("fieldset").all()) {
+        if (!(await set.locator("input:checked").count())) {
+          await set.locator("label").first().click()
+        }
+      }
+      await step(() => card.getByRole("button", { name: "Continue" }).click())
     } else if (slot === "ask-choice") {
       // Pages come ticked; every other card takes one pick.
       if ((await card.getByRole("checkbox").count()) === 0) {

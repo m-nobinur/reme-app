@@ -76,6 +76,7 @@ const TYPED: Record<AskableFactKey, Record<string, string>> = {
   "business.offerings": { items: "Deep cleans, end of tenancy" },
   "business.audience": { text: "Busy families" },
   "business.overview": { text: "Two crews, booked a week ahead" },
+  "business.proof": { text: "Ten years trading, fully insured" },
   "service_area.text": { text: "Anytown and the villages around it" },
   "assistant.name": { name: "Sam" },
   "owner.preferred_name": { name: "Jo" },

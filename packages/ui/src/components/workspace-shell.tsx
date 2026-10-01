@@ -324,12 +324,13 @@ function WorkspaceShell({
         </header>
 
         <main
-          // The panel floats over the page's top right, so the conversation
-          // centres in the full width. Below lg its line sits under the bar,
+          // The panel floats over the page's top right. From lg it keeps
+          // `--panel-inset` free at the right, its width and a gap, which the
+          // conversation leaves clear; below lg its line sits under the bar,
           // so the page starts below it.
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
-            hasPanel && "max-lg:pt-13"
+            hasPanel && "max-lg:pt-13 lg:[--panel-inset:23.5rem]"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.

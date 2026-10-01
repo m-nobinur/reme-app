@@ -12,6 +12,13 @@ import {
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import {
+  CARD_SURFACE,
+  FIELD_ERROR,
+  OPTION,
+  OPTION_PILL,
+  OPTION_TILE,
+} from "@workspace/ui/lib/card"
+import {
   AA,
   hexColour,
   nextShown,
@@ -453,12 +460,8 @@ function ChoiceForm({
     return (
       <label
         className={cn(
-          "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150",
-          "hover:border-primary/50 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
-          "has-[:checked]:border-primary has-[:checked]:bg-primary/5",
-          pictured || hinted
-            ? "flex-col gap-2 rounded-2xl p-3"
-            : "min-h-9 items-center rounded-full px-4 text-sm",
+          OPTION,
+          pictured || hinted ? OPTION_TILE : OPTION_PILL,
           value === OTHER && color && "border-dashed"
         )}
         key={value}
@@ -555,7 +558,7 @@ function ChoiceForm({
         )
       ) : null}
       {invalid ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
+        <p className={FIELD_ERROR} role="alert">
           {invalid}
         </p>
       ) : null}
@@ -607,7 +610,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
 
   return (
     <div
-      className="my-3 flex max-w-2xl flex-col gap-2"
+      className={cn(CARD_SURFACE, "my-3 flex max-w-2xl flex-col gap-2")}
       data-slot="ask-choice"
       ref={cardRef}
     >

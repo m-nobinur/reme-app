@@ -109,7 +109,7 @@ export const FACT_INPUTS = {
     ],
   },
   "service_area.radius": {
-    ask: "Where do you work from, and how far do you travel?",
+    ask: "Where are you based, and how far do you travel?",
     fields: [
       {
         name: "centre",
@@ -153,9 +153,13 @@ export const FACT_INPUTS = {
     ask: "How does the business run day to day?",
     fields: line("text", "How you work", 800),
   },
+  "business.proof": {
+    ask: "What sets you apart from others in your trade?",
+    fields: line("text", "Years trading, accreditations, guarantees", 600),
+  },
   "service_area.text": {
-    ask: "Where do you work?",
-    fields: line("text", "Towns, regions or postcodes", 200),
+    ask: "Which areas do you cover?",
+    fields: line("text", "Your town or city, and the areas nearby", 200),
   },
   "assistant.name": {
     ask: "What would you like to call your assistant?",

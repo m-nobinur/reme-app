@@ -11,6 +11,7 @@ import {
   useFocusWhenIdle,
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
+import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { askUploadView } from "@workspace/ui/lib/tool-state"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
@@ -160,14 +161,14 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
 
   return (
     <div
-      className="my-3 flex max-w-xl flex-col gap-3"
+      className={cn(CARD_SURFACE, "my-3 flex max-w-xl flex-col gap-3")}
       data-slot="ask-upload"
       ref={cardRef}
     >
       <label
         className={cn(
-          "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-border border-dashed bg-card px-4 py-6 text-center transition-colors duration-150",
-          "hover:border-primary/50 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+          "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-border border-dashed bg-muted/40 px-4 py-6 text-center transition-colors duration-150",
+          "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
           over && "border-primary bg-primary/5",
           sending && "pointer-events-none opacity-60"
         )}

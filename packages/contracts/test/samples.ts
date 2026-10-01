@@ -70,6 +70,26 @@ export const samples: Record<ContractName, unknown> = {
     requested_at: NOW,
     expires_at: LATER,
   },
+  AskDetailsInput: {
+    step: "contact",
+    prefill: [
+      {
+        key: "business.email",
+        value: { address: "hello@brightclean.example" },
+      },
+    ],
+    skippable: false,
+  },
+  AskDetailsOutput: {
+    answer: "stated",
+    facts: [
+      { key: "business.phone", value: { e164: "+441134960000" } },
+      {
+        key: "business.email",
+        value: { address: "hello@brightclean.example" },
+      },
+    ],
+  },
   AskFactInput: {
     key: "business.name",
     skippable: false,
@@ -821,6 +841,7 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
     missing_facts: ["business.email"],
+    assistant_name: "Ava",
     reminders: {
       notes: [
         {

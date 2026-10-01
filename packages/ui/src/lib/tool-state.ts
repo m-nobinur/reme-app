@@ -1,17 +1,22 @@
 import {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDetailsInput,
+  AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
   AskUploadInput,
   AskUploadOutput,
   type FactValue,
   type FactValueKey,
+  PRONOUNS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
+  TONES,
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
+import { factText } from "@workspace/ui/lib/facts"
 
 /**
  * What the owner sees of an `ask_fact` or a `request_change` call, read from
@@ -246,6 +251,52 @@ export type AskUploadView = AskView<
 >
 export const askUploadView = (part: ToolPartView): AskUploadView =>
   askView(part, AskUploadInput, AskUploadOutput)
+
+/**
+ * An `ask_details` card: a few related facts on one card, such as the phone
+ * and email together, or the assistant's name, pronouns and tone.
+ */
+export type AskDetailsView = AskView<
+  AskDetailsInput,
+  Extract<AskDetailsOutput, { answer: "stated" }>
+>
+export const askDetailsView = (part: ToolPartView): AskDetailsView =>
+  askView(part, AskDetailsInput, AskDetailsOutput)
+
+/**
+ * A UK number as it is written at home: `+447700900123` as `07700 900123`.
+ * Any other number stays as it is.
+ */
+export function phoneText(e164: string): string {
+  const national = /^\+44(\d{10})$/.exec(e164)?.[1]
+  if (!national) return e164
+  // ponytail: two groupings, London-style 02x and five-then-six for the
+  // rest; a full UK numbering plan only if owners read these as wrong.
+  return national.startsWith("2")
+    ? `0${national.slice(0, 2)} ${national.slice(2, 6)} ${national.slice(6)}`
+    : `0${national.slice(0, 4)} ${national.slice(4)}`
+}
+
+/**
+ * Details as the owner gave them, in the card's order and the words it
+ * showed: "07700 900123, hello@example.com" or "Ava, she/her, Friendly".
+ */
+export function detailsText(facts: readonly FactValue[]): string {
+  return facts
+    .map((fact) => {
+      if (fact.key === "business.phone") return phoneText(fact.value.e164)
+      if (fact.key === "assistant.pronouns" || fact.key === "assistant.tone") {
+        const presets: readonly { id: string; label: string }[] =
+          fact.key === "assistant.pronouns" ? PRONOUNS : TONES
+        return (
+          presets.find((each) => each.id === fact.value.id)?.label ??
+          fact.value.id
+        )
+      }
+      return factText(fact.key, fact.value)
+    })
+    .join(", ")
+}
 
 /**
  * A `review_quote_form` card: the proposed questions waiting, the list the

@@ -44,10 +44,16 @@ it("picks the newest review of a built version, and nothing else", () => {
 it("asks, then says approved, then asks again for a newer version", () => {
   const v2 = { approvalId: "b", revisionId: "rev-b", version: 2 }
   const v3 = { approvalId: "c", revisionId: "rev-c", version: 3 }
-  expect(readyCard(null, null)).toBeNull()
-  expect(readyCard(v2, null)).toEqual({ kind: "review", review: v2 })
+  expect(readyCard(null, null, null)).toBeNull()
+  expect(readyCard(v2, null, 1)).toEqual({ kind: "review", review: v2 })
   // Approved here: quiet, whether or not the poll has caught up.
-  expect(readyCard(v2, v2)).toEqual({ kind: "approved", version: 2 })
-  expect(readyCard(null, v2)).toEqual({ kind: "approved", version: 2 })
-  expect(readyCard(v3, v2)).toEqual({ kind: "review", review: v3 })
+  expect(readyCard(v2, v2, 1)).toEqual({ kind: "approved", version: 2 })
+  expect(readyCard(null, v2, 1)).toEqual({ kind: "approved", version: 2 })
+  expect(readyCard(v3, v2, 1)).toEqual({ kind: "review", review: v3 })
+})
+
+it("drops the approved line once that version is live", () => {
+  const v1 = { approvalId: "a", revisionId: "rev-a", version: 1 }
+  expect(readyCard(null, v1, null)).toEqual({ kind: "approved", version: 1 })
+  expect(readyCard(null, v1, 1)).toBeNull()
 })
