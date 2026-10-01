@@ -14,6 +14,7 @@ import {
   built,
   cardAnswer,
   chosen,
+  DEFAULT_QUOTE_FIELDS,
   firstPalettes,
   ONBOARDING_GOAL,
   type Onboarding,
@@ -31,6 +32,7 @@ import {
   opener,
   photos,
   question,
+  quoteForm,
   started,
   type Voice,
 } from "../src/onboarding-copy.ts"
@@ -116,6 +118,9 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
 const everyCard = (card: ToolPart): unknown => {
   const step = stepOf(card) as StepId
   if (card.type === "tool-ask_upload") return { answer: "skipped" }
+  if (card.type === "tool-review_quote_form") {
+    return { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS }
+  }
   if (card.type === "tool-ask_choice") {
     return { answer: "chosen", ids: CHOSEN[step], other: null }
   }
@@ -145,6 +150,7 @@ describe("the onboarding steps", () => {
       "font",
       "pages",
       "upload",
+      "quote_form",
       "build",
     ])
     expect(step).toEqual([
@@ -165,7 +171,7 @@ describe("the onboarding steps", () => {
       const [text, card, ...rest] = step
       expect(rest).toEqual([])
       expect(text).toMatchObject({ type: "text", state: "done" })
-      expect(card?.type).toMatch(/^tool-ask_/)
+      expect(card?.type).toMatch(/^tool-(ask_|review_quote_form)/)
       const answer = cardAnswer(
         card as ToolPart,
         everyCard(card as ToolPart),
@@ -174,6 +180,27 @@ describe("the onboarding steps", () => {
       if (!answer) break
       at = applied(at, answer)
     }
+  })
+
+  it("never starts a build before the quote form is confirmed or declined", () => {
+    const { asked, at } = walk(start(), everyCard)
+    expect(asked.slice(-2)).toEqual(["quote_form", "build"])
+    // Asked for changes: the form comes back before any build.
+    const changed = applied(
+      { ...at, facts: at.facts.filter((f) => f.key !== "quote.form") },
+      { kind: "facts", facts: [] }
+    )
+    expect(onboardingStep(changed, counter())[1]).toMatchObject({
+      type: "tool-review_quote_form",
+      input: { fields: DEFAULT_QUOTE_FIELDS },
+    })
+    // Declined: the card closed with no fact, and the default form stands.
+    expect(
+      onboardingStep(
+        { ...changed, closed: [...changed.closed, "quote_form"] },
+        counter()
+      )[0]
+    ).toMatchObject({ type: "tool-request_change" })
   })
 
   it("reads stored fact rows, provenance and all", () => {
@@ -789,10 +816,11 @@ const lines = (v: Voice): [string, string][] => [
   ["opener", opener(v)],
   ...(
     STEPS.map((s) => s.id).filter(
-      (id) => id !== "upload" && id !== "build"
+      (id) => id !== "upload" && id !== "quote_form" && id !== "build"
     ) as Exclude<StepId, "upload" | "quote_form" | "build">[]
   ).map((id): [string, string] => [id, question(id, v)]),
   ["upload", photos(v)],
+  ["quote_form", quoteForm(v)],
   ["started", started(v, true)],
   ["manual_yes", manualEnd(v, true)],
   ["manual_no", manualEnd(v, false)],

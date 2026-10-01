@@ -44,6 +44,7 @@ import {
   type ToolPart,
 } from "../src/chat.ts"
 import {
+  DEFAULT_QUOTE_FIELDS,
   type Onboarding,
   onboardingStep,
   opening,
@@ -281,6 +282,9 @@ const CHOSEN: Record<string, string[]> = {
 /** A card's answer as the web sends it; the tagline and the photos are skipped. */
 const answerFor = (card: ToolPart): unknown => {
   const step = stepOf(card) as string
+  if (card.type === "tool-review_quote_form") {
+    return { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS }
+  }
   if (card.type === "tool-ask_choice") {
     return { answer: "chosen", ids: CHOSEN[step], other: null }
   }
@@ -531,6 +535,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         "business.overview",
         "business.phone",
         "owner.preferred_name",
+        "quote.form",
         "service_area.text",
         "site.build_mode",
         "site.font",
@@ -587,7 +592,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     const roles = messages.map((m) => m.content.role)
     const asked = legacy.messages
       .flatMap((m) => m.content.parts)
-      .filter((p) => p.type.startsWith("tool-ask_")).length
+      .filter(
+        (p) =>
+          p.type.startsWith("tool-ask_") || p.type === "tool-review_quote_form"
+      ).length
     expect(asked).toBeGreaterThan(10)
     expect(roles.filter((role) => role === "user")).toHaveLength(asked)
     expect(roles).toEqual([
@@ -608,7 +616,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       // Each step asks one card and ends on it, answered, bar the last.
       const cards = m.content.parts.filter(
         (p) =>
-          p.type.startsWith("tool-ask_") || p.type === "tool-request_change"
+          p.type.startsWith("tool-ask_") ||
+          p.type === "tool-review_quote_form" ||
+          p.type === "tool-request_change"
       )
       expect(cards).toHaveLength(1)
       if (i < messages.length - 1) {
@@ -1000,7 +1010,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect((await me.rows(id))[0]?.parentId).toBeNull()
     })
 
-    it("starts the build on a typed skip of the photos, keyed by the conversation", async () => {
+    it("asks the quote form after a typed skip of the photos, and starts the build once it is confirmed", async () => {
       const fresh = await owner(kit, url as string, "chat-photos")
       const talk = talker(fresh)
       const set = await fresh.call(stubOrchestrator(), "/facts", {
@@ -1021,7 +1031,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       expect(pendingCall(asked.after).type).toBe("tool-ask_upload")
       const stub = building()
-      const skipped = await talk.turn(
+      const skippedPhotos = await talk.turn(
         id,
         {
           mode: "ask",
@@ -1029,11 +1039,32 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         },
         stub
       )
+      // No build yet: the quote form waits to be confirmed or declined.
+      expect(stub.calls).toHaveLength(0)
+      const form = pendingCall(skippedPhotos.after)
+      expect(form.type).toBe("tool-review_quote_form")
+      const skipped = await talk.turn(
+        id,
+        {
+          turn: {
+            kind: "results",
+            message_id: skippedPhotos.after.id,
+            results: [
+              {
+                kind: "answer",
+                tool_call_id: form.toolCallId,
+                output: { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS },
+              },
+            ],
+          },
+        },
+        stub
+      )
       expect(stub.calls).toHaveLength(1)
       expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
         `onboarding:${id}`
       )
-      expect(skipped.after.parts).toMatchObject([
+      expect(skipped.after.parts.slice(-4)).toMatchObject([
         { type: "step-start" },
         {
           type: "tool-request_change",
@@ -1045,7 +1076,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ])
       expect(await progress()).toEqual({
         passed: ["upload"],
-        closed: ["industry", "upload"],
+        closed: ["industry", "upload", "quote_form"],
         offered: true,
         builder: null,
       })

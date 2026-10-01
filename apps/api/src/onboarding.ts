@@ -17,6 +17,7 @@ import {
   PRONOUNS,
   type QuoteField,
   type RequestChangeOutput,
+  ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
   TEMPLATES,
   type TemplateId,
@@ -33,6 +34,7 @@ import {
   opener,
   photos,
   question,
+  quoteForm,
   type RetryReason,
   retry,
   started,
@@ -194,6 +196,26 @@ export function firstPalettes(org: string): PaletteId[] {
   }
   return shown
 }
+
+/** The script's quote form: what any business needs, for the owner to keep or change. */
+export const DEFAULT_QUOTE_FIELDS = [
+  {
+    key: "job",
+    label: "What do you need?",
+    type: "textarea",
+    required: true,
+    hint: null,
+    options: null,
+  },
+  {
+    key: "when",
+    label: "When do you need it?",
+    type: "date",
+    required: false,
+    hint: null,
+    options: null,
+  },
+] as const satisfies readonly QuoteField[]
 
 /** The pages ticked when the card opens. */
 const DEFAULT_PAGES = ["home", "services", "about", "contact", "quote"]
@@ -446,6 +468,25 @@ export const STEPS: readonly Step[] = [
     id: "upload",
     done: (o) => !building(o) || o.closed.includes("upload"),
     ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
+  },
+  {
+    // The build waits for a quote form the owner reviewed or declined. With
+    // no model to draft one, the script offers a short form to confirm; the
+    // planner reads any changes the owner asks for.
+    id: "quote_form",
+    done: (o) =>
+      !building(o) || has(o, "quote.form") || o.closed.includes("quote_form"),
+    ask: (o, newId) => [
+      text(quoteForm(voiceOf(o))),
+      call(
+        "tool-review_quote_form",
+        ReviewQuoteFormInput.parse({
+          fields: DEFAULT_QUOTE_FIELDS,
+          note: null,
+        }),
+        newId
+      ),
+    ],
   },
   {
     id: "build",

@@ -368,6 +368,17 @@ Photos are what will make it feel like yours.`,
   return `${say(v, lead)} ${photoQuestion(v)} ${say(v, close)}`
 }
 
+/** The quote form, for when no model can draft one: a short form the owner confirms or changes. */
+export function quoteForm(v: Voice): string {
+  return say(
+    v,
+    pick(v, "quote_form", [
+      `One last thing before I build. Every enquiry from the site comes through Request a quote, so what should it ask a customer? I've started a short form for ${v.business} below. Keep it, or tell me what you need to know to quote a job and I'll change it.`,
+      `Nearly there. When a customer asks ${v.business} for a quote, what do you need to know first? Here's a simple form to start from. Confirm it, or say what to add.`,
+    ])
+  )
+}
+
 /** Phase 4 to 5: the build runs in the background and the chat stays open. */
 export function started(v: Voice, uploaded: boolean): string {
   return say(
