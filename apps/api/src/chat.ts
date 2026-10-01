@@ -82,7 +82,7 @@ import {
   titleFrom,
   withoutProviderData,
 } from "./http.ts"
-import { type JevDecision, jev } from "./jev.ts"
+import { type JevDecision, jev, matched } from "./jev.ts"
 import {
   type Answer,
   again,
@@ -139,8 +139,10 @@ import { readFacts } from "./workspace.ts"
  * `onboarding.ts` with a question and a card (`ask_fact`, `ask_details`,
  * `ask_choice` or `ask_upload`), and a typed reply answers the card it
  * overtook. In onboarding a card answer never waits on a model; a typed
- * reply to a choice or details card goes past Jev (`jev.ts`), and code
- * answers it when Jev is sure; every other typed reply goes to the planner.
+ * reply to a choice or details card is read exactly by code, or by Jev
+ * (`jev.ts`) while the planner runs, and code answers it when either is
+ * sure before the planner shows a word; every other typed reply goes to
+ * the planner.
  * Every other turn goes to the CoS,
  * whose history is the event log; when the CoS has no model, no budget, a
  * frozen conversation or a provider that fails before any content, the
@@ -625,13 +627,6 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
-  // Outside the transaction, so no connection waits on it.
-  const decision =
-    turn.kind === "message" && gateOf && gated(ahead.card)
-      ? await gateOf(ahead.card, ahead.asked, turn.text)
-      : null
-  const gate =
-    decision && ahead.card ? { callId: ahead.card.toolCallId, decision } : null
   const modelId = env.COS_MODEL ?? DEFAULT_MODEL
   const price = priceOf(modelId)
   const model =
@@ -648,6 +643,30 @@ export async function chat(
       : env.OPENROUTER_API_KEY
         ? plannerModel(env.OPENROUTER_API_KEY, plannerId)
         : null
+  // A typed reply to a waiting card: code reads an exact answer itself, and
+  // Jev reads the rest beside the planner (`plannedTurn`), so the planner
+  // never waits on it. With no planner to race, the turn waits for Jev
+  // here, outside the transaction, so no connection waits on it.
+  const toCard =
+    turn.kind === "message" && gated(ahead.card)
+      ? { card: ahead.card, text: turn.text }
+      : null
+  const exact = toCard && matched(toCard.card, toCard.text)
+  const jevGate =
+    toCard && !exact && gateOf
+      ? gateOf(toCard.card, ahead.asked, toCard.text).then(
+          (decision) =>
+            decision && { callId: toCard.card.toolCallId, decision },
+          () => null
+        )
+      : null
+  const racing = planner && planPrice ? jevGate : null
+  const gate: Gate | null =
+    toCard && exact
+      ? { callId: toCard.card.toolCallId, decision: exact }
+      : racing
+        ? null
+        : await jevGate
   let onboardingTurn = false
   const preparer =
     deps.prepare !== undefined
@@ -712,6 +731,13 @@ export async function chat(
               )
             : null
         if (job) return { plan: job }
+        // No planner to race (over budget, frozen, a retry): Jev's reading
+        // still answers the card when it is sure, as before the race.
+        // ponytail: waits on Jev (1 s at most) with the connection held, on
+        // these rare turns only; move it before the lock if they grow common.
+        const answered =
+          given ??
+          (racing ? await gateAnswer(db, held, id, owner, await racing) : null)
         return scriptTurn(
           db,
           env,
@@ -721,7 +747,7 @@ export async function chat(
           id,
           parsed.data,
           newId,
-          given
+          answered
         )
       }
       const reserve = model && price && !log.frozen ? reservation(price) : 0
@@ -792,6 +818,7 @@ export async function chat(
       model: planner as LanguageModel,
       modelId: plannerId,
       price: planPrice as NonNullable<typeof planPrice>,
+      gate: racing,
       waitUntil,
       committed: () => void prepareLater(new Response(null)),
     })
@@ -1842,6 +1869,8 @@ type Planning = {
   model: LanguageModel
   modelId: string
   price: NonNullable<ReturnType<typeof priceOf>>
+  /** Jev's reading of a typed reply, still on its way while the planner runs. */
+  gate: Promise<Gate | null> | null
   /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
   waitUntil: (promise: Promise<unknown>) => void
   /** Called once the turn's rows have committed. */
@@ -1895,12 +1924,17 @@ async function callEvents(turn: Turn, calls: PlanCall[]) {
   return written.flat()
 }
 
-/** The planner turn's `cos.turn`: `fallback` when the script answered it. */
+type PlanEnded = "answered" | "fallback" | "gated" | "error"
+
+/**
+ * The planner turn's `cos.turn`: `fallback` when the script answered it,
+ * `gated` when it answered with Jev's decision and the planner was stopped.
+ */
 function planEnd(
   turn: Turn,
   modelId: string,
   outcome: PlanOutcome,
-  ended: "answered" | "fallback" | "error"
+  ended: PlanEnded
 ): CosTurn {
   const sum = (pick: (c: PlanCall) => number) =>
     outcome.calls.reduce((total, c) => total + pick(c), 0)
@@ -2013,14 +2047,42 @@ async function plannedTurn(
     stepOpen = textOpen = true
     write({ type: "text-delta", id: "text", delta })
   }
-  const outcome = await planTurn(p.model, p.price, job.state, PLANNER, say)
+  // Jev reads the reply while the planner runs. A confident decision code
+  // can answer for the card still waiting, before the owner has read a
+  // word, stops the planner and the script answers with it. Once any word
+  // has shown, or the planner is done, Jev is ignored.
+  const stop = new AbortController()
+  let planning = true
+  let gate = null as Gate | null
+  void p.gate?.then((found) => {
+    const card = waitingCard(job.tail)
+    if (
+      found &&
+      planning &&
+      !textOpen &&
+      card?.toolCallId === found.callId &&
+      decidedAnswer(card, found.decision, job.state.onboarding)
+    ) {
+      gate = found
+      stop.abort()
+    }
+  })
+  const outcome = await planTurn(
+    p.model,
+    p.price,
+    job.state,
+    PLANNER,
+    say,
+    stop.signal
+  )
+  planning = false
   if (textOpen) write({ type: "text-end", id: "text" })
   console.log(
     JSON.stringify({
       code: "onboarding.plan",
       turn_id: job.turn.turnId,
-      ok: outcome.ok,
-      reason: outcome.ok ? null : outcome.reason,
+      ok: outcome.ok && !gate,
+      reason: gate ? "gated" : outcome.ok ? null : outcome.reason,
       calls: outcome.calls.length,
       ms: outcome.calls.reduce((total, c) => total + c.ms, 0),
       first_chunk_ms: outcome.firstChunkMs,
@@ -2028,13 +2090,17 @@ async function plannedTurn(
       cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
     })
   )
+  // A planner that failed on its own leaves the script to answer, and Jev's
+  // reading, when it has one, is still the best reading of the reply. Waited
+  // for here, outside the transaction; `gateAnswer` checks it still applies.
+  if (!outcome.ok && !gate && p.gate) gate = await p.gate
   const scope = {
     orgId: p.owner.orgId,
     workosUserId: p.owner.session.workosUserId,
   }
   const steps = await callEvents(job.turn, outcome.calls)
   let logged = false
-  const close = (db: OrgScopedDb, ended: "answered" | "fallback" | "error") =>
+  const close = (db: OrgScopedDb, ended: PlanEnded) =>
     writeAsTurn(db, job.turn, [
       ...(logged ? [] : steps),
       {
@@ -2059,10 +2125,10 @@ async function plannedTurn(
       if (JSON.stringify(held.tail) !== JSON.stringify(job.tail)) {
         throw new Refusal(stale())
       }
-      const done = outcome.ok
-        ? await commitPlan(db, held, job, outcome, p)
-        : null
+      const done =
+        outcome.ok && !gate ? await commitPlan(db, held, job, outcome, p) : null
       if (!done) {
+        const given = await gateAnswer(db, held, p.id, p.owner, gate)
         const response = await scriptTurn(
           db,
           p.env,
@@ -2072,13 +2138,13 @@ async function plannedTurn(
           p.id,
           p.request,
           p.newId,
-          null,
+          given,
           p.rowId
         )
         if (response.ok && outcome.shown) {
           await keepShown(db, p.id, held, continued, outcome.shown)
         }
-        await close(db, "fallback")
+        await close(db, given ? "gated" : "fallback")
         return response
       }
       if (done.build) await writeAsTurn(db, job.turn, steps)

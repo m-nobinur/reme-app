@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { decisionOf, JEV, jev } from "../src/jev.ts"
+import { decisionOf, JEV, jev, matched } from "../src/jev.ts"
 import { choiceCard, detailsCard, type Onboarding } from "../src/onboarding.ts"
 
 const o: Onboarding = {
@@ -117,6 +117,7 @@ describe("the Jev gate", () => {
       decision: "answer:modern",
       cost_usd: 0.00002,
       error: null,
+      source: "jev",
     })
     expect(typeof line.ms).toBe("number")
   })
@@ -162,5 +163,72 @@ describe("the Jev gate", () => {
     expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string).error).toBe(
       "timeout"
     )
+  })
+})
+
+describe("the exact matcher", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const font = choiceCard("font", o, () => "c4")
+
+  it("takes a whole reply that is one option's label or id, in any case or punctuation", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    for (const reply of ["Bold", " bold. ", "BOLD!", "bold"]) {
+      expect(matched(template, reply)).toEqual({
+        kind: "answer",
+        option: "bold",
+      })
+    }
+    for (const reply of [
+      "Clean sans",
+      "clean_sans",
+      "clean-sans",
+      "Clean  Sans.",
+    ]) {
+      expect(matched(font, reply)).toEqual({
+        kind: "answer",
+        option: "clean_sans",
+      })
+    }
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toEqual({
+      code: "onboarding.jev",
+      step: "font",
+      ms: 0,
+      decision: "answer:clean_sans",
+      error: null,
+      cost_usd: null,
+      source: "code",
+    })
+  })
+
+  it("takes a plain deferral on any card Jev reads", () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    for (const card of [template, pages, contact]) {
+      for (const reply of [
+        "You pick",
+        "up to you!",
+        "Dealer's choice",
+        "surprise me",
+      ]) {
+        expect(matched(card, reply)).toEqual({ kind: "defer" })
+      }
+    }
+  })
+
+  it("leaves every other reply to Jev, and logs nothing", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    for (const reply of [
+      "yes but I also do carpets",
+      "bold please",
+      "the bold one",
+      "bold or modern",
+      "you pick, but not bold",
+      "",
+    ]) {
+      expect(matched(template, reply)).toBeNull()
+    }
+    // A card that takes several reads its options with the planner.
+    expect(matched(pages, "Home")).toBeNull()
+    expect(matched(contact, "07700 900412")).toBeNull()
+    expect(log).not.toHaveBeenCalled()
   })
 })

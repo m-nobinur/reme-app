@@ -1339,13 +1339,17 @@ const systemMessage = (content: string): SystemModelMessage => ({
  *   is refused at its end.
  * - A retry is told what the owner has read, and its message must begin
  *   with exactly that; what it adds streams the same way.
+ *
+ * `cancel` ends the planning as a timeout does, the call counted at its
+ * worst, and nothing more is shown once it fires.
  */
 export async function planTurn(
   model: LanguageModel,
   price: Price,
   s: PlanState,
   limits: { callMs: number; totalMs: number; hedgeMs?: number } = PLANNER,
-  onSay?: (text: string) => void
+  onSay?: (text: string) => void,
+  cancel?: AbortSignal
 ): Promise<PlanOutcome> {
   const instructions = await plannerInstructions()
   const system = systemMessage(instructions)
@@ -1355,17 +1359,22 @@ export async function planTurn(
   const began = Date.now()
   const out = { shown: "" as string, firstChunkMs: null as number | null }
   const show = (words: string) => {
-    if (!onSay || words.length === 0) return
+    if (!onSay || words.length === 0 || cancel?.aborted) return
     out.firstChunkMs ??= Date.now() - began
     out.shown += words
     onSay(words)
   }
   for (let attempt = 0; attempt < PLANNER.attempts; attempt++) {
     const left = limits.totalMs - (Date.now() - began)
-    if (left <= 1_000) return { ok: false, reason: "timeout", calls, ...out }
+    if (left <= 1_000 || cancel?.aborted) {
+      return { ok: false, reason: "timeout", calls, ...out }
+    }
     const sent = [...messages]
     const started = Date.now()
-    const signal = AbortSignal.timeout(Math.min(limits.callMs, left))
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(Math.min(limits.callMs, left)),
+      ...(cancel ? [cancel] : []),
+    ])
     let raw = ""
     let usage: Usage = NO_USAGE
     let cost = 0
