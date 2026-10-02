@@ -1,0 +1,18 @@
+diff --git a/dist/core/client/workos.js b/dist/core/client/workos.js
+index ae9319789fa8862c838db90c5b1e3c866dd03ba3..2983e11e238f41ca853eec1da5c67e50676506b5 100644
+--- a/dist/core/client/workos.js
++++ b/dist/core/client/workos.js
+@@ -20,6 +20,13 @@ export function createWorkOSInstance() {
+             name: 'authkit-session',
+             version: pkg.version,
+         },
++        // reme: the bounds apps/web/src/lib/auth/workos.ts gives its own client
++        // (CLIENT_OPTIONS). The SDK's default is 60 s a try and three retries,
++        // so a stalled WorkOS held a session refresh, and the chat turn or page
++        // behind it, for minutes. The Worker build reads the timeout from config.
++        timeout: 10000,
++        config: { timeout: 10000 },
++        maxRetries: 0,
+     };
+     // Initialize the WorkOS client with config values
+     const workos = new WorkOS(apiKey, options);

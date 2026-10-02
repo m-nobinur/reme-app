@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@workos/authkit-session@0.7.1':
+    hash: 42f895fc17405e2529168825531d12fe20c52a387d859eca3a1579ee79ef533d
+    path: patches/@workos__authkit-session@0.7.1.patch
+
 importers:
 
   .:
@@ -202,7 +207,7 @@ importers:
         version: 10.11.0
       '@workos/authkit-session':
         specifier: 0.7.1
-        version: 0.7.1(@workos-inc/node@10.11.0)(typescript@6.0.3)
+        version: 0.7.1(patch_hash=42f895fc17405e2529168825531d12fe20c52a387d859eca3a1579ee79ef533d)(@workos-inc/node@10.11.0)(typescript@6.0.3)
       '@workos/authkit-tanstack-react-start':
         specifier: 0.11.1
         version: 0.11.1(@tanstack/react-router@1.170.40(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@tanstack/react-start@1.168.59(crossws@0.4.5(srvx@0.11.22))(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.11)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(@workos-inc/node@10.11.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
@@ -10408,7 +10413,7 @@ snapshots:
 
   '@workos-inc/node@10.11.0': {}
 
-  '@workos/authkit-session@0.7.1(@workos-inc/node@10.11.0)(typescript@6.0.3)':
+  '@workos/authkit-session@0.7.1(patch_hash=42f895fc17405e2529168825531d12fe20c52a387d859eca3a1579ee79ef533d)(@workos-inc/node@10.11.0)(typescript@6.0.3)':
     dependencies:
       '@workos-inc/node': 10.11.0
       iron-webcrypto: 2.0.0
@@ -10422,7 +10427,7 @@ snapshots:
       '@tanstack/react-router': 1.170.40(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-start': 1.168.59(crossws@0.4.5(srvx@0.11.22))(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.11)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       '@workos-inc/node': 10.11.0
-      '@workos/authkit-session': 0.7.1(@workos-inc/node@10.11.0)(typescript@6.0.3)
+      '@workos/authkit-session': 0.7.1(patch_hash=42f895fc17405e2529168825531d12fe20c52a387d859eca3a1579ee79ef533d)(@workos-inc/node@10.11.0)(typescript@6.0.3)
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
     transitivePeerDependencies:

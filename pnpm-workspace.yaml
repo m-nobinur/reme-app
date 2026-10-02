@@ -7,3 +7,5 @@ allowBuilds:
   esbuild: true
   lightningcss: true
   workerd: true
+patchedDependencies:
+  '@workos/authkit-session@0.7.1': patches/@workos__authkit-session@0.7.1.patch
