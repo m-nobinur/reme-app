@@ -120,20 +120,21 @@ export function ChatPage() {
 
   // "New chat" on /app itself: the address is the same, the state is new.
   // A press that carries a question sends it as the chat's first message,
-  // once per press, so going back to it does not ask again.
+  // once per press, so going back to it does not ask again. Never on a stored
+  // conversation, whose thread is a placeholder until its history is in.
   const fresh = useLocation({ select: (location) => location.state.chat })
   const ask = useLocation({ select: (location) => location.state.ask })
   const seen = useRef(fresh)
   useEffect(() => {
     const press = startsNewChat(seen.current, fresh)
     seen.current = fresh
-    const send = ask && fresh && !asked.has(fresh) ? ask : undefined
+    const send = !id && ask && fresh && !asked.has(fresh) ? ask : undefined
     if (send && fresh) asked.add(fresh)
     void (async () => {
       if (press) await runtime.threads.switchToNewThread()
       if (send) runtime.thread.append(send)
     })()
-  }, [fresh, ask, runtime])
+  }, [id, fresh, ask, runtime])
 
   const missing = useSyncExternalStore(
     missingConversations.subscribe,
@@ -187,7 +188,7 @@ export function ChatPage() {
                 placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
                 quickActions={OWNER_QUICK_ACTIONS}
                 reveal={onboarding ? OPENING_REVEAL : undefined}
-                stored={Boolean(id)}
+                stored={id}
               />
             </UploadPhotosProvider>
           </CosToolsProvider>

@@ -224,7 +224,13 @@ export async function answerOnboarding(page: Page): Promise<void> {
       await input.press("Enter")
     })
 
+  // The opener first, on this conversation. Until its history is in, the
+  // page shows a placeholder thread, where `settled` holds at once and a
+  // message would start another conversation.
+  const conversation = page.url()
+  await slow(assistant.first()).toBeVisible()
   await settled()
+  await expect(page).toHaveURL(conversation)
   let opened = false
   for (let turn = 0; turn < 45; turn++) {
     if (await started.count()) return
