@@ -197,7 +197,7 @@ function Chat() {
       { value: tools },
       createElement(Thread, {
         autoFocus: false,
-        stored: true,
+        stored: ID,
         components: { ToolFallback: Approval },
       })
     )
@@ -357,6 +357,61 @@ it("a stored conversation's skeleton stays up until its messages arrive, with no
   await act(async () => release.open?.())
   await vi.waitFor(() => expect(seen.at(-1)).toBe("messages"))
   expect(seen.slice(seen.indexOf("skeleton"))).toEqual(["skeleton", "messages"])
+})
+
+it("a stored conversation sends nothing until it is the thread on screen, then sends", async () => {
+  const release: { open?: () => void } = {}
+  hold = new Promise<void>((resolve) => {
+    release.open = resolve
+  })
+  stored = FIXTURE.histories.start
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="aui_thread-history-skeleton"]')
+    ).not.toBeNull()
+  )
+  // The runtime is still on its placeholder thread. An Enter and a press of
+  // Send there started a second conversation and a turn in it.
+  const input = container.querySelector("textarea")
+  await type(container, "Hello")
+  await act(async () => {
+    input?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    )
+  })
+  const posts = () =>
+    vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST")
+      .length
+  expect(posts()).toBe(0)
+  expect(input?.disabled).toBe(true)
+  expect(
+    container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Send message"]'
+    )?.disabled
+  ).toBe(true)
+
+  hold = null
+  await act(async () => release.open?.())
+  await vi.waitFor(() =>
+    expect(transcript(container)).toEqual([
+      "What is your business called?Business nameSave",
+    ])
+  )
+  expect(input?.disabled).toBe(false)
+  expect(sent).toEqual([])
+  expect(posts()).toBe(0)
+
+  // Once it is, a message goes out, to this conversation.
+  turns.push(sse(FIXTURE.streams.typed))
+  await type(container, "Hello")
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  await vi.waitFor(() => expect(transcript(container)).toHaveLength(3))
+  await matches(container, FIXTURE.histories.typed)
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {

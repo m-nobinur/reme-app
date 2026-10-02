@@ -126,10 +126,11 @@ export const SITE_CHANGE_MODE: Omit<ThreadMode, "onClear"> = {
 export type ThreadProps = {
   components?: ThreadComponents | undefined
   /**
-   * A stored conversation, at its own address. It is never a new chat: while
-   * its history loads it shows a skeleton, never the welcome or suggestions.
+   * The id of a stored conversation, at its own address. It is never a new
+   * chat: while its history loads it shows a skeleton, never the welcome or
+   * suggestions, and nothing sends until the thread is that conversation.
    */
-  stored?: boolean | undefined
+  stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -219,6 +220,22 @@ const useHeld = (value: boolean, ms: number) => {
   return value || held
 }
 
+/**
+ * Whether the composer can send. A stored conversation opens on a placeholder
+ * thread and swaps to the stored one once it is fetched; a send before then
+ * went to the placeholder and started a second conversation. So nothing sends
+ * until the main thread is the stored conversation and its history is in.
+ * The thread's id decides, not the loading flags alone: the placeholder's
+ * read false.
+ */
+const useSendable = () => {
+  const { stored } = useContext(ThreadSettingsContext)
+  return useAuiState(
+    (s) =>
+      !stored || (s.threadListItem.remoteId === stored && !s.thread.isLoading)
+  )
+}
+
 const HistoryLoading: FC<{ stored: boolean }> = ({ stored }) => {
   const empty = useAuiState((s) => s.thread.messages.length === 0)
   const loading = useAuiState((s) =>
@@ -231,7 +248,7 @@ const HistoryLoading: FC<{ stored: boolean }> = ({ stored }) => {
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
-  stored = false,
+  stored,
   placeholder,
   briefing,
   quickActions,
@@ -241,8 +258,8 @@ export const Thread: FC<ThreadProps> = ({
 }) => {
   const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
   const settings = useMemo(
-    () => ({ placeholder, briefing, quickActions, mode, reveal }),
-    [placeholder, briefing, quickActions, mode, reveal]
+    () => ({ stored, placeholder, briefing, quickActions, mode, reveal }),
+    [stored, placeholder, briefing, quickActions, mode, reveal]
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
@@ -255,7 +272,7 @@ export const Thread: FC<ThreadProps> = ({
             after={after}
             autoFocus={autoFocus}
             isEmpty={isEmpty}
-            stored={stored}
+            stored={Boolean(stored)}
           />
         </ComposerInputContext.Provider>
       </ThreadSettingsContext.Provider>
@@ -517,6 +534,10 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const reviewing = useAuiState((s) =>
     waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
   )
+  // Disabled, not only kept from sending: words typed into the placeholder
+  // thread would stay behind with it when the stored one replaces it. The
+  // input takes focus once it is enabled.
+  const sendable = useSendable()
   useEffect(() => {
     if (mode) input.current?.focus()
   }, [mode, input])
@@ -537,6 +558,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}
+          disabled={!sendable}
           enterKeyHint="send"
           aria-label="Message input"
         />
@@ -554,6 +576,8 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   // Focus goes to the composer after a pick, so the owner can finish the
   // sentence; Escape still hands it back to the button.
   const after = useRef<HTMLElement | null>(null)
+  // A pick writes into the composer, which waits with it.
+  const sendable = useSendable()
   if (!quickActions?.length) return null
   return (
     <DropdownMenu
@@ -562,6 +586,7 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
       }}
     >
       <DropdownMenuTrigger
+        disabled={!sendable}
         render={
           <Button
             aria-label="Quick actions"
@@ -628,6 +653,7 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
 const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   input,
 }) => {
+  const sendable = useSendable()
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-1">
@@ -637,6 +663,7 @@ const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send
+            disabled={!sendable}
             render={
               <TooltipIconButton
                 tooltip="Send message"
