@@ -64,6 +64,7 @@ import {
   stepCost,
   toolErrorText,
 } from "../src/cos/agent.ts"
+import { retrying } from "../src/cos/retry.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
 import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
@@ -1152,6 +1153,35 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       logged.mockRestore()
     }
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
+  })
+
+  it("answers anyway when that mid-stream 429 clears on a retry", async () => {
+    const id = await conversation(me)
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    try {
+      const done = await turn(me, typed(id, "Hi, we clean in Leeds", "act"), {
+        model: retrying(
+          scripted(
+            calls({ id: "call_facts", tool: "get_facts", input: {} }),
+            [
+              { type: "stream-start", warnings: [] },
+              { type: "error", error: { code: 429 } },
+            ],
+            said("Good to meet you.")
+          ).model
+        ),
+      })
+      expect(done.chunks.filter((c) => c.type === "error")).toHaveLength(0)
+      expect(done.chunks).toContainEqual(
+        expect.objectContaining({
+          type: "text-delta",
+          delta: "Good to meet you.",
+        })
+      )
+    } finally {
+      log.mockRestore()
+    }
+    expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
   })
 
   it("labels taint by what each event carries", async () => {

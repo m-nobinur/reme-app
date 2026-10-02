@@ -52,6 +52,7 @@ import {
   readSession,
   sha256,
 } from "./cos/history.ts"
+import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
   type FellBack,
@@ -633,7 +634,7 @@ export async function chat(
     deps.model !== undefined
       ? deps.model
       : env.OPENROUTER_API_KEY
-        ? openrouterModel(env.OPENROUTER_API_KEY, modelId)
+        ? retrying(openrouterModel(env.OPENROUTER_API_KEY, modelId))
         : null
   const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
   const planPrice = priceOf(plannerId)
