@@ -117,11 +117,25 @@ export async function streamTurn(
     originalMessages: input.uiMessages as never,
     generateMessageId: input.newMessageId,
     onError: (error) => {
+      // The SDK reports each error chunk a second time, as an Error holding
+      // the text returned here, which is not a second failure.
+      if (error instanceof Error && error.message === ERROR_TEXT) {
+        return ERROR_TEXT
+      }
+      // A provider's status and code say whether it was a rate limit or a
+      // refusal; its message is never logged.
+      const { statusCode, code } = (error ?? {}) as {
+        statusCode?: unknown
+        code?: unknown
+      }
       console.error(
         JSON.stringify({
           code: "cos.stream_error",
           turn_id: run.turn.turnId,
           error: error instanceof Error ? error.name : "unknown",
+          status: typeof statusCode === "number" ? statusCode : null,
+          provider_code:
+            typeof code === "string" || typeof code === "number" ? code : null,
         })
       )
       return ERROR_TEXT

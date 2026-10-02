@@ -1110,6 +1110,50 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
   })
 
+  it("logs a provider's mid-stream error once, with its status and without its message", async () => {
+    // Staging 2026-10-01: get_facts on Azure, then the next step, pinned to
+    // Azure by its encrypted reasoning, got OpenRouter's in-stream 429.
+    const id = await conversation(me)
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined)
+    try {
+      const done = await turn(me, typed(id, "Hi, we clean in Leeds", "act"), {
+        model: scripted(
+          calls({ id: "call_facts", tool: "get_facts", input: {} }),
+          [
+            { type: "stream-start", warnings: [] },
+            {
+              type: "error",
+              error: {
+                code: 429,
+                message: "rate-limited upstream, secret detail",
+                metadata: { error_type: "rate_limit_exceeded" },
+              },
+            },
+          ]
+        ).model,
+      })
+      expect(done.chunks.filter((c) => c.type === "error")).toHaveLength(1)
+      const lines = logged.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.includes("cos.stream_error"))
+      expect(lines.map((line) => JSON.parse(line))).toEqual([
+        {
+          code: "cos.stream_error",
+          turn_id: expect.any(String),
+          error: "AI_StreamProviderError",
+          status: 429,
+          provider_code: 429,
+        },
+      ])
+      expect(lines.join()).not.toContain("secret detail")
+    } finally {
+      logged.mockRestore()
+    }
+    expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
+  })
+
   it("labels taint by what each event carries", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
