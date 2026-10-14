@@ -6,6 +6,8 @@ import {
   critique,
   FIXES_MAX,
   type Fix,
+  type Piece,
+  payloadOf,
   readFixes,
   settle,
 } from "../src/critic.ts"
@@ -31,7 +33,11 @@ const base = {
   route,
   sessionId: "assignment-1",
   blueprint: { direction: "calm_daylight" },
-  images: ["QQ==", "Qg==", "Qw=="],
+  images: [
+    { width: 390, data: "QQ==" },
+    { width: 768, data: "Qg==" },
+    { width: 1440, data: "Qw==" },
+  ] satisfies Piece[],
 }
 const replying =
   (text: string): Complete =>
@@ -42,8 +48,19 @@ describe("the critic's prompt", () => {
     const { system, user } = criticPrompt({ blueprint: { direction: "x" } })
     for (const r of [...RULES, ...TELLS]) expect(system).toContain(r.id)
     expect(user).toContain('"direction":"x"')
-    expect(user).toContain("390, 768, 1440")
+    expect(user).toContain("- 390 px wide: 0 pieces")
     expect(user).not.toContain("on the build before this one")
+  })
+
+  it("tells the critic how many pieces of each width it is shown", () => {
+    const pieces = [390, 390, 390, 768, 1440, 1440].map((width) => ({
+      width,
+      data: "QQ==",
+    }))
+    const { user } = criticPrompt({ blueprint: {}, pieces })
+    expect(user).toContain("- 390 px wide: 3 pieces")
+    expect(user).toContain("- 768 px wide: 1 piece\n")
+    expect(user).toContain("- 1440 px wide: 2 pieces")
   })
 
   it("names the earlier fixes on the second look", () => {
@@ -54,13 +71,13 @@ describe("the critic's prompt", () => {
 })
 
 describe("critique", () => {
-  it("sends the three screenshots as pictures and returns the fixes", async () => {
+  it("sends every piece as a picture, in order, and returns the fixes", async () => {
     const complete = vi.fn(
       replying(JSON.stringify({ fixes: [fix("Hero"), fix("Faq")] }))
     )
     const out = await critique({ ...base, complete })
     expect(out.fixes).toEqual([fix("Hero"), fix("Faq")])
-    expect(out.errors).toEqual([])
+    expect(out).toMatchObject({ ran: true, errors: [] })
     const call = complete.mock.calls[0]?.[0]
     expect(call?.images).toEqual([
       { data: "QQ==", mimeType: "image/png" },
@@ -93,7 +110,7 @@ describe("critique", () => {
 
   it("answers an empty list when the site holds", async () => {
     const out = await critique({ ...base, complete: replying('{"fixes":[]}') })
-    expect(out).toMatchObject({ fixes: [], errors: [] })
+    expect(out).toMatchObject({ fixes: [], ran: true, errors: [] })
   })
 
   it("never throws: a failed call, a bad reply or no screenshots are no fixes and a reason", async () => {
@@ -105,11 +122,13 @@ describe("critique", () => {
     })
     expect(failed).toMatchObject({
       fixes: [],
+      ran: false,
       errors: ["provider.unavailable"],
     })
     const prose = await critique({ ...base, complete: replying("Looks fine.") })
     expect(prose.fixes).toEqual([])
     expect(prose.errors[0]).toContain("no JSON object")
+    expect(prose.ran).toBe(false)
     // A reply that parsed but is not a fixes list is the same as no reply.
     const odd = await critique({ ...base, complete: replying('{"ok":true}') })
     expect(odd.errors[0]).toContain("no fixes list")
@@ -117,6 +136,7 @@ describe("critique", () => {
     const blind = await critique({ ...base, images: [], complete })
     expect(blind).toMatchObject({
       fixes: [],
+      ran: false,
       errors: ["no screenshots were taken"],
     })
     expect(complete).not.toHaveBeenCalled()
@@ -145,5 +165,34 @@ describe("settle", () => {
     expect(settle([fix("Hero", "about")], [fix("Hero")]).fixes[0]?.fixed).toBe(
       true
     )
+  })
+})
+
+describe("a look that did not run", () => {
+  const earlier = [fix("Hero"), fix("Faq")]
+
+  it("is recorded as not run, never as a site that holds", () => {
+    const failed = { fixes: [], ran: false }
+    expect(payloadOf(failed, 1)).toEqual({ ran: false, fixes: null })
+    expect(payloadOf({ fixes: [], ran: true }, 1)).toEqual({
+      ran: true,
+      fixes: [],
+    })
+  })
+
+  it("leaves the earlier fixes unknown on the second look, not fixed", () => {
+    const second = payloadOf({ fixes: [], ran: false }, 2, earlier)
+    expect(second.ran).toBe(false)
+    expect(second.fixes?.map((f) => f.fixed)).toEqual([null, null])
+    // The same empty answer from a look that did run is what "fixed" means.
+    const held = payloadOf({ fixes: [], ran: true }, 2, earlier)
+    expect(held.fixes?.map((f) => f.fixed)).toEqual([true, true])
+  })
+
+  it("settle takes a look that did not run as no verdict", () => {
+    expect(settle(earlier, [], false).fixes.map((f) => f.fixed)).toEqual([
+      null,
+      null,
+    ])
   })
 })
