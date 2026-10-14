@@ -215,9 +215,9 @@ type Check = { exit_code: number; output: string; ms: number }
 type Run = { exit_code: number; key: string | null; ms: number }
 
 /**
- * Axe runs after the preview exists, in the Workflow (`a11y` step), not here:
- * the preview does not wait on it, and the review and publish wait on its
- * result instead.
+ * Axe runs in the Workflow, not here, and before the preview: while the
+ * critic reads the screenshots on a planned build, or in its own step
+ * otherwise. Its result is the a11y gate in `validateRevision`.
  */
 export type Axe = Run
 

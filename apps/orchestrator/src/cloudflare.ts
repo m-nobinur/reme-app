@@ -84,7 +84,7 @@ import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
 import { GIT, runAxe } from "./tail.ts"
 import { logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
-import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
+import { assignmentFacts, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -633,6 +633,25 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         continue
       }
       if (payload.kind === "completion") {
+        // Axe over this revision's build, from the sandbox the build still
+        // holds. Null when a newer edit took the sandbox, which fails the gate.
+        const axeOf = () =>
+          whileHeld(this.env, ids, () => {
+            const sandbox = tailSandbox(sandboxFor(this.env, ids.orgId))
+            return runAxe(
+              {
+                exec: (command) =>
+                  sandbox.exec(`cd ${SITE_ROOT} && ${command}`, {
+                    timeoutMs: 180_000,
+                  }),
+                readFileBuffer: sandbox.readFileBuffer,
+              },
+              this.env.SITES,
+              `sites/${ids.orgId}/${payload.revision_id}/`
+            )
+          })
+        // Set by the look below when it ran axe on this very build.
+        let looked: Awaited<ReturnType<typeof axeOf>> | undefined
         // BA5: a planned build is looked at before the gates, while the
         // sandbox still holds it and the state is still `implementing`, so a
         // repair is a signal and costs none of the gate repairs. The first
@@ -647,22 +666,31 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               ids,
               payload.revision_id
             )
-            const result = await run((kit) =>
-              critiqueRound({
-                env: this.env,
-                kit,
-                ids,
-                round: look,
-                revisionId: payload.revision_id,
-                earlier: asked,
-              })
-            )
+            // Axe runs in the sandbox while the critic's model call, which
+            // does not touch it, is in flight: the a11y gate costs the first
+            // preview no wall time. A look that sends the lead back changes
+            // the build, and its axe run is dropped with it.
+            const [result, axe] = await Promise.all([
+              run((kit) =>
+                critiqueRound({
+                  env: this.env,
+                  kit,
+                  ids,
+                  round: look,
+                  revisionId: payload.revision_id,
+                  earlier: asked,
+                })
+              ),
+              axeOf().catch(() => undefined),
+            ])
             return {
               ...result,
+              axe,
               shots: { revision_id: payload.revision_id, ...taken },
             }
           })
           shotsOf = seen.shots
+          looked = seen.axe
           if (look === 1 && seen.fixes.length > 0) {
             asked = seen.fixes
             await step.do(`design repair ${round}`, async () => {
@@ -690,6 +718,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         )
+        // The accessibility gate comes before the preview, so a build never
+        // announces one and then repairs it. The look above ran axe already
+        // when this build was planned; any other build (the quick lane, a
+        // repair round) has nothing to overlap it with and runs it here, in
+        // `validating`, where the owner already reads "Checking the site".
+        const axe =
+          looked !== undefined
+            ? looked
+            : await step.do(`a11y ${round}`, async () => axeOf())
         const gated = await step.do(`gates ${round}`, async () => {
           const gateMs: Record<string, number> = {}
           const started = Date.now()
@@ -701,6 +738,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               {
                 report_id: payload.report_id,
                 revision_id: payload.revision_id,
+                axe,
               },
               this.env.SITE_HOST_SUFFIX,
               gateMs
@@ -712,37 +750,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             at: Date.now(),
           }
         })
-        // The accessibility gate, once the preview exists: axe in the
-        // sandbox takes about ten seconds, which the preview no longer waits
-        // on. The review below does, and so do the approval and the publish.
-        const a11y =
-          gated.outcome === "preview_ready"
-            ? await step.do(`a11y ${round}`, async () => {
-                const started = Date.now()
-                const sandbox = tailSandbox(sandboxFor(this.env, ids.orgId))
-                const axe = await whileHeld(this.env, ids, () =>
-                  runAxe(
-                    {
-                      exec: (command) =>
-                        sandbox.exec(`cd ${SITE_ROOT} && ${command}`, {
-                          timeoutMs: 180_000,
-                        }),
-                      readFileBuffer: sandbox.readFileBuffer,
-                    },
-                    this.env.SITES,
-                    `sites/${ids.orgId}/${payload.revision_id}/`
-                  )
-                )
-                const result = await run((kit) =>
-                  checkA11y(kit, this.env.SITES, ids, payload.revision_id, axe)
-                )
-                return { ...result, ms: since(started) }
-              })
-            : null
-        const verdict =
-          a11y && a11y.outcome !== "preview_ready"
-            ? { ...gated, ...a11y }
-            : gated
+        const verdict = gated
         if (verdict.outcome === "repairing" && quickBase) {
           // The quick edit failed a gate: its files go back to where it
           // started and the Developer takes the change at the section role.
@@ -877,7 +885,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           upload_reused: t?.upload_reused ?? null,
           upload_bytes: t?.upload_bytes ?? null,
           source_ms: t?.source_ms ?? null,
-          axe_ms: a11y?.ms ?? null,
+          axe_ms: axe?.ms ?? null,
           gates_ms: verdict.gate_ms.total,
           ...Object.fromEntries(
             Object.entries(verdict.gate_ms)
