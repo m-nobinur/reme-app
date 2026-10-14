@@ -186,6 +186,42 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails a widening word the fact does not hold: 'Fully insured' is broader than a stated limit", () => {
+    const limited = [
+      ...PLAIN,
+      fact("credentials.insurance", { statement: "Insured up to $5 million" }),
+    ]
+    for (const main of [
+      "<p>Fully insured</p>",
+      "<p>Completely insured and bonded</p>",
+      "<p>Comprehensive insurance</p>",
+      "<p>Full coverage on every clean</p>",
+      "<p>Fully covered</p>",
+      "<p>Totally guaranteed</p>",
+    ]) {
+      const result = verdict(main, limited)
+      expect(result.passed, main).toBe(false)
+      expect(result.message, main).toContain("index.html")
+    }
+    // What the fact says, and its plain claim word, still pass.
+    for (const main of ["<p>Insured up to $5 million</p>", "<p>Insured</p>"])
+      expect(verdict(main, limited).passed, main).toBe(true)
+    // A widening word that sits before nothing the gate watches is copy, not a claim.
+    for (const main of [
+      "<p>Full-service cleaning</p>",
+      "<p>A complete clean, start to finish</p>",
+      "<p>We cover Fairhaven fully</p>",
+    ])
+      expect(verdict(main, limited).passed, main).toBe(true)
+    // The fact that holds the widening word supports it.
+    const full = [
+      ...PLAIN,
+      fact("credentials.insurance", { statement: "Fully insured" }),
+    ]
+    expect(verdict("<p>Fully insured</p>", full).passed).toBe(true)
+    expect(verdict("<p>Comprehensive insurance</p>", full).passed).toBe(false)
+  })
+
   it("passes a testimonial a fact carries and fails a quote it does not", () => {
     const real =
       '<blockquote><p>"They left the kitchen spotless and were on time"</p><cite>Jane R</cite></blockquote>'

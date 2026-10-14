@@ -116,6 +116,10 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("Write the line without the claim instead")
   })
 
+  it("tells the builder a widening word needs the fact to carry it", () => {
+    expect(text(false)).toContain('does not make "Fully insured"')
+  })
+
   it("has the About page's copy rephrase its facts under headings written for the business", () => {
     const rules = text(false)
     expect(rules).toContain(
@@ -128,7 +132,7 @@ describe("the Developer's site rules", () => {
 
   it("keeps the copy guidance short enough for the cached segment", () => {
     expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
-    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(560)
+    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(580)
   })
 })
 
