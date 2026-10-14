@@ -25,6 +25,10 @@ export type Voice = {
   /** The preset labels the owner picked, or null for their own words. */
   template: string | null
   palette: string | null
+  /** The label of the design direction the owner picked on the tray, or null for their own words or the builder's choice. */
+  direction: string | null
+  /** The owner's own words for the layout or the lettering when they chose no preset. */
+  ownLook: string | null
   /** The owner's own colour when they chose no preset: a colour code or their words. */
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
@@ -290,10 +294,7 @@ ${ask}`,
   ],
   // Phase 3: the look they picked, then what a quote needs, in their words.
   quote_form: (v) => {
-    const look =
-      v.template && v.palette
-        ? `that ${v.template} layout with the ${v.palette} colours`
-        : "the look you've chosen"
+    const look = lookOf(v)
     return [
       `Great pick! I think ${look} will make ${services(v)} look sharp and inviting.
 
@@ -313,6 +314,21 @@ For ${lower(v.offering)}, the usual things are when, where and what the job invo
 The usual things are when, where and what the job involves, but you know your customers best. So customers can ask for a quote in one go, what should the form ask them?`,
     ]
   },
+}
+
+/**
+ * The look the owner has picked, as a noun phrase: the old template and
+ * colours, else the tray's direction and palette, else what they wrote, and
+ * only with nothing at all the builder's own choice.
+ */
+function lookOf(v: Voice): string {
+  if (v.template && v.palette)
+    return `that ${v.template} layout with the ${v.palette} colours`
+  if (v.direction && v.palette) return `the ${v.direction} look in ${v.palette}`
+  if (v.direction) return `the ${v.direction} look`
+  if (v.palette) return `the ${v.palette} colours`
+  if (v.ownColour || v.ownLook) return "the look you described"
+  return `the look I'll choose for ${v.business}`
 }
 
 /** The palette the owner just chose, said back before the next question. */

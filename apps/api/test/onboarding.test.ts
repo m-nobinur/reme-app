@@ -604,6 +604,26 @@ describe("an answer on a card", () => {
     )
   })
 
+  it("words the quote-form step from what the owner picked, never from a template that is not there", () => {
+    const none = { template: null, palette: null }
+    const said = (over: Partial<Voice>) =>
+      question("quote_form", voice({ ...none, ...over }))
+    expect(said({ direction: "Counsel", palette: "Ocean" })).toContain(
+      "the Counsel look in Ocean"
+    )
+    expect(said({ direction: "Counsel" })).toContain("the Counsel look")
+    expect(said({ palette: "Ocean" })).toContain("the Ocean colours")
+    expect(said({ ownLook: "airy and plain" })).toContain(
+      "the look you described"
+    )
+    expect(said({ ownColour: "Navy and gold" })).toContain(
+      "the look you described"
+    )
+    expect(said({})).toContain(`the look I'll choose for ${BUSINESS}`)
+    for (const over of [{}, { direction: "Counsel" }, { ownLook: "airy" }])
+      expect(said(over)).not.toContain("you've chosen")
+  })
+
   it("always adds the fixed pages, in the list's order", () => {
     expect(
       cardAnswer(
@@ -1046,6 +1066,8 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   offering: "Regular cleaning",
   template: "Classic",
   palette: "Ocean",
+  direction: null,
+  ownLook: null,
   ownColour: null,
   services: null,
   photoQuestion: null,

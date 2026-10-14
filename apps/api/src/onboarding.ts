@@ -173,6 +173,7 @@ const label = (list: readonly { id: string; label: string }[], id?: string) =>
 export function voiceOf(o: Onboarding): Voice {
   const template = factValue(o.facts, "site.template")
   const palette = factValue(o.facts, "site.palette")
+  const direction = factValue(o.facts, "site.direction")
   return {
     org: o.orgId,
     business: factValue(o.facts, "business.name")?.name ?? o.orgName,
@@ -184,6 +185,9 @@ export function voiceOf(o: Onboarding): Voice {
     offering: factValue(o.facts, "business.offerings")?.items[0] ?? null,
     template: template?.custom ? null : label(TEMPLATES, template?.id),
     palette: label(PALETTES, palette?.id),
+    direction: label(DIRECTIONS, direction?.id),
+    ownLook:
+      direction?.custom ?? factValue(o.facts, "site.font")?.custom ?? null,
     ownColour: palette?.brand ?? palette?.custom ?? null,
     services: o.prepared?.services_phrase ?? null,
     photoQuestion: o.prepared?.photo_question ?? null,
