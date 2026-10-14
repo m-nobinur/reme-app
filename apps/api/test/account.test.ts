@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   type Accounts,
   deleteAccount,
+  type Objects,
+  removeObjects,
   type Takedown,
   tombstone,
 } from "../src/account.ts"
@@ -54,6 +56,80 @@ beforeAll(() => {
 })
 afterAll(() => {
   globalThis.fetch = realFetch
+})
+
+/**
+ * The sites bucket in memory, two keys a page. The cursor is the last key
+ * returned, as R2's is a position in key order, so deleting a page before
+ * asking for the next one skips nothing.
+ */
+function bucket(initial: string[]) {
+  const held = new Set(initial)
+  const sites: Objects = {
+    list: async ({ prefix, cursor }) => {
+      const after = [...held]
+        .filter((k) => k.startsWith(prefix) && (!cursor || k > cursor))
+        .sort((a, b) => (a < b ? -1 : 1)) // R2 orders keys by code unit
+      const page = after.slice(0, 2)
+      const truncated = after.length > 2
+      return {
+        objects: page.map((key) => ({ key })),
+        truncated,
+        cursor: truncated ? page.at(-1) : undefined,
+      }
+    },
+    delete: async (keys) => {
+      for (const key of [keys].flat()) held.delete(key)
+    },
+  }
+  return { sites, held }
+}
+
+/** Every kind of object an org owns. */
+const owned = (org: string) => [
+  `uploads/${org}/a`,
+  `uploads/${org}/b`,
+  `uploads/${org}/c`,
+  `generated/${org}/a`,
+  `sites/${org}/rev1/dist/index.html`,
+  `sites/${org}/rev1/manifest.json`,
+  `sites/${org}/rev2/dist/index.html`,
+  `sites/${org}/checkpoints/asg.tar.zst`,
+  `sandboxes/${org}`,
+]
+
+describe("removing an org's R2 objects", () => {
+  const org = "0b7a5d5e-1111-4000-8000-000000000001"
+  const other = "0b7a5d5e-1111-4000-8000-000000000002"
+  // Starts with the first org's id, so a prefix without its slash would match it.
+  const longer = `${org}0`
+
+  it("deletes every page of the org's objects and nothing of another org's", async () => {
+    const { sites, held } = bucket([
+      ...owned(org),
+      ...owned(other),
+      ...owned(longer),
+    ])
+    await removeObjects(sites, org)
+    expect([...held].sort()).toEqual([...owned(other), ...owned(longer)].sort())
+  })
+
+  it("finishes on a retry after a partial run, and repeats as a no-op", async () => {
+    const { sites, held } = bucket([...owned(org), ...owned(other)])
+    let calls = 0
+    const flaky: Objects = {
+      list: sites.list,
+      delete: async (keys) => {
+        if (++calls === 2) throw new Error("R2 answered 500")
+        await sites.delete(keys)
+      },
+    }
+    await expect(removeObjects(flaky, org)).rejects.toThrow("R2 answered 500")
+    expect(held.size).toBeGreaterThan(owned(other).length)
+    await removeObjects(flaky, org)
+    await removeObjects(sites, org)
+    expect([...held].sort()).toEqual(owned(other).sort())
+  })
 })
 
 describe("the route, before the database", () => {
@@ -473,13 +549,18 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       })),
       "idempotency-key": "delete-account",
     }
+    const objects = bucket([...owned(orgId), ...owned(crypto.randomUUID())])
     const remove = () =>
       worker.fetch(
         new Request("http://api.invalid/account", {
           method: "DELETE",
           headers,
         }),
-        { ...env(url as string), ORCHESTRATOR: orchestrator } as unknown as Env,
+        {
+          ...env(url as string),
+          ORCHESTRATOR: orchestrator,
+          SITES: objects.sites,
+        } as unknown as Env,
         ctx
       )
     const bridged = `POST orchestrator /assignments/site/takedown ${orgId}`
@@ -488,6 +569,8 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(failed.status).toBe(503)
     expect(asked).toEqual([bridged])
     expect(await resolveOrg(kit, session)).toBe(orgId)
+    // A failed takedown deletes nothing.
+    expect(objects.held.size).toBe(owned(orgId).length * 2)
 
     asked.length = 0
     takedown = 204
@@ -501,6 +584,8 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     ])
     expect(await resolveOrg(kit, session)).toBeNull()
     expect(await logged(orgId)).toBe(1)
+    expect([...objects.held].some((k) => k.includes(orgId))).toBe(false)
+    expect(objects.held.size).toBe(owned(orgId).length)
   })
 
   /** Never answers, and ignores the abort: the worst a vendor can do. */
@@ -541,7 +626,11 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
             "idempotency-key": "delete-stalled",
           },
         }),
-        { ...env(url as string), ORCHESTRATOR: orchestrator } as unknown as Env,
+        {
+          ...env(url as string),
+          ORCHESTRATOR: orchestrator,
+          SITES: bucket([]).sites,
+        } as unknown as Env,
         ctx
       )
 
