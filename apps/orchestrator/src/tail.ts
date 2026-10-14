@@ -186,6 +186,14 @@ const SECURITY_HEADERS = {
   "x-frame-options": "DENY",
 }
 
+/**
+ * A command's last 20 lines with the command's own exit code. Piped into
+ * `tail`, a failed `astro build` exited 0 and reported a revision with no
+ * files.
+ */
+export const tailed = (command: string) =>
+  `(${command} > /tmp/tailed.log 2>&1; s=$?; tail -20 /tmp/tailed.log; exit $s)`
+
 /** A durable step runner: flue's inside a tool, or a plain call inside one Workflow step. */
 export type Steps = {
   do: <T>(name: string, fn: () => Promise<T>) => Promise<T>
@@ -243,7 +251,7 @@ export async function finishRevision(input: {
   )
   const check = await steps.do("astro check", async (): Promise<Check> => {
     const started = Date.now()
-    const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
+    const r = await run(tailed("./node_modules/.bin/astro check"))
     return {
       exit_code: r.exitCode,
       output: r.stdout.slice(-2000),
@@ -264,8 +272,9 @@ export async function finishRevision(input: {
   )
   const build = await steps.do("astro build", async (): Promise<Check> => {
     const started = Date.now()
+    // The last build's pages go first, so a build that writes none is seen.
     const r = await run(
-      `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
+      `rm -rf dist && ${tailed(`./node_modules/.bin/astro build --site https://${host}`)} && test -n "$(find dist -name '*.html' -type f | head -1)"`
     )
     return {
       exit_code: r.exitCode,
@@ -275,7 +284,7 @@ export async function finishRevision(input: {
   })
   if (build.exit_code !== 0) {
     throw new Error(
-      `astro build failed, fix it before reporting:\n${build.output}`
+      `astro build failed or wrote no pages, fix it before reporting:\n${build.output}`
     )
   }
 
