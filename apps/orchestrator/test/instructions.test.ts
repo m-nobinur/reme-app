@@ -1,7 +1,13 @@
 import type { FactRecord } from "@workspace/contracts"
+import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { Brief } from "../src/brief.ts"
-import { DESIGN_RULES, industryOf, packVoice } from "../src/developer-rules.ts"
+import {
+  DESIGN_RULES,
+  DIRECTION_LIBRARY,
+  industryOf,
+  packVoice,
+} from "../src/developer-rules.ts"
 import { BUILD_MARK, instructions } from "../src/instructions.ts"
 
 const fact = (key: string, value: unknown): FactRecord => ({
@@ -52,6 +58,26 @@ describe("the twelve design rules", () => {
   })
 })
 
+describe("the design directions", () => {
+  it("reach the instructions, each with its variants and every palette's six roles", () => {
+    const text = instructions(brief([cleaning]), 20)
+    expect(text).toContain("Design directions:")
+    for (const line of DIRECTION_LIBRARY) expect(text).toContain(line)
+    for (const d of DIRECTIONS) {
+      const line = DIRECTION_LIBRARY.find((each) =>
+        each.startsWith(`- ${d.id} (`)
+      )
+      expect(line, d.id).toContain(`hero ${d.hero}, services ${d.services}`)
+      for (const palette of d.palettes)
+        expect(DIRECTION_LIBRARY.at(-1), palette).toMatch(
+          new RegExp(
+            `${palette} "paper:\\S+ ink:\\S+ primary:\\S+ tint:\\S+ accent:\\S+ line:\\S+"`
+          )
+        )
+    }
+  })
+})
+
 describe("the instructions' cache order", () => {
   const at = (text: string, needle: string) => {
     const i = text.indexOf(needle)
@@ -65,6 +91,7 @@ describe("the instructions' cache order", () => {
       "Rules:",
       "The site never shows a price",
       "Design rules",
+      "Design directions:",
       "Components (name, file, props, never):",
       BUILD_MARK,
       "This is a first build",

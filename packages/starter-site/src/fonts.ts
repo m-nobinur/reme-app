@@ -127,10 +127,12 @@ export function familiesOf(pair: FontPair | undefined) {
 }
 
 /**
- * One rule for the page head: the display weight of the pair. It beats the
- * `--display-weight` a template sets, as an owner's choice always has, so
- * Outfit is never asked for the 800 a template wanted of the system sans.
+ * One rule for the page head: the display weight of the pair, and the italic
+ * for a headline's accented word when the pair draws it in one. The weight
+ * beats theme.css's default, as an owner's choice always has.
  */
 export function fontTheme(pair: FontPair | undefined): string {
-  return pair ? `html:root{--display-weight:${pair.display.weights[0]}}` : ""
+  if (!pair) return ""
+  const italic = pair.display.italic ? ";--accent-style:italic" : ""
+  return `html:root{--display-weight:${pair.display.weights[0]}${italic}}`
 }

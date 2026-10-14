@@ -1,9 +1,9 @@
 {
-  "_": "A recipe is the page a build starts from. `pages` says, for each page file, what it is for, the section kinds it may hold and the site fields those sections read. A pack gives, per page, the sections and variants the page starts with, for one of the contract's INDUSTRY_PACK ids; cleaning, legal and limousine start from service_business and change what their trade reads differently. The order is `layout` in src/site-config.ts, which the build edits: reorder, drop or change a variant, within `kinds` and the contract's SECTION_VARIANTS. A hero with no variant is the plain page hero (the home page takes its template's). Every section renders nothing until its fields are set, so a page with few facts is short rather than broken.",
+  "_": "A recipe is the page a build starts from. `pages` says, for each page file, what it is for, the section kinds it may hold and the site fields those sections read. A pack gives, per page, the sections and variants the page starts with, for one of the contract's INDUSTRY_PACK ids; cleaning, legal and limousine start from service_business and change what their trade reads differently. The order is `layout` in src/site-config.ts, which the build edits: reorder, drop or change a variant, within `kinds` and the contract's SECTION_VARIANTS. A section with no variant takes site.direction's (a hero only on the home page; elsewhere it is the plain page hero); a pack names one only where its trade needs it. Every section renders nothing until its fields are set, so a page with few facts is short rather than broken.",
   "pages": {
     "home": {
       "page": "src/pages/index.astro",
-      "purpose": "The page a visitor lands on: what the business does, why it, how it works, where, the questions people ask, and how to ask for a quote. The template sets the hero, header and type.",
+      "purpose": "The page a visitor lands on: what the business does, why it, how it works, where, the questions people ask, and how to ask for a quote. The direction sets the hero, the type and the shape.",
       "kinds": [
         "hero",
         "trust_strip",
@@ -237,15 +237,13 @@
             "variant": "icons"
           },
           {
-            "kind": "service_cards",
-            "variant": "photo_cards"
+            "kind": "service_cards"
           },
           {
             "kind": "value_props"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
             "kind": "about"
@@ -261,12 +259,10 @@
             "kind": "service_area"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "about": [
@@ -288,8 +284,7 @@
             "variant": "wall"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "services": [
@@ -301,16 +296,13 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "service_area": [
@@ -321,8 +313,7 @@
             "kind": "service_area"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "contact": [
@@ -333,8 +324,7 @@
             "kind": "contact"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "quote": [
@@ -434,15 +424,13 @@
             "variant": "icons"
           },
           {
-            "kind": "service_cards",
-            "variant": "photo_cards"
+            "kind": "service_cards"
           },
           {
             "kind": "value_props"
           },
           {
-            "kind": "steps",
-            "variant": "circles"
+            "kind": "steps"
           },
           {
             "kind": "about"
@@ -458,12 +446,10 @@
             "kind": "service_area"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "about": [
@@ -485,8 +471,7 @@
             "variant": "wall"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "services": [
@@ -498,16 +483,13 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "service_area": [
@@ -518,8 +500,7 @@
             "kind": "service_area"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "contact": [
@@ -530,8 +511,7 @@
             "kind": "contact"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "quote": [
@@ -622,8 +602,7 @@
             "variant": "practice_list"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
             "kind": "about"
@@ -639,12 +618,10 @@
             "kind": "service_area"
           },
           {
-            "kind": "faq",
-            "variant": "stacked"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "about": [
@@ -666,8 +643,7 @@
             "variant": "wall"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "services": [
@@ -679,16 +655,13 @@
             "variant": "practice_list"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "service_area": [
@@ -699,8 +672,7 @@
             "kind": "service_area"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "contact": [
@@ -711,8 +683,7 @@
             "kind": "contact"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "quote": [
@@ -814,8 +785,7 @@
       "order": {
         "home": [
           {
-            "kind": "hero",
-            "variant": "dark_center"
+            "kind": "hero"
           },
           {
             "kind": "trust_strip",
@@ -826,8 +796,7 @@
             "variant": "fleet"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
             "kind": "value_props"
@@ -843,12 +812,10 @@
             "kind": "service_area"
           },
           {
-            "kind": "faq",
-            "variant": "stacked"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "about": [
@@ -870,8 +837,7 @@
             "variant": "wall"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "services": [
@@ -883,16 +849,13 @@
             "variant": "fleet"
           },
           {
-            "kind": "steps",
-            "variant": "timeline"
+            "kind": "steps"
           },
           {
-            "kind": "faq",
-            "variant": "split"
+            "kind": "faq"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "service_area": [
@@ -903,8 +866,7 @@
             "kind": "service_area"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "contact": [
@@ -915,8 +877,7 @@
             "kind": "contact"
           },
           {
-            "kind": "cta_band",
-            "variant": "solid"
+            "kind": "cta_band"
           }
         ],
         "quote": [

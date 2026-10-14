@@ -5,7 +5,10 @@ import {
   type FactValueKey,
   FIXED_PAGES,
   FONTS,
+  INDUSTRIES,
   type IndustryId,
+  LEGACY_FONT_PAIR,
+  LEGACY_TEMPLATE_DIRECTION,
   PAGES,
   PALETTES,
   TEMPLATES,
@@ -14,6 +17,7 @@ import {
 import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
+import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
@@ -48,11 +52,28 @@ export const DESIGN_RULES = [
   "12. No social proof the facts do not hold. An empty testimonials section is left out.",
 ]
 
+/** A palette as `site.palette` takes it: the six roles, by name. */
+const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
+export const paletteRoles = (palette: (typeof PALETTES)[number]) =>
+  ROLES.map((role) => `${role}:${palette[role]}`).join(" ")
+
 /**
- * The directions library as prompt lines, stable across every build. VS6
- * fills it from `src/directions.json`; empty, the segment is left out.
+ * The directions library as prompt lines, stable across every build: how to
+ * apply one, each direction, and the six roles of every palette they name,
+ * from the starter's `src/directions.json`.
  */
-export const DIRECTION_LIBRARY: readonly string[] = []
+export const DIRECTION_LIBRARY: readonly string[] = [
+  "- Pick one direction for the Blueprint and set direction in src/site-config.ts to its id, font to its pair and palette to the roles of one of its palettes, unless the owner chose a palette or a font (below). Change at most two axes (a variant, radius, bands, the pair or the palette) and name them in the Blueprint. In layout, leave a section's variant out to take the direction's, and name one only for an axis you changed. Radius, bands and the ornament come with the direction; never restyle them in CSS.",
+  ...DIRECTIONS.map(
+    (d) =>
+      `- ${d.id} (${d.label}; ${d.industries.length === INDUSTRIES.length ? "any industry" : d.industries.join(", ")}): fonts ${d.fonts}; palettes ${d.palettes.join(", ")}; hero ${d.hero}, services ${d.services}, steps ${d.steps}, faq ${d.faq}, cta ${d.cta}; radius ${d.radius}; bands ${d.bands}. Ornament: ${d.ornament}. Photos: ${d.image_style} Voice: ${d.voice}`
+  ),
+  `- Palettes, as palette takes them: ${PALETTES.filter((p) =>
+    DIRECTIONS.some((d) => d.palettes.includes(p.id))
+  )
+    .map((p) => `${p.id} "${paletteRoles(p)}"`)
+    .join("; ")}.`,
+]
 
 /**
  * Each industry pack's copy voice notes, by the id `business.industry`
@@ -260,13 +281,12 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   return [
     ...(template
       ? [
-          // VS6 turns the old template into a direction from the library.
-          `- Layout: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"); apply it through the fields src/site-config.ts gives for it.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
+          `- Direction: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"), which is now the ${labelOf(DIRECTIONS, LEGACY_TEMPLATE_DIRECTION[template.id])} direction; pick ${LEGACY_TEMPLATE_DIRECTION[template.id]} for the Blueprint unless their notes ask for another.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
         ]
       : []),
     ...(preset
       ? [
-          `- Colour: the brand colour is ${preset.brand}, the owner's ${preset.label} palette. Derive the rest of the colours from it.`,
+          `- Colour: the brand colour is ${preset.brand}, the owner's ${preset.label} palette, whatever the direction names. Set palette in src/site-config.ts to "${paletteRoles(preset)}" exactly; derive no colour.`,
         ]
       : palette?.brand
         ? [ownColour(palette.brand, palette.custom)]
@@ -277,11 +297,11 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
           : []),
     ...(family
       ? [
-          `- Font: ${family.label}, the system stack ${family.family}. Add no font files and no font links.`,
+          `- Font: the owner chose ${family.label}, whatever the direction names; set font in src/site-config.ts to "${LEGACY_FONT_PAIR[family.id]}". The pair's files come with the site; add no font files and no font links.`,
         ]
       : font?.custom
         ? [
-            `- Font: the owner described ${quoted(font.custom)}. Use the closest of these system stacks and add no font files: ${FONTS.map((f) => f.family).join("; ")}.`,
+            `- Font: the owner described ${quoted(font.custom)}. Set font to the closest pair a direction names; add no font files and no font links.`,
           ]
         : []),
     ...(pages

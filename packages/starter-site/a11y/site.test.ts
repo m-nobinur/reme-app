@@ -1,6 +1,6 @@
 /**
  * The accessibility gate for a tenant site: axe against the built pages of the
- * golden fixture, in a real browser, at WCAG 2.2 AA, once per template.
+ * golden fixture, in a real browser, at WCAG 2.2 AA, in three directions.
  *
  * It is vitest rather than a Playwright runner so that scripts/floor.mjs can
  * count it, and it lives outside `test/` so that `pnpm test` stays browser-free
@@ -29,20 +29,24 @@ const PAGES = [
 ]
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 
-/** Each template, each in a palette and a font of its own. */
+/** Three directions, each in a palette and a font of its own. */
 const brand = (id: string) =>
   PALETTES.find((each) => each.id === id)?.brand ?? ""
 const VARIANTS: Record<string, Record<string, string>> = {
-  classic: { ...FILLED, template: "classic", brandColor: brand("forest") },
-  modern: {
+  fresh_modern: {
     ...FILLED,
-    template: "modern",
+    direction: "fresh_modern",
+    brandColor: brand("forest"),
+  },
+  calm_daylight: {
+    ...FILLED,
+    direction: "calm_daylight",
     brandColor: brand("sunset"),
     font: "classic_serif",
   },
-  bold: {
+  after_dark: {
     ...FILLED,
-    template: "bold",
+    direction: "after_dark",
     brandColor: brand("midnight"),
     font: "soft_rounded",
   },
@@ -57,11 +61,11 @@ let phone: Page | undefined
 
 beforeAll(async () => {
   for (const [name, site] of Object.entries(VARIANTS)) {
-    // The bold build asks a chauffeur firm's questions, so a select, a
+    // The after_dark build asks a chauffeur firm's questions, so a select, a
     // number and a date are scanned as well as the default text inputs.
     const built = await build({
       site,
-      ...(name === "bold" ? { quoteForm: LIMOUSINE_FORM } : {}),
+      ...(name === "after_dark" ? { quoteForm: LIMOUSINE_FORM } : {}),
     })
     sites.push({ name, built, ...(await serve(built.dist)) })
   }

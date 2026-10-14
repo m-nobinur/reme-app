@@ -16,8 +16,8 @@ import Steps from "../components/Steps/Steps.astro"
 import Testimonials from "../components/Testimonials/Testimonials.astro"
 import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
+import { directionOf } from "../directions"
 import { phoneText } from "../phone"
-import { HERO_OF, templateOf } from "../presets"
 import { primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
 import { serviceItems } from "../structured-data"
@@ -46,20 +46,28 @@ const offerings = site.offerings
 const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
 const talk = site.phone || site.email
 
-// Each component types its own variants; the layout's strings are checked
-// against the contract by a test, so one cast stands for all of them.
-const heroOf = (variant: string | undefined) =>
-  (variant ?? (home ? HERO_OF[templateOf(site.template)] : undefined)) as never
+// A section with no variant of its own takes the direction's; a page hero
+// other than home's stays the plain one. Each component types its own
+// variants and a test checks the layout's and the directions' strings against
+// the contract, so one cast stands for all of them.
+const direction = directionOf(site.direction)
+const OF_DIRECTION: Partial<Record<string, string>> = {
+  hero: home ? direction.hero : undefined,
+  service_cards: direction.services,
+  steps: direction.steps,
+  faq: direction.faq,
+  cta_band: direction.cta,
+}
 ---
 
 {
   layout[page].map(({ kind, variant }) => {
-    const v = variant as never
+    const v = (variant ?? OF_DIRECTION[kind]) as never
     switch (kind) {
       case "hero":
         return (
           <Hero
-            variant={heroOf(variant)}
+            variant={v}
             eyebrow={home ? site.industry : ""}
             heading={heading}
             lede={lede}

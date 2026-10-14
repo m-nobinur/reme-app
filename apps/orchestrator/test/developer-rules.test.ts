@@ -15,6 +15,7 @@ import {
   assignmentGoal,
   COPY_RULES,
   ownerChoices,
+  paletteRoles,
   photoFile,
   siteRules,
 } from "../src/developer-rules.ts"
@@ -209,7 +210,7 @@ describe("the owner's onboarding choices in the rules", () => {
     }
   })
 
-  it("turns presets into values: the template, the palette's brand colour, the font stack, the pages and the voice", () => {
+  it("turns presets into values: the direction, the palette's roles, the font pair, the pages and the voice", () => {
     const rules = ownerChoices([
       fact("site.template", { id: "modern" }),
       fact("site.palette", { id: "forest" }),
@@ -217,11 +218,17 @@ describe("the owner's onboarding choices in the rules", () => {
       fact("site.pages", { ids: ["home", "about", "gallery", "quote"] }),
       fact("assistant.tone", { id: "professional" }),
     ]).join("\n")
+    const forest = PALETTES.find((p) => p.id === "forest")
+    if (!forest) throw new Error("no forest palette")
     expect(rules).toContain('Modern template (site.template "modern")')
+    expect(rules).toContain("pick calm_daylight for the Blueprint")
+    expect(rules).toContain(`the brand colour is ${forest.brand}`)
     expect(rules).toContain(
-      `the brand colour is ${PALETTES.find((p) => p.id === "forest")?.brand}`
+      `Set palette in src/site-config.ts to "${paletteRoles(forest)}" exactly`
     )
-    expect(rules).toContain("ui-serif, Georgia, serif")
+    expect(rules).toContain(
+      'set font in src/site-config.ts to "newsreader_inter"'
+    )
     expect(rules).toContain(
       "Home and Request a quote, plus About, Gallery. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
     )

@@ -7,8 +7,8 @@ import { brandTheme } from "../brand"
 import Seo from "../components/Seo/Seo.astro"
 import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
 import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
+import { directionOf } from "../directions"
 import { BODY_VAR, DISPLAY_VAR, fontTheme, pairOf } from "../fonts"
-import { templateOf } from "../presets"
 import { site } from "../site-config"
 
 interface Props {
@@ -19,13 +19,20 @@ interface Props {
 }
 
 const props = Astro.props
-// Empty unless the owner chose a colour, and empty again if what they chose is
-// not a hex colour. See src/brand.ts. The font rule likewise, from src/fonts.ts.
+// Empty unless the site has a palette or a colour, and empty again if neither
+// parses. See src/brand.ts. The font rule likewise, from src/fonts.ts. The
+// direction's radius, bands and ornament key off the root's attributes.
 const pair = pairOf(site.font)
-const theme = brandTheme(site.brandColor) + fontTheme(pair)
+const theme = brandTheme(site.brandColor, site.palette) + fontTheme(pair)
+const direction = directionOf(site.direction)
 ---
 
-<html lang="en" data-template={templateOf(site.template)}>
+<html
+  lang="en"
+  data-direction={direction.id}
+  data-radius={direction.radius}
+  data-bands={direction.bands}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

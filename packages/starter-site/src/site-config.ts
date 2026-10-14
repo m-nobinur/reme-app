@@ -95,19 +95,32 @@ const values = {
   photo3Src: "",
   photo3Alt: "",
   /**
-   * The colour the owner chose, as #rrggbb: their palette's brand colour
-   * (site.palette) or one they named. Empty is the default theme, and so is
-   * anything that is not a hex colour. Do not pick one for them.
+   * The design direction, an id from src/directions.json, as "calm_daylight":
+   * the Blueprint's direction. It sets the radius, the dark bands, the
+   * ornament, and the variant of every hero (on the home page), service
+   * cards, steps, FAQ and closing band in layout that names none. An old
+   * template id (classic, modern, bold) reads as its direction; anything else
+   * reads as fresh_modern.
+   */
+  direction: "fresh_modern",
+  /**
+   * The palette's six roles, as "paper:#f7faf9 ink:#13201a primary:#1b4332
+   * tint:#e1efe9 accent:#37aebe line:#cedfd8": a preset's roles exactly as
+   * the instructions give them. It wins over brandColor. Anything short of
+   * all six hex colours is ignored.
+   */
+  palette: "",
+  /**
+   * The owner's own colour, as #rrggbb, when they named one rather than a
+   * palette: the six roles are derived from it. Empty is the default theme,
+   * and so is anything that is not a hex colour. Do not pick one for them.
    */
   brandColor: "",
   /**
-   * The layout the owner chose (site.template): classic, modern or bold.
-   * Anything else reads as classic.
-   */
-  template: "classic",
-  /**
-   * The type the owner chose (site.font): clean_sans, classic_serif or
-   * soft_rounded. Empty or anything else keeps the template's own type.
+   * The font pair, an id from src/fonts.ts, as "outfit_figtree": the
+   * Blueprint's fonts. The old ids (clean_sans, classic_serif, soft_rounded)
+   * read as their pairs. Empty or anything else keeps the system stacks and
+   * loads no font file.
    */
   font: "",
   /** media.uploads, the path of the owner's logo, as "/uploads/<id>.png". Empty shows the business name as text. */
@@ -116,7 +129,7 @@ const values = {
   logoAlt: "",
   /**
    * media.uploads, the path of the owner's photo the home page's hero shows,
-   * as "/uploads/<id>.jpg". Empty gives each template its photo-free hero.
+   * as "/uploads/<id>.jpg". Empty gives the hero variant its photo-free form.
    */
   heroImage: "",
   /** What that photo shows, in one sentence: its alt text. The hero shows the photo only with it. */
@@ -412,9 +425,10 @@ export const fields = Object.fromEntries(
  * them, so composing a page is editing this data: reorder, drop, or change a
  * variant. A section with no content behind it renders nothing, whatever its
  * place here. `kind` and `variant` are the contract's SECTION_VARIANTS (a test
- * fails when they drift). A hero with no variant is the plain page hero,
- * except on the home page, where it takes the hero of the template the owner
- * picked until directions replace templates.
+ * fails when they drift). A section with no variant takes site.direction's:
+ * the hero only on the home page (elsewhere it is the plain page hero), and
+ * service cards, steps, FAQ and closing band on every page. Name a variant
+ * only where the Blueprint changes the direction's.
  */
 export type LayoutSection = {
   kind:
@@ -445,15 +459,15 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
   home: [
     { kind: "hero" },
     { kind: "trust_strip", variant: "icons" },
-    { kind: "service_cards", variant: "photo_cards" },
+    { kind: "service_cards" },
     { kind: "value_props" },
-    { kind: "steps", variant: "timeline" },
+    { kind: "steps" },
     { kind: "about" },
     { kind: "testimonials", variant: "wall" },
     { kind: "gallery" },
     { kind: "service_area" },
-    { kind: "faq", variant: "split" },
-    { kind: "cta_band", variant: "solid" },
+    { kind: "faq" },
+    { kind: "cta_band" },
   ],
   about: [
     { kind: "hero" },
@@ -461,24 +475,20 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
     { kind: "about" },
     { kind: "value_props" },
     { kind: "testimonials", variant: "wall" },
-    { kind: "cta_band", variant: "solid" },
+    { kind: "cta_band" },
   ],
   services: [
     { kind: "hero" },
     { kind: "service_cards", variant: "alternating" },
-    { kind: "steps", variant: "timeline" },
-    { kind: "faq", variant: "split" },
-    { kind: "cta_band", variant: "solid" },
+    { kind: "steps" },
+    { kind: "faq" },
+    { kind: "cta_band" },
   ],
   service_area: [
     { kind: "hero" },
     { kind: "service_area" },
-    { kind: "cta_band", variant: "solid" },
+    { kind: "cta_band" },
   ],
-  contact: [
-    { kind: "hero" },
-    { kind: "contact" },
-    { kind: "cta_band", variant: "solid" },
-  ],
+  contact: [{ kind: "hero" }, { kind: "contact" }, { kind: "cta_band" }],
   quote: [{ kind: "hero" }, { kind: "quote_form" }],
 }

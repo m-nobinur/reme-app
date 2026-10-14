@@ -12,8 +12,8 @@
 
 import type { ComponentManifest } from "@workspace/contracts"
 
-/** 8,000 characters is about 2,000 tokens at the ratio measured on the starter, in the cached segment. The starter with its marketing components needs about 6,400; `seed.test.ts` fails if the seed's own map is ever cut. */
-export const REPO_MAP_MAX_CHARS = 8_000
+/** 10,000 characters is about 2,500 tokens at the ratio measured on the starter, in the cached segment. The starter with its fonts, palettes and directions needs about 9,200 (2026-10-14); `seed.test.ts` fails if the seed's own map is ever cut. */
+export const REPO_MAP_MAX_CHARS = 10_000
 
 /** Room kept for the notice that says what a cut map left out. */
 const NOTICE_CHARS = 600

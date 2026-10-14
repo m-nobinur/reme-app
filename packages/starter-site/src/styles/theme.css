@@ -29,7 +29,7 @@
   );
   /* A system serif for headings. It ships with every desktop and phone, costs
      no download, and is what keeps the page from reading as another sans-serif
-     template. */
+     site. */
   --font-display: var(
     --face-display,
     ui-serif,
@@ -40,8 +40,7 @@
 
   /* Type, to the bar the reference sites set: a 16 px body at 1.7, a hero of
      64 to 82 px, a section heading of 38 to 56 px, all in a display weight of
-     500 that is set large rather than bold. The templates below may still
-     override a step until each becomes a design direction. */
+     500 that is set large rather than bold, the same in every direction. */
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
@@ -115,29 +114,18 @@ html {
   font-synthesis-weight: none;
 }
 
-/* The templates' own type and shape. Plain attribute selectors, so the
-   owner's font, written as html:root in the page head, still wins. */
-[data-template="modern"] {
-  --font-display: var(--face-display, var(--font-sans));
-  --text-hero: clamp(2.75rem, 1.4rem + 5.2vw, 5.75rem);
-  --text-page: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
-  --display-weight: 500;
-  --display-tracking: -0.035em;
-  --radius-card: 1.25rem;
-  --radius-button: 999px;
-  --radius-media: 1.25rem;
-  --header-h: 5rem;
+/* The direction's radius language (src/directions.ts). soft is the default
+   above; square is the 2 to 4 px of an editorial site, round the large cards
+   and pill buttons of a friendly one. Pills on captions and tags keep their
+   own shape in every direction. */
+[data-radius="square"] {
+  --radius-card: 0.25rem;
+  --radius-button: 0.125rem;
+  --radius-media: 0.125rem;
 }
 
-[data-template="bold"] {
-  --font-display: var(--face-display, var(--font-sans));
-  --text-2xl: clamp(2rem, 1.4rem + 2.4vw, 3.25rem);
-  --text-page: clamp(2.75rem, 1.5rem + 5vw, 5.5rem);
-  --text-hero: clamp(3rem, 0.9rem + 8.6vw, 8.5rem);
-  --display-weight: 800;
-  --display-tracking: -0.035em;
-  --display-case: uppercase;
-  --radius-card: 0;
-  --radius-button: 0;
-  --radius-media: 0;
+[data-radius="round"] {
+  --radius-card: 1.5rem;
+  --radius-button: 999px;
+  --radius-media: 1.5rem;
 }

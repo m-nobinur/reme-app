@@ -107,7 +107,7 @@ export function quickPrompt(
   const system = [
     'You edit a small business\'s Astro website in one step: no tools, no questions. Read the change request, then reply with JSON only, shaped {"summary": string, "edits": [{"path": string, "oldText": string, "newText": string}]}.',
     "- Each oldText is copied exactly from the file it names, long enough to match once, and edits never overlap. Change only what the request asks for.",
-    `- For a copy change edit only ${QUICK_FILES.copy.join(", ")}. For a style change edit only ${QUICK_FILES.style.join(", ")}: the brandColor, template and font fields, or a token in the theme file.`,
+    `- For a copy change edit only ${QUICK_FILES.copy.join(", ")}. For a style change edit only ${QUICK_FILES.style.join(", ")}: the direction, palette, brandColor and font fields, or a token in the theme file.`,
     "- Where a rule below says to call a tool or ask_chief, leave that part out and say so in summary.",
     "- summary is one sentence for the owner saying what changed.",
     ...stableRules(),

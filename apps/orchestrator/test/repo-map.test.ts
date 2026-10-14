@@ -67,7 +67,7 @@ describe("the repository map", () => {
     expect(cut.length).toBeLessThanOrEqual(REPO_MAP_MAX_CHARS)
     const notice = cut.split("\n").at(-1) ?? ""
     expect(notice).toMatch(
-      /^\[Map cut at 8000 characters: \d+ files not listed/
+      /^\[Map cut at 10000 characters: \d+ files not listed/
     )
     const listed = cut.split("\n").length - 1
     expect(notice).toContain(
