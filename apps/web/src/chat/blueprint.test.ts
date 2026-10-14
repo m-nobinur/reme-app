@@ -195,7 +195,15 @@ describe("what the card says of a plan", () => {
 
   it("says which photos are made and how many are the owner's", () => {
     expect(generatedLine(BLUEPRINT)).toBe(
-      "2 photos will be made for you: Home hero, Home hero. 1 are yours."
+      "2 photos will be made for you: Home hero, Home hero. 1 is yours."
     )
+    const two = {
+      ...BLUEPRINT,
+      images: [
+        ...BLUEPRINT.images,
+        { ...BLUEPRINT.images[2], slot_id: "slot_d" },
+      ],
+    } as Blueprint
+    expect(generatedLine(two)).toMatch(/2 are yours\.$/)
   })
 })

@@ -42,8 +42,8 @@ import {
 
 /**
  * The plan the owner reads before anything is built: an icon, "Blueprint" and
- * the site's name over a collapsible body of two pages, the feature plan and
- * the design. "Build it" starts the build; "Change something" puts the owner
+ * the site's name, always shown, over a "Review feature plan" collapsible of
+ * two pages, the feature plan and the design. "Build it" starts the build; "Change something" puts the owner
  * in the composer with a prefix to finish, and the message they send is the
  * answer (`change`), which re-plans. A re-plan draws the same card with the
  * rows that differ from the plan before marked "Changed". Read-only, with no
@@ -62,14 +62,17 @@ function Changed({ on, children }: { on: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "rounded-xl",
+        "flex items-start gap-2 rounded-xl",
         on && "-mx-2 bg-primary/10 px-2 py-1 ring-1 ring-primary/30"
       )}
       data-changed={on || undefined}
     >
-      {children}
+      {/* The text wraps in its own column; the tag stays at the end of the row. */}
+      <div className="min-w-0 flex-1">{children}</div>
       {on ? (
-        <span className="ml-2 font-medium text-primary text-xs">Changed</span>
+        <span className="shrink-0 whitespace-nowrap font-medium text-primary text-xs leading-5">
+          Changed
+        </span>
       ) : null}
     </div>
   )
@@ -186,7 +189,7 @@ function Design({
             <li key={page.key}>
               <Changed on={changed.has(page.key)}>
                 <span className="font-medium">{page.label}</span>
-                <span className="text-muted-foreground">
+                <span className="text-foreground/75">
                   {" "}
                   · {page.sections.join(", ")}
                 </span>
@@ -255,37 +258,26 @@ export function BlueprintCard({
       )}
       data-slot="blueprint-card"
     >
-      <Collapsible onOpenChange={setOpen} open={open}>
-        <div className="flex items-center gap-3">
-          <span
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+        >
+          <BlueprintIcon className="size-5" />
+        </span>
+        <h3 className="min-w-0 flex-1 truncate text-sm" id={`${id}-title`}>
+          <span className="font-medium">Blueprint</span>
+          <span className="text-muted-foreground"> · {site}</span>
+        </h3>
+      </div>
+      <Collapsible className="mt-4" onOpenChange={setOpen} open={open}>
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-2xl border border-border px-3 py-2 text-left font-medium text-sm outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring">
+          <span className="min-w-0 flex-1">Review feature plan</span>
+          <CaretDownIcon
             aria-hidden
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-          >
-            <BlueprintIcon className="size-5" />
-          </span>
-          <h3 className="min-w-0 flex-1 truncate text-sm" id={`${id}-title`}>
-            <span className="font-medium">Blueprint</span>
-            <span className="text-muted-foreground"> · {site}</span>
-          </h3>
-          <CollapsibleTrigger
-            render={
-              <Button
-                aria-label={open ? "Collapse the plan" : "Expand the plan"}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              />
-            }
-          >
-            <CaretDownIcon
-              aria-hidden
-              className={cn(
-                open && "rotate-180",
-                "motion-reduce:transition-none"
-              )}
-            />
-          </CollapsibleTrigger>
-        </div>
+            className={cn("size-4 shrink-0", open && "rotate-180")}
+          />
+        </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="flex flex-col gap-4 pt-4">
             <h4 className="font-medium text-sm">{PAGE_TITLES[page]}</h4>
@@ -298,79 +290,78 @@ export function BlueprintCard({
                 photoDirection={photoDirection}
               />
             )}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
-              <div className="flex items-center gap-1">
-                <Button
-                  aria-disabled={page === 0 || undefined}
-                  aria-label={`Previous: ${PAGE_TITLES[0]}`}
-                  className="aria-disabled:opacity-40"
-                  onClick={() => go(page - 1)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <CaretLeftIcon aria-hidden />
-                </Button>
-                {/* Announced politely, so a screen reader hears which page it is on. */}
-                <span
-                  aria-live="polite"
-                  className="min-w-12 text-center text-muted-foreground text-sm tabular-nums"
-                >
-                  <span aria-hidden>
-                    {page + 1} / {PAGE_TITLES.length}
-                  </span>
-                  <span className="sr-only">
-                    {PAGE_TITLES[page]}, page {page + 1} of {PAGE_TITLES.length}
-                  </span>
-                </span>
-                <Button
-                  aria-disabled={page === last || undefined}
-                  aria-label={`Next: ${PAGE_TITLES[last]}`}
-                  className="aria-disabled:opacity-40"
-                  onClick={() => go(page + 1)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <CaretRightIcon aria-hidden />
-                </Button>
-              </div>
-              {readOnly ? null : (
-                <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <Button
-                    onClick={() => {
-                      setWriting(true)
-                      compose(CHANGE_PREFIX)
-                      onChange?.()
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Change something
-                  </Button>
-                  <Button onClick={onBuild} size="sm" type="button">
-                    Build it
-                  </Button>
-                </div>
-              )}
-            </div>
-            {readOnly ? null : (
-              <p
-                className={cn(
-                  "text-muted-foreground text-xs",
-                  writing ? null : "sr-only"
-                )}
-                role="status"
+            <div className="flex items-center gap-1">
+              <Button
+                aria-disabled={page === 0 || undefined}
+                aria-label={`Previous: ${PAGE_TITLES[0]}`}
+                className="aria-disabled:opacity-40"
+                onClick={() => go(page - 1)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
               >
-                {writing
-                  ? "Write what to change in the message box below and send it. Your message updates this plan."
-                  : ""}
-              </p>
-            )}
+                <CaretLeftIcon aria-hidden />
+              </Button>
+              {/* Announced politely, so a screen reader hears which page it is on. */}
+              <span
+                aria-live="polite"
+                className="min-w-12 text-center text-muted-foreground text-sm tabular-nums"
+              >
+                <span aria-hidden>
+                  {page + 1} / {PAGE_TITLES.length}
+                </span>
+                <span className="sr-only">
+                  {PAGE_TITLES[page]}, page {page + 1} of {PAGE_TITLES.length}
+                </span>
+              </span>
+              <Button
+                aria-disabled={page === last || undefined}
+                aria-label={`Next: ${PAGE_TITLES[last]}`}
+                className="aria-disabled:opacity-40"
+                onClick={() => go(page + 1)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <CaretRightIcon aria-hidden />
+              </Button>
+            </div>
           </div>
         </CollapsibleContent>
       </Collapsible>
+      {readOnly ? null : (
+        <>
+          {/* Always in reach: the owner can build without opening the plan. */}
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <Button
+              onClick={() => {
+                setWriting(true)
+                compose(CHANGE_PREFIX)
+                onChange?.()
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Change something
+            </Button>
+            <Button onClick={onBuild} size="sm" type="button">
+              Build it
+            </Button>
+          </div>
+          <p
+            className={cn(
+              "mt-3 text-muted-foreground text-xs",
+              writing ? null : "sr-only"
+            )}
+            role="status"
+          >
+            {writing
+              ? "Write what to change in the message box below and send it. Your message updates this plan."
+              : ""}
+          </p>
+        </>
+      )}
     </section>
   )
 }

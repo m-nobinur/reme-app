@@ -498,6 +498,23 @@ const panelCatalog: Entry[] = [
     name: "ApprovalItem preview unavailable",
     render: () => approval({ preview: "error", onRetryPreview: retry }),
   },
+  // Generated photos badged in the review: the hero from the laptop shot, the
+  // other a tile until it has a thumbnail of its own.
+  {
+    name: "ApprovalItem with generated photos",
+    render: () =>
+      approval({
+        photoActions: { onRemove: noop, onTryAnother: noop, onUseOwn: noop },
+        photos: [
+          {
+            alt: "A bright kitchen after a clean",
+            section: "hero",
+            slot_id: "hero",
+          },
+          { alt: "The team at work", section: "about", slot_id: "about" },
+        ],
+      }),
+  },
   // The preview was read but its screenshots do not load: the link stays.
   {
     name: "ApprovalItem screenshots failed",

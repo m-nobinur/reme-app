@@ -2,6 +2,7 @@ import {
   ArrowSquareOutIcon,
   CheckCircleIcon,
   CircleIcon,
+  CircleNotchIcon,
   ClockIcon,
 } from "@phosphor-icons/react"
 import {
@@ -289,18 +290,31 @@ function WorkingOn({
         ) : null}
         {!quick && build.activity?.length ? (
           <ul aria-label="What it is doing" className="flex flex-col gap-1">
-            {build.activity.map((row) => {
+            {build.activity.map((row, index, rows) => {
               const done = row.done >= row.total
+              // Rows run in order: the first one not done is what it is on
+              // now, the rest are next.
+              const active =
+                !done &&
+                rows.findIndex((each) => each.done < each.total) === index
               return (
                 <li
                   className={cn(
                     "flex items-center gap-2 text-[0.8125rem]",
-                    done ? "text-muted-foreground" : "text-foreground"
+                    active && "font-medium text-foreground",
+                    done && "text-muted-foreground",
+                    !(active || done) && "text-muted-foreground/70"
                   )}
+                  data-state={done ? "done" : active ? "active" : "queued"}
                   key={row.id}
                 >
                   {done ? (
                     <CheckCircleIcon aria-hidden className="size-4" />
+                  ) : active ? (
+                    <CircleNotchIcon
+                      aria-hidden
+                      className="size-4 animate-spin text-primary motion-reduce:animate-none"
+                    />
                   ) : (
                     <CircleIcon aria-hidden className="size-4" />
                   )}
@@ -308,6 +322,10 @@ function WorkingOn({
                     {row.label}
                     {row.total > 1 ? `, ${row.done} of ${row.total}` : null}
                     {done ? <span className="sr-only"> (done)</span> : null}
+                    {active ? <span className="sr-only"> (now)</span> : null}
+                    {done || active ? null : (
+                      <span className="sr-only"> (next)</span>
+                    )}
                   </span>
                 </li>
               )
@@ -875,6 +893,9 @@ function ApprovalItem({
         <GeneratedPhotos
           actions={photoActions}
           disabled={busy !== null}
+          heroShot={
+            typeof preview === "object" ? preview.screenshots[2] : undefined
+          }
           photos={photos}
         />
       ) : null}

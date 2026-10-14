@@ -134,6 +134,7 @@ export type ThreadProps = {
    * The id of a stored conversation, at its own address. It is never a new
    * chat: while its history loads it shows a skeleton, never the welcome or
    * suggestions, and nothing sends until the thread is that conversation.
+   * Once loaded and still empty it shows the welcome, like a new chat.
    */
   stored?: string | undefined
   autoFocus?: boolean | undefined
@@ -261,7 +262,21 @@ export const Thread: FC<ThreadProps> = ({
   after,
   reveal,
 }) => {
-  const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
+  // A stored conversation with nothing in it is as empty as a new chat, once
+  // its history is in: the same welcome and suggestions, with the composer in
+  // the middle. Until then it is loading, and the held flag keeps the render
+  // in between from showing the welcome.
+  const loadingStored = useAuiState((s) =>
+    stored
+      ? s.thread.isLoading ||
+        s.threads.isLoading ||
+        s.threadListItem.remoteId !== stored
+      : false
+  )
+  const holdStored = useHeld(loadingStored, 300)
+  const isEmpty = useAuiState((s) =>
+    stored ? !holdStored && s.thread.messages.length === 0 : isNewChatView(s)
+  )
   const settings = useMemo(
     () => ({ stored, placeholder, briefing, quickActions, mode, reveal }),
     [stored, placeholder, briefing, quickActions, mode, reveal]
@@ -386,7 +401,7 @@ const ThreadRoot: FC<{
               )}
             >
               <ThreadScrollToBottom />
-              <div className="flex flex-col">
+              <div className="group/dock flex flex-col">
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} />
               </div>
@@ -563,7 +578,8 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           whenever the page is open, so a heavy ring would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+        // A docked tray takes the top corners, so the two read as one card.
+        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring group-has-[[data-slot=question-tray]]/dock:rounded-t-none"
       >
         <ComposerPrimitive.Input
           ref={input}
@@ -745,18 +761,33 @@ const MessageError: FC = () => {
   )
 }
 
-/** The dot a reply shows until its first words arrive. */
-const TypingIndicator: FC = () => (
-  <span data-slot="aui_assistant-message-indicator" role="status">
-    <span
-      aria-hidden
-      className="animate-pulse font-sans motion-reduce:animate-none"
-    >
-      {"●"}
+/**
+ * The dot a reply shows until its first words arrive. Quiet, and not under a
+ * card that already says it is working (Saving, Stopping): the owner has
+ * answered it and its own line is the progress.
+ */
+const TypingIndicator: FC = () => {
+  const answered = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "tool-call" &&
+        part.result === undefined &&
+        part.approval?.approved !== undefined
+    )
+  )
+  if (answered) return null
+  return (
+    <span data-slot="aui_assistant-message-indicator" role="status">
+      <span
+        aria-hidden
+        className="animate-pulse font-sans text-muted-foreground motion-reduce:animate-none"
+      >
+        {"●"}
+      </span>
+      <span className="sr-only">Working</span>
     </span>
-    <span className="sr-only">Working</span>
-  </span>
-)
+  )
+}
 
 /** How long a played-in message shows the typing dot, then takes over its words. */
 const REVEAL_TYPING_MS = 700

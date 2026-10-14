@@ -111,7 +111,10 @@ function FixtureThread({
   isLoading = false,
   bare = false,
   rates = false,
+  stored,
 }: {
+  /** The thread is this stored conversation, as at `/app/c/$id`. */
+  stored?: string
   height?: string
   /** Records a thumb on a reply, as the app does, so the thumbs show. */
   rates?: boolean
@@ -137,7 +140,24 @@ function FixtureThread({
     messages,
     onNew: noop,
     suggestions,
-    ...(rates ? { adapters: { feedback: { submit: noop } } } : {}),
+    adapters: {
+      ...(rates ? { feedback: { submit: noop } } : {}),
+      ...(stored
+        ? {
+            threadList: {
+              threadId: stored,
+              threads: [
+                {
+                  id: stored,
+                  remoteId: stored,
+                  status: "regular" as const,
+                  title: "Getting started",
+                },
+              ],
+            },
+          }
+        : {}),
+    },
   })
 
   return (
@@ -176,6 +196,7 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
       settings={{
         placeholder: "Ask Reme anything…",
         quickActions: OWNER_QUICK_ACTIONS,
+        ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
       }}
     />
@@ -206,6 +227,11 @@ const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
 })
 
 const noop = async () => undefined
+
+/** A drawn picture, not a real one: a window, a worktop, a bowl. Grey by opacity alone. */
+const KITCHEN = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="150" height="100" viewBox="0 0 150 100"><rect width="150" height="100" fill-opacity=".08"/><rect x="18" y="12" width="54" height="40" fill-opacity=".2"/><rect x="0" y="62" width="150" height="38" fill-opacity=".35"/><circle cx="108" cy="52" r="12" fill-opacity=".5"/></svg>'
+)}`
 
 const ask = (text: string): ThreadMessageLike => ({
   content: [{ text, type: "text" }],
@@ -1653,7 +1679,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
  * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
  * alone at phone and desktop widths.
  */
-function ConversationSample() {
+function ConversationSample({ stored }: { stored?: string }) {
   return (
     <WorkspaceShell
       className="h-192 border border-border"
@@ -1667,13 +1693,14 @@ function ConversationSample() {
         <span className="text-muted-foreground text-sm">Nothing right now</span>
       }
       rail={<p className="text-sm">Brightclean</p>}
-      title="New chat"
+      title={stored ? "Getting started" : "New chat"}
     >
       <OwnerThread
         bare
         height="h-full"
         isDisabled={false}
         messages={[]}
+        {...(stored ? { stored } : {})}
         settings={{
           briefing: "v3 is live. Version 4 is ready for you to approve.",
         }}
@@ -1887,6 +1914,7 @@ const assistantCatalog = [
               alt: "A bright kitchen after a clean",
               section: "hero",
               slot_id: "hero",
+              src: KITCHEN,
             },
             {
               alt: "The team at work",
@@ -2081,6 +2109,12 @@ const assistantCatalog = [
     ),
   },
   { name: "Conversation", render: () => <ConversationSample /> },
+  // A stored conversation with nothing in it yet, as onboarding opens: the
+  // same welcome and suggestions, composer in the middle.
+  {
+    name: "Conversation stored and empty",
+    render: () => <ConversationSample stored="stored-1" />,
+  },
   {
     name: "ConversationMenu",
     render: () => <ConversationMenu newChat={<a href="#new" />} />,
