@@ -62,14 +62,17 @@ function Changed({ on, children }: { on: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "rounded-xl",
+        "flex items-start gap-2 rounded-xl",
         on && "-mx-2 bg-primary/10 px-2 py-1 ring-1 ring-primary/30"
       )}
       data-changed={on || undefined}
     >
-      {children}
+      {/* The text wraps in its own column; the tag stays at the end of the row. */}
+      <div className="min-w-0 flex-1">{children}</div>
       {on ? (
-        <span className="ml-2 font-medium text-primary text-xs">Changed</span>
+        <span className="shrink-0 whitespace-nowrap font-medium text-primary text-xs leading-5">
+          Changed
+        </span>
       ) : null}
     </div>
   )
@@ -186,7 +189,7 @@ function Design({
             <li key={page.key}>
               <Changed on={changed.has(page.key)}>
                 <span className="font-medium">{page.label}</span>
-                <span className="text-muted-foreground">
+                <span className="text-foreground/75">
                   {" "}
                   · {page.sections.join(", ")}
                 </span>

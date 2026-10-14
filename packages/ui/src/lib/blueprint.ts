@@ -103,7 +103,8 @@ export function generatedLine(b: Blueprint): string {
   }
   const shown = generated.slice(0, 3).join(", ")
   const more = generated.length > 3 ? ` and ${generated.length - 3} more` : ""
-  const own = uploaded > 0 ? ` ${uploaded} are yours.` : ""
+  const own =
+    uploaded > 0 ? ` ${uploaded} ${uploaded === 1 ? "is" : "are"} yours.` : ""
   return `${generated.length} photo${generated.length === 1 ? "" : "s"} will be made for you: ${shown}${more}.${own}`
 }
 
