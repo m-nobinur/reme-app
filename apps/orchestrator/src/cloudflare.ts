@@ -39,6 +39,7 @@ import {
   issueSpec,
   takeSnapshot,
 } from "./brief.ts"
+import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
 import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
@@ -549,6 +550,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
     let resumes = 0
+    let looks = 0
+    let asked: Fix[] = []
+    let shotsOf: { revision_id: string; taken: number; ms: number } | null =
+      null
     for (let round = 1; round <= ROUNDS; round++) {
       let woke: { payload: DeveloperEvent }
       if (pending) {
@@ -600,6 +605,53 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         continue
       }
       if (payload.kind === "completion") {
+        // BA5: a planned build is looked at before the gates, while the
+        // sandbox still holds it and the state is still `implementing`, so a
+        // repair is a signal and costs none of the gate repairs. The first
+        // look may send the lead back once; the second records which fixes
+        // held. Advice only: it never fails a build, and the gates decide.
+        if (route.plan && looks < 2) {
+          looks++
+          const look = looks as 1 | 2
+          const seen = await step.do(`critique ${look}`, async () => {
+            const taken = await takeScreenshots(
+              this.env,
+              ids,
+              payload.revision_id
+            )
+            const result = await run((kit) =>
+              critiqueRound({
+                env: this.env,
+                kit,
+                ids,
+                round: look,
+                revisionId: payload.revision_id,
+                earlier: asked,
+              })
+            )
+            return {
+              ...result,
+              shots: { revision_id: payload.revision_id, ...taken },
+            }
+          })
+          shotsOf = seen.shots
+          if (look === 1 && seen.fixes.length > 0) {
+            asked = seen.fixes
+            await step.do(`design repair ${round}`, async () => {
+              await init(Developer, { id: ids.assignmentId }).dispatch({
+                message: {
+                  kind: "signal",
+                  type: "design.critique",
+                  body: repairMessage(seen.fixes),
+                },
+              })
+              return { fixes: seen.fixes.length }
+            })
+            continue
+          }
+          // Nothing to repair, or this was the check: no second look.
+          looks = 2
+        }
         await step.do(`validating ${round}`, () =>
           run((kit) =>
             advance(kit, ids, "validating", {
@@ -710,9 +762,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // router serves each image once it lands. The sandbox is still the
         // build's own here, which `keep warm` ends.
         const shots = warmAfter
-          ? await step.do("screenshots", () =>
-              takeScreenshots(this.env, ids, payload.revision_id)
-            )
+          ? shotsOf?.revision_id === payload.revision_id
+            ? shotsOf
+            : await step.do("screenshots", () =>
+                takeScreenshots(this.env, ids, payload.revision_id)
+              )
           : null
         const endMs = await step.do(
           warmAfter ? "keep warm" : "destroy sandbox",

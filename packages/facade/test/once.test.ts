@@ -73,6 +73,33 @@ describe("completeOnce", () => {
     expect(headers[0]?.get("x-session-id")).toBe("assignment-1")
   })
 
+  it("sends pictures ahead of the text in the user message", async () => {
+    const sent: { messages: { role: string; content: unknown }[] }[] = []
+    vi.stubGlobal("fetch", async (_input: unknown, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)))
+      return new Response(sse("{}"), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    })
+    await completeOnce(
+      { OPENROUTER_API_KEY: "or-key" },
+      {
+        model: "openrouter/anthropic/claude-sonnet-5.5",
+        effort: "medium",
+        maxTokens: 4_000,
+        system: "The rules.",
+        user: "Look.",
+        images: [{ data: "QUJD", mimeType: "image/png" }],
+        sessionId: "assignment-1",
+      }
+    )
+    const user = sent[0]?.messages.find((m) => m.role === "user")
+    expect(user?.content).toMatchObject([
+      { type: "image_url", image_url: { url: "data:image/png;base64,QUJD" } },
+      { type: "text", text: "Look." },
+    ])
+  })
+
   it("throws a typed refusal for a model the table does not route", async () => {
     await expect(
       completeOnce(

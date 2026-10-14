@@ -20,6 +20,8 @@ export async function completeOnce(
     maxTokens: number
     system: string
     user: string
+    /** Pictures the model reads with `user`, base64 (the design critic's screenshots). */
+    images?: { data: string; mimeType: string }[]
     /** Pins one provider for the cache, per assignment. */
     sessionId: string
     schema?: { name: string; schema: Record<string, unknown> }
@@ -46,7 +48,18 @@ export async function completeOnce(
     model,
     {
       systemPrompt: call.system,
-      messages: [{ role: "user", content: call.user, timestamp: Date.now() }],
+      messages: [
+        {
+          role: "user",
+          content: call.images?.length
+            ? [
+                ...call.images.map((i) => ({ type: "image" as const, ...i })),
+                { type: "text" as const, text: call.user },
+              ]
+            : call.user,
+          timestamp: Date.now(),
+        },
+      ],
     },
     {
       reasoning: call.effort,
