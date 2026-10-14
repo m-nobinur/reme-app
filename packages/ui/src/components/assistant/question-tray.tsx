@@ -9,6 +9,7 @@ import {
   type AskDesignInput,
   type AskDesignOutput,
   FONT_PAIRS,
+  PALETTES,
 } from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -21,7 +22,6 @@ import {
 } from "@workspace/ui/lib/font-faces"
 import { cn } from "@workspace/ui/lib/utils"
 import {
-  type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -64,61 +64,78 @@ function PreviewFaces() {
   return <style>{faceCss(previewFaces())}</style>
 }
 
-function Box({
-  className,
-  ...rect
-}: { className: string } & ComponentProps<"rect">) {
-  return <rect className={className} rx="1.5" {...rect} />
-}
+/** The four stops a site is drawn in, in `PALETTES[].swatches` order. */
+type Stops = readonly [
+  paper: string,
+  tint: string,
+  primary: string,
+  ink: string,
+]
 
 /**
- * A wireframe of a hero and the services under it, in theme tokens, so two
- * directions that differ in those two variants differ at a glance.
- * A variant the sketch does not know draws the first of each.
+ * A wireframe of a hero and the services under it, drawn in the site's own
+ * four colours and not the app's tokens: the site looks the same in either
+ * app theme, and so does its sketch. Two directions that differ in those two
+ * variants differ at a glance. A variant the sketch does not know draws the
+ * first of each.
  */
-function LayoutSketch({ hero, services }: Layout) {
-  const ink = "fill-foreground/75"
-  const block = "fill-muted-foreground/25"
-  const tint = "fill-primary/15"
+function LayoutSketch({
+  hero,
+  services,
+  stops: [paper, tint, primary, ink],
+}: Layout & { stops: Stops }) {
+  // One fill per role; opacity does the softening so the stops stay the site's.
+  const fill = (color: string, opacity = 1) => ({
+    fill: color,
+    fillOpacity: opacity,
+  })
+  const text = fill(ink, 0.75)
+  const quiet = fill(ink, 0.25)
+  const wash = fill(tint)
+  const button = fill(primary)
+  const rule = { stroke: ink, strokeOpacity: 0.15 }
   return (
     <svg
       aria-hidden
-      className="h-auto w-full rounded-xl border border-border bg-background"
+      className="h-auto w-full rounded-xl ring-1 ring-foreground/15"
       data-hero={hero}
       data-services={services}
       viewBox="0 0 120 84"
     >
-      <Box className={ink} height="3" width="14" x="6" y="4" />
-      <Box className={block} height="2" width="26" x="70" y="4.5" />
+      <rect height="84" style={fill(paper)} width="120" />
+      <rect height="3" rx="1.5" style={text} width="14" x="6" y="4" />
+      <rect height="2" rx="1" style={quiet} width="26" x="70" y="4.5" />
       {hero === "dark_center" ? (
         <>
-          <rect className="fill-foreground" height="38" width="120" y="11" />
-          <Box
-            className="fill-background"
+          <rect height="38" style={fill(ink)} width="120" y="11" />
+          <rect
             height="5"
+            rx="1.5"
+            style={fill(paper)}
             width="56"
             x="32"
             y="21"
           />
-          <Box
-            className="fill-background/50"
+          <rect
             height="2"
+            rx="1"
+            style={fill(paper, 0.5)}
             width="40"
             x="40"
             y="30"
           />
-          <Box className="fill-primary" height="5" width="16" x="52" y="37" />
+          <rect height="5" rx="1.5" style={button} width="16" x="52" y="37" />
         </>
       ) : hero === "wash" ? (
         <>
-          <rect className="fill-primary/25" height="38" width="120" y="11" />
-          <Box className={ink} height="5" width="44" x="8" y="21" />
-          <Box className={ink} height="5" width="32" x="8" y="28" />
-          <Box className="fill-primary" height="5" width="14" x="8" y="37" />
-          <Box
-            className="fill-background/70"
+          <rect height="38" style={fill(primary, 0.25)} width="120" y="11" />
+          <rect height="5" rx="1.5" style={text} width="44" x="8" y="21" />
+          <rect height="5" rx="1.5" style={text} width="32" x="8" y="28" />
+          <rect height="5" rx="1.5" style={button} width="14" x="8" y="37" />
+          <rect
             height="4"
             rx="2"
+            style={fill(paper, 0.7)}
             width="22"
             x="90"
             y="42"
@@ -126,22 +143,23 @@ function LayoutSketch({ hero, services }: Layout) {
         </>
       ) : hero === "split_frame" ? (
         <>
-          <Box className={ink} height="5" width="40" x="8" y="19" />
-          <Box className={ink} height="5" width="30" x="8" y="26" />
-          <Box className={block} height="2" width="34" x="8" y="34" />
-          <Box className="fill-primary" height="5" width="14" x="8" y="40" />
+          <rect height="5" rx="1.5" style={text} width="40" x="8" y="19" />
+          <rect height="5" rx="1.5" style={text} width="30" x="8" y="26" />
+          <rect height="2" rx="1" style={quiet} width="34" x="8" y="34" />
+          <rect height="5" rx="1.5" style={button} width="14" x="8" y="40" />
           <rect
-            className="fill-card stroke-border"
             height="34"
             rx="1.5"
+            style={{ ...fill(paper), ...rule }}
             width="46"
             x="66"
             y="13"
           />
-          <Box className={tint} height="28" width="40" x="69" y="16" />
-          <Box
-            className="fill-card stroke-border"
+          <rect height="28" rx="1.5" style={wash} width="40" x="69" y="16" />
+          <rect
             height="10"
+            rx="1.5"
+            style={{ ...fill(paper), ...rule }}
             width="20"
             x="58"
             y="38"
@@ -149,59 +167,70 @@ function LayoutSketch({ hero, services }: Layout) {
         </>
       ) : hero === "text_led" ? (
         <>
-          <Box className={ink} height="7" width="70" x="8" y="17" />
-          <Box className={ink} height="7" width="56" x="8" y="27" />
-          <Box className={block} height="2" width="44" x="8" y="38" />
-          <Box className="fill-primary" height="5" width="14" x="8" y="43" />
-          <Box className={tint} height="18" width="18" x="94" y="26" />
+          <rect height="7" rx="1.5" style={text} width="70" x="8" y="17" />
+          <rect height="7" rx="1.5" style={text} width="56" x="8" y="27" />
+          <rect height="2" rx="1" style={quiet} width="44" x="8" y="38" />
+          <rect height="5" rx="1.5" style={button} width="14" x="8" y="43" />
+          <rect height="18" rx="1.5" style={wash} width="18" x="94" y="26" />
         </>
       ) : (
         <>
-          <Box className={ink} height="5" width="40" x="8" y="19" />
-          <Box className={ink} height="5" width="30" x="8" y="26" />
-          <Box className={block} height="2" width="34" x="8" y="34" />
-          <Box className="fill-primary" height="5" width="14" x="8" y="40" />
+          <rect height="5" rx="1.5" style={text} width="40" x="8" y="19" />
+          <rect height="5" rx="1.5" style={text} width="30" x="8" y="26" />
+          <rect height="2" rx="1" style={quiet} width="34" x="8" y="34" />
+          <rect height="5" rx="1.5" style={button} width="14" x="8" y="40" />
           <path
-            className="fill-primary/25"
             d="M70 48 V30 a18 18 0 0 1 36 0 V48 Z"
+            style={fill(primary, 0.25)}
           />
         </>
       )}
       {services === "numbered_rows"
         ? [54, 64, 74].map((y) => (
             <g key={y}>
-              <circle className={tint} cx="12" cy={y + 3} r="3.5" />
-              <Box className={ink} height="2.5" width="36" x="22" y={y + 1} />
-              <Box className={block} height="2" width="60" x="22" y={y + 5} />
-              <line
-                className="stroke-border"
-                x1="6"
-                x2="114"
-                y1={y + 9}
-                y2={y + 9}
+              <circle cx="12" cy={y + 3} r="3.5" style={wash} />
+              <rect
+                height="2.5"
+                rx="1.25"
+                style={text}
+                width="36"
+                x="22"
+                y={y + 1}
               />
+              <rect
+                height="2"
+                rx="1"
+                style={quiet}
+                width="60"
+                x="22"
+                y={y + 5}
+              />
+              <line style={rule} x1="6" x2="114" y1={y + 9} y2={y + 9} />
             </g>
           ))
         : services === "alternating"
           ? [53, 68].map((y, row) => (
               <g key={y}>
-                <Box
-                  className={tint}
+                <rect
                   height="12"
+                  rx="1.5"
+                  style={wash}
                   width="34"
                   x={row ? 80 : 6}
                   y={y}
                 />
-                <Box
-                  className={ink}
+                <rect
                   height="2.5"
+                  rx="1.25"
+                  style={text}
                   width="40"
                   x={row ? 8 : 46}
                   y={y + 2}
                 />
-                <Box
-                  className={block}
+                <rect
                   height="2"
+                  rx="1"
+                  style={quiet}
                   width="52"
                   x={row ? 8 : 46}
                   y={y + 7}
@@ -211,19 +240,26 @@ function LayoutSketch({ hero, services }: Layout) {
           : services === "fleet"
             ? [6, 62].map((x) => (
                 <g key={x}>
-                  <Box className={tint} height="16" width="52" x={x} y="54" />
-                  <Box
-                    className={block}
+                  <rect
+                    height="16"
+                    rx="1.5"
+                    style={wash}
+                    width="52"
+                    x={x}
+                    y="54"
+                  />
+                  <rect
                     height="3"
                     rx="1.5"
+                    style={quiet}
                     width="12"
                     x={x}
                     y="73"
                   />
-                  <Box
-                    className={block}
+                  <rect
                     height="3"
                     rx="1.5"
+                    style={quiet}
                     width="12"
                     x={x + 15}
                     y="73"
@@ -233,23 +269,26 @@ function LayoutSketch({ hero, services }: Layout) {
             : services === "practice_list"
               ? [54, 63, 72].map((y, row) => (
                   <g key={y}>
-                    <Box
-                      className={ink}
+                    <rect
                       height="2.5"
+                      rx="1.25"
+                      style={text}
                       width="6"
                       x="6"
                       y={y + 1}
                     />
-                    <Box
-                      className={ink}
+                    <rect
                       height="2.5"
+                      rx="1.25"
+                      style={text}
                       width={30 + row * 4}
                       x="18"
                       y={y + 1}
                     />
-                    <Box
-                      className={block}
+                    <rect
                       height="2"
+                      rx="1"
+                      style={quiet}
                       width="70"
                       x="18"
                       y={y + 5}
@@ -258,17 +297,63 @@ function LayoutSketch({ hero, services }: Layout) {
                 ))
               : [6, 44, 82].map((x) => (
                   <g key={x}>
-                    <Box className={tint} height="14" width="32" x={x} y="53" />
-                    <Box className={ink} height="2.5" width="22" x={x} y="70" />
-                    <Box className={block} height="2" width="30" x={x} y="75" />
+                    <rect
+                      height="14"
+                      rx="1.5"
+                      style={wash}
+                      width="32"
+                      x={x}
+                      y="53"
+                    />
+                    <rect
+                      height="2.5"
+                      rx="1.25"
+                      style={text}
+                      width="22"
+                      x={x}
+                      y="70"
+                    />
+                    <rect
+                      height="2"
+                      rx="1"
+                      style={quiet}
+                      width="30"
+                      x={x}
+                      y="75"
+                    />
                   </g>
                 ))}
     </svg>
   )
 }
 
+/**
+ * The colours the sketches are drawn in: the palette the owner picked, else
+ * the first one offered, else the first palette there is.
+ */
+function siteStops(
+  questions: Question[],
+  answers: Record<string, Answer>
+): Stops {
+  const asked = questions.find((each) => each.visual === "palette")
+  const swatches = (option?: Option) =>
+    option?.visual?.kind === "swatches" && option.visual.colors.length === 4
+      ? (option.visual.colors as unknown as Stops)
+      : undefined
+  const picked = asked && answers[asked.id]
+  const chosen =
+    picked && "choice" in picked
+      ? asked?.card.options.find((each) => each.id === picked.choice)
+      : undefined
+  return (
+    swatches(chosen) ??
+    swatches(asked?.card.options[0]) ??
+    (PALETTES[0]?.swatches as unknown as Stops)
+  )
+}
+
 /** What an option shows above its label, from the question's visual and the option's own data. */
-function Picture({ option }: { option: Option }) {
+function Picture({ option, stops }: { option: Option; stops: Stops }) {
   const { visual } = option
   if (visual?.kind === "swatches") {
     return (
@@ -310,7 +395,13 @@ function Picture({ option }: { option: Option }) {
     )
   }
   if (visual?.kind === "layout") {
-    return <LayoutSketch hero={visual.hero} services={visual.services} />
+    return (
+      <LayoutSketch
+        hero={visual.hero}
+        services={visual.services}
+        stops={stops}
+      />
+    )
   }
   return null
 }
@@ -402,6 +493,7 @@ function QuestionTray({
 
   const question = questions[index]
   if (!question) return null
+  const stops = siteStops(questions, answers)
   const total = questions.length
   const last = index === total - 1
   const answer = answers[question.id]
@@ -561,7 +653,7 @@ function QuestionTray({
                         type="radio"
                         value={option.id}
                       />
-                      <Picture option={option} />
+                      <Picture option={option} stops={stops} />
                       <span className="flex items-center gap-1.5 font-medium text-sm">
                         {question.visual === "font_pair" ? (
                           <span className="sr-only">{option.label}</span>
