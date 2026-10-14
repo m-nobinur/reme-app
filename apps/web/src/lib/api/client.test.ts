@@ -450,6 +450,7 @@ for (const [status, code, reason] of [
   [409, "approval.not_requested", "gone"],
   [404, "approval.not_found", "gone"],
   [404, "assignment.not_found", "gone"],
+  [409, "revision.a11y_unchecked", "checking"],
 ] as const) {
   it(`says why a decision was refused: ${code}`, async () => {
     answers[`POST /approvals/${APPROVAL}/decision`] = refusal(status, code)
