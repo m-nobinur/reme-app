@@ -76,11 +76,15 @@ describe("the instructions' cache order", () => {
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
-  it("shares one prefix across businesses and between a build and a revise", () => {
+  it("shares one prefix across businesses in one industry and between a build and a revise", () => {
     const prefix = (text: string) => text.slice(0, text.indexOf(BUILD_MARK))
     const first = instructions(brief([cleaning]), 20)
+    // The pack voice ends the stable segment, so the shared prefix is per industry.
     const other = instructions(
-      brief([fact("business.name", "Someone Else")], "sites/x/source.tar.zst"),
+      brief(
+        [cleaning, fact("business.name", "Someone Else")],
+        "sites/x/source.tar.zst"
+      ),
       5
     )
     expect(prefix(first).length).toBeGreaterThan(1000)
@@ -113,8 +117,10 @@ describe("the pack voice slot", () => {
     expect(packVoice([], packs)).toEqual([])
   })
 
-  it("is empty today, so no segment is invented", () => {
-    expect(packVoice([cleaning])).toEqual([])
-    expect(instructions(brief([cleaning]), 20)).not.toContain("Industry pack")
+  it("carries the cleaning pack's notes and none for an industry without a pack", () => {
+    expect(packVoice([cleaning]).length).toBeGreaterThan(0)
+    expect(instructions(brief([cleaning]), 20)).toContain("Industry pack")
+    const other = fact("business.industry", { name: "X", category: null })
+    expect(instructions(brief([other]), 20)).not.toContain("Industry pack")
   })
 })
