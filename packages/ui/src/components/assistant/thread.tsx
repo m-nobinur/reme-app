@@ -386,7 +386,7 @@ const ThreadRoot: FC<{
               )}
             >
               <ThreadScrollToBottom />
-              <div className="flex flex-col">
+              <div className="group/dock flex flex-col">
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} />
               </div>
@@ -563,7 +563,8 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           whenever the page is open, so a heavy ring would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+        // A docked tray takes the top corners, so the two read as one card.
+        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring group-has-[[data-slot=question-tray]]/dock:rounded-t-none"
       >
         <ComposerPrimitive.Input
           ref={input}

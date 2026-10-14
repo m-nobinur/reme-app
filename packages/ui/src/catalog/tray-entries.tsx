@@ -154,7 +154,7 @@ const trayCatalog: CatalogEntry[] = [
                 onFinish={noop}
                 start={start}
               />
-              <div className="rounded-b-3xl border border-border bg-background px-4 py-3 text-muted-foreground text-sm">
+              <div className="rounded-b-4xl border border-border bg-background px-4 py-3 text-muted-foreground text-sm">
                 Message Sam
               </div>
             </div>

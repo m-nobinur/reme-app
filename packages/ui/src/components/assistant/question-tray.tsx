@@ -555,7 +555,7 @@ function QuestionTray({
     <section
       aria-label="Design questions"
       className={cn(
-        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-t-3xl border border-border border-b-0 bg-card text-card-foreground",
+        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-t-[var(--composer-radius,var(--radius-4xl))] border border-border border-b-0 bg-card text-card-foreground",
         className
       )}
       data-slot="question-tray"
@@ -572,7 +572,7 @@ function QuestionTray({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-t-3xl px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          className="flex w-full items-center gap-3 rounded-t-[var(--composer-radius,var(--radius-4xl))] px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
           onClick={() => setCollapsed(false)}
           type="button"
         >
@@ -680,6 +680,7 @@ function QuestionTray({
               {other ? (
                 <Input
                   aria-label={other.label}
+                  className="rounded-[var(--composer-radius,var(--radius-4xl))]"
                   autoComplete="off"
                   maxLength={200}
                   onChange={(event) => write(event.currentTarget.value)}
