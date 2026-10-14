@@ -1,0 +1,10 @@
+{
+  "id": "forest",
+  "label": "Forest",
+  "paper": "#f7f9f6",
+  "ink": "#16211b",
+  "primary": "#1b4332",
+  "tint": "#e2ebe4",
+  "accent": "#b8893b",
+  "line": "#d3ddd5"
+}

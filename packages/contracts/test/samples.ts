@@ -1,4 +1,6 @@
 import type { ContractName } from "../src/registry.ts"
+// Colour literals are data here: the lint rule that keeps them out of code reads only code.
+import paletteSample from "./palette-sample.json" with { type: "json" }
 
 const ORG = "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e"
 const STAFF = "1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d"
@@ -238,6 +240,71 @@ export const samples: Record<ContractName, unknown> = {
       requested_at: NOW,
       expires_at: null,
     },
+  },
+  Blueprint: {
+    direction: "calm_daylight",
+    fonts: "outfit_figtree",
+    palette: { kind: "preset", id: "forest" },
+    pages: [
+      {
+        page: "home",
+        sections: [
+          {
+            kind: "hero",
+            variant: "wash",
+            purpose: "Say what Fictional Fox Cleaning does and where",
+            content_notes:
+              "Lead with the weekly clean; phone number beside the button",
+          },
+          {
+            kind: "service_cards",
+            variant: "photo_cards",
+            purpose: "Three services, each with a photo and a link",
+            content_notes: null,
+          },
+          {
+            kind: "cta_band",
+            variant: "solid",
+            purpose: "Ask for a quote",
+            content_notes: null,
+          },
+        ],
+      },
+      {
+        page: "quote",
+        sections: [
+          {
+            kind: "quote_form",
+            variant: "default",
+            purpose: "Collect what a quote needs",
+            content_notes: null,
+          },
+        ],
+      },
+    ],
+    images: [
+      {
+        id: "home_hero",
+        page: "home",
+        section: "hero",
+        aspect: "16:9",
+        resolution: "2K",
+        subject: "An empty sunlit living room, one green plant on the sill",
+        text_side: "left",
+        source: "generated",
+        alt: "A bright, tidy living room",
+      },
+    ],
+    voice: "Plain and warm, first person plural, no exclamation marks",
+    features: [
+      "A home page that leads with the weekly clean",
+      "Three service cards with photos",
+      "A quote form that asks for rooms and access",
+      "Your phone number on every page",
+    ],
+    custom_sections: [
+      { name: "SeasonalOffer", purpose: "A strip for the spring clean offer" },
+    ],
   },
   BuildSummary: {
     assignment_id: ASSIGNMENT,
@@ -508,6 +575,23 @@ export const samples: Record<ContractName, unknown> = {
     },
     built_at: NOW,
   },
+  DesignDirection: {
+    id: "calm_daylight",
+    label: "Calm daylight",
+    industries: ["cleaning", "health"],
+    fonts: "outfit_figtree",
+    palettes: ["forest", "sage"],
+    hero: "wash",
+    services: "photo_cards",
+    steps: "circles",
+    faq: "split",
+    cta: "solid",
+    radius: "soft",
+    bands: "one_dark",
+    ornament: "Pill captions on photos",
+    image_style: "Empty sunlit interiors, one prop in the brand hue",
+    voice: "Calm and plain, short sentences",
+  },
   DerivedReminder: {
     rule: "approval_expiring",
     approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
@@ -618,12 +702,29 @@ export const samples: Record<ContractName, unknown> = {
     attempt: 2,
     reported_at: NOW,
   },
+  FontPair: {
+    id: "outfit_figtree",
+    label: "Outfit and Figtree",
+    display: { family: "Outfit", weights: [500, 600], italic: false },
+    body: { family: "Figtree", weights: [400, 500] },
+  },
   GetPreviewInput: { assignment_id: ASSIGNMENT },
   GetPreviewOutput: {
     outcome: "ready",
     assignment_id: ASSIGNMENT,
     version: 3,
     expires_at: LATER,
+  },
+  ImageSlot: {
+    id: "about_team",
+    page: "about",
+    section: "about",
+    aspect: "4:3",
+    resolution: "1K",
+    subject: "The owner's own photo of the two of them with the van",
+    source: "upload",
+    asset_id: "4e5f6071-8293-4a0e-9f10-4c5d6e7f8091",
+    alt: "Two cleaners beside a white van",
   },
   InformationAnswer: {
     answer_id: "e7f8091a-2b3c-47f8-b9ba-445566778899",
@@ -660,6 +761,7 @@ export const samples: Record<ContractName, unknown> = {
   OwnerChangeRequest: {
     text: "Add a line saying we bring our own supplies.",
   },
+  Palette: paletteSample,
   PreviewClaim: {
     org_id: ORG,
     site_id: ORG,

@@ -1663,6 +1663,266 @@ export interface components {
           /** @enum {string} */
           reason: "build_failed" | "budget_parked" | "publish_rolled_back"
         }
+    Blueprint: {
+      direction: string
+      /** @enum {string} */
+      fonts:
+        | "outfit_figtree"
+        | "dmsans_fraunces"
+        | "instrument_worksans"
+        | "sora_manrope"
+        | "syne_jakarta"
+        | "newsreader_inter"
+        | "cormorant_manrope"
+        | "fraunces_figtree"
+      palette:
+        | {
+            /** @constant */
+            kind: "preset"
+            /** @enum {string} */
+            id:
+              | "ocean"
+              | "classic_blue"
+              | "harbour"
+              | "lagoon"
+              | "forest"
+              | "sage"
+              | "sunset"
+              | "mocha"
+              | "cardinal"
+              | "berry"
+              | "burgundy"
+              | "midnight"
+              | "damson"
+              | "ultra_violet"
+              | "graphite"
+              | "onyx"
+          }
+        | {
+            /** @constant */
+            kind: "brand"
+            brand: string
+          }
+      pages: {
+        /** @enum {string} */
+        page:
+          | "home"
+          | "services"
+          | "about"
+          | "gallery"
+          | "testimonials"
+          | "faq"
+          | "service_area"
+          | "contact"
+          | "quote"
+        sections: (
+          | {
+              /** @constant */
+              kind: "hero"
+              /** @enum {string} */
+              variant:
+                | "wash"
+                | "split_arch"
+                | "split_frame"
+                | "dark_center"
+                | "text_led"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "trust_strip"
+              /** @enum {string} */
+              variant: "icons" | "phrases"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "service_cards"
+              /** @enum {string} */
+              variant:
+                | "photo_cards"
+                | "numbered_rows"
+                | "alternating"
+                | "fleet"
+                | "practice_list"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "value_props"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "steps"
+              /** @enum {string} */
+              variant: "circles" | "dark_band" | "timeline"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "about"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "testimonials"
+              /** @enum {string} */
+              variant: "featured" | "wall"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "gallery"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "service_area"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "faq"
+              /** @enum {string} */
+              variant: "split" | "stacked"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "cta_band"
+              /** @enum {string} */
+              variant: "solid" | "photo"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "contact"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "quote_form"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+        )[]
+      }[]
+      images: (
+        | {
+            id: string
+            /** @enum {string} */
+            page:
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+            /** @enum {string} */
+            section:
+              | "hero"
+              | "trust_strip"
+              | "service_cards"
+              | "value_props"
+              | "steps"
+              | "about"
+              | "testimonials"
+              | "gallery"
+              | "service_area"
+              | "faq"
+              | "cta_band"
+              | "contact"
+              | "quote_form"
+            /** @enum {string} */
+            aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+            /** @enum {string} */
+            resolution: "1K" | "2K"
+            subject: string
+            /** @enum {string} */
+            text_side?: "left" | "right" | "none"
+            alt: string
+            /** @constant */
+            source: "upload"
+            /** Format: uuid */
+            asset_id: string
+          }
+        | {
+            id: string
+            /** @enum {string} */
+            page:
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+            /** @enum {string} */
+            section:
+              | "hero"
+              | "trust_strip"
+              | "service_cards"
+              | "value_props"
+              | "steps"
+              | "about"
+              | "testimonials"
+              | "gallery"
+              | "service_area"
+              | "faq"
+              | "cta_band"
+              | "contact"
+              | "quote_form"
+            /** @enum {string} */
+            aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+            /** @enum {string} */
+            resolution: "1K" | "2K"
+            subject: string
+            /** @enum {string} */
+            text_side?: "left" | "right" | "none"
+            alt: string
+            /** @constant */
+            source: "generated"
+            /** Format: uuid */
+            asset_id?: string
+          }
+      )[]
+      voice: string
+      features: string[]
+      custom_sections?: {
+        name: string
+        purpose: string
+      }[]
+    }
     BuildSummary: {
       /** Format: uuid */
       assignment_id: string
@@ -3569,6 +3829,74 @@ export interface components {
             | "quote.form"
           )[]
         }
+    DesignDirection: {
+      id: string
+      label: string
+      industries: (
+        | "cleaning"
+        | "chauffeur"
+        | "legal"
+        | "health"
+        | "beauty"
+        | "food"
+        | "trades"
+        | "automotive"
+        | "property"
+        | "education"
+        | "events"
+        | "retail"
+      )[]
+      /** @enum {string} */
+      fonts:
+        | "outfit_figtree"
+        | "dmsans_fraunces"
+        | "instrument_worksans"
+        | "sora_manrope"
+        | "syne_jakarta"
+        | "newsreader_inter"
+        | "cormorant_manrope"
+        | "fraunces_figtree"
+      palettes: (
+        | "ocean"
+        | "classic_blue"
+        | "harbour"
+        | "lagoon"
+        | "forest"
+        | "sage"
+        | "sunset"
+        | "mocha"
+        | "cardinal"
+        | "berry"
+        | "burgundy"
+        | "midnight"
+        | "damson"
+        | "ultra_violet"
+        | "graphite"
+        | "onyx"
+      )[]
+      /** @enum {string} */
+      hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
+      /** @enum {string} */
+      services:
+        | "photo_cards"
+        | "numbered_rows"
+        | "alternating"
+        | "fleet"
+        | "practice_list"
+      /** @enum {string} */
+      steps: "circles" | "dark_band" | "timeline"
+      /** @enum {string} */
+      faq: "split" | "stacked"
+      /** @enum {string} */
+      cta: "solid" | "photo"
+      /** @enum {string} */
+      radius: "square" | "soft" | "round"
+      /** @enum {string} */
+      bands: "light" | "one_dark" | "two_dark" | "inverted"
+      ornament: string
+      image_style: string
+      voice: string
+    }
     ErrorEnvelope: {
       /** @enum {string} */
       class:
@@ -3967,6 +4295,28 @@ export interface components {
       /** Format: date-time */
       reported_at: string
     }
+    FontPair: {
+      /** @enum {string} */
+      id:
+        | "outfit_figtree"
+        | "dmsans_fraunces"
+        | "instrument_worksans"
+        | "sora_manrope"
+        | "syne_jakarta"
+        | "newsreader_inter"
+        | "cormorant_manrope"
+        | "fraunces_figtree"
+      label: string
+      display: {
+        family: string
+        weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
+        italic: boolean
+      }
+      body: {
+        family: string
+        weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
+      }
+    }
     GetPreviewInput: {
       /** Format: uuid */
       assignment_id: string
@@ -3998,6 +4348,89 @@ export interface components {
             code: string
             message: string
           }
+        }
+    ImageSlot:
+      | {
+          id: string
+          /** @enum {string} */
+          page:
+            | "home"
+            | "services"
+            | "about"
+            | "gallery"
+            | "testimonials"
+            | "faq"
+            | "service_area"
+            | "contact"
+            | "quote"
+          /** @enum {string} */
+          section:
+            | "hero"
+            | "trust_strip"
+            | "service_cards"
+            | "value_props"
+            | "steps"
+            | "about"
+            | "testimonials"
+            | "gallery"
+            | "service_area"
+            | "faq"
+            | "cta_band"
+            | "contact"
+            | "quote_form"
+          /** @enum {string} */
+          aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+          /** @enum {string} */
+          resolution: "1K" | "2K"
+          subject: string
+          /** @enum {string} */
+          text_side?: "left" | "right" | "none"
+          alt: string
+          /** @constant */
+          source: "upload"
+          /** Format: uuid */
+          asset_id: string
+        }
+      | {
+          id: string
+          /** @enum {string} */
+          page:
+            | "home"
+            | "services"
+            | "about"
+            | "gallery"
+            | "testimonials"
+            | "faq"
+            | "service_area"
+            | "contact"
+            | "quote"
+          /** @enum {string} */
+          section:
+            | "hero"
+            | "trust_strip"
+            | "service_cards"
+            | "value_props"
+            | "steps"
+            | "about"
+            | "testimonials"
+            | "gallery"
+            | "service_area"
+            | "faq"
+            | "cta_band"
+            | "contact"
+            | "quote_form"
+          /** @enum {string} */
+          aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+          /** @enum {string} */
+          resolution: "1K" | "2K"
+          subject: string
+          /** @enum {string} */
+          text_side?: "left" | "right" | "none"
+          alt: string
+          /** @constant */
+          source: "generated"
+          /** Format: uuid */
+          asset_id?: string
         }
     InformationAnswer: {
       /** Format: uuid */
@@ -4048,6 +4481,33 @@ export interface components {
     }
     OwnerChangeRequest: {
       text: string
+    }
+    Palette: {
+      /** @enum {string} */
+      id:
+        | "ocean"
+        | "classic_blue"
+        | "harbour"
+        | "lagoon"
+        | "forest"
+        | "sage"
+        | "sunset"
+        | "mocha"
+        | "cardinal"
+        | "berry"
+        | "burgundy"
+        | "midnight"
+        | "damson"
+        | "ultra_violet"
+        | "graphite"
+        | "onyx"
+      label: string
+      paper: string
+      ink: string
+      primary: string
+      tint: string
+      accent: string
+      line: string
     }
     PreviewClaim: {
       /** Format: uuid */
