@@ -191,6 +191,34 @@ live("minting a preview link, against a real database", () => {
       revision_id: rev.id,
       host,
     })
+
+    // Local dev's config: the same signed claim, for the local router's host,
+    // opened over http on its port. The claim names the host alone.
+    const local = await app.request(path, authed, {
+      ...env,
+      SITE_HOST_SUFFIX: ".reme.localhost",
+      SITE_PORT: "3004",
+    } as unknown as Env)
+    const opened = (await local.json()) as {
+      url: string
+      screenshots: string[]
+    }
+    const localHost = `preview-v3-${slug}.reme.localhost`
+    expect(opened.url.split("?")[0]).toBe(`http://${localHost}:3004/open`)
+    expect(opened.screenshots[0]?.split("?")[0]).toBe(
+      `http://${localHost}:3004/screenshots/home-390.png`
+    )
+    const localToken = new URL(opened.url).searchParams.get("t") ?? ""
+    expect(await verifyPreview(localToken, KEY, "site")).toMatchObject({
+      revision_id: rev.id,
+      host: localHost,
+    })
+    // A port on a real host mints nothing.
+    const stray = await app.request(path, authed, {
+      ...env,
+      SITE_PORT: "3004",
+    } as unknown as Env)
+    expect(stray.status).toBe(503)
   })
 
   it("refuses a revision that is still building, and an assignment with none", async () => {

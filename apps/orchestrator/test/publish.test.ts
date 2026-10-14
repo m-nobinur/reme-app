@@ -625,11 +625,21 @@ describe("the artifact check and the probe", () => {
     expect(worst).toBeLessThan(10 * 60_000)
     expect((SERVE_TRIES - 1) * SERVE_WAIT_MS).toBeGreaterThanOrEqual(120_000)
     let signal: AbortSignal | undefined
-    await probeHost("x", null, (async (_: string, init: RequestInit) => {
+    const asked: string[] = []
+    await probeHost("x", null, (async (url: string, init: RequestInit) => {
+      asked.push(url)
       signal = init.signal ?? undefined
       return new Response(GOOD_HTML)
     }) as unknown as typeof fetch)
     expect(signal).toBeInstanceOf(AbortSignal)
+    // Local dev probes the local router, on the port its config names.
+    const pause = async () => undefined
+    const fetcher = (async (url: string) => {
+      asked.push(url)
+      return new Response(GOOD_HTML)
+    }) as unknown as typeof fetch
+    await probeHost("x.reme.localhost", null, fetcher, undefined, pause, "3004")
+    expect(asked).toEqual(["https://x/", "http://x.reme.localhost:3004/"])
   })
 
   it("points nothing at an org whose owner deleted their account, and says so for good", async () => {
@@ -933,6 +943,32 @@ live("the publish workflow", () => {
       db.select().from(siteRevisions).where(eq(siteRevisions.id, revisionId))
     )
     expect(revision?.status).toBe("published")
+  })
+
+  it("publishes on local dev to the local router's host, and probes it there", async () => {
+    const store = storage()
+    const { orgId, revisionId, approvalId } = await approved(store)
+    const { env } = workflowEnv(store)
+    const local = {
+      ...env,
+      SITE_HOST_SUFFIX: ".reme.localhost",
+      SITE_PORT: "3004",
+    } as unknown as Env
+    const router = serveFromPointer(store)
+    vi.stubGlobal("fetch", router)
+    const outcome = await new PublishWorkflow({} as never, local).run(
+      { payload: { org_id: orgId, approval_id: approvalId } } as never,
+      fakeStep([])
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "published" })
+    const host = `state-test-${orgId.slice(0, 8)}.reme.localhost`
+    expect(
+      JSON.parse(store.pointers.get(`host:${host}`) ?? "{}")
+    ).toMatchObject({ revision_id: revisionId })
+    expect(new Set(router.mock.calls.map(([input]) => String(input)))).toEqual(
+      new Set([`http://${host}:3004/`])
+    )
   })
 
   it("never activates a half-uploaded artifact", async () => {

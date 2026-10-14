@@ -289,11 +289,13 @@ export function Decidable({
  */
 function Website({
   host,
+  url,
   live,
   thumbnail,
   blueprint,
 }: {
   host: string | null
+  url: string | null
   live: number | null
   thumbnail: Thumbnail
   blueprint: Blueprint | null
@@ -304,6 +306,7 @@ function Website({
       host={host}
       live={live}
       onRequestChanges={useRequestChanges()}
+      url={url}
       thumbnail={thumbnail}
     />
   )
@@ -421,7 +424,7 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
       return (
         <a
           className={NEXT_STEP}
-          href={`https://${suggestion.host}`}
+          href={suggestion.url}
           rel="noreferrer"
           target="_blank"
           title={suggestion.host}
@@ -674,6 +677,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
             host={host}
             live={live}
             thumbnail={thumbnail}
+            url={workspace.url}
           />
         </TabsContent>
       ) : null}

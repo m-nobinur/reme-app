@@ -143,7 +143,7 @@ const alert = {
   reason: "build_failed",
 }
 const workspace = {
-  site: { host: null, live: null },
+  site: { host: null, url: null, live: null },
   builds: [],
   attention: [approval, question, alert, report],
   missing_facts: [],
@@ -313,6 +313,7 @@ it("reads the live version, and a build only while it is working", async () => {
     ...workspace,
     site: {
       host: "fictional.invalid",
+      url: "https://fictional.invalid",
       live: { revision_id: REVISION, version: 3, assignment_id: ASSIGNMENT },
     },
     builds: [build("awaiting_review")],
@@ -515,7 +516,11 @@ it("polls with the last tag and keeps what it has on a 304", async () => {
 it("reads a changed workspace with its tag, builds, facts and reminders", async () => {
   answers["GET /workspace"] = Response.json(
     {
-      site: { host: "fictional.example.invalid", live: null },
+      site: {
+        host: "fictional.example.invalid",
+        url: "http://fictional.example.invalid:3004",
+        live: null,
+      },
       builds: [building],
       expected_seconds: {
         full: { p50: 180, p95: 330 },
@@ -538,6 +543,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     builds: [building],
     expectedSeconds: { quick: { p50: 15, p95: 45 } },
     host: "fictional.example.invalid",
+    url: "http://fictional.example.invalid:3004",
     missingFacts: ["business.phone"],
     assistantName: "Ava",
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],

@@ -114,6 +114,8 @@ export type Workspace = {
   expectedSeconds?: WorkspaceStatus["expected_seconds"]
   /** The site's host, once it has one. */
   host: string | null
+  /** Where `host` opens: https, or the local router on local dev. Null with `host`. */
+  url: string | null
   /** The required facts still to ask for. */
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */

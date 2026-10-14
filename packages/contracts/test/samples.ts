@@ -970,6 +970,7 @@ export const samples: Record<ContractName, unknown> = {
   WorkspaceStatus: {
     site: {
       host: "brightclean.remeai.co.uk",
+      url: "https://brightclean.remeai.co.uk",
       live: { revision_id: REVISION, version: 3, assignment_id: ASSIGNMENT },
     },
     builds: [

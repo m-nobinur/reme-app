@@ -268,7 +268,7 @@ async function workspaceStatus(
   if (!response || response.status === 401 || response.status === 403) {
     return {
       status: {
-        site: { host: null, live: null },
+        site: { host: null, url: null, live: null },
         builds: [],
         attention: [],
         missing_facts: [],
@@ -365,6 +365,7 @@ function workspaceOf(
     builds: status.builds,
     expectedSeconds: status.expected_seconds,
     host: status.site.host,
+    url: status.site.url,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,
     derivedReminders: status.reminders.derived,

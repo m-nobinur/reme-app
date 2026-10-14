@@ -17,6 +17,12 @@ interface __BaseEnv_Env {
   RUNTIME_SPEC_KEY: string
   /** Signs preview claims here; the router verifies them (ADR-032). */
   PREVIEW_KEY: string
+  /**
+   * Local dev only, from `.dev.vars` with `SITE_HOST_SUFFIX=.reme.localhost`:
+   * the local router's port, for preview links and the publish probe. Never
+   * in `wrangler.jsonc`; `siteUrl` refuses it on a real host.
+   */
+  SITE_PORT?: string
   OPENROUTER_API_KEY: string
   /** The model plane's settings, set as secrets so one list says what the Worker reads. */
   REME_MODEL_PRIMARY: string

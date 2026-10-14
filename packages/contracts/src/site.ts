@@ -296,3 +296,24 @@ export function previewHost(slug: string, version: number, suffix: string) {
  * "Preview" has a slug starting `preview-`, and its live site is a site.
  */
 export const isPreviewHost = (host: string) => /^preview-v\d+-/.test(host)
+
+/** A TCP port, 1 to 65535, as config writes it. */
+const PORT =
+  /^(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/
+
+/**
+ * Where a site or preview host is opened, from the environment's config: its
+ * suffix and `SITE_PORT`. A real host is https on the default port. A
+ * `.localhost` host is local dev's router, which never leaves the machine
+ * (RFC 6761) and serves plain http on `SITE_PORT`. Anything else throws, so
+ * a misconfigured environment mints no link rather than an http one or one
+ * on a stray port: a port on a real host, or a `.localhost` host without one.
+ */
+export function siteUrl(host: string, port: string | undefined): string {
+  const local = host.endsWith(".localhost")
+  if (!local && !port) return `https://${host}`
+  if (local && port && PORT.test(port)) return `http://${host}:${port}`
+  throw new Error(
+    `no site link for ${JSON.stringify(host)} on port ${JSON.stringify(port)}`
+  )
+}

@@ -8,6 +8,7 @@ import {
   SITE_REVISION_HEADER,
   SitePointer,
   siteHost,
+  siteUrl,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -580,13 +581,15 @@ export async function probeHost(
     /** `probeProof` for the host, without which the router names no revision. */
     proof: string
   },
-  pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
+  pause = (ms: number) => new Promise((done) => setTimeout(done, ms)),
+  /** `SITE_PORT`: local dev's router, for a `.localhost` host. */
+  port?: string
 ): Promise<{ ok: true } | { ok: false; reason: string; not_served?: string }> {
   let res: Response | null = null
   for (let attempt = 1; ; attempt++) {
     let seen: string
     try {
-      res = await fetcher(`https://${host}/`, {
+      res = await fetcher(`${siteUrl(host, port)}/`, {
         headers: {
           "cache-control": "no-cache",
           ...(expected && { [SITE_PROBE_HEADER]: expected.proof }),

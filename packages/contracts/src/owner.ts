@@ -440,6 +440,8 @@ export const REMINDER_NOTES_MAX = 20
 export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
     host: z.string().min(1).nullable(),
+    /** Where `host` opens, built by `siteUrl`: http and a port on local dev. Null with `host`. */
+    url: z.url().nullable(),
     /**
      * The version being served, and the build that made it, so the panel can
      * read its screenshots through `GET /builds/:id/preview`.

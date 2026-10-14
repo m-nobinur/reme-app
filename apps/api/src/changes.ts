@@ -460,7 +460,7 @@ export async function startChange(
         const [builds, reviews, site] = await Promise.all([
           readBuilds(db, null),
           readApprovals(db),
-          readSite(db, env.SITE_HOST_SUFFIX),
+          readSite(db, env),
         ])
         return {
           made,

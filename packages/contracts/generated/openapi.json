@@ -28939,6 +28939,17 @@
                   }
                 ]
               },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "live": {
                 "anyOf": [
                   {
@@ -28975,6 +28986,7 @@
             },
             "required": [
               "host",
+              "url",
               "live"
             ],
             "additionalProperties": false

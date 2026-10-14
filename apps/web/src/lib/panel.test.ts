@@ -7,6 +7,7 @@ import { type PanelInput, pageOf, panelFor } from "./panel"
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
 const CHAT = "00000000-0000-4000-8000-00000000000b"
 const HOST = "fixture-clean.example.invalid"
+const URL_ = `https://${HOST}`
 /** 10:00 in London. */
 const NOW = new Date("2026-10-01T09:00:00.000Z")
 const ZONE = "Europe/London"
@@ -83,7 +84,7 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
 })
 
 const live = (over: Partial<Workspace> = {}) =>
-  workspace({ live: 3, host: HOST, ...over })
+  workspace({ live: 3, host: HOST, url: URL_, ...over })
 
 describe("pageOf", () => {
   it("names each page, and tells the getting-started chat apart", () => {
@@ -258,7 +259,9 @@ describe("in a chat", () => {
       "Version 4 is ready for your review.",
       "Approve it here, or say what to change.",
     ])
-    expect(panel?.suggestions).toEqual([{ kind: "visit-site", host: HOST }])
+    expect(panel?.suggestions).toEqual([
+      { kind: "visit-site", host: HOST, url: URL_ },
+    ])
   })
 
   it("names who asked a question, from the directory", () => {
@@ -289,7 +292,7 @@ describe("in a chat", () => {
     ])
     expect(panel?.suggestions).toEqual([
       { kind: "request-change" },
-      { kind: "visit-site", host: HOST },
+      { kind: "visit-site", host: HOST, url: URL_ },
     ])
   })
 })

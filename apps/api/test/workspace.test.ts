@@ -276,7 +276,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(response.status).toBe(200)
     const body = WorkspaceStatus.parse(await response.json())
     expect(body).toEqual({
-      site: { host: null, live: null },
+      site: { host: null, url: null, live: null },
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
@@ -312,12 +312,19 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
+      url: `https://${busy.slug}${SUFFIX}`,
       live: {
         revision_id: busyIds.liveRevision,
         version: 1,
         assignment_id: busyIds.live,
       },
     })
+    // Local dev's config links the same site to the local router instead.
+    const local = await readWorkspace(kit, busy.orgId, {
+      SITE_HOST_SUFFIX: ".reme.localhost" as Env["SITE_HOST_SUFFIX"],
+      SITE_PORT: "3004",
+    })
+    expect(local.site.url).toBe(`http://${busy.slug}.reme.localhost:3004`)
     expect(
       body.builds.map((b) => [b.assignment_id, b.state, b.revision])
     ).toEqual([
@@ -485,7 +492,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 
   describe("derived reminders", () => {
     const derived = async (who: Owner, now?: Date) =>
-      (await readWorkspace(kit, who.orgId, SUFFIX, now)).reminders.derived
+      (await readWorkspace(kit, who.orgId, { SITE_HOST_SUFFIX: SUFFIX }, now))
+        .reminders.derived
 
     it("reminds of a review under 24 hours from expiry until it is decided", async () => {
       const who = await owner(kit, url as string, "expiring")
@@ -582,7 +590,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         )
       },
     }
-    await readWorkspace(counted, busy.orgId, SUFFIX)
+    await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
     // The eighth reads the generated photos of the waiting approval.
     expect(statements).toBe(8)

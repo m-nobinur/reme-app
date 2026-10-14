@@ -30,7 +30,7 @@ export type Suggestion =
   | { kind: "onboarding"; id: string }
   | { kind: "start-website" }
   | { kind: "request-change" }
-  | { kind: "visit-site"; host: string }
+  | { kind: "visit-site"; host: string; url: string }
   | { kind: "set-reminder" }
 
 /** Something with a time: what is coming up, or what just happened. */
@@ -189,7 +189,7 @@ function remindersSentence(
 
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, names, now, zone } = input
-  const { live, host, builds, attention, missingFacts } = workspace
+  const { live, host, url, builds, attention, missingFacts } = workspace
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
     : null
@@ -434,8 +434,8 @@ export function panelFor(input: PanelInput): Panel | null {
     if (!reviewing && page !== "website") {
       suggestions.push({ kind: "request-change" })
     }
-    if (host && page !== "website")
-      suggestions.push({ kind: "visit-site", host })
+    if (host && url && page !== "website")
+      suggestions.push({ kind: "visit-site", host, url })
   }
 
   return {
