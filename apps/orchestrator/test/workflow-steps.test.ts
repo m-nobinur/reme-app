@@ -131,6 +131,7 @@ const script = {
   claims: [] as { claimed: boolean; superseded: string | null }[],
   provisions: [] as boolean[],
   verdicts: [] as string[],
+  a11y: [] as string[],
   checkpoints: [] as boolean[],
   origin: "console" as "owner" | "console",
   reviews: 0,
@@ -299,7 +300,14 @@ vi.mock("../src/retention.ts", () => ({
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
-  // The accessibility gate is one of the gates `validateRevision` decides.
+  // What a quick edit's accessibility gate finds after its preview; none left is a pass.
+  checkA11y: async () => {
+    const outcome = script.a11y.shift() ?? "preview_ready"
+    return outcome === "preview_ready"
+      ? { outcome, report_id: "r" }
+      : { outcome, report_id: "r", failed: [] }
+  },
+  // Everywhere else the accessibility gate is one `validateRevision` decides.
   validateRevision: async (
     _kit: unknown,
     _sites: unknown,
@@ -393,6 +401,7 @@ type Setup = {
   claims?: typeof script.claims
   provisions?: boolean[]
   verdicts?: string[]
+  a11y?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
   looks?: typeof script.looks
@@ -467,6 +476,21 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     [completion],
     { origin: "owner", lane: copy, verdicts: ["repairing"] },
     { outcome: "preview_ready" },
+  ],
+  // A quick edit runs axe once its preview exists; a failure there goes to
+  // the section lane, whose second preview waits on axe.
+  [
+    "accessibility failed after a quick edit",
+    [completion],
+    { origin: "owner", lane: copy, a11y: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  // The site went to a newer edit before axe could run: this build stops.
+  [
+    "superseded before accessibility",
+    [],
+    { origin: "owner", lane: copy, a11y: ["stopped"] },
+    { outcome: "stopped" },
   ],
   [
     "section change",
@@ -585,6 +609,7 @@ describe("the assignment Workflow's step names", () => {
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
+    script.a11y = [...(setup.a11y ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
     script.origin = setup.origin ?? "console"
     script.lane = setup.lane ?? {}
@@ -757,6 +782,27 @@ describe("the assignment Workflow's step names", () => {
     expect(script.gated).toEqual([{ exit_code: 0, key: null, ms: 1 }])
   })
 
+  it("runs a quick edit's axe after its preview, and the section lane's before", async () => {
+    script.lane = copy
+    script.a11y = ["repairing"]
+    script.gated = []
+    const quick = drive([completion])
+    await quick.run()
+    // The quick edit's gates are handed no axe run; the section lane's are.
+    expect(script.gated).toEqual(["later", { exit_code: 0, key: null, ms: 1 }])
+    expect(quick.names.indexOf("a11y 1")).toBeGreaterThan(
+      quick.names.indexOf("gates 1")
+    )
+    expect(quick.names.indexOf("a11y 2")).toBeLessThan(
+      quick.names.indexOf("gates 2")
+    )
+    // The Developer is told what axe found.
+    expect(dispatched.map((d) => JSON.stringify(d))).toEqual(
+      expect.arrayContaining([expect.stringContaining("validation.failed")])
+    )
+    script.lane = {}
+  })
+
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
     script.verdicts = ["preview_ready"]
     script.origin = "owner"
@@ -792,6 +838,8 @@ describe("the assignment Workflow's step names", () => {
         "quick edit",
         "quick edit handed on",
         "quick edit failed a gate",
+        "accessibility failed after a quick edit",
+        "superseded before accessibility",
         "section change",
         "planned build",
         "design critique repaired",
