@@ -523,7 +523,7 @@ const reportComplete = (current: Session) =>
       const assignmentId = current.brief.snapshot.assignment_id
       const sandbox = harness.sandbox
       const toolStarted = Date.now()
-      const { revisionId, check, build, manifest, source } =
+      const { revisionId, check, build, manifest, axe, source } =
         await finishRevision({
           steps: step,
           sandbox,
@@ -546,7 +546,7 @@ const reportComplete = (current: Session) =>
         // Taken after the preview is ready, by the Workflow; the router serves
         // them by name from this revision's prefix.
         screenshots: [],
-        checks: checksOf({ check, build }),
+        checks: checksOf({ check, build, axe }),
         risks: data.risks,
         decisions_needed: data.decisions_needed,
         reported_at: new Date().toISOString(),
@@ -571,6 +571,7 @@ const reportComplete = (current: Session) =>
             upload_reused: manifest.reused,
             upload_bytes: manifest.bytes,
             source_ms: source.ms,
+            axe_ms: axe.ms,
             // Replayed steps return their first run's ms, so the tool's own
             // wall time is the one that says what the whole call cost.
             tool_ms: since(toolStarted),

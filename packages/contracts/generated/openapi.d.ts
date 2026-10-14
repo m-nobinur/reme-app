@@ -5725,6 +5725,8 @@ export interface components {
           | "structured_data"
           | "content"
           | "claims"
+          | "a11y"
+          | "size"
         passed: boolean
         evidence_key: string | null
         offending_node: string | null

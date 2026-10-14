@@ -18635,7 +18635,9 @@
                     "links",
                     "structured_data",
                     "content",
-                    "claims"
+                    "claims",
+                    "a11y",
+                    "size"
                   ]
                 },
                 "passed": {
