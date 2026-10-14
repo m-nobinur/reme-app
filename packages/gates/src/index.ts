@@ -4,7 +4,7 @@ import {
   type FactRecord,
   type GateResult,
 } from "@workspace/contracts"
-import { claimFindings } from "./claims.ts"
+import { claimFindings, generatedImageFindings } from "./claims.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
 import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
@@ -17,10 +17,12 @@ import {
 } from "./text.ts"
 
 export {
+  CLAIM_IMAGE_SECTIONS,
   CLAIM_VOCABULARY,
   type ClaimFinding,
   type ClaimKind,
   claimFindings,
+  generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
@@ -377,9 +379,13 @@ export function checkContent(
 /** The claims gate v0: every rating, count, superlative, credential, guarantee and testimonial traced to a fact (§8.5). */
 export function checkClaims(
   pages: readonly Page[],
-  facts: readonly FactRecord[]
+  facts: readonly FactRecord[],
+  plan?: Parameters<typeof generatedImageFindings>[0]
 ): GateResult {
-  const findings = claimFindings(pages, facts)
+  const findings = [
+    ...claimFindings(pages, facts),
+    ...(plan ? generatedImageFindings(plan) : []),
+  ]
   const first = findings[0]
   if (!first)
     return pass(

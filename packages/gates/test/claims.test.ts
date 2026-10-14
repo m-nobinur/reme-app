@@ -247,3 +247,53 @@ describe("the claims gate", () => {
       expect(prefix.endsWith(".")).toBe(true)
   })
 })
+
+describe("generated images in a claim section", () => {
+  const slot = (
+    id: string,
+    section: "hero" | "about" | "gallery" | "service_cards",
+    source: "generated" | "upload"
+  ) => ({
+    id,
+    page: "home",
+    section,
+    aspect: "4:3",
+    resolution: "1K",
+    subject: "a cleaner holding a bucket",
+    alt: "A cleaner at work",
+    source,
+    asset_id: "20000001-0000-4000-8000-000000000000",
+  })
+  const sections = [
+    { kind: "hero", variant: "wash" },
+    { kind: "about", variant: "default" },
+    { kind: "gallery", variant: "default" },
+    { kind: "service_cards", variant: "fleet" },
+  ].map((s) => ({ ...s, purpose: "x", content_notes: null }))
+  const plan = (...images: ReturnType<typeof slot>[]) =>
+    ({ images, pages: [{ page: "home", sections }] }) as never
+
+  it("fails a generated slot in a claim section and names the slot", () => {
+    const r = checkClaims([], PLAIN, plan(slot("team", "about", "generated")))
+    expect(r.passed).toBe(false)
+    expect(r.offending_node).toContain("images.team")
+  })
+
+  it("fails a generated slot in a fleet services section", () => {
+    const r = checkClaims(
+      [],
+      PLAIN,
+      plan(slot("cars", "service_cards", "generated"))
+    )
+    expect(r.passed).toBe(false)
+  })
+
+  it("passes a generated hero and an uploaded photo in a claim section", () => {
+    const r = checkClaims(
+      [],
+      PLAIN,
+      plan(slot("hero", "hero", "generated"), slot("work", "gallery", "upload"))
+    )
+    expect(r.passed).toBe(true)
+  })
+})
