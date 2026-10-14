@@ -1,4 +1,5 @@
 ---
+import SectionHead from "../../layouts/SectionHead.astro"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
@@ -26,7 +27,7 @@ const more =
     <section class="band area-section">
       <div class="wrap area-inner">
         <div class="area-copy">
-          {heading && <h2>{heading}</h2>}
+          <SectionHead eyebrow={site.areaEyebrow} heading={heading} />
           {site.areaBody && <p class="area-body">{site.areaBody}</p>}
           {more && (
             <p class="section-more">

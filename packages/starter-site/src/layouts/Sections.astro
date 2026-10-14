@@ -2,6 +2,7 @@
 // A page's body, from layout[page] in site-config. The page file keeps what
 // is its own (title, description, structured data); the order and variants of
 // its sections are data.
+import { plain } from "../accent"
 import ActionLink from "../components/ActionLink/ActionLink.astro"
 import AreaSection from "../components/AreaSection/AreaSection.astro"
 import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
@@ -22,6 +23,7 @@ import { primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
 import { serviceItems } from "../structured-data"
 import AboutSection from "./AboutSection.astro"
+import SectionHead from "./SectionHead.astro"
 
 interface Props {
   page: LayoutPage
@@ -37,7 +39,9 @@ const HEAD = {
   contact: [site.contactHeading, site.contactIntro],
   quote: [site.quoteHeading, site.quoteIntro],
 } as const
-const [heading, lede] = HEAD[page]
+const [marked, lede] = HEAD[page]
+// The h1 shares a field with a section heading elsewhere, and shows no accent marks.
+const heading = plain(marked)
 const home = page === "home"
 const offerings = site.offerings
   .split("\n")
@@ -96,12 +100,15 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
           <>
             <ServiceCards variant={v} />
             {page === "services" && offerings.length > 0 && (
-              <Section heading={site.offeringsHeading}>
-                <ul class="offerings">
+              <Section
+                eyebrow={site.offeringsEyebrow}
+                heading={site.offeringsHeading}
+              >
+                <ol class="offerings">
                   {offerings.map((item) => (
                     <li>{item}</li>
                   ))}
-                </ul>
+                </ol>
               </Section>
             )}
           </>
@@ -145,9 +152,10 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
                 <aside class="quote-aside">
                   {next.length > 0 && (
                     <>
-                      {site.quoteAsideHeading && (
-                        <h2>{site.quoteAsideHeading}</h2>
-                      )}
+                      <SectionHead
+                        eyebrow={site.quoteEyebrow}
+                        heading={site.quoteAsideHeading}
+                      />
                       <ol class="next-list">
                         {next.map((line) => (
                           <li>{line}</li>
@@ -157,7 +165,10 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
                   )}
                   {talk && (
                     <>
-                      {site.quoteTalkHeading && <h2>{site.quoteTalkHeading}</h2>}
+                      <SectionHead
+                        eyebrow={next.length > 0 ? "" : site.quoteEyebrow}
+                        heading={site.quoteTalkHeading}
+                      />
                       <ContactDetails />
                     </>
                   )}

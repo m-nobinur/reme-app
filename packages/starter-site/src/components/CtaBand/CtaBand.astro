@@ -1,5 +1,6 @@
 ---
 import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { phoneText } from "../../phone"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
@@ -24,7 +25,7 @@ const image = variant === "photo" ? site.ctaImage : ""
       )}
       <div class="wrap cta-inner">
         <div class="cta-text">
-          {site.ctaHeading && <h2>{site.ctaHeading}</h2>}
+          <SectionHead bare eyebrow={site.ctaEyebrow} heading={site.ctaHeading} />
           {site.ctaBody && <p class="cta-body">{site.ctaBody}</p>}
         </div>
         <div class="actions">

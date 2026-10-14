@@ -1,4 +1,5 @@
 ---
+import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
@@ -6,7 +7,7 @@ import { localBusiness } from "../structured-data"
 ---
 
 <Base
-  title={site.contactTitle || site.contactHeading}
+  title={site.contactTitle || plain(site.contactHeading)}
   description={site.contactDescription || site.contactIntro}
   jsonLd={localBusiness(Astro.site)}
 >

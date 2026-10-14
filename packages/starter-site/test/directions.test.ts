@@ -80,13 +80,30 @@ describe("the directions library", () => {
 })
 
 const built: Partial<Record<string, Built>> = {}
+// The service photos a photo pattern needs: without them the home page shows
+// numbered rows instead (look.test.ts).
+const SERVICE_PHOTOS = {
+  service1Image: "/uploads/s1.jpg",
+  service1ImageAlt: "A kitchen",
+  service2Image: "/uploads/s2.jpg",
+  service2ImageAlt: "An oven",
+  service3Image: "/uploads/s3.jpg",
+  service3ImageAlt: "A hallway",
+}
 const ONE_PHOTO = { photo2Src: "", photo2Alt: "", photo3Src: "", photo3Alt: "" }
 
 beforeAll(async () => {
   const [fresh_modern, calm_daylight, after_dark, panel] = await Promise.all([
-    build({ site: FILLED }),
+    build({ site: { ...FILLED, ...SERVICE_PHOTOS } }),
     // An old template id, as a site stored before directions.
-    build({ site: { ...FILLED, direction: "modern", font: "classic_serif" } }),
+    build({
+      site: {
+        ...FILLED,
+        ...SERVICE_PHOTOS,
+        direction: "modern",
+        font: "classic_serif",
+      },
+    }),
     // After dark carries one gallery photo and the panel build no hero photo,
     // so the single figure and the photo-free hero are each built once.
     build({

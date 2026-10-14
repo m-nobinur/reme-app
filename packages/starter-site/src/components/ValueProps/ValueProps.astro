@@ -1,5 +1,6 @@
 ---
 import { iconPath } from "../../icons"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
 
@@ -16,11 +17,10 @@ const items = ([1, 2, 3] as const)
   items.length > 0 && (
     <section class="band band-tint value-props">
       <div class="wrap value-inner">
-        {site.valuePropsHeading && (
-          <div class="section-head">
-            <h2>{site.valuePropsHeading}</h2>
-          </div>
-        )}
+        <SectionHead
+          eyebrow={site.valuePropsEyebrow}
+          heading={site.valuePropsHeading}
+        />
         <ul class="value-list">
           {items.map((item) => (
             <li>

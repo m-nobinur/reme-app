@@ -1,5 +1,6 @@
 ---
 import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 
 // The path names a file a gallery image slot placed and the alt text says what
@@ -13,11 +14,7 @@ const items = ([1, 2, 3] as const)
   items.length > 0 && (
     <section class="band gallery">
       <div class="wrap">
-      {site.galleryHeading && (
-        <div class="section-head">
-          <h2>{site.galleryHeading}</h2>
-        </div>
-      )}
+      <SectionHead eyebrow={site.galleryEyebrow} heading={site.galleryHeading} />
       {items.length === 1 ? (
         <figure class="gallery-single">
           <Photo

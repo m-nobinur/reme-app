@@ -97,6 +97,30 @@
   );
   --brand-accent: var(--role-accent, var(--brand));
 
+  /* Design rule 5: neutrals lean toward the hue. tokens.css ships greys with
+     no chroma, shared with an app whose own neutral is grey; a tenant site
+     leads each of them to the brand, so no surface, border or text is a pure
+     grey or white. A palette's paper, ink, line and tint (brandTheme) take
+     over from these. */
+  --background: color-mix(in oklch, var(--primary) 2.5%, oklch(0.995 0 0));
+  --foreground: color-mix(in oklch, var(--primary) 14%, oklch(0.145 0 0));
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--brand-soft);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--brand-soft);
+  --muted-foreground: color-mix(in oklch, var(--primary) 12%, oklch(0.53 0 0));
+  --accent: var(--brand-soft);
+  --accent-foreground: var(--foreground);
+  --border: var(
+    --role-line,
+    color-mix(in oklch, var(--primary) 18%, oklch(0.922 0 0))
+  );
+  --input: var(--border);
+  --ring: color-mix(in oklch, var(--primary) 40%, oklch(0.63 0 0));
+
   --radius-card: var(--radius-lg);
   --radius-button: var(--radius-md);
   --radius-media: var(--radius-lg);

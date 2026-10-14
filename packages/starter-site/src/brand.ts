@@ -136,8 +136,8 @@ export function paletteFromBrand(value: string): BrandPalette | undefined {
   if (!brand) return undefined
   const [h, s] = hueSat(brand)
   const paper = hsl(h, Math.min(s, 0.5) * 0.5, 0.975)
-  const tint = hsl(h, Math.min(s, 0.45) * 0.7, 0.91)
-  const line = hsl(h, Math.min(s, 0.45) * 0.5, 0.84)
+  const tint = hsl(h, Math.min(s, 0.6) * 0.95, 0.91)
+  const line = hsl(h, Math.min(s, 0.6) * 0.7, 0.84)
   const ink = readable(hsl(h, Math.min(s, 0.4) * 0.6, 0.1), tint, AA)
   return {
     paper: toHex(paper),

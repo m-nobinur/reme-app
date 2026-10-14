@@ -136,6 +136,12 @@ describe("the Developer's site rules", () => {
     )
   })
 
+  it("asks for an eyebrow and an accent clause in every section heading", () => {
+    const rules = text(false)
+    expect(rules).toContain("Every section heading has an eyebrow field")
+    expect(rules).toContain("*rebooking us*")
+  })
+
   it("keeps the copy guidance short enough for the cached segment", () => {
     expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
     expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(600)

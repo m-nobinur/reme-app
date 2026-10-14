@@ -1,4 +1,5 @@
 ---
+import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 import { faqItems as items } from "../../structured-data"
 
@@ -14,12 +15,7 @@ const { variant = "split" } = Astro.props
   items.length > 0 && (
     <section class:list={["band faq", `faq-${variant}`]}>
       <div class="wrap faq-inner">
-        {site.faqHeading && (
-          <div class="section-head">
-            {site.faqEyebrow && <p class="eyebrow">{site.faqEyebrow}</p>}
-            <h2>{site.faqHeading}</h2>
-          </div>
-        )}
+        <SectionHead eyebrow={site.faqEyebrow} heading={site.faqHeading} />
         <div class="faq-list">
           {items.map((item) => (
             <details>
