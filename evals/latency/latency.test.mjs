@@ -4,6 +4,7 @@ import {
   laneRows,
   parseLine,
   percentile,
+  photosOf,
   render,
   roleRows,
   timingsOf,
@@ -96,6 +97,51 @@ test("lanes get percentiles, cost from the turns, and the baseline of the same k
   assert.equal(full.n, 2)
   assert.equal(full.readyP50, 200) // the failed build has no preview and drops out
   assert.equal(full.wallP95, 230)
+})
+
+test("images per build and their cost come from site.photos, per lane", () => {
+  const photo = (assignment_id, payload) =>
+    JSON.stringify({ type: "site.photos", assignment_id, payload })
+  const slot = (id, resolution, asset_id) => ({
+    id,
+    source: "generated",
+    resolution,
+    ...(asset_id ? { asset_id } : {}),
+  })
+  const photos = photosOf(
+    [
+      photo("f0", {
+        slots: [
+          slot("hero", "2K", "a"),
+          slot("b", "1K", "b"),
+          slot("c", "1K"),
+          { id: "u", source: "upload", resolution: "1K", asset_id: "u" },
+        ],
+        regenerated: null,
+      }),
+      // a lone redraw drew one slot, not the whole list
+      photo("r0", {
+        slots: [slot("hero", "2K", "a"), slot("b", "1K", "b")],
+        regenerated: "b",
+      }),
+      photo("f1", { slots: [slot("hero", "2K", "a")], cost_usd: 0.07 }),
+    ].join("\n")
+  )
+  assert.deepEqual(photos.get("f0"), { images: 2, cost: 0.084 })
+  assert.deepEqual(photos.get("r0"), { images: 1, cost: 0.034 })
+  const lines = [
+    timing({ assignment_id: "f0", lane: "full", change_kind: "creative" }),
+    timing({ assignment_id: "f1", lane: "full", change_kind: "creative" }),
+    timing({ assignment_id: "r0", lane: "quick", change_kind: "photo" }),
+    timing({ assignment_id: "q9", lane: "quick", change_kind: "copy" }),
+  ].join("\n")
+  const rows = laneRows(timingsOf(lines), [], [], photos)
+  const full = rows.find((r) => r.lane === "full:creative")
+  assert.equal(full.imagesN, 2)
+  assert.equal(full.imagesP50, 1)
+  assert.equal(full.imageCostP50, 0.07)
+  assert.equal(rows.find((r) => r.lane === "quick:photo").imagesP50, 1)
+  assert.equal(rows.find((r) => r.lane === "quick:copy").imagesN, 0)
 })
 
 test("cache-read ratio is per role and counts written tokens as prompt", () => {
