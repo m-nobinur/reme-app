@@ -14,6 +14,8 @@ import {
   BuildSummary,
   ChangeKind,
   OwnerChangeRequest,
+  PHOTO_PATH,
+  thumbnailOf,
   WorkspaceStatus,
 } from "../src/owner.ts"
 import { ModelRoute } from "../src/runtime.ts"
@@ -294,6 +296,59 @@ describe("lane and activity on a build", () => {
     ).toBe(false)
   })
 
+  it("carries the photos as they settle, each thumbnail on the app's own photo door", () => {
+    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+    const photos = [
+      {
+        slot_id: "hero",
+        state: "made",
+        alt: "A van",
+        thumbnail: `/api/photos/${file}`,
+      },
+      { slot_id: "about", state: "fallback", alt: null, thumbnail: null },
+      { slot_id: "team", state: "drawing", alt: "The team", thumbnail: null },
+    ]
+    const at = (thumbnail: unknown) =>
+      BuildSummary.safeParse({
+        ...build,
+        photos: [{ ...photos[0], thumbnail }],
+        review_ms: 0,
+      }).success
+    expect(
+      BuildSummary.safeParse({ ...build, photos, review_ms: 42_000 }).success
+    ).toBe(true)
+    expect(at(`https://evil.example/${file}`)).toBe(false)
+    expect(at(`/api/photos/../${file}`)).toBe(false)
+    expect(at(`/api/photos/${file}.svg`)).toBe(false)
+    expect(at(`/api/photos/${file.toUpperCase()}`)).toBe(false)
+    expect(BuildSummary.safeParse({ ...build, review_ms: -1 }).success).toBe(
+      false
+    )
+    expect(
+      BuildSummary.safeParse({
+        ...build,
+        photos: [{ ...photos[0], state: "done" }],
+      }).success
+    ).toBe(false)
+  })
+
+  it("names a thumbnail by the photo's asset id, and none without one", () => {
+    const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+    expect(thumbnailOf(id)).toBe(`/api/photos/${id}`)
+    expect(`/photos/${id}`.replace(PHOTO_PATH, "$1")).toBe(id)
+    for (const bad of [
+      `${id}.png`,
+      `../${id}`,
+      "not-an-id",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(thumbnailOf(bad), String(bad)).toBeNull()
+    }
+    expect(PHOTO_PATH.test(`/photos/${id}/x`)).toBe(false)
+  })
+
   it("refuses a lane nobody runs", () => {
     for (const lane of ["slow", "", null]) {
       expect(BuildSummary.safeParse({ ...build, lane }).success).toBe(false)
@@ -328,7 +383,13 @@ describe("lane and activity on a build", () => {
       { ...row, done: 1.5 },
       { ...row, id: "Pages" },
       { ...row, percent: 60 },
+      { ...row, items: [{ label: "", done: true }] },
+      { ...row, items: Array(10).fill({ label: "Home", done: false }) },
     ]
+    const named = { ...row, items: [{ label: "Home", done: true }] }
+    expect(
+      BuildSummary.safeParse({ ...build, activity: [named] }).success
+    ).toBe(true)
     for (const candidate of bad) {
       expect(
         BuildSummary.safeParse({ ...build, activity: [candidate] }).success

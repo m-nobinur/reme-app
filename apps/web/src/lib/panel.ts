@@ -1,6 +1,6 @@
 import type { BuildSummary, Conversation } from "@workspace/contracts"
 import { BUILD_STAGES } from "@workspace/ui/components/live-panel"
-import { WORKING } from "@workspace/ui/lib/build-state"
+import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import type { AttentionItem, Workspace } from "./api/types"
 import { askerOf, assistantOf, digestOf } from "./briefing"
@@ -40,6 +40,8 @@ export type Line = {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string
+  /** The step a working build is on, of how many. */
+  progress?: { done: number; total: number }
 }
 
 export type Panel = {
@@ -357,6 +359,11 @@ export function panelFor(input: PanelInput): Panel | null {
   const line = ((): Line => {
     const tone = live ? "live" : "idle"
     if (working) {
+      // A full build names the step it is on and how far through them it is,
+      // which the minimised pill keeps in view.
+      const rows = working.lane === "quick" ? [] : (working.activity ?? [])
+      const at = currentRow(rows)
+      const step = rows[at]
       return {
         tone: "working",
         lead: working.revision?.version
@@ -364,7 +371,13 @@ export function panelFor(input: PanelInput): Panel | null {
           : live
             ? "Building a new version,"
             : "Building your first version,",
-        detail: BUILD_STAGES[working.state].note.toLowerCase().slice(0, -1),
+        detail:
+          working.state === "planning" && working.blueprint?.awaiting
+            ? "waiting for your review"
+            : step
+              ? step.label.toLowerCase()
+              : BUILD_STAGES[working.state].note.toLowerCase().slice(0, -1),
+        ...(step ? { progress: { done: at + 1, total: rows.length } } : {}),
       }
     }
     const [approval] = approvals

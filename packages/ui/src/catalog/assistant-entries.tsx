@@ -1990,6 +1990,29 @@ const assistantCatalog = [
     ),
   },
   {
+    // The photos the build made, each from its own thumbnail.
+    name: "SiteReady with photos",
+    render: () => (
+      <div className="max-w-2xl">
+        <SiteReady
+          onApprove={noop}
+          onMakeChanges={noop}
+          onSeePreview={noop}
+          photoActions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+          photos={[
+            {
+              alt: "A bright, tidy living room in morning light",
+              section: "hero",
+              slot_id: "hero",
+              src: KITCHEN,
+            },
+          ]}
+          version={2}
+        />
+      </div>
+    ),
+  },
+  {
     name: "RequestChange",
     render: () => (
       <FixtureThread height="h-[130rem]" messages={REQUEST_CHANGE_STATES} />

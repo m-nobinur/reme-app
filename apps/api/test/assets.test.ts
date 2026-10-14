@@ -220,3 +220,65 @@ describe.skipIf(!url)("POST /assets, on a live connection", () => {
     ])
   })
 })
+
+describe.skipIf(!url)("GET /photos/:id, on a live connection", () => {
+  const kit: Tenancy = tenancy(url as string, { max: 2 })
+  let realFetch: typeof fetch
+
+  beforeAll(() => {
+    realFetch = globalThis.fetch
+    globalThis.fetch = stubJwksFetch()
+  })
+
+  afterAll(async () => {
+    globalThis.fetch = realFetch
+    await kit.close()
+  })
+
+  const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+  /** A bucket holding one generated photo, under `org`. */
+  const holding = (org: string) => {
+    const key = `generated/${org}/${id}.webp`
+    return {
+      get: async (asked: string) =>
+        asked === key
+          ? {
+              body: new Blob([WEBP]).stream(),
+              httpMetadata: { contentType: "image/webp" },
+            }
+          : null,
+    }
+  }
+  const read = (
+    who: Awaited<ReturnType<typeof owner>>,
+    sites: ReturnType<typeof holding>,
+    path = `/photos/${id}`
+  ) => who.call(stubOrchestrator(), path, { bindings: { SITES: sites } })
+
+  it("serves the org's own photo with its type, cached for good", async () => {
+    const who = await owner(kit, url as string, "photos-own")
+    const response = await read(who, holding(who.orgId))
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toBe("image/webp")
+    expect(response.headers.get("cache-control")).toContain("immutable")
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(WEBP)
+  })
+
+  it("answers 404 for another org's photo, the same as for none", async () => {
+    const one = await owner(kit, url as string, "photos-one")
+    const other = await owner(kit, url as string, "photos-other")
+    const response = await read(other, holding(one.orgId))
+    expect(response.status).toBe(404)
+    expect(await codeOf(response)).toBe("photo.not_found")
+  })
+
+  it("serves nothing for a path that is not an asset id", async () => {
+    const who = await owner(kit, url as string, "photos-path")
+    for (const path of [`/photos/${id}.webp`, "/photos/..%2Fsecret"]) {
+      expect((await read(who, holding(who.orgId), path)).status, path).toBe(404)
+    }
+  })
+})
+
+const codeOf = async (response: Response) =>
+  ErrorEnvelope.parse(await response.json()).code

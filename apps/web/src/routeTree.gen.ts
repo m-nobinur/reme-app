@@ -37,6 +37,7 @@ import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppWebsiteRouteImport } from './routes/app/website'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
@@ -179,6 +180,11 @@ const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   path: '/api/auth/social',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPhotosIdRoute = ApiPhotosIdRouteImport.update({
+  id: '/api/photos/$id',
+  path: '/api/photos/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppConversationIndexRoute = AppConversationIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/': typeof AppConversationIndexRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
@@ -249,6 +256,7 @@ export interface FileRoutesByTo {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesById {
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
   '/app/_conversation/c/$id': typeof AppConversationCIdRoute
 }
@@ -314,6 +323,7 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/photos/$id'
     | '/app/'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -345,6 +355,7 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/photos/$id'
     | '/app/c/$id'
   id:
     | '__root__'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/photos/$id'
     | '/app/_conversation/'
     | '/app/_conversation/c/$id'
   fileRoutesById: FileRoutesById
@@ -400,6 +412,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSocialRoute: typeof ApiAuthSocialRoute
+  ApiPhotosIdRoute: typeof ApiPhotosIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -600,6 +613,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSocialRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/photos/$id': {
+      id: '/api/photos/$id'
+      path: '/api/photos/$id'
+      fullPath: '/api/photos/$id'
+      preLoaderRoute: typeof ApiPhotosIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/_conversation/': {
       id: '/app/_conversation/'
       path: '/'
@@ -677,17 +697,22 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSocialRoute: ApiAuthSocialRoute,
+  ApiPhotosIdRoute: ApiPhotosIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+
 import type { startInstance } from './start.ts'
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
+
     router: Awaited<ReturnType<typeof getRouter>>
+
     config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

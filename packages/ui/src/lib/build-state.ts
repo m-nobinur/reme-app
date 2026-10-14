@@ -1,4 +1,11 @@
-import type { AssignmentState } from "@workspace/contracts"
+import type { AssignmentState, BuildActivity } from "@workspace/contracts"
+
+/**
+ * The row a build is on now: rows run in order, so it is the first one not
+ * done. -1 once every row is done.
+ */
+export const currentRow = (rows: readonly BuildActivity[]) =>
+  rows.findIndex((row) => row.done < row.total)
 
 /**
  * The states in which a build is doing work: building, checking or

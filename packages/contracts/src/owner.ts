@@ -282,6 +282,46 @@ export const BuildActivity = z.strictObject({
   label: Text(60),
   done: z.int().nonnegative().max(999),
   total: z.int().positive().max(999),
+  /** What the row counts, by name, such as the plan's pages: fixed labels, never model text. */
+  items: z
+    .array(z.strictObject({ label: Text(60), done: z.boolean() }))
+    .max(9)
+    .optional(),
+})
+
+/** A generated photo's asset id, the hash-made UUID its object key starts with. */
+const PHOTO_ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+/** The path the api serves a generated photo at: `GET /photos/{asset id}`. */
+export const PHOTO_PATH = new RegExp(`^/photos/(${PHOTO_ID})$`)
+
+/**
+ * A generated photo as the app shows it: the app's own door to the api's
+ * `GET /photos/{asset id}`, which reads `generated/{org}/{asset id}.{ext}`
+ * for the caller's org only. A pattern rather than any URL, so the wire never
+ * points an image anywhere else.
+ */
+export const PhotoThumbnail = z
+  .string()
+  .regex(new RegExp(`^/api/photos/${PHOTO_ID}$`))
+
+/** The thumbnail of a generated photo by its asset id, or null when there is no id to show. */
+export const thumbnailOf = (assetId: string | null | undefined) =>
+  assetId && new RegExp(`^${PHOTO_ID}$`).test(assetId)
+    ? `/api/photos/${assetId}`
+    : null
+
+/**
+ * One generated photo of a build while it is made: `drawing` until its slot
+ * settles, then `made` with its thumbnail, or `fallback` when no model drew it
+ * and its section uses its text layout. `alt` is the plan's, null once a
+ * fallback's slot has left the plan.
+ */
+export const BuildPhoto = z.strictObject({
+  slot_id: z.string().min(1),
+  state: z.enum(["drawing", "made", "fallback"]),
+  alt: z.string().max(200).nullable(),
+  thumbnail: PhotoThumbnail.nullable(),
 })
 
 /** The most progress rows a build shows at once. */
@@ -320,6 +360,10 @@ export const BuildSummary = z.strictObject({
   revision: RevisionRef.nullable(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
   blueprint: BuildBlueprint.optional(),
+  /** The photos this build makes, in the order they settle; absent before its photo step starts. */
+  photos: z.array(BuildPhoto).max(24).optional(),
+  /** Milliseconds spent waiting on the owner's decided Blueprint reviews, which the panel's clock leaves out. */
+  review_ms: z.int().nonnegative().optional(),
   created_at: Timestamp,
   updated_at: Timestamp,
 })
@@ -356,6 +400,8 @@ export const AttentionItem = z.discriminatedUnion("kind", [
           slot_id: z.string().min(1),
           section: z.string().min(1),
           alt: z.string(),
+          /** Absent when the file is not known, as on an older event. */
+          thumbnail: PhotoThumbnail.optional(),
         })
       )
       .max(24)
@@ -486,6 +532,7 @@ export type ChangeKind = z.infer<typeof ChangeKind>
 export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
 export type BuildLane = z.infer<typeof BuildLane>
 export type BuildActivity = z.infer<typeof BuildActivity>
+export type BuildPhoto = z.infer<typeof BuildPhoto>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>

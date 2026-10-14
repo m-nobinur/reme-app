@@ -546,6 +546,40 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
 })
 
+it("shows a review's generated photo from its thumbnail, and one without as before", async () => {
+  const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+  answers["GET /workspace"] = {
+    ...workspace,
+    attention: [
+      {
+        ...approval,
+        photos: [
+          {
+            slot_id: "hero",
+            section: "hero",
+            alt: "A van",
+            thumbnail: `/api/photos/${id}`,
+          },
+          { slot_id: "team", section: "about", alt: "The team" },
+        ],
+      },
+    ],
+  }
+  const read = await apiSource.pollWorkspace(null)
+  expect(read !== "unchanged" && read.attention[0]).toMatchObject({
+    photos: [
+      { slot_id: "hero", alt: "A van", src: `/api/photos/${id}` },
+      { slot_id: "team", alt: "The team" },
+    ],
+  })
+  const [, team] =
+    (read !== "unchanged" &&
+      read.attention[0]?.kind === "approval" &&
+      read.attention[0].photos) ||
+    []
+  expect(team).not.toHaveProperty("src")
+})
+
 it("polls in one request, naming the asker by id for the frame to resolve", async () => {
   answers["GET /workspace"] = { ...workspace, attention: [question] }
   const read = await apiSource.pollWorkspace(null)
