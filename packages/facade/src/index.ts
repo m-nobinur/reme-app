@@ -33,6 +33,7 @@ export {
   REPEATED_FAILURES,
   REPEATING_FAILURE,
   SANDBOX_UPDATING,
+  TASK_RESULT_MAX_CHARS,
   TOOL_RESULT_MAX_CHARS,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"
@@ -68,3 +69,5 @@ export {
   selectTransport,
   TRANSPORTS,
 } from "./transport.ts"
+export type { PrefixWarmer } from "./warm.ts"
+export { createPrefixWarmer } from "./warm.ts"

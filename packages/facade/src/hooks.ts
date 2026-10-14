@@ -196,6 +196,31 @@ export function boundResult<T extends ToolResult>(
   }
 }
 
+/** A subagent's answer to the lead: a summary, never a file dump (Pi's example caps 50 KB). */
+export const TASK_RESULT_MAX_CHARS = 4_000
+
+/** The lead reads a child's summary; the edits themselves are on disk. */
+function boundTask<T>(result: T): T {
+  const r = result as Partial<ToolResult> | undefined
+  if (!Array.isArray(r?.content)) return result
+  const joined = r.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text ?? "")
+    .join("")
+  const max = TASK_RESULT_MAX_CHARS
+  if (joined.length <= max) return result
+  return {
+    ...r,
+    content: [
+      ...r.content.filter((c) => c.type !== "text"),
+      {
+        type: "text",
+        text: `${joined.slice(0, max)}\n[The task's answer was cut at ${max} of ${joined.length} characters. Its edits are on disk: read the files for the rest.]`,
+      },
+    ],
+  } as T
+}
+
 /** Tools that end the Developer's turn by waking the Workflow. */
 const TERMINAL = new Set(["ask_chief", "report_complete"])
 /** Tools that change nothing, so they may run after a turn has ended. */
@@ -351,7 +376,7 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
       const result = await next()
       failures.delete(lane)
       await options.onToolDone?.(name)
-      return result
+      return name === "task" ? boundTask(result) : result
     } catch (error) {
       if (TERMINAL.has(name)) closedBy = null
       const now = options.interruptNow?.(error)
