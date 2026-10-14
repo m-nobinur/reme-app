@@ -10,7 +10,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "destroy sandbox"
+      "keep warm"
     ],
     "owner build": [
       "claim 1",
@@ -21,7 +21,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "destroy sandbox",
+      "keep warm",
       "review"
     ],
     "information round trip": [
@@ -42,7 +42,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
-      "destroy sandbox"
+      "keep warm"
     ],
     "gate failure repaired": [
       "claim 1",
@@ -57,7 +57,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
-      "destroy sandbox"
+      "keep warm"
     ],
     "gate failure ends failed": [
       "claim 1",
@@ -91,7 +91,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
-      "destroy sandbox"
+      "keep warm"
     ],
     "interrupted past the resume budget": [
       "claim 1",
@@ -121,7 +121,6 @@
     ],
     "superseded a preview": [
       "claim 1",
-      "destroy 10000001-0000-4000-8000-00000000aaaa",
       "sandbox 1",
       "planning",
       "implementing",
@@ -129,7 +128,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "destroy sandbox"
+      "keep warm"
     ],
     "site busy then claimed": [
       "claim 1",
@@ -142,7 +141,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "destroy sandbox"
+      "keep warm"
     ],
     "pool full then provisioned": [
       "claim 1",
@@ -155,7 +154,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "destroy sandbox"
+      "keep warm"
     ],
     "checkpoint found the site gone": [
       "claim 1",
@@ -259,7 +258,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
-      "destroy sandbox"
+      "keep warm"
     ]
   },
   "PublishWorkflow": {

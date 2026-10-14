@@ -68,6 +68,7 @@ vi.mock("@workspace/facade", async (importOriginal) => ({
 }))
 
 const ROW = {
+  kind: "site.build",
   id: "10000001-0000-4000-8000-000000000001",
   orgId: "10000001-0000-4000-8000-000000000000",
   goal: "probe",
@@ -128,6 +129,8 @@ const script = {
   origin: "console" as "owner" | "console",
   reviews: 0,
   reviewRefusal: null as string | null,
+  /** The revision a warm sandbox names, if any. */
+  held: null as string | null,
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -151,8 +154,16 @@ vi.mock("../src/sandbox.ts", () => ({
     }
     return { cold_start_ms: 1 }
   },
-  sandboxFor: () => ({ destroy: async () => undefined }),
+  sandboxFor: () => ({
+    destroy: async () => undefined,
+    exec: async (command: string) => {
+      if (command.startsWith("rm -rf")) prepared.push("wipe")
+      return { exitCode: 0, stdout: "", stderr: "" }
+    },
+  }),
   endSandbox: async () => undefined,
+  keepWarm: async () => undefined,
+  takeWarm: async () => script.held,
   checkpoint: async () => ({
     taken: script.checkpoints.shift() ?? true,
     key: "k",
@@ -162,6 +173,8 @@ vi.mock("../src/sandbox.ts", () => ({
   rehydrate: async () => ({ restored: true, ms: 1 }),
 }))
 const advanced: [string, string | undefined][] = []
+/** How the developer step readied the site's disk. */
+const prepared: string[] = []
 const resumedOn: Record<string, unknown>[] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
@@ -187,8 +200,19 @@ vi.mock("../src/state.ts", () => ({
     script.claims.shift() ?? { claimed: true, superseded: null },
 }))
 vi.mock("../src/revise.ts", () => ({
-  publishedSource: async () => null,
-  restoreAndMap: async () => "",
+  SITE_ROOT: "/workspace/site",
+  publishedSource: async () =>
+    ROW.kind === "site.revise"
+      ? { revision_id: "rev-live", assignment_id: "x", source_key: "k" }
+      : null,
+  restoreAndMap: async () => {
+    prepared.push("restore")
+    return ""
+  },
+  mapSite: async () => {
+    prepared.push("warm")
+    return ""
+  },
 }))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
@@ -677,5 +701,28 @@ describe("the scheduled handler", () => {
       (m) => JSON.parse(m[1] ?? "[]") as string[]
     )
     expect(crons).toEqual([["0 * * * *"], ["0 * * * *", UPTIME_CRON]])
+  })
+})
+
+// QE2: a revise whose site's sandbox is still warm with the revision it
+// starts from skips the restore; any other disk is replaced.
+describe("the disk a build starts on", () => {
+  it.each([
+    ["site.revise", "rev-live", "warm"],
+    ["site.revise", "rev-older", "restore"],
+    ["site.revise", null, "restore"],
+    ["site.build", "rev-live", "wipe"],
+  ])("%s on a sandbox holding %s: %s", async (kind, held, outcome) => {
+    ROW.kind = kind
+    script.held = held
+    script.verdicts = ["preview_ready"]
+    prepared.length = 0
+    try {
+      await drive([completion]).run()
+      expect(prepared).toEqual([outcome])
+    } finally {
+      ROW.kind = "site.build"
+      script.held = null
+    }
   })
 })

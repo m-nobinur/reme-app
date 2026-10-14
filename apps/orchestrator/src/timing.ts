@@ -4,7 +4,7 @@
  * duration comes from a step's own return value or a durable stamp, never from
  * a clock held across steps, which a replay would reset.
  */
-export type Timings = Record<string, number | string | null>
+export type Timings = Record<string, number | string | boolean | null>
 
 /** What `report_complete` measures and hands the Workflow with its wake-up. */
 export type ToolTimings = {

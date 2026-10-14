@@ -26,7 +26,7 @@ vi.mock("@cloudflare/sandbox", () => ({
       if (command.startsWith("tar --zstd -cf")) {
         disk.set("/tmp/checkpoint.tar.zst", "packed site")
       }
-      if (command.startsWith("mkdir -p")) disk.set("site", "restored")
+      if (command.includes("tar --zstd -xf")) disk.set("site", "restored")
       return { exitCode: 0, stdout: "", stderr: "" }
     },
     readFile: async (path: string) => ({
