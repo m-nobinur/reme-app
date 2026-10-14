@@ -7,6 +7,8 @@ import {
 } from "@workspace/contracts"
 import { describe, expect, test } from "vitest"
 import { loadManifests, ROOT } from "../scripts/manifests"
+import { ICONS } from "../src/icons"
+import { quoteFormProblem } from "../src/quote-form"
 import { fields, layout, site } from "../src/site-config"
 
 type Entry = { kind: string; variant?: string }
@@ -14,7 +16,16 @@ const recipes = JSON.parse(
   readFileSync(join(ROOT, "src/recipes.json"), "utf8")
 ) as {
   pages: Record<string, { page: string; kinds: string[]; fields: string[] }>
-  packs: Record<string, { order: Record<string, Entry[]> }>
+  packs: Record<
+    string,
+    {
+      order: Record<string, Entry[]>
+      cta?: string
+      headings?: Record<string, string>
+      icons?: string[]
+      quoteForm?: unknown[]
+    }
+  >
 }
 const variants: Record<string, readonly string[]> = SECTION_VARIANTS
 const problems = (page: string, entries: Entry[], allowed: string[]) =>
@@ -102,6 +113,22 @@ describe("the page recipes", () => {
         ).toEqual([])
         expect(entries[0]?.kind).toBe("hero")
       }
+    }
+  })
+
+  test("the industry packs carry real headings, icons, a CTA and a valid quote form", () => {
+    for (const pack of ["cleaning", "legal", "limousine"]) {
+      const p = recipes.packs[pack]
+      expect(p.cta, pack).toMatch(/^[A-Z][a-z]+( [a-z]+)+$/)
+      for (const [key, value] of Object.entries(p.headings ?? {})) {
+        expect(Object.keys(site), `${pack}.${key}`).toContain(key)
+        expect(value, `${pack}.${key}`).not.toMatch(
+          /[—!]|^(What we do|Services)$/
+        )
+      }
+      expect(Object.keys(p.headings ?? {}).length, pack).toBeGreaterThan(8)
+      for (const icon of p.icons ?? []) expect(ICONS, pack).toHaveProperty(icon)
+      expect(quoteFormProblem({ fields: p.quoteForm }), pack).toBeNull()
     }
   })
 

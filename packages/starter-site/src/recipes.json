@@ -349,6 +349,81 @@
     },
     "cleaning": {
       "label": "Cleaning",
+      "cta": "Get a quote",
+      "headings": {
+        "serviceCardsEyebrow": "Cleaning services",
+        "serviceCardsHeading": "Rooms we leave spotless",
+        "valuePropsHeading": "Why homes stay with us",
+        "stepsHeading": "From first message to clean",
+        "testimonialsHeading": "Kept clean, kept booked",
+        "galleryHeading": "Fresh from the last visit",
+        "faqHeading": "Before your first clean",
+        "serviceAreaHeading": "Where our cleaners work",
+        "servicesHeading": "What we clean",
+        "contactHeading": "Tell us about your home",
+        "quoteHeading": "Get a cleaning quote"
+      },
+      "icons": [
+        "broom",
+        "sprayBottle",
+        "house",
+        "bathtub",
+        "washingMachine",
+        "tShirt",
+        "couch",
+        "key",
+        "leaf",
+        "plant",
+        "calendarCheck",
+        "checkCircle"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Type of clean",
+          "type": "select",
+          "required": true,
+          "hint": null,
+          "options": [
+            "Regular clean",
+            "Deep clean",
+            "End of tenancy",
+            "Something else"
+          ]
+        },
+        {
+          "key": "location",
+          "label": "Postcode",
+          "type": "text",
+          "required": true,
+          "hint": "Where the clean is",
+          "options": null
+        },
+        {
+          "key": "bedrooms",
+          "label": "Bedrooms",
+          "type": "number",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Preferred start date",
+          "type": "date",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Anything we should know",
+          "type": "textarea",
+          "required": true,
+          "hint": "Pets, access, areas that need extra attention",
+          "options": null
+        }
+      ],
       "order": {
         "home": [
           {
@@ -471,6 +546,68 @@
     },
     "legal": {
       "label": "Legal",
+      "cta": "Book a consultation",
+      "headings": {
+        "serviceCardsEyebrow": "Practice areas",
+        "serviceCardsHeading": "Where we can act for you",
+        "valuePropsHeading": "How we work with clients",
+        "stepsHeading": "What happens after you call",
+        "testimonialsHeading": "In clients' words",
+        "galleryHeading": "The practice",
+        "faqHeading": "Questions before you instruct us",
+        "serviceAreaHeading": "Who we act for, and where",
+        "servicesHeading": "Practice areas",
+        "contactHeading": "Speak to a solicitor",
+        "quoteHeading": "Book a consultation"
+      },
+      "icons": [
+        "scales",
+        "briefcase",
+        "gavel",
+        "fileText",
+        "handshake",
+        "buildings",
+        "clock",
+        "checkCircle",
+        "chatCircle",
+        "clipboardText",
+        "mapPin",
+        "phone"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Area of law",
+          "type": "text",
+          "required": true,
+          "hint": "For example family, property or employment",
+          "options": null
+        },
+        {
+          "key": "location",
+          "label": "Where you are based",
+          "type": "text",
+          "required": true,
+          "hint": "A town or postcode",
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Preferred consultation date",
+          "type": "date",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Brief outline of your matter",
+          "type": "textarea",
+          "required": true,
+          "hint": "A few lines is enough. Please leave out sensitive details for now",
+          "options": null
+        }
+      ],
       "order": {
         "home": [
           {
@@ -590,6 +727,90 @@
     },
     "limousine": {
       "label": "Limousine and chauffeur",
+      "cta": "Reserve a car",
+      "headings": {
+        "serviceCardsEyebrow": "The fleet",
+        "serviceCardsHeading": "The car for your journey",
+        "valuePropsHeading": "Why clients ride with us",
+        "stepsHeading": "From booking to drop-off",
+        "testimonialsHeading": "After the ride",
+        "galleryHeading": "On the road",
+        "faqHeading": "Before you reserve",
+        "serviceAreaHeading": "Where we pick up and drop off",
+        "servicesHeading": "Occasions and journeys",
+        "contactHeading": "Talk to our bookings team",
+        "quoteHeading": "Reserve a car"
+      },
+      "icons": [
+        "carProfile",
+        "steeringWheel",
+        "champagne",
+        "airplaneTakeoff",
+        "suitcase",
+        "clock",
+        "car",
+        "calendarCheck",
+        "mapPin",
+        "handshake",
+        "checkCircle",
+        "phone"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Occasion",
+          "type": "select",
+          "required": true,
+          "hint": null,
+          "options": [
+            "Airport transfer",
+            "Wedding",
+            "Corporate travel",
+            "Night out",
+            "Something else"
+          ]
+        },
+        {
+          "key": "location",
+          "label": "Pick-up address",
+          "type": "text",
+          "required": true,
+          "hint": "Street and town or postcode",
+          "options": null
+        },
+        {
+          "key": "destination",
+          "label": "Drop-off address",
+          "type": "text",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Date of travel",
+          "type": "date",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "passengers",
+          "label": "Passengers",
+          "type": "number",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Luggage, stops and anything else",
+          "type": "textarea",
+          "required": false,
+          "hint": "Flight number, child seats, return journey",
+          "options": null
+        }
+      ],
       "order": {
         "home": [
           {
