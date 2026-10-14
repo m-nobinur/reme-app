@@ -238,6 +238,7 @@ describe("the fallback Blueprint", () => {
     expect(made.pages.map((p) => p.page)).toEqual(["home", "services", "quote"])
     expect(made.images).toMatchObject([
       { id: "home_hero", source: "upload", alt: "A clean kitchen" },
+      { id: "gallery_1", section: "gallery", source: "upload" },
     ])
     expect(problems(made, { facts, library: LIBRARY })).toEqual([])
   })
@@ -249,6 +250,137 @@ describe("the fallback Blueprint", () => {
     ]
     const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
     expect(made.palette).toEqual({ kind: "preset", id: "forest" })
+  })
+})
+
+describe("pages the starter has no file for", () => {
+  const photo = (n: number) => ({
+    id: `20000000-0000-4000-8000-00000000000${n}`,
+    name: `job${n}.jpg`,
+    content_type: "image/jpeg",
+    bytes: 1000,
+    alt: `Finished job ${n}`,
+  })
+  const UPLOADS = fact("media.uploads", { items: [1, 2, 3, 4].map(photo) })
+  const picking = (ids: string[], ...more: FactRecord[]) => [
+    ...CLEANING,
+    fact("site.pages", { ids }),
+    ...more,
+  ]
+  const plan = (facts: FactRecord[]) => {
+    const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
+    expect(problems(made, { facts, library: LIBRARY })).toEqual([])
+    return made
+  }
+  const home = (made: Blueprint) =>
+    made.pages.find((p) => p.page === "home")?.sections.map((s) => s.kind) ?? []
+
+  it("makes a gallery from the owner's photos, never the hero's alone", () => {
+    const made = plan(picking(["home", "gallery"], UPLOADS))
+    expect(made.pages.map((p) => p.page)).toEqual(["home", "quote"])
+    expect(home(made)).toContain("gallery")
+    expect(
+      made.images.filter((i) => i.section === "gallery").map((i) => i.source)
+    ).toEqual(["upload", "upload", "upload"])
+    expect(made.features).toContain(
+      "Your gallery is a section on the home page, built from your own photos."
+    )
+  })
+
+  it("leaves the gallery out without photos and says so", () => {
+    const made = plan(picking(["home", "gallery"]))
+    expect(home(made)).not.toContain("gallery")
+    expect(made.images.filter((i) => i.section === "gallery")).toEqual([])
+    expect(made.features.join("\n")).toMatch(
+      /gallery needs photos of your work/
+    )
+  })
+
+  it("refuses a planned gallery with no photos, and one with no slot", () => {
+    const withGallery = plan(picking(["home", "gallery"], UPLOADS))
+    const none = picking(["home", "gallery"])
+    expect(
+      problems(withGallery, { facts: none, library: LIBRARY }).join("\n")
+    ).toMatch(/gallery needs the owner's photos/)
+    expect(
+      problems(
+        { ...withGallery, images: [] },
+        { facts: picking(["home", "gallery"], UPLOADS), library: LIBRARY }
+      ).join("\n")
+    ).toMatch(/gallery has no image slot/)
+  })
+
+  it.each([
+    ["testimonials", "Your reviews are a section on the home page."],
+    ["faq", "Your FAQ is a section on the home page."],
+  ])("makes %s a home page section and says so", (id, line) => {
+    const made = plan(picking(["home", id]))
+    expect(home(made)).toContain(id)
+    expect(made.features).toContain(line)
+    expect(made.pages.map((p) => p.page)).not.toContain(id)
+  })
+
+  it("puts a section the pack's home order lacks where it belongs", () => {
+    const legal = [
+      ...LEGAL,
+      fact("site.pages", { ids: ["home", "gallery", "faq"] }),
+      UPLOADS,
+    ]
+    const kinds = home(plan(legal))
+    expect(kinds.indexOf("gallery")).toBe(kinds.indexOf("service_area") - 1)
+    expect(kinds.indexOf("faq")).toBeLessThan(kinds.indexOf("cta_band"))
+  })
+
+  it("keeps all three for 'Everything' and loses none of the pages", () => {
+    const everything = [
+      "home",
+      "services",
+      "about",
+      "gallery",
+      "testimonials",
+      "faq",
+      "service_area",
+      "contact",
+      "quote",
+    ]
+    const made = plan(picking(everything, UPLOADS))
+    expect(made.pages.map((p) => p.page)).toEqual([
+      "home",
+      "about",
+      "services",
+      "service_area",
+      "contact",
+      "quote",
+    ])
+    expect(home(made)).toEqual(
+      expect.arrayContaining(["gallery", "testimonials", "faq"])
+    )
+    expect(
+      made.features.filter((l) => /section on the home page/.test(l))
+    ).toHaveLength(3)
+    expect(made.features.length).toBeLessThanOrEqual(10)
+  })
+
+  it("keeps the lines once on a re-plan and asks the model for the sections", () => {
+    const facts = picking(["home", "gallery", "faq"], UPLOADS)
+    const made = plan(facts)
+    expect(withOwnerChoices(made, facts).features).toEqual(made.features)
+    const prompt = plannerPrompt({ facts, recent: [], previous: null })
+    expect(prompt.user).toContain(
+      "Picked as home page sections: gallery (planned)"
+    )
+    // A model plan without the picked section is sent back.
+    const without = {
+      ...made,
+      pages: made.pages.map((p) =>
+        p.page === "home"
+          ? { ...p, sections: p.sections.filter((s) => s.kind !== "faq") }
+          : p
+      ),
+    }
+    expect(problems(without, { facts, library: LIBRARY }).join("\n")).toMatch(
+      /picked faq/
+    )
   })
 })
 

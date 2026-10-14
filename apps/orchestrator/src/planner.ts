@@ -1,4 +1,5 @@
 import {
+  BLUEPRINT_FEATURES_MAX,
   Blueprint,
   type DesignDirection,
   type FactRecord,
@@ -41,6 +42,7 @@ import {
   industryOf,
   ownerPhotos,
   packVoice,
+  SECTION_PICKS,
 } from "./developer-rules.ts"
 import { DIRECTIONS, directionLine, directionsFor } from "./directions.ts"
 import { SEED_DIGEST, STARTER_FILES } from "./seed.ts"
@@ -137,17 +139,75 @@ export function wantedPages(facts: readonly FactRecord[]): PageId[] {
   return STARTER_PAGES.filter((page) => want.has(page))
 }
 
-/** The owner's answers applied over a plan, so the model cannot outvote them. */
+/** The order a home page holds its sections, for placing a picked one. */
+const HOME_ORDER: SectionKind[] = [
+  "hero",
+  "trust_strip",
+  "service_cards",
+  "value_props",
+  "steps",
+  "about",
+  "testimonials",
+  "gallery",
+  "service_area",
+  "faq",
+  "cta_band",
+]
+
+/**
+ * What the owner picked that the starter has no page for: each becomes a
+ * home page section. A gallery is the owner's own photos or nothing, so
+ * without uploads it is not planned.
+ */
+export function pickedSections(facts: readonly FactRecord[]): {
+  kind: SectionKind
+  planned: boolean
+}[] {
+  const picked = factValue(facts, "site.pages")?.ids ?? []
+  const photos = ownerPhotos(facts).length > 0
+  return picked
+    .filter((id): id is keyof typeof SECTION_PICKS => id in SECTION_PICKS)
+    .map((id) => ({
+      kind: SECTION_PICKS[id],
+      planned: id !== "gallery" || photos,
+    }))
+}
+
+/** The card lines that say what became of each picked page that is not a page. */
+const pickNotes = (facts: readonly FactRecord[]): string[] =>
+  pickedSections(facts).map(({ kind, planned }) =>
+    !planned
+      ? "Your gallery needs photos of your work, so it is left out for now. Upload some and I'll add it."
+      : kind === "gallery"
+        ? "Your gallery is a section on the home page, built from your own photos."
+        : kind === "faq"
+          ? "Your FAQ is a section on the home page."
+          : "Your reviews are a section on the home page."
+  )
+
+/**
+ * The owner's answers applied over a plan, so the model cannot outvote them:
+ * their design choices, and a card line for each picked page that became a
+ * section or was left out, so nothing they picked goes without a word.
+ */
 export function withOwnerChoices(
   blueprint: Blueprint,
   facts: readonly FactRecord[]
 ): Blueprint {
   const owner = ownerChoices(facts)
+  const notes = pickNotes(facts)
+  const features = [
+    ...blueprint.features.filter((line) => !notes.includes(line)),
+  ]
   return {
     ...blueprint,
     ...(owner.direction ? { direction: owner.direction } : {}),
     ...(owner.palette ? { palette: owner.palette } : {}),
     ...(owner.fonts ? { fonts: owner.fonts } : {}),
+    features: [
+      ...features.slice(0, BLUEPRINT_FEATURES_MAX - notes.length),
+      ...notes,
+    ],
   }
 }
 
@@ -194,6 +254,31 @@ export function problems(
         )
       }
     }
+  }
+  const hasPhotos = ownerPhotos(context.facts).length > 0
+  const homeKinds = blueprint.pages
+    .find((p) => p.page === "home")
+    ?.sections.map((s) => s.kind)
+  for (const { kind, planned } of pickedSections(context.facts)) {
+    if (planned && homeKinds && !homeKinds.includes(kind)) {
+      found.push(`the owner picked ${kind}: the home page must hold it`)
+    }
+  }
+  if (
+    !hasPhotos &&
+    blueprint.pages.some((p) => p.sections.some((s) => s.kind === "gallery"))
+  ) {
+    found.push(
+      "a gallery needs the owner's photos and they have none; leave it out"
+    )
+  }
+  if (
+    blueprint.pages.some((p) => p.sections.some((s) => s.kind === "gallery")) &&
+    !blueprint.images.some((s) => s.section === "gallery")
+  ) {
+    found.push(
+      "the gallery has no image slot; plan one for each of the owner's photos"
+    )
   }
   const ids = blueprint.images.map((slot) => slot.id)
   if (new Set(ids).size !== ids.length) found.push("an image slot id repeats")
@@ -344,20 +429,59 @@ export function fallbackBlueprint(input: {
   const direction =
     library.find((d) => d.id === owner.direction) ??
     leastUsed(directionsFor(industry, library), recent)
-  const pages = wantedPages(facts).map((page) => ({
-    page,
-    sections: (pack.order[page] ?? [{ kind: "hero" as const }]).map(
-      ({ kind, variant }) => ({
+  const uploads = ownerPhotos(facts)
+  // A gallery is the owner's photos or nothing; a picked section the pack's
+  // home order lacks goes in before the first section that follows it.
+  const pickedKinds = pickedSections(facts)
+    .filter((s) => s.planned)
+    .map((s) => s.kind)
+  const pages = wantedPages(facts).map((page) => {
+    const order = (pack.order[page] ?? [{ kind: "hero" as const }]).filter(
+      ({ kind }) => kind !== "gallery" || uploads.length > 0
+    ) as { kind: SectionKind; variant?: string }[]
+    if (page === "home") {
+      for (const kind of pickedKinds) {
+        if (order.some((s) => s.kind === kind)) continue
+        const after = order.findIndex(
+          (s) => HOME_ORDER.indexOf(s.kind) > HOME_ORDER.indexOf(kind)
+        )
+        order.splice(after < 0 ? order.length : after, 0, { kind })
+      }
+    }
+    return {
+      page,
+      sections: order.map(({ kind, variant }) => ({
         kind,
         variant: variantFor(page, kind, variant, direction),
         purpose: PURPOSE[kind],
         content_notes: null,
-      })
-    ),
-  }))
+      })),
+    }
+  })
   const heroVariant = pages[0]?.sections.find((s) => s.kind === "hero")?.variant
   const aspect = heroVariant ? PHOTO_HERO[heroVariant] : undefined
-  const upload = ownerPhotos(facts)[0]
+  const upload = uploads[0]
+  // The starter's gallery shows three; the hero keeps the first photo when others remain.
+  const galleryOn = pages.find((p) =>
+    p.sections.some((s) => s.kind === "gallery")
+  )
+  const galleryPhotos = (uploads.length > 1 ? uploads.slice(1) : uploads).slice(
+    0,
+    3
+  )
+  const galleryImages = galleryOn
+    ? galleryPhotos.map((photo, i) => ({
+        id: `gallery_${i + 1}`,
+        page: galleryOn.page,
+        section: "gallery" as const,
+        aspect: "4:3" as const,
+        resolution: "1K" as const,
+        subject: cap(photo.alt ?? photo.name, 300),
+        alt: cap(photo.alt ?? photo.name, 200),
+        source: "upload" as const,
+        asset_id: photo.id,
+      }))
+    : []
   const slot = {
     id: "home_hero",
     page: "home" as const,
@@ -390,21 +514,25 @@ export function fallbackBlueprint(input: {
     "Works on phones, tablets and desktops",
   ].slice(0, 10)
   while (features.length < 4) features.push("Every button asks for a quote")
-  return Blueprint.parse({
+  const made = Blueprint.parse({
     direction: direction.id,
     fonts,
     palette,
     pages,
-    images: aspect
-      ? [
-          upload
-            ? { ...slot, source: "upload", asset_id: upload.id }
-            : { ...slot, source: "generated" },
-        ]
-      : [],
+    images: [
+      ...(aspect
+        ? [
+            upload
+              ? { ...slot, source: "upload", asset_id: upload.id }
+              : { ...slot, source: "generated" },
+          ]
+        : []),
+      ...galleryImages,
+    ],
     voice: direction.voice,
     features,
   })
+  return withOwnerChoices(made, facts)
 }
 
 /**
@@ -529,7 +657,7 @@ export function plannerPrompt(input: {
     "- Start from one direction in the library below and keep it whole, changing at most two of its choices (fonts, palette, home hero variant, home services variant). A direction is a tested combination; a site stitched from several reads as nobody's.",
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
-    "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof.",
+    "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
     "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work, streets. Never generate one for about, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene; the alt says what it shows.",
     "- With no uploads, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
@@ -577,6 +705,11 @@ export function plannerPrompt(input: {
       .join("\n") || "- (none)",
     "",
     `The business's pages: ${wantedPages(facts).join(", ")}.`,
+    ...pickedSections(facts).map(({ kind, planned }) =>
+      planned
+        ? `Picked as home page sections: ${kind} (planned).`
+        : `Picked as home page sections: ${kind} (not planned: the owner has no photos).`
+    ),
     "",
     "The owner's own choices:",
     owner.direction ? `- direction: ${owner.direction}` : null,
