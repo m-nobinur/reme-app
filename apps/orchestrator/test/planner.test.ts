@@ -131,6 +131,7 @@ describe("the structured output schema", () => {
   })
 
   it("keeps each dropped id pattern as a description the model reads", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: walks a JSON Schema
     const schema = outputSchema().properties as Record<string, any>
     expect(schema.direction.pattern).toBeUndefined()
     expect(schema.direction.description).toMatch(/Must match \^\[a-z\]/)

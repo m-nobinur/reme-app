@@ -237,9 +237,9 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
       each.kind === "service_cards" ? { ...each, variant: "photo_cards" } : each
     ),
   }
-  const page = (built: Built | undefined, file: string) => {
-    if (!built) throw new Error("the build did not run")
-    return readPages(built.dist).find((each) => each.file === file)?.html ?? ""
+  const page = (site: Built | undefined, file: string) => {
+    if (!site) throw new Error("the build did not run")
+    return readPages(site.dist).find((each) => each.file === file)?.html ?? ""
   }
   let none: Built | undefined
   let some: Built | undefined
@@ -261,12 +261,12 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
     ])
   }, 180_000)
   afterAll(() => {
-    for (const built of [none, some, all, direction]) clean(built)
+    for (const site of [none, some, all, direction]) clean(site)
   })
 
   test("photo cards without a photo for every service become numbered rows", () => {
-    for (const built of [none, some]) {
-      const home = page(built, "index.html")
+    for (const site of [none, some]) {
+      const home = page(site, "index.html")
       expect(home).toContain("services-numbered_rows")
       expect(home).not.toContain("services-photo_cards")
     }

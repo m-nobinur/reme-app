@@ -68,11 +68,7 @@ const EDITS = [
 const args = Object.fromEntries(
   process.argv
     .slice(2)
-    .reduce(
-      (pairs, a, i, all) =>
-        i % 2 ? pairs : [...pairs, [a.replace(/^--/, ""), all[i + 1]]],
-      []
-    )
+    .flatMap((a, i, all) => (i % 2 ? [] : [[a.replace(/^--/, ""), all[i + 1]]]))
 )
 const business = BUSINESSES.find((b) => b.id === (args.business ?? "clean-05"))
 if (!business) throw new Error(`no business ${args.business}`)
@@ -84,6 +80,7 @@ const base = (process.env.ORCHESTRATOR_URL ?? "http://localhost:3002").replace(
   ""
 )
 const token = process.env.ORCHESTRATOR_TOKEN ?? ""
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: a turbo pass-through would make the facade live tests run
 const openrouter = process.env.OPENROUTER_API_KEY ?? ""
 if (!token || !openrouter)
   throw new Error("ORCHESTRATOR_TOKEN and OPENROUTER_API_KEY are required")
@@ -262,13 +259,13 @@ async function watch(id, { timeoutMs, every, spentAtStart }) {
   let row
   for (;;) {
     row = await call("GET", `/${id}`)
-    const state = row.assignment.state
-    if (state !== last) {
-      timeline.push({ state, at_ms: Date.now() - started })
-      log(`${id} ${state} ($${Number(row.cost_usd ?? 0).toFixed(4)})`)
-      last = state
+    const now = row.assignment.state
+    if (now !== last) {
+      timeline.push({ state: now, at_ms: Date.now() - started })
+      log(`${id} ${now} ($${Number(row.cost_usd ?? 0).toFixed(4)})`)
+      last = now
     }
-    if (SETTLED.has(state)) break
+    if (SETTLED.has(now)) break
     const { events } = await call("GET", `/${id}/events`)
     const round = awaitingRound(events)
     if (round) {
@@ -303,7 +300,7 @@ function save(name, result) {
   )
   writeFileSync(
     join(out, `${name}.events.jsonl`),
-    result.events.map((e) => JSON.stringify(e)).join("\n") + "\n"
+    `${result.events.map((e) => JSON.stringify(e)).join("\n")}\n`
   )
 }
 
@@ -383,13 +380,13 @@ async function main() {
       phone:
         "Our phone number is now (206) 555-0177. Update it everywhere on the site.",
     }
-    for (const base of EDITS) {
+    for (const canned of EDITS) {
       const edit =
-        args.variant === "b" && variant[base.name]
+        args.variant === "b" && variant[canned.name]
           ? {
-              ...base,
-              goal: variant[base.name],
-              ...(base.facts
+              ...canned,
+              goal: variant[canned.name],
+              ...(canned.facts
                 ? {
                     facts: [
                       {
@@ -400,7 +397,7 @@ async function main() {
                   }
                 : {}),
             }
-          : base
+          : canned
       if ((await keyUsage()) - spentAtStart >= SPEND_STOP_USD) break
       // An owner looks at the preview first; the last edit's screenshots
       // and warm keep run after its preview_ready.
