@@ -408,10 +408,60 @@ export function fallbackBlueprint(input: {
 }
 
 /**
+ * A union of objects told apart by a `kind` const and holding the same
+ * fields, as one object whose consts and enums are pooled per field; null
+ * when the branches differ in any other field. Anthropic refused the
+ * section union (15 kinds, nested in two arrays) with "The compiled grammar
+ * is too large" on every provider, 2026-10-14, so every plan fell back to
+ * code. `Blueprint` still checks which variants each kind takes.
+ */
+function mergeKinds(branches: unknown[]): Record<string, unknown> | null {
+  type Node = Record<string, unknown> & {
+    properties?: Record<string, Record<string, unknown>>
+  }
+  const objects = branches as Node[]
+  const fields = (b: Node) =>
+    Object.keys(b.properties ?? {})
+      .sort()
+      .join()
+  const first = objects[0]
+  if (
+    objects.length < 2 ||
+    !first?.properties ||
+    !objects.every(
+      (b) =>
+        b?.type === "object" &&
+        b.properties?.kind?.const !== undefined &&
+        fields(b) === fields(first)
+    )
+  )
+    return null
+  const properties: Record<string, unknown> = {}
+  for (const key of Object.keys(first.properties)) {
+    const all = objects.map((b) => b.properties?.[key] ?? {})
+    if (all.every((p) => Array.isArray(p.enum) || p.const !== undefined)) {
+      const values = all.flatMap((p) =>
+        Array.isArray(p.enum) ? p.enum : [p.const]
+      )
+      properties[key] = { type: "string", enum: [...new Set(values)] }
+    } else if (all.every((p) => JSON.stringify(p) === JSON.stringify(all[0]))) {
+      properties[key] = all[0]
+    } else return null
+  }
+  return {
+    type: "object",
+    properties,
+    required: first.required,
+    additionalProperties: false,
+  }
+}
+
+/**
  * The Blueprint's shape for structured output: the contract's JSON Schema
  * without the keywords Claude's structured outputs refuse (string and array
- * lengths, patterns, number bounds) and with `oneOf` as `anyOf`. `Blueprint`
- * itself checks what was dropped, so nothing is lost but the model's hint.
+ * lengths, patterns, number bounds), with `oneOf` as `anyOf` and the section
+ * union merged (`mergeKinds`). `Blueprint` itself checks what was dropped,
+ * so nothing is lost but the model's hint.
  */
 export function outputSchema(): Record<string, unknown> {
   const drop = new Set([
@@ -434,7 +484,8 @@ export function outputSchema(): Record<string, unknown> {
       if (key === "minItems" && typeof value === "number" && value > 1) continue
       out[key === "oneOf" ? "anyOf" : key] = clean(value)
     }
-    return out
+    const merged = Array.isArray(out.anyOf) ? mergeKinds(out.anyOf) : null
+    return merged ?? out
   }
   return clean(z.toJSONSchema(Blueprint, { io: "output" })) as Record<
     string,
