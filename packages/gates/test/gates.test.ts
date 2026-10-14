@@ -434,6 +434,7 @@ describe("all the gates", () => {
         checks: [
           { check: "astro check", exit_code: 0, output_key: null },
           { check: "axe", exit_code: 0, output_key: null },
+          { check: "custom sections", exit_code: 0, output_key: null },
         ],
       } as CompletionReport,
       budget: { limit: 102_400 },
@@ -529,6 +530,7 @@ describe("all the gates", () => {
         checks: [
           { check: "astro check", exit_code: 0, output_key: null },
           { check: "axe", exit_code: 0, output_key: null },
+          { check: "custom sections", exit_code: 0, output_key: null },
         ],
       } as CompletionReport,
       budget: { limit: 102_400 },
