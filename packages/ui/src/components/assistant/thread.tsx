@@ -51,6 +51,10 @@ import {
 import { LogoMark } from "@workspace/ui/components/logo"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
+  PLAN_CHANGES_PLACEHOLDER,
+  waitsOnBlueprint,
+} from "@workspace/ui/lib/blueprint"
+import {
   QUOTE_CHANGES_PLACEHOLDER,
   waitsOnQuoteForm,
 } from "@workspace/ui/lib/quote-form"
@@ -534,6 +538,9 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const reviewing = useAuiState((s) =>
     waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
   )
+  const planning = useAuiState((s) =>
+    waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
+  )
   // Disabled, not only kept from sending: words typed into the placeholder
   // thread would stay behind with it when the stored one replaces it. The
   // input takes focus once it is enabled.
@@ -553,7 +560,11 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (reviewing ? QUOTE_CHANGES_PLACEHOLDER : placeholder)
+            (reviewing
+              ? QUOTE_CHANGES_PLACEHOLDER
+              : planning
+                ? PLAN_CHANGES_PLACEHOLDER
+                : placeholder)
           }
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}

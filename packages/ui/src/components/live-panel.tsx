@@ -7,12 +7,14 @@ import {
 import {
   type ApprovalTarget,
   type AssignmentState,
+  type Blueprint,
   type BuildActivity,
   type BuildLane,
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
+import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -1097,11 +1099,14 @@ function YourWebsite({
   host,
   live,
   thumbnail = null,
+  blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
   live: number | null
   thumbnail?: Thumbnail
+  /** The plan the live site was built from, kept under it read-only. */
+  blueprint?: Blueprint | null
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
@@ -1169,6 +1174,14 @@ function YourWebsite({
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {blueprint ? (
+        <BlueprintCard
+          blueprint={blueprint}
+          className="my-0 rounded-2xl p-3"
+          defaultOpen={false}
+          readOnly
+        />
       ) : null}
     </div>
   )

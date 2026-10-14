@@ -27,6 +27,7 @@ import {
 } from "@workspace/ui/components/tabs"
 import { type AnswerSpec, askable } from "@workspace/ui/lib/answer"
 import type { ReactNode } from "react"
+import { BLUEPRINT } from "./blueprint-fixtures"
 
 /**
  * Catalog entries for the live panel. Every state a component has is its own
@@ -648,6 +649,18 @@ const panelCatalog: Entry[] = [
     name: "YourWebsite",
     render: () => (
       <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={noop}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite with its plan",
+    render: () => (
+      <YourWebsite
+        blueprint={BLUEPRINT}
         host="brightclean-demo.example.invalid"
         live={3}
         onRequestChanges={noop}

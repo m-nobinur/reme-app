@@ -14,7 +14,11 @@ import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
-import { previewFaces } from "@workspace/ui/lib/font-faces"
+import {
+  faceStack as face,
+  faceCss,
+  previewFaces,
+} from "@workspace/ui/lib/font-faces"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -90,17 +94,8 @@ function pairOf(option: Option): {
  * open, so a page that never shows the tray fetches none of these files.
  */
 function PreviewFaces() {
-  const css = previewFaces()
-    .map(
-      ({ family, weight, url }) =>
-        `@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};font-display:swap;src:url(${url}) format("woff2")}`
-    )
-    .join("")
-  return <style>{css}</style>
+  return <style>{faceCss(previewFaces())}</style>
 }
-
-/** The family list a face falls back through when the preview's file has not loaded. */
-const face = (name: string) => `"${name}", ui-sans-serif, system-ui, sans-serif`
 
 function Box({
   className,
