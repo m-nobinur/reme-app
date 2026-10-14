@@ -29,6 +29,16 @@ const {
   highlights = [],
 } = Astro.props
 const photo = variant && image?.src && image.alt ? image : null
+// The box each variant's photo renders in (src/styles/site.css), so the browser
+// does not fetch a 1280 px candidate for a 480 px frame.
+const SIZES = {
+  wash: "100vw",
+  dark_center: "100vw",
+  split_frame: "(min-width: 80rem) 34rem, (min-width: 56rem) 42vw, 100vw",
+  split_arch:
+    "(min-width: 80rem) 30rem, (min-width: 56rem) 42vw, (min-width: 30rem) 30rem, 100vw",
+  text_led: "17rem",
+}
 const listed = variant && !photo ? highlights.filter((h) => h.name) : []
 // A home hero sets its last word in the accent, never the whole line.
 const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
@@ -69,7 +79,7 @@ const actions = Astro.slots.has("default")
               class="hero-image"
               src={photo.src}
               alt={photo.alt}
-              sizes="(min-width: 80rem) 1280px, 100vw"
+              sizes={SIZES[variant ?? "wash"]}
               priority
             />
             {caption && <p class="hero-caption">{caption}</p>}

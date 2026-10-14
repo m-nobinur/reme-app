@@ -458,6 +458,8 @@ describe("the prompt", () => {
     expect(a.system).toBe(b.system)
     expect(a.system).toContain("- after_dark (After dark")
     expect(a.system).toContain("a photo slot for every service")
+    // No uploads is no reason for a bare hero: the planner is told to spend the slots.
+    expect(a.system).toContain("Plan up to 8 slots in all")
     expect(a.user).toContain(
       "- calm_daylight + hero wash + services photo_cards (2)"
     )
