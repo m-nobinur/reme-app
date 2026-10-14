@@ -258,7 +258,10 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
   } as unknown as Env
   const run = () =>
     new AssignmentWorkflow({} as never, env).run(
-      { payload: { org_id: ROW.orgId, assignment_id: ROW.id } } as never,
+      {
+        payload: { org_id: ROW.orgId, assignment_id: ROW.id },
+        timestamp: new Date(),
+      } as never,
       step as never
     )
   return { names, waits, run }

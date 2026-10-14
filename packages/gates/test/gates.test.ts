@@ -409,6 +409,7 @@ describe("all the gates", () => {
     const body = new TextEncoder().encode(home())
     const contactBody = new TextEncoder().encode(contact)
     const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex")
+    const timings: Record<string, number> = {}
     const results = await runGates({
       manifest: {
         revision_id: ORG,
@@ -432,7 +433,15 @@ describe("all the gates", () => {
         checks: [{ check: "astro check", exit_code: 0, output_key: null }],
       } as CompletionReport,
       facts: FACTS,
+      timings,
     })
+    expect(Object.keys(timings).sort()).toEqual([
+      "claims",
+      "content",
+      "links",
+      "read",
+      "structured_data",
+    ])
     expect(results.map((r) => r.gate)).toEqual([
       "build",
       "types",

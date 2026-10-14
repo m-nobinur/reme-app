@@ -156,6 +156,20 @@ export async function assignmentCost(
   return Number(row?.usd ?? 0)
 }
 
+/** How many model turns the assignment's log holds, for the timing line. */
+export async function turnCount(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'runtime.turn'`
+    )
+  return Number(row?.n ?? 0)
+}
+
 export type TransitionInput = Ids & {
   to: AssignmentState
   expectedVersion: number

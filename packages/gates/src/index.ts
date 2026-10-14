@@ -392,7 +392,15 @@ export async function runGates(input: {
   facts: readonly FactRecord[]
   /** The site's own host names, as `astro build --site` wrote them. */
   hosts?: readonly string[]
+  /** Filled with milliseconds per gate, and `read` for the page reads. */
+  timings?: Record<string, number>
 }): Promise<GateResult[]> {
+  const lap = <T>(name: string, fn: () => T): T => {
+    const started = Date.now()
+    const out = fn()
+    if (input.timings) input.timings[name] = Date.now() - started
+    return out
+  }
   const build = await checkBuild(input.manifest, input.read)
   const types = checkTypes(input.report)
   const parsed = DeploymentManifest.safeParse(input.manifest)
@@ -410,19 +418,21 @@ export async function runGates(input: {
   }
   const decoder = new TextDecoder()
   const pages: Page[] = []
+  const readStarted = Date.now()
   for (const file of Object.keys(parsed.data.files)
     .filter((f) => f.endsWith(".html"))
     .sort()) {
     const bytes = await input.read(file)
     if (bytes) pages.push(parsePage(file, decoder.decode(bytes)))
   }
+  if (input.timings) input.timings.read = Date.now() - readStarted
   return [
     build,
     types,
-    checkLinks(pages, parsed.data.files),
-    checkStructuredData(pages),
-    checkContent(pages, input.facts, input.hosts),
-    checkClaims(pages, input.facts),
+    lap("links", () => checkLinks(pages, parsed.data.files)),
+    lap("structured_data", () => checkStructuredData(pages)),
+    lap("content", () => checkContent(pages, input.facts, input.hosts)),
+    lap("claims", () => checkClaims(pages, input.facts)),
   ]
 }
 

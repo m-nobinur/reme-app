@@ -55,7 +55,8 @@ import {
   seedFiles,
 } from "../seed.ts"
 import { eventSink } from "../sink.ts"
-import { assignmentCost } from "../state.ts"
+import { assignmentCost, turnCount } from "../state.ts"
+import { since } from "../timing.ts"
 
 /**
  * The Developer (§8, ADR-031): one Durable Object conversation per
@@ -545,6 +546,7 @@ const reportComplete = (current: Session) =>
       const sandbox = harness.sandbox
       const run = (command: string) =>
         sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
+      const toolStarted = Date.now()
 
       // The quote questions are the owner's, never the Developer's: the
       // build renders the facts' list whatever happened to the file.
@@ -553,8 +555,13 @@ const reportComplete = (current: Session) =>
         quoteFormFile(current.brief.snapshot.facts)
       )
       const check = await step.do("astro check", async () => {
+        const started = Date.now()
         const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
-        return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
+        return {
+          exit_code: r.exitCode,
+          output: r.stdout.slice(-2000),
+          ms: since(started),
+        }
       })
       // Canonical URLs, the sitemap and robots name the tenant host; without
       // --site the starter leaves them out rather than invent one.
@@ -569,10 +576,15 @@ const reportComplete = (current: Session) =>
         })
       )
       const build = await step.do("astro build", async () => {
+        const started = Date.now()
         const r = await run(
           `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
         )
-        return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
+        return {
+          exit_code: r.exitCode,
+          output: r.stdout.slice(-2000),
+          ms: since(started),
+        }
       })
       if (build.exit_code !== 0) {
         throw new Error(
@@ -600,6 +612,7 @@ const reportComplete = (current: Session) =>
       const prefix = `sites/${orgId}/${revisionId}/`
 
       const screenshots = await step.do("screenshots", async () => {
+        const started = Date.now()
         const script = [
           "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
           "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
@@ -618,10 +631,17 @@ const reportComplete = (current: Session) =>
           await env.SITES.put(key, await sandbox.readFileBuffer(path))
           keys.push(key)
         }
-        return { keys, exit_code: r.exitCode, output: r.stdout.slice(-500) }
+        return {
+          keys,
+          exit_code: r.exitCode,
+          output: r.stdout.slice(-500),
+          ms: since(started),
+        }
       })
 
       const manifest = await step.do("upload dist", async () => {
+        const started = Date.now()
+        let bytesUploaded = 0
         const listing = await run("find dist -type f | sort")
         const files: Record<string, string> = {}
         const routes: { path: string; file: string }[] = []
@@ -629,6 +649,7 @@ const reportComplete = (current: Session) =>
           const file = line.replace(/^dist\//, "")
           const bytes = await sandbox.readFileBuffer(`${SITE_ROOT}/${line}`)
           files[file] = await sha256(bytes)
+          bytesUploaded += bytes.byteLength
           await env.SITES.put(`${prefix}dist/${file}`, bytes)
           if (file.endsWith("index.html")) {
             routes.push({ path: `/${file.replace(/index\.html$/, "")}`, file })
@@ -644,10 +665,15 @@ const reportComplete = (current: Session) =>
           built_at: new Date().toISOString(),
         })
         await env.SITES.put(`${prefix}manifest.json`, JSON.stringify(parsed))
-        return { files: Object.keys(files).length }
+        return {
+          files: Object.keys(files).length,
+          bytes: bytesUploaded,
+          ms: since(started),
+        }
       })
 
-      await step.do("upload source", async () => {
+      const source = await step.do("upload source", async () => {
+        const started = Date.now()
         const r = await run(
           `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`
         )
@@ -657,7 +683,7 @@ const reportComplete = (current: Session) =>
           `${prefix}source.tar.zst`,
           await sandbox.readFileBuffer("/tmp/source.tar.zst")
         )
-        return { key: `${prefix}source.tar.zst` }
+        return { key: `${prefix}source.tar.zst`, ms: since(started) }
       })
 
       const report = CompletionReport.parse({
@@ -695,12 +721,29 @@ const reportComplete = (current: Session) =>
       // Model output: nothing downstream may promote it (§28.3).
       current.tee.emit("assignment.completion_reported", report, ["inferred"])
       await current.tee.flush()
+      const turns = await current.kit
+        .withOrg({ orgId }, (db) => turnCount(db, assignmentId))
+        .catch(() => null)
       await (await workflow(assignmentId)).sendEvent({
         type: "developer",
         payload: {
           kind: "completion",
           report_id: report.report_id,
           revision_id: revisionId,
+          timings: {
+            check_ms: check.ms,
+            build_ms: build.ms,
+            screenshots_ms: screenshots.ms,
+            upload_ms: manifest.ms,
+            upload_files: manifest.files,
+            upload_bytes: manifest.bytes,
+            source_ms: source.ms,
+            // Replayed steps return their first run's ms, so the tool's own
+            // wall time is the one that says what the whole call cost.
+            tool_ms: since(toolStarted),
+            model_turns: turns,
+            reported_at: Date.now(),
+          },
         },
       })
       return {
