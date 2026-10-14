@@ -52,6 +52,9 @@ import { env, stubJwksFetch } from "./sealed-session.ts"
 
 const url = process.env.DATABASE_URL
 
+/** A generated photo's asset id, as the photo step logs it. */
+const PHOTO_ID = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+
 /** The required facts a new org lacks: sign-up already gave its name. */
 const REQUIRED = [
   "business.phone",
@@ -177,6 +180,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           section: "hero",
           alt: "A sunlit room",
           source: "generated",
+          asset_id: PHOTO_ID,
         },
         {
           id: "owner_team",
@@ -308,7 +312,14 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention[0]).toMatchObject({
       kind: "approval",
       version: 2,
-      photos: [{ slot_id: "hero_room", section: "hero", alt: "A sunlit room" }],
+      photos: [
+        {
+          slot_id: "hero_room",
+          section: "hero",
+          alt: "A sunlit room",
+          thumbnail: `/api/photos/${PHOTO_ID}`,
+        },
+      ],
     })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
@@ -328,6 +339,81 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         { revision_id: busyIds.reviewRevision, version: 2 },
       ],
     ])
+  })
+
+  it("shows a working build's photos as they settle and its pages by name, its clock without the plan review", async () => {
+    const who = await owner(kit, url as string, "live-build")
+    const s = seed(kit, who)
+    const build = await s.assignment("implementing")
+    const page = (id: string) => ({
+      page: id,
+      sections: [
+        { kind: "hero", variant: "wash", purpose: "Lead", content_notes: null },
+      ],
+    })
+    const slot = (id: string) => ({
+      id,
+      page: "home",
+      section: "hero",
+      aspect: "16:9",
+      resolution: "1K",
+      subject: "A clean kitchen",
+      alt: `Photo ${id}`,
+      source: "generated",
+    })
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db
+        .update(assignments)
+        .set({
+          blueprint: {
+            direction: "calm_daylight",
+            fonts: "outfit_figtree",
+            palette: { kind: "preset", id: "forest" },
+            pages: [page("home"), page("services")],
+            images: [slot("hero"), slot("team")],
+            voice: "Warm and plain.",
+            features: ["One", "Two", "Three", "Four"],
+          },
+        })
+        .where(eq(assignments.id, build))
+    )
+    // Proposed for review 30 minutes ago and decided 15 minutes later.
+    await s.event(build, "blueprint.proposed", { round: 1, review: true }, 0.5)
+    await s.event(build, "blueprint.decided", { round: 1 }, 0.25)
+    const progress = (payload: Record<string, unknown>) =>
+      s.event(build, "build.progress", payload)
+    await progress({ stage: "photos", item: null, total: 2 })
+    await progress({
+      stage: "photos",
+      item: "team",
+      total: 2,
+      status: "generated",
+      asset_id: PHOTO_ID,
+    })
+    await progress({ stage: "pages", item: null, total: 2 })
+    await progress({ stage: "pages", item: "services", total: 2 })
+
+    const body = WorkspaceStatus.parse(await (await workspace(who)).json())
+    const [shown] = body.builds
+    expect(shown?.photos).toEqual([
+      {
+        slot_id: "team",
+        state: "made",
+        alt: "Photo team",
+        thumbnail: `/api/photos/${PHOTO_ID}`,
+      },
+      { slot_id: "hero", state: "drawing", alt: "Photo hero", thumbnail: null },
+    ])
+    expect(shown?.activity?.find((r) => r.id === "writing")).toMatchObject({
+      done: 1,
+      total: 2,
+      items: [
+        { label: "Home", done: false },
+        { label: "Services", done: true },
+      ],
+    })
+    // 15 minutes, give or take the insert's clock.
+    expect(Math.round((shown?.review_ms ?? 0) / 60_000)).toBe(15)
   })
 
   it("lists an expired review the sweep parked, since a late decision counts", async () => {

@@ -6,15 +6,18 @@ import {
   Blueprint,
   type BuildActivity,
   type BuildLane,
+  type BuildPhoto,
   type BuildSummary,
   type DerivedReminder,
   type FactRecord,
   FactValue,
   FactValueKey,
   InformationRequest,
+  PAGES,
   SiteFields,
   siteHost,
   TERMINAL_STATES,
+  thumbnailOf,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
@@ -82,19 +85,33 @@ export type Progress = Partial<
   Record<"pages" | "photos", { done: number; total: number }>
 >
 
+/** One `build.progress` row that finished something: a page, or a photo slot with how it settled. */
+export type Settled = {
+  stage: string
+  item: string
+  status?: string | null
+  asset_id?: string | null
+}
+
 /** The most a row counts to (the contract's bound). */
 const COUNT_MAX = 999
 
+/** The generated slots a plan still has to draw. */
+const toDraw = (plan: Blueprint | null | undefined) =>
+  (plan?.images ?? []).filter((i) => i.source === "generated" && !i.asset_id)
+
 /**
- * Rows up to the build's current stage, earlier ones done. A planned build
- * counts its pages ("Writing the pages, 3 of 5") and, when it makes any, its
- * photos in a row before them; any other stage is whole, `1 of 1`. A quick
- * build gets none; the panel shows one line for it.
+ * Every stage row of the build, in order: those passed are done, the rest
+ * count what they have finished so far. A planned build counts its photos,
+ * when it makes any, and names its pages ("Writing the pages, 3 of 5"), then
+ * has its design looked over before the checks; any other stage is whole,
+ * `1 of 1`. A quick build gets none; the panel shows one line for it.
  */
 export function activityFor(
   lane: BuildLane,
   state: AssignmentState,
-  progress: Progress = {}
+  progress: Progress = {},
+  { plan, settled = [] }: { plan?: Blueprint | null; settled?: Settled[] } = {}
 ): BuildActivity[] {
   const now = STAGES.findIndex((stage) => stage.at.includes(state))
   if (lane === "quick" || now < 0) return []
@@ -112,16 +129,65 @@ export function activityFor(
       total,
     }
   }
-  return STAGES.slice(0, now + 1).flatMap(({ id, label }, i) => {
+  const pagesDone = new Set(
+    settled.filter((s) => s.stage === "pages").map((s) => s.item)
+  )
+  return STAGES.flatMap(({ id, label }, i) => {
     const passed = i < now
     if (id !== "writing") return [row(id, label, passed)]
+    const pages = plan?.pages.map(({ page }) => ({
+      label: PAGES.find((p) => p.id === page)?.label ?? page,
+      done: passed || pagesDone.has(page),
+    }))
+    const photos =
+      progress.photos ??
+      (toDraw(plan).length > 0
+        ? { done: 0, total: toDraw(plan).length }
+        : undefined)
     return [
-      ...(progress.photos
-        ? [row("photos", "Making photos", passed, progress.photos)]
-        : []),
-      row(id, label, passed, progress.pages),
+      ...(photos ? [row("photos", "Making photos", passed, photos)] : []),
+      {
+        ...row(id, label, passed, progress.pages),
+        ...(pages ? { items: pages } : {}),
+      },
+      // BA5's look before the gates runs only on a planned build.
+      ...(plan ? [row("design", "Looking over the design", passed)] : []),
     ]
   })
+}
+
+/**
+ * The photos a build is making, once its photo step has started: the slots
+ * that settled, in the order they did, then those still drawing. A slot that
+ * fell back has left the plan, so it has no alt.
+ */
+export function photosOf(
+  plan: Blueprint | null | undefined,
+  settled: Settled[]
+): BuildPhoto[] {
+  const alt = new Map((plan?.images ?? []).map((i) => [i.id, i.alt]))
+  const done = new Map<string, BuildPhoto>()
+  for (const s of settled) {
+    if (s.stage !== "photos" || done.has(s.item)) continue
+    const fell = s.status === "fallback"
+    done.set(s.item, {
+      slot_id: s.item,
+      state: fell ? "fallback" : "made",
+      alt: alt.get(s.item) ?? null,
+      thumbnail: fell ? null : thumbnailOf(s.asset_id),
+    })
+  }
+  const drawing = toDraw(plan)
+    .filter((i) => !done.has(i.id))
+    .map(
+      (i): BuildPhoto => ({
+        slot_id: i.id,
+        state: "drawing",
+        alt: i.alt,
+        thumbnail: null,
+      })
+    )
+  return [...done.values(), ...drawing].slice(0, 24)
 }
 
 /**
@@ -167,6 +233,16 @@ export async function readBuilds(
       // BA4's counts: distinct pages or photos finished per stage, and the
       // stage's total, so a repeated event never counts twice.
       progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, count(distinct e.payload->>'item')::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
+      // The same rows by name, in the order they landed: which pages are
+      // written, and how each photo slot settled.
+      settled: sql<
+        Settled[] | null
+      >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id') order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
+      // Time the build waited on the owner's decided plan reviews: each
+      // `blueprint.decided` back to the review round it answered.
+      reviewMs: sql<
+        number | null
+      >`(select sum(extract(epoch from (d.occurred_at - p.occurred_at)) * 1000)::float8 from events d join events p on p.assignment_id = d.assignment_id and p.type = 'blueprint.proposed' and p.payload->>'review' = 'true' and p.payload->>'round' = d.payload->>'round' where d.assignment_id = assignments.id and d.type = 'blueprint.decided')`,
     })
     .from(assignments)
     .where(
@@ -178,6 +254,9 @@ export async function readBuilds(
     const fellThrough = row.fell && row.lane === "quick"
     const lane: BuildLane =
       row.lane === "quick" && !fellThrough ? "quick" : "full"
+    const plan = Blueprint.safeParse(row.blueprint).data ?? null
+    const settled = row.settled ?? []
+    const progress = row.progress ?? {}
     return {
       assignment_id: row.id,
       kind: row.kind as BuildSummary["kind"],
@@ -185,9 +264,11 @@ export async function readBuilds(
       goal: row.goal,
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
-      activity: activityFor(lane, row.state, row.progress ?? {}),
+      activity: activityFor(lane, row.state, progress, { plan, settled }),
       revision: row.revision,
       ...planOf(row),
+      ...(progress.photos ? { photos: photosOf(plan, settled) } : {}),
+      ...(row.reviewMs ? { review_ms: Math.round(row.reviewMs) } : {}),
       created_at: iso(row.createdAt),
       updated_at: iso(row.updatedAt),
     }
@@ -267,11 +348,25 @@ export async function readApprovals(
     )
     for (const r of found as unknown as {
       assignment_id: string
-      slots: { id: string; section: string; alt: string; source: string }[]
+      slots: {
+        id: string
+        section: string
+        alt: string
+        source: string
+        asset_id?: string
+      }[]
     }[]) {
       const photos = r.slots
         .filter((s) => s.source === "generated")
-        .map((s) => ({ slot_id: s.id, section: s.section, alt: s.alt }))
+        .map((s) => {
+          const thumbnail = thumbnailOf(s.asset_id)
+          return {
+            slot_id: s.id,
+            section: s.section,
+            alt: s.alt,
+            ...(thumbnail ? { thumbnail } : {}),
+          }
+        })
       if (photos.length > 0) placed.set(r.assignment_id, photos)
     }
   }

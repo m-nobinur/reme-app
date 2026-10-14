@@ -8,11 +8,12 @@ import {
   InformationAnswer,
   idempotencyKey,
   OwnerChangeRequest,
+  PHOTO_PATH,
   PreviewLink,
   SetFactsRequest,
 } from "@workspace/contracts"
 import { approvals, assignments, type Tenancy } from "@workspace/db"
-import { uploadAssets } from "./assets.ts"
+import { readPhoto, uploadAssets } from "./assets.ts"
 import {
   bridge,
   holds,
@@ -44,7 +45,7 @@ import {
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -183,6 +184,9 @@ export async function ownerRoute(
   }
   if (pathname === "/assets" && method === "POST") {
     return uploadAssets(request, env, kit, owner)
+  }
+  if (PHOTO_PATH.test(pathname) && method === "GET") {
+    return readPhoto(env, owner, pathname.slice("/photos/".length))
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)
