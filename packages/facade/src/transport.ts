@@ -18,6 +18,7 @@ import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic"
 import { setProvider } from "@flue/runtime"
 import { FacadeError } from "./errors.ts"
 import { openrouterModels } from "./models/index.ts"
+import { modelRouting, outputCaps } from "./spec.ts"
 
 /**
  * §29.1: the routing table in the spec picks the model, this picks how the
@@ -178,7 +179,10 @@ function tapCost(
  * which errs high. Behind the AI Gateway the body passes through unchanged,
  * so the same tap reads it.
  */
-function billed(api: ProviderStreams): ProviderStreams {
+function billed(
+  api: ProviderStreams,
+  caps: Readonly<Record<string, number>>
+): ProviderStreams {
   const wrap =
     <O extends StreamOptions>(
       call: (
@@ -191,6 +195,8 @@ function billed(api: ProviderStreams): ProviderStreams {
       let bill: { id: unknown; cost: number } | undefined
       const inner = call(model, context, {
         ...(options as O),
+        // flue never sets maxTokens, so the role table's cap is applied here.
+        maxTokens: options?.maxTokens ?? caps[model.id],
         onPayload: async (params, at) => {
           const next = (await options?.onPayload?.(params, at)) ?? params
           return { ...(next as object), usage: { include: true } }
@@ -249,7 +255,8 @@ function billed(api: ProviderStreams): ProviderStreams {
  */
 export function buildProviders(
   env: ModelEnv,
-  transport: Transport
+  transport: Transport,
+  caps: Readonly<Record<string, number>> = {}
 ): Provider[] {
   const providers: Provider[] = []
   const viaGateway = transport.startsWith("gateway:")
@@ -272,7 +279,7 @@ export function buildProviders(
           ...(gateway ? { headers: gatewayHeaders() } : {}),
         })),
         models: withBase(openrouterModels(), baseUrl),
-        api: billed(openAICompletionsApi()),
+        api: billed(openAICompletionsApi(), caps),
       })
     )
   }
@@ -318,12 +325,18 @@ export function buildProviders(
  * module scope. Throws before any model call when the configuration cannot
  * carry one.
  */
-export function registerProviders(env: ModelEnv): {
+export function registerProviders(
+  env: ModelEnv & { REME_MODEL_DEFAULT?: string; REME_MODEL_FALLBACK?: string }
+): {
   transport: Transport
   providers: Provider[]
 } {
   const transport = selectTransport(env)
-  const providers = buildProviders(env, transport)
+  const providers = buildProviders(
+    env,
+    transport,
+    outputCaps(modelRouting(env, "A"), modelRouting(env, "B"))
+  )
   for (const provider of providers) setProvider(provider)
   return { transport, providers }
 }
