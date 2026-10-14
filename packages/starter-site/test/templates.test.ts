@@ -7,7 +7,7 @@ import {
 } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { brandRamp, contrast } from "../src/brand"
-import { FONTS, fontTheme, TEMPLATES as LAYOUTS } from "../src/presets"
+import { FONTS, fontTheme, HERO_OF, TEMPLATES as LAYOUTS } from "../src/presets"
 import { type Built, build, clean, type Page, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -83,11 +83,14 @@ describe("a template", () => {
     }
   })
 
-  test("gives each template its own hero, header and type in its styles", () => {
+  test("gives each template a hero variant of its own, styled", () => {
     const css = readFileSync(join(ROOT, "src/styles/site.css"), "utf8")
-    for (const name of ["classic", "modern", "bold"]) {
+    expect(new Set(Object.values(HERO_OF)).size).toBe(LAYOUTS.length)
+    for (const name of LAYOUTS) {
       expect(classes(home(name)), name).toContain("hero-home")
-      expect(css, name).toContain(`[data-template="${name}"] .hero-home`)
+      expect(classes(home(name)), name).toContain(`hero-${HERO_OF[name]}`)
+      expect(css, name).toContain(`.hero-${HERO_OF[name]} `)
+      expect(css, name).toContain(`[data-template="${name}"]`)
     }
   })
 

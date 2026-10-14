@@ -3,11 +3,24 @@ import { phoneText } from "../../phone"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
+
+interface Props {
+  /** solid is the brand colour, photo puts site.ctaImage under it. */
+  variant?: "solid" | "photo"
+}
+
+const { variant = "solid" } = Astro.props
+const image = variant === "photo" ? site.ctaImage : ""
 ---
 
 {
   (site.ctaHeading || site.ctaBody) && (
-    <section class="band band-tint cta-band">
+    <section
+      class:list={["band band-tint cta-band", image && "cta-photo"]}
+    >
+      {image && (
+        <img class="cta-image" src={image} alt="" loading="lazy" decoding="async" />
+      )}
       <div class="wrap cta-inner">
         <div class="cta-text">
           {site.ctaHeading && <h2>{site.ctaHeading}</h2>}

@@ -1,22 +1,35 @@
 component: ServiceCards
 path: src/components/ServiceCards/ServiceCards.astro
-summary: The services, as linked cards on the home page or a full section each
-  on the services page.
+summary: The services, in one of five patterns; alternating is the services
+  page's full section for each.
 props:
   - name: variant
-    type: '"cards" | "sections"'
+    type: '"photo_cards" | "numbered_rows" | "alternating" | "fleet" |
+      "practice_list"'
     required: false
-    description: cards on home, sections on the services page.
+    description: The pattern. alternating is the services page's own.
 constraints:
   - Reads serviceItems from src/structured-data.ts (service1Name to
     service6For); a service renders only with a name or a body.
-  - A card shows Name, Body and Icon and links to its section, id service-N, on
-    the services page. A section adds Includes, one item to a line, For, and a
-    quote link.
+  - photo_cards are cards with a 4:3 photo, the icon on it, and an arrow;
+    numbered_rows are hairline rows with a number, an icon circle and a round
+    arrow; practice_list is a numbered list with the name beside its sentence,
+    for legal; fleet is 16:9 cards with Includes as spec pills, for limousine;
+    alternating is photo and text rows with the Includes check list.
+  - Every pattern but alternating links each name to its section, id service-N,
+    on the services page. alternating adds Includes, one item to a line, For,
+    and a quote link, and is what the services page uses.
+  - serviceNImage with serviceNImageAlt is the service's photo; without it a
+    card shows its icon and a row its text. A fleet photo is an owner upload.
+  - The section's eyebrow is site.serviceCardsEyebrow.
   - Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice.
 examples:
   - "<ServiceCards />"
-  - '<ServiceCards variant="sections" />'
+  - '<ServiceCards variant="photo_cards" />'
+  - '<ServiceCards variant="numbered_rows" />'
+  - '<ServiceCards variant="alternating" />'
+  - '<ServiceCards variant="fleet" />'
+  - '<ServiceCards variant="practice_list" />'
 forbidden:
   - a price
   - a service the facts give no sign of

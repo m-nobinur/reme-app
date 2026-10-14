@@ -215,7 +215,10 @@ describe("a component with its fields filled", () => {
   test("Hero renders", () => {
     const pages = pagesOf(filled)
     expect(hasClass(pages, "hero")).toBe(true)
-    expect(visible(pages)).toContain("A home you come back to")
+    // The home h1 keeps its words whole, its last one in the accent.
+    expect(pages.find((p) => p.file === "index.html")?.html).toContain(
+      'A home you come back <span class="accent">to</span></h1>'
+    )
   })
 })
 

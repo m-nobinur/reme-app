@@ -85,12 +85,24 @@
     "component": "CtaBand",
     "path": "src/components/CtaBand/CtaBand.astro",
     "summary": "A closing band with a heading, a line and the site's main action.",
-    "props": [],
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"solid\" | \"photo\"",
+        "required": false,
+        "description": "solid is the brand colour, photo puts site.ctaImage under it."
+      }
+    ],
     "constraints": [
       "Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or the body is set. The links come from the pages that exist and the phone fact. An empty ctaLabel takes the label of the page it links to, which is the quote page when there is one.",
-      "Last on a page, after everything else."
+      "Last on a page, after everything else.",
+      "solid is the brand colour; photo lays site.ctaImage under it, and is solid while that field is empty."
     ],
-    "examples": ["<CtaBand />"],
+    "examples": [
+      "<CtaBand />",
+      "<CtaBand variant=\"solid\" />",
+      "<CtaBand variant=\"photo\" />"
+    ],
     "forbidden": ["an offer, discount or deadline"],
     "source": "generated"
   },
@@ -98,12 +110,24 @@
     "component": "Faq",
     "path": "src/components/Faq/Faq.astro",
     "summary": "Questions and answers, each one a native disclosure that needs no script.",
-    "props": [],
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"split\" | \"stacked\"",
+        "required": false,
+        "description": "split puts the heading beside the questions, stacked above them."
+      }
+    ],
     "constraints": [
       "Reads faqItems from src/structured-data.ts, which reads faq1Question to faq8Answer; an entry needs both halves to render. Six to eight when the facts answer that many.",
-      "A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data matches the questions on the page."
+      "A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data matches the questions on the page.",
+      "split sets the heading beside the questions, stacked above them in a narrow column. The eyebrow is site.faqEyebrow."
     ],
-    "examples": ["<Faq />"],
+    "examples": [
+      "<Faq />",
+      "<Faq variant=\"split\" />",
+      "<Faq variant=\"stacked\" />"
+    ],
     "forbidden": [
       "an answer stating a price, hour or guarantee no fact carries",
       "FAQPage data on a page that does not show the questions"
@@ -126,7 +150,7 @@
   {
     "component": "Hero",
     "path": "src/components/Hero/Hero.astro",
-    "summary": "The page's h1 with a lede and action links; on the home page the template sets its composition.",
+    "summary": "The page's h1 with a lede and action links; on the home page a variant sets its composition.",
     "props": [
       {
         "name": "heading",
@@ -148,15 +172,21 @@
       },
       {
         "name": "variant",
-        "type": "\"home\" | \"page\"",
+        "type": "\"wash\" | \"split_arch\" | \"split_frame\" | \"dark_center\" | \"text_led\"",
         "required": false,
-        "description": "home on the home page, page elsewhere."
+        "description": "The home page's composition. Empty is the plain hero of every other page."
       },
       {
         "name": "image",
         "type": "{ src: string; alt: string }",
         "required": false,
         "description": "The home photo, shown with both halves."
+      },
+      {
+        "name": "caption",
+        "type": "string",
+        "required": false,
+        "description": "A few words on the photo, as site.heroCaption."
       },
       {
         "name": "highlights",
@@ -168,14 +198,21 @@
     "constraints": [
       "One per page, first inside the layout.",
       "Children are ActionLink elements only.",
-      "home on the home page, page everywhere else. The home hero follows site.template, with the copy beside the photo, the photo full-bleed behind it, or oversized type over stacked blocks.",
+      "variant only on the home page; every other page leaves it empty. wash is the photo full-bleed with a pale wash under the copy; split_arch the photo under an arch beside the copy; split_frame the photo in a frame with a stamp card on its corner; dark_center the photo full-bleed under a dark gradient with the copy centred; text_led large type with the photo as a portrait inset.",
+      "The home hero sets the h1's last word in the accent colour.",
+      "caption is the one piece of copy on the photo, site.heroCaption, and shows only with the photo.",
       "With no photo the home hero shows highlights, the first three services with their icons, never an empty box.",
       "Renders nothing when the heading, the lede and the actions are all empty.",
       "eyebrow is for the home page, with site.industry.",
       "image is the home page's, from site.heroImage and site.heroImageAlt; it renders only with both, and the same photo is not used again on the page."
     ],
     "examples": [
-      "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+      "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />",
+      "<Hero variant=\"wash\" heading={site.heroHeading} image={{ src: site.heroImage, alt: site.heroImageAlt }} caption={site.heroCaption} />",
+      "<Hero variant=\"split_arch\" heading={site.heroHeading} image={{ src: site.heroImage, alt: site.heroImageAlt }} />",
+      "<Hero variant=\"split_frame\" heading={site.heroHeading} image={{ src: site.heroImage, alt: site.heroImageAlt }} caption={site.heroCaption} />",
+      "<Hero variant=\"dark_center\" heading={site.heroHeading} image={{ src: site.heroImage, alt: site.heroImageAlt }} />",
+      "<Hero variant=\"text_led\" heading={site.heroHeading} image={{ src: site.heroImage, alt: site.heroImageAlt }} />"
     ],
     "forbidden": ["a second Hero on a page", "literal text in heading or lede"],
     "source": "generated"
@@ -292,21 +329,31 @@
   {
     "component": "ServiceCards",
     "path": "src/components/ServiceCards/ServiceCards.astro",
-    "summary": "The services, as linked cards on the home page or a full section each on the services page.",
+    "summary": "The services, in one of five patterns; alternating is the services page's full section for each.",
     "props": [
       {
         "name": "variant",
-        "type": "\"cards\" | \"sections\"",
+        "type": "\"photo_cards\" | \"numbered_rows\" | \"alternating\" | \"fleet\" | \"practice_list\"",
         "required": false,
-        "description": "cards on home, sections on the services page."
+        "description": "The pattern. alternating is the services page's own."
       }
     ],
     "constraints": [
       "Reads serviceItems from src/structured-data.ts (service1Name to service6For); a service renders only with a name or a body.",
-      "A card shows Name, Body and Icon and links to its section, id service-N, on the services page. A section adds Includes, one item to a line, For, and a quote link.",
+      "photo_cards are cards with a 4:3 photo, the icon on it, and an arrow; numbered_rows are hairline rows with a number, an icon circle and a round arrow; practice_list is a numbered list with the name beside its sentence, for legal; fleet is 16:9 cards with Includes as spec pills, for limousine; alternating is photo and text rows with the Includes check list.",
+      "Every pattern but alternating links each name to its section, id service-N, on the services page. alternating adds Includes, one item to a line, For, and a quote link, and is what the services page uses.",
+      "serviceNImage with serviceNImageAlt is the service's photo; without it a card shows its icon and a row its text. A fleet photo is an owner upload.",
+      "The section's eyebrow is site.serviceCardsEyebrow.",
       "Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice."
     ],
-    "examples": ["<ServiceCards />", "<ServiceCards variant=\"sections\" />"],
+    "examples": [
+      "<ServiceCards />",
+      "<ServiceCards variant=\"photo_cards\" />",
+      "<ServiceCards variant=\"numbered_rows\" />",
+      "<ServiceCards variant=\"alternating\" />",
+      "<ServiceCards variant=\"fleet\" />",
+      "<ServiceCards variant=\"practice_list\" />"
+    ],
     "forbidden": ["a price", "a service the facts give no sign of"],
     "source": "generated"
   },
@@ -328,14 +375,27 @@
     "component": "SiteHeader",
     "path": "src/components/SiteHeader/SiteHeader.astro",
     "summary": "The sticky header with the business name, navigation, a phone menu and one call to action.",
-    "props": [],
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"split\" | \"centered\" | \"minimal\"",
+        "required": false,
+        "description": "split, centered on the name, or minimal: a two-line wordmark and the menu."
+      }
+    ],
     "constraints": [
       "The Base layout renders it on every page.",
       "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set.",
       "The owner's logo (site.logo with site.logoAlt) replaces the business name at a fixed height; with no logo the name shows as text.",
-      "On a phone the links sit behind a native details menu labelled navMenu, which needs no script."
+      "On a phone the links sit behind a native details menu labelled navMenu, which needs no script.",
+      "split puts the name left and the action right; centered puts the name between the links and the action; minimal shows the name over site.industry and keeps the links behind the menu at every width."
     ],
-    "examples": ["<SiteHeader />"],
+    "examples": [
+      "<SiteHeader />",
+      "<SiteHeader variant=\"split\" />",
+      "<SiteHeader variant=\"centered\" />",
+      "<SiteHeader variant=\"minimal\" />"
+    ],
     "forbidden": ["using it in a page", "a hard-coded navigation link"],
     "source": "generated"
   },
@@ -343,11 +403,25 @@
     "component": "Steps",
     "path": "src/components/Steps/Steps.astro",
     "summary": "How working with the business goes, as numbered steps.",
-    "props": [],
-    "constraints": [
-      "Reads step1Title to step3Body itself; a step renders only when one of its two fields is set. The numbers are drawn by CSS, not written into a field."
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"circles\" | \"dark_band\" | \"timeline\"",
+        "required": false,
+        "description": "circles on a tint band, dark_band beside its heading, timeline on a line."
+      }
     ],
-    "examples": ["<Steps />"],
+    "constraints": [
+      "Reads step1Title to step3Body itself; a step renders only when one of its two fields is set. The numbers, 01 to 03, are drawn by CSS, not written into a field.",
+      "timeline puts the steps on one line across, down the side on a phone; circles centres each under an outlined number on the tint; dark_band sets the heading beside the steps on a dark band.",
+      "The section's eyebrow is site.stepsEyebrow."
+    ],
+    "examples": [
+      "<Steps />",
+      "<Steps variant=\"circles\" />",
+      "<Steps variant=\"dark_band\" />",
+      "<Steps variant=\"timeline\" />"
+    ],
     "forbidden": ["a time, price or promise no fact states"],
     "source": "generated"
   },
@@ -355,11 +429,23 @@
     "component": "Testimonials",
     "path": "src/components/Testimonials/Testimonials.astro",
     "summary": "Reviews quoted from the facts, with the reviewer's name.",
-    "props": [],
-    "constraints": [
-      "Quote and author are both fact fields. A quote is rendered as the fact gives it, unedited and untrimmed."
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"featured\" | \"wall\"",
+        "required": false,
+        "description": "featured sets the first review larger on a tint, wall sets them evenly."
+      }
     ],
-    "examples": ["<Testimonials />"],
+    "constraints": [
+      "Quote and author are both fact fields. A quote is rendered as the fact gives it, unedited and untrimmed.",
+      "featured sets the first review larger on the tint; wall sets them evenly. The eyebrow is site.testimonialsEyebrow."
+    ],
+    "examples": [
+      "<Testimonials />",
+      "<Testimonials variant=\"featured\" />",
+      "<Testimonials variant=\"wall\" />"
+    ],
     "forbidden": ["a review written here", "editing or shortening a quote"],
     "source": "generated"
   },
@@ -367,13 +453,25 @@
     "component": "TrustStrip",
     "path": "src/components/TrustStrip/TrustStrip.astro",
     "summary": "A band under the home hero with the business's figures and up to three proof points.",
-    "props": [],
+    "props": [
+      {
+        "name": "variant",
+        "type": "\"icons\" | \"phrases\"",
+        "required": false,
+        "description": "icons in columns split by hairlines, phrases in one tracked line."
+      }
+    ],
     "constraints": [
       "Figures are fact fields (statYearsValue, statClientsValue, statRatingValue); one with no value does not render.",
       "trust1 to trust3 restate business.proof in under six words each, and stay empty without it.",
-      "Renders nothing when there are no figures and no points."
+      "Renders nothing when there are no figures and no points.",
+      "icons sets them in columns split by hairlines, a check beside each point; phrases sets them in one uppercase line with dots between."
     ],
-    "examples": ["<TrustStrip />"],
+    "examples": [
+      "<TrustStrip />",
+      "<TrustStrip variant=\"icons\" />",
+      "<TrustStrip variant=\"phrases\" />"
+    ],
     "forbidden": ["a figure or point no fact states"],
     "source": "generated"
   },

@@ -113,6 +113,11 @@ const values = {
   /** What that photo shows, in one sentence: its alt text. The hero shows the photo only with it. */
   heroImageAlt: "",
   /**
+   * A few words on the hero photo, as a pill or a stamp card: a fact restated
+   * in under six words, as "Fully insured". Empty shows the photo bare.
+   */
+  heroCaption: "",
+  /**
    * The home page's h1: the main service and the area, as "Weekly house
    * cleaning in Fairhaven". Falls back to the business name.
    */
@@ -187,6 +192,11 @@ const values = {
   valueProp3Title: "",
   valueProp3Body: "",
   valueProp3Icon: "",
+  /**
+   * The short label above a section's h2: a word or two, set small and
+   * uppercase, never a claim. Empty leaves the heading on its own.
+   */
+  serviceCardsEyebrow: "Services",
   serviceCardsHeading: "What we do",
   /** The link under the service cards to the services page, off that page. */
   serviceCardsLink: "See all services",
@@ -230,6 +240,25 @@ const values = {
   service6Icon: "",
   service6Includes: "",
   service6For: "",
+  /**
+   * A photo for each service, by number: a path the build placed, as
+   * "/uploads/<id>.jpg", and its alt text. Shown only with both. A fleet's
+   * photos are the owner's own uploads, never generated. Empty shows the
+   * service without a photo.
+   */
+  service1Image: "",
+  service1ImageAlt: "",
+  service2Image: "",
+  service2ImageAlt: "",
+  service3Image: "",
+  service3ImageAlt: "",
+  service4Image: "",
+  service4ImageAlt: "",
+  service5Image: "",
+  service5ImageAlt: "",
+  service6Image: "",
+  service6ImageAlt: "",
+  stepsEyebrow: "Process",
   stepsHeading: "How it works",
   /** Three steps from first contact to the finished job. */
   step1Title: "",
@@ -241,6 +270,7 @@ const values = {
   statYearsLabel: "Years in business",
   statClientsLabel: "Clients served",
   statRatingLabel: "Average rating",
+  testimonialsEyebrow: "Reviews",
   testimonialsHeading: "What clients say",
   galleryHeading: "Our work",
   /**
@@ -252,6 +282,7 @@ const values = {
   areaBody: "",
   /** The link from the home page's area section to the service area page. */
   areaLink: "See the areas we cover",
+  faqEyebrow: "Questions",
   faqHeading: "Common questions",
   /**
    * Six to eight questions a customer of this trade asks before booking,
@@ -278,6 +309,8 @@ const values = {
   ctaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
   ctaLabel: "",
+  /** A photo behind the closing band, under the brand colour; decoration, so no alt. */
+  ctaImage: "",
   /** The quote page's side column: what happens after a visitor sends the form. */
   quoteAsideHeading: "What happens next",
   quoteNext1: "Send the form with as much detail as you can.",

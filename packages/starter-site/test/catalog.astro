@@ -1,0 +1,139 @@
+---
+/**
+ * Every section variant on one page, for the variants' axe run and a look by
+ * eye. It lives outside src/ so the seed never ships it: a11y/variants.test.ts
+ * plants it as src/pages/catalog.astro in a build of the fictional fixture,
+ * rewriting its imports to that folder. The labels are for whoever reads the
+ * catalog; every other string comes from the fixture's site-config.
+ */
+import ActionLink from "../src/components/ActionLink/ActionLink.astro"
+import CtaBand from "../src/components/CtaBand/CtaBand.astro"
+import Faq from "../src/components/Faq/Faq.astro"
+import Hero from "../src/components/Hero/Hero.astro"
+import ServiceCards from "../src/components/ServiceCards/ServiceCards.astro"
+import SiteHeader from "../src/components/SiteHeader/SiteHeader.astro"
+import Steps from "../src/components/Steps/Steps.astro"
+import Testimonials from "../src/components/Testimonials/Testimonials.astro"
+import TrustStrip from "../src/components/TrustStrip/TrustStrip.astro"
+import Base from "../src/layouts/Base.astro"
+import { primaryAction } from "../src/routes"
+import { site } from "../src/site-config"
+import { serviceItems } from "../src/structured-data"
+
+const HEROES = [
+  "wash",
+  "split_arch",
+  "split_frame",
+  "dark_center",
+  "text_led",
+] as const
+const SERVICES = [
+  "photo_cards",
+  "numbered_rows",
+  "alternating",
+  "fleet",
+  "practice_list",
+] as const
+const photo = { src: site.heroImage, alt: site.heroImageAlt }
+const heroes = HEROES.flatMap((variant) => [
+  { variant, image: photo },
+  { variant, image: undefined },
+])
+---
+
+<Base title={`Section variants | ${site.businessName}`} noindex>
+  {
+    (["split", "centered", "minimal"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">SiteHeader · {variant}</p>
+        <SiteHeader variant={variant} />
+      </>
+    ))
+  }
+  {
+    heroes.map(({ variant, image }) => (
+      <>
+        <p class="catalog-label">
+          Hero · {variant}
+          {image ? "" : " · no photo"}
+        </p>
+        <Hero
+          variant={variant}
+          eyebrow={site.industry}
+          heading={site.heroHeading}
+          lede={site.tagline}
+          image={image}
+          caption={site.heroCaption}
+          highlights={serviceItems.slice(0, 3)}
+        >
+          {primaryAction && (
+            <ActionLink href={primaryAction.href} label={primaryAction.label} />
+          )}
+        </Hero>
+      </>
+    ))
+  }
+  {
+    (["icons", "phrases"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">TrustStrip · {variant}</p>
+        <TrustStrip variant={variant} />
+      </>
+    ))
+  }
+  {
+    SERVICES.map((variant) => (
+      <>
+        <p class="catalog-label">ServiceCards · {variant}</p>
+        <ServiceCards variant={variant} />
+      </>
+    ))
+  }
+  {
+    (["circles", "dark_band", "timeline"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">Steps · {variant}</p>
+        <Steps variant={variant} />
+      </>
+    ))
+  }
+  {
+    (["featured", "wall"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">Testimonials · {variant}</p>
+        <Testimonials variant={variant} />
+      </>
+    ))
+  }
+  {
+    (["split", "stacked"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">Faq · {variant}</p>
+        <Faq variant={variant} />
+      </>
+    ))
+  }
+  {
+    (["solid", "photo"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">CtaBand · {variant}</p>
+        <CtaBand variant={variant} />
+      </>
+    ))
+  }
+</Base>
+
+<style is:global>
+  .catalog-label {
+    max-width: none;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    background: var(--foreground);
+    color: var(--background);
+    font: 600 0.75rem/1.4 ui-monospace, monospace;
+  }
+
+  main > .site-header {
+    position: relative;
+  }
+</style>
