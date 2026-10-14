@@ -128,17 +128,30 @@ test("the tuple reads the layout and falls back to the legacy template for a bui
   assert.equal(old.hero, "default/modern")
   assert.equal(old.services, "none")
   const planned = tupleOf({
-    site: { template: "classic" },
+    site: {
+      direction: "calm_daylight",
+      font: "outfit_figtree",
+      palette: "paper:a ink:b primary:c",
+    },
+    layout,
+  })
+  assert.equal(
+    tupleKey(planned),
+    "calm_daylight|split_arch|fleet|outfit_figtree|paper:a ink:b primary:c"
+  )
+  // A part the site leaves empty falls back to the Blueprint (BA3's shape).
+  const fromPlan = tupleOf({
+    site: { direction: "calm_daylight" },
     layout,
     blueprint: {
-      direction: "calm_daylight",
+      direction: "bold_editorial",
       fonts: "outfit_figtree",
       palette: { kind: "preset", id: "lagoon" },
     },
   })
-  assert.equal(
-    tupleKey(planned),
-    "calm_daylight|split_arch|fleet|outfit_figtree|lagoon"
+  assert.deepEqual(
+    [fromPlan.direction, fromPlan.pair, fromPlan.palette],
+    ["calm_daylight", "outfit_figtree", "lagoon"]
   )
   assert.deepEqual(sequenceOf(layout), [
     "hero:split_arch",
