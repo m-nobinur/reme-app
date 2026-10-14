@@ -101,9 +101,11 @@ describe("a built site", () => {
   })
 
   test("sets a pair's italic accent as a face of its own", () => {
-    const { dist } = home("fraunces")
+    const { dist, html } = home("fraunces")
     // Fraunces 500 upright and italic, DM Sans 400 and 500.
     expect(woff2(dist)).toHaveLength(4)
+    expect(html).toContain("--accent-style:italic")
+    expect(home("sora").html).not.toContain("--accent-style")
   })
 
   test("gives each face a fallback that holds the layout", () => {

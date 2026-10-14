@@ -20,6 +20,9 @@
  * the four pairs `PALETTE_AA_PAIRS` names in the contracts hold at 4.5:1. The
  * brand test reads that list from the contract; this file cannot import it.
  *
+ * `site.palette` skips the derivation: it carries a preset's six roles, which
+ * `paletteOf` reads and `brandTheme` writes as they are.
+ *
  * A colour that is not a hex string returns nothing and the site keeps the
  * default theme. The file imports nothing, so it builds in the sandbox.
  */
@@ -138,7 +141,8 @@ export function paletteFromBrand(value: string): BrandPalette | undefined {
   return {
     paper: toHex(paper),
     ink: toHex(ink),
-    primary: toHex(readable(brand, paper, AA)),
+    // Darkened for the tint, the darker ground it sits on, so it reads on both.
+    primary: toHex(readable(brand, tint, AA)),
     tint: toHex(tint),
     accent: toHex(brand),
     line: toHex(line),
@@ -160,16 +164,66 @@ export function brandRamp(value: string): BrandRamp | undefined {
   }
 }
 
+const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
+
 /**
- * The ramp as one CSS rule for the page head, or an empty string. `html:root`,
- * not `:root`: the linked stylesheet comes after this rule in the built page
- * and declares the defaults on `:root`, which would win a tie.
+ * Secondary text: the ink eased toward the paper as far as AA on the tint
+ * allows, the darker of the two grounds it sits on. The shared grey of
+ * tokens.css is measured against a white page, not a palette's tint.
  */
-export function brandTheme(value: string): string {
-  const ramp = brandRamp(value)
-  const palette = paletteFromBrand(value)
-  if (!ramp || !palette) return ""
-  // --brand-text is the palette's primary: it reads on the tinted paper, not
-  // only on white. The role properties are the ones theme.css falls back from.
-  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${palette.primary};--background:${palette.paper};--foreground:${palette.ink};--role-tint:${palette.tint};--role-line:${palette.line};--role-accent:${palette.accent}}`
+export function mutedOf(palette: BrandPalette): string {
+  const [ink, paper, tint] = [palette.ink, palette.paper, palette.tint].map(
+    parse
+  ) as [Rgb, Rgb, Rgb]
+  for (let step = 9; step > 0; step--) {
+    const mix = ink.map((v, i) =>
+      Math.round(v + ((paper[i] as number) - v) * step * 0.05)
+    ) as Rgb
+    if (ratio(mix, tint) >= AA + 0.1 && ratio(mix, paper) >= AA + 0.1)
+      return toHex(mix)
+  }
+  return palette.ink
+}
+
+/**
+ * The six roles a `site.palette` value names, as `paper:#f7faf9 ink:#13201a
+ * ...` in any order, or nothing unless all six are there as hex colours. A
+ * preset's roles already hold the AA pairs, so they are taken as given.
+ */
+export function paletteOf(value: string): BrandPalette | undefined {
+  const found = new Map(
+    Array.from(
+      value.matchAll(
+        /\b(paper|ink|primary|tint|accent|line):\s*(#[0-9a-fA-F]{6})\b/g
+      ),
+      (match) => [match[1], (match[2] as string).toLowerCase()] as const
+    )
+  )
+  return ROLES.every((role) => found.has(role))
+    ? (Object.fromEntries(found) as BrandPalette)
+    : undefined
+}
+
+/**
+ * The theme as one CSS rule for the page head, or an empty string: from the
+ * palette's six roles when `palette` has them, else derived from the one
+ * brand colour. `html:root`, not `:root`: the linked stylesheet comes after
+ * this rule in the built page and declares the defaults on `:root`, which
+ * would win a tie.
+ */
+export function brandTheme(value: string, palette = ""): string {
+  const roles = paletteOf(palette)
+  // A preset's paper reads on its primary (an AA pair), so it is the label.
+  const ramp = roles
+    ? { brand: roles.primary, foreground: roles.paper }
+    : brandRamp(value)
+  const p = roles ?? paletteFromBrand(value)
+  if (!ramp || !p) return ""
+  // --brand-text is the primary, darkened only where a preset's primary falls
+  // short on its own tint (sage, sunset, mocha): eyebrows and links sit on the
+  // tinted bands too. The role properties are the ones theme.css falls back from.
+  const text = toHex(
+    readable(parse(p.primary) as Rgb, parse(p.tint) as Rgb, AA)
+  )
+  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${text};--background:${p.paper};--foreground:${p.ink};--muted-foreground:${mutedOf(p)};--role-tint:${p.tint};--role-line:${p.line};--role-accent:${p.accent}}`
 }

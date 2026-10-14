@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { PALETTE_AA_PAIRS } from "@workspace/contracts"
+import { PALETTE_AA_PAIRS, PALETTES } from "@workspace/contracts"
 import { describe, expect, test } from "vitest"
-import { brandRamp, brandTheme, contrast, paletteFromBrand } from "../src/brand"
+import {
+  brandRamp,
+  brandTheme,
+  contrast,
+  mutedOf,
+  paletteFromBrand,
+  paletteOf,
+} from "../src/brand"
 import { ROOT } from "./build"
 
 const AA = 4.5
@@ -39,6 +46,11 @@ describe("a theme derived from the owner's colour", () => {
           contrast(palette[text] as string, palette[on] as string),
           `${text} on ${on}`
         ).toBeGreaterThanOrEqual(AA)
+      // Eyebrows and links in the primary also sit on the tinted bands.
+      expect(
+        contrast(palette.primary as string, palette.tint as string),
+        "primary on tint"
+      ).toBeGreaterThanOrEqual(AA)
     })
   }
 
@@ -62,5 +74,47 @@ describe("a theme derived from the owner's colour", () => {
       "--role-tint:",
     ])
       expect(css).toContain(property)
+  })
+})
+
+describe("a theme from a preset's six roles", () => {
+  const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
+  const roles = (each: (typeof PALETTES)[number]) =>
+    ROLES.map((role) => `${role}:${each[role]}`).join(" ")
+
+  test("every preset reaches the page exactly, over any brand colour", () => {
+    const red = colours.chosen["saturated red"] as string
+    for (const each of PALETTES) {
+      const css = brandTheme(red, roles(each))
+      const text = /--brand-text:(#[0-9a-f]{6})/.exec(css)?.[1] ?? ""
+      // The text shade is the primary itself unless that fails on the tint.
+      expect(contrast(text, each.tint), each.id).toBeGreaterThanOrEqual(AA)
+      if (contrast(each.primary, each.tint) >= AA)
+        expect(text, each.id).toBe(each.primary)
+      expect(css, each.id).toBe(
+        `html:root{--brand:${each.primary};--brand-foreground:${each.paper};--brand-text:${text};--background:${each.paper};--foreground:${each.ink};--muted-foreground:${mutedOf(each)};--role-tint:${each.tint};--role-line:${each.line};--role-accent:${each.accent}}`
+      )
+      // Secondary text eases off the ink and still reads on paper and tint.
+      const muted = mutedOf(each)
+      expect(muted, each.id).not.toBe(each.ink)
+      for (const ground of [each.paper, each.tint])
+        expect(contrast(muted, ground), each.id).toBeGreaterThanOrEqual(AA)
+      // The label colour is the palette's paper, an AA pair on its primary.
+      expect(
+        contrast(each.paper, each.primary),
+        each.id
+      ).toBeGreaterThanOrEqual(AA)
+    }
+  })
+
+  test("short of six hex roles, the brand colour decides", () => {
+    const forest = PALETTES.find((each) => each.id === "forest")
+    if (!forest) throw new Error("no forest palette")
+    const blue = colours.chosen["mid blue"] as string
+    const five = roles(forest).split(" ").slice(0, 5).join(" ")
+    expect(paletteOf(five)).toBeUndefined()
+    expect(paletteOf(roles(forest).replace(forest.ink, "dark"))).toBeUndefined()
+    expect(brandTheme(blue, five)).toBe(brandTheme(blue))
+    expect(brandTheme("", five)).toBe("")
   })
 })
