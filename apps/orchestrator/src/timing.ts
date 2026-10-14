@@ -10,9 +10,12 @@ export type Timings = Record<string, number | string | boolean | null>
 export type ToolTimings = {
   check_ms: number
   build_ms: number
-  screenshots_ms: number
   upload_ms: number
+  /** Every file of the build. */
   upload_files: number
+  /** Of those, the files copied inside R2 from the previous revision. */
+  upload_reused: number
+  /** Bytes read out of the sandbox, which the reused files are not. */
   upload_bytes: number
   source_ms: number
   tool_ms: number

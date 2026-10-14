@@ -381,3 +381,60 @@ export async function probe(env: Env, label: string): Promise<ProbeResult> {
     await sandbox.destroy()
   }
 }
+
+/** The widths the preview's screenshots are taken at; the router serves them by these names. */
+const VIEWPORTS = [390, 768, 1440] as const
+
+/**
+ * The home page at three widths, from the build the sandbox still holds,
+ * stored under the revision's prefix. Taken after the preview is ready: the
+ * owner's preview does not wait for them, and the review card shows them as
+ * they land. Never throws; a screenshot that was not taken is a 404 the card
+ * handles, and the count says how many there were.
+ */
+export async function takeScreenshots(
+  env: Env,
+  ids: Ids,
+  revisionId: string
+): Promise<{ taken: number; ms: number }> {
+  const started = Date.now()
+  const prefix = `sites/${ids.orgId}/${revisionId}/`
+  let taken = 0
+  try {
+    const sandbox = sandboxFor(env, ids.orgId)
+    // `[a]stro` cannot match the shell running this very line, which `-f` reads.
+    const script = [
+      "pkill -f '[a]stro preview' || true",
+      "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
+      "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
+      ...VIEWPORTS.map(
+        (w) =>
+          `playwright screenshot --browser chromium --viewport-size=${w},900 --full-page http://127.0.0.1:4321/ /tmp/home-${w}.png`
+      ),
+      "pkill -f '[a]stro preview' || true",
+    ].join("; ")
+    await sandbox.exec(`cd ${SITE_ROOT} && rm -f /tmp/home-*.png; ${script}`, {
+      timeout: 120_000,
+    })
+    for (const w of VIEWPORTS) {
+      const file = await sandbox
+        .readFile(`/tmp/home-${w}.png`, { encoding: "base64" })
+        .catch(() => null)
+      if (!file) continue
+      await env.SITES.put(
+        `${prefix}screenshots/home-${w}.png`,
+        Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+      )
+      taken++
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "screenshots.failed",
+        assignment_id: ids.assignmentId,
+        error: String(error),
+      })
+    )
+  }
+  return { taken, ms: Date.now() - started }
+}

@@ -58,6 +58,7 @@ import {
   rehydrate,
   SLEEP_AFTER,
   sandboxFor,
+  takeScreenshots,
   takeWarm,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
@@ -460,6 +461,39 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // leaves the site's sandbox warm for the next edit; anything else
         // destroys it.
         const warmAfter = verdict.outcome === "preview_ready"
+        // An owner's build goes in front of the owner as soon as the preview
+        // exists, so the 72 h clock starts then. `requestReview` answers a
+        // retry with the request it already holds. A build superseded or
+        // cancelled since the gates has nothing to review and ends as it is.
+        // The console asks for its own review, so its builds stop at
+        // `preview_ready` as before.
+        if (warmAfter && admitted.origin === "owner") {
+          await step.do("review", () =>
+            run(async (kit) => {
+              try {
+                const { request } = await requestReview(kit, ids)
+                return { approval_id: request.approval_id }
+              } catch (error) {
+                if (
+                  error instanceof TransitionError &&
+                  error.code === "assignment.not_previewable"
+                ) {
+                  return { approval_id: null }
+                }
+                throw error
+              }
+            })
+          )
+        }
+        // The screenshots come after the preview exists, not before it: the
+        // review card above is already in front of the owner, and the
+        // router serves each image once it lands. The sandbox is still the
+        // build's own here, which `keep warm` ends.
+        const shots = warmAfter
+          ? await step.do("screenshots", () =>
+              takeScreenshots(this.env, ids, payload.revision_id)
+            )
+          : null
         const endMs = await step.do(
           warmAfter ? "keep warm" : "destroy sandbox",
           async () => {
@@ -493,9 +527,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           model_turns: t?.model_turns ?? null,
           check_ms: t?.check_ms ?? null,
           build_ms: t?.build_ms ?? null,
-          screenshots_ms: t?.screenshots_ms ?? null,
+          // The preview exists once the gates step returns; everything after
+          // is the owner's wait for screenshots and the warm keep.
+          preview_ready_ms:
+            verdict.outcome === "preview_ready" ? verdict.at - t0 : null,
+          screenshots_ms: shots?.ms ?? null,
+          screenshots_taken: shots?.taken ?? null,
           upload_ms: t?.upload_ms ?? null,
           upload_files: t?.upload_files ?? null,
+          upload_reused: t?.upload_reused ?? null,
           upload_bytes: t?.upload_bytes ?? null,
           source_ms: t?.source_ms ?? null,
           gates_ms: verdict.gate_ms.total,
@@ -507,33 +547,6 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
           end_to_end_ms: done - t0,
         })
-        // An owner's build goes in front of the owner as soon as the preview
-        // exists, so the 72 h clock starts then. `requestReview` answers a
-        // retry with the request it already holds. A build superseded or
-        // cancelled since the gates has nothing to review and ends as it is.
-        // The console asks for its own review, so its builds stop at
-        // `preview_ready` as before.
-        if (
-          verdict.outcome === "preview_ready" &&
-          admitted.origin === "owner"
-        ) {
-          await step.do("review", () =>
-            run(async (kit) => {
-              try {
-                const { request } = await requestReview(kit, ids)
-                return { approval_id: request.approval_id }
-              } catch (error) {
-                if (
-                  error instanceof TransitionError &&
-                  error.code === "assignment.not_previewable"
-                ) {
-                  return { approval_id: null }
-                }
-                throw error
-              }
-            })
-          )
-        }
         return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {
