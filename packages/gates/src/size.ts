@@ -15,6 +15,8 @@ export type SizeBudget = { limit: number }
 /** VS1: at most four font files and 120 KB of them on the home page. */
 export const FONT_FILES = 4
 export const FONT_BYTES = 120 * 1024
+/** EV2: at most two font families (a pair), whatever their weights. */
+export const FONT_FAMILIES = 2
 /** IG3: the hero at 1280 px, any other image and all of them on a phone. */
 export const HERO_BYTES = 180 * 1024
 export const IMAGE_BYTES = 90 * 1024
@@ -122,16 +124,22 @@ export async function checkSize(
   }
   let gzip = 0
   const fonts = new Set<string>()
+  const families = new Set<string>()
   for (const file of text) {
     const bytes = await read(file)
     if (!bytes) continue
     gzip += await gzipped(bytes)
     if (file.endsWith(".css"))
-      for (const [, url] of new TextDecoder()
+      for (const [, face] of new TextDecoder()
         .decode(bytes)
-        .matchAll(/url\(\s*["']?([^"')]+\.woff2)["']?\s*\)/g)) {
-        const font = fileOf(url ?? "", file)
-        if (font) fonts.add(font)
+        .matchAll(/@font-face\s*\{([^}]*)\}/g)) {
+        const [, url] =
+          /url\(\s*["']?([^"')]+\.woff2)["']?\s*\)/.exec(face ?? "") ?? []
+        const font = url ? fileOf(url, file) : null
+        if (!font) continue
+        fonts.add(font)
+        const family = /font-family\s*:\s*["']?([^;"']+)/.exec(face ?? "")?.[1]
+        if (family) families.add(family.trim().toLowerCase())
       }
   }
   // Preloaded faces count even when no stylesheet we read names them.
@@ -151,6 +159,12 @@ export async function checkSize(
   if (fonts.size > FONT_FILES || fontBytes > FONT_BYTES)
     return fail(
       `the home page loads ${fonts.size} font files, ${kib(fontBytes)}; the line is ${FONT_FILES} files and ${kib(FONT_BYTES)}`,
+      [...fonts][0] ?? null
+    )
+
+  if (families.size > FONT_FAMILIES)
+    return fail(
+      `the home page loads ${families.size} font families (${[...families].join(", ")}); the line is ${FONT_FAMILIES}`,
       [...fonts][0] ?? null
     )
 

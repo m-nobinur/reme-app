@@ -8,9 +8,14 @@ const bytes = (kb: number) => new Uint8Array(kb * KB)
 
 /** A built home page: one stylesheet naming `fonts`, a hero picture and `others` pictures. */
 function site(
-  options: { fonts?: number[]; hero?: number; others?: number[] } = {}
+  options: {
+    fonts?: number[]
+    families?: string[]
+    hero?: number
+    others?: number[]
+  } = {}
 ) {
-  const { fonts = [20, 20], hero = 100, others = [40, 40] } = options
+  const { fonts = [20, 20], families, hero = 100, others = [40, 40] } = options
   const files: Record<string, Uint8Array> = {}
   const picture = (name: string, kb: number, priority: boolean) => {
     files[`_astro/${name}-480.avif`] = bytes(1)
@@ -20,7 +25,8 @@ function site(
   }
   const faces = fonts.map((kb, i) => {
     files[`_astro/f${i}.woff2`] = bytes(kb)
-    return `@font-face{src:url(/_astro/f${i}.woff2) format("woff2")}`
+    const family = families ? `font-family:"${families[i]}";` : ""
+    return `@font-face{${family}src:url(/_astro/f${i}.woff2) format("woff2")}`
   })
   files["_astro/site.css"] = enc(`${faces.join("")}body{margin:0}`)
   files["index.html"] = enc(
@@ -60,6 +66,23 @@ describe("the size gate", () => {
       expect(result.passed, fonts.join()).toBe(false)
       expect(result.message).toMatch(/font files/)
     }
+  })
+
+  it("fails a third font family, and passes two families in several weights", async () => {
+    const three = site({
+      fonts: [10, 10, 10],
+      families: ["Outfit", "Figtree", "Lora"],
+    })
+    const bad = await checkSize(three.files, three.read, BUDGET)
+    expect(bad.passed).toBe(false)
+    expect(bad.message).toMatch(/3 font families/)
+    const pair = site({
+      fonts: [10, 10, 10, 10],
+      families: ["Outfit", "Outfit", "Figtree", "Figtree"],
+    })
+    expect(await checkSize(pair.files, pair.read, BUDGET)).toMatchObject({
+      passed: true,
+    })
   })
 
   it("fails a hero over 180 KB at 1280 and any other image over 90 KB at a phone's pick", async () => {
