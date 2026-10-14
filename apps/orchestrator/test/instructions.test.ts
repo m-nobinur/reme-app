@@ -101,6 +101,15 @@ describe("the design directions", () => {
   })
 })
 
+describe("the accessibility repair", () => {
+  it("tells the lead to run the gate's own axe command and rerun it before it reports", () => {
+    const text = instructions(brief([cleaning]), 20)
+    expect(text).toContain("node /opt/astro/axe.mjs dist /tmp/axe.json")
+    expect(text).toMatch(/validation\.failed message names the a11y gate/)
+    expect(text).toMatch(/until it exits 0, and only then call report_complete/)
+  })
+})
+
 describe("the instructions' cache order", () => {
   const at = (text: string, needle: string) => {
     const i = text.indexOf(needle)

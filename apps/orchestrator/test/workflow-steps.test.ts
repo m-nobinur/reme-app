@@ -131,7 +131,6 @@ const script = {
   claims: [] as { claimed: boolean; superseded: string | null }[],
   provisions: [] as boolean[],
   verdicts: [] as string[],
-  a11y: [] as string[],
   checkpoints: [] as boolean[],
   origin: "console" as "owner" | "console",
   reviews: 0,
@@ -147,6 +146,8 @@ const script = {
   /** The owner chose "Skip all": the plan is built without the card's wait. */
   skipReview: false as boolean,
   planned: [] as number[],
+  /** The axe run each `validateRevision` call was handed. */
+  gated: [] as unknown[],
   /** The fixes each look of the design critic finds; none left is none. */
   critic: [] as {
     page: string
@@ -298,14 +299,14 @@ vi.mock("../src/retention.ts", () => ({
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
-  // What the accessibility gate finds after each preview; none left is a pass.
-  checkA11y: async () => {
-    const outcome = script.a11y.shift() ?? "preview_ready"
-    return outcome === "preview_ready"
-      ? { outcome, report_id: "r" }
-      : { outcome, report_id: "r", failed: [] }
-  },
-  validateRevision: async () => {
+  // The accessibility gate is one of the gates `validateRevision` decides.
+  validateRevision: async (
+    _kit: unknown,
+    _sites: unknown,
+    _ids: unknown,
+    input: { axe: unknown }
+  ) => {
+    script.gated.push(input.axe)
     const outcome = script.verdicts.shift() ?? "preview_ready"
     return outcome === "repairing"
       ? { outcome, report_id: "r", failed: [] }
@@ -392,7 +393,6 @@ type Setup = {
   claims?: typeof script.claims
   provisions?: boolean[]
   verdicts?: string[]
-  a11y?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
   looks?: typeof script.looks
@@ -439,27 +439,6 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     [completion, completion],
     { verdicts: ["repairing"] },
     { outcome: "preview_ready" },
-  ],
-  // Axe runs once the preview exists; a failure there goes back for repair
-  // the way a gate failure does.
-  [
-    "accessibility failed after the preview",
-    [completion, completion],
-    { a11y: ["repairing"] },
-    { outcome: "preview_ready" },
-  ],
-  [
-    "accessibility failed after a quick edit",
-    [completion],
-    { origin: "owner", lane: copy, a11y: ["repairing"] },
-    { outcome: "preview_ready" },
-  ],
-  // The site went to a newer edit before axe could run: this build stops.
-  [
-    "superseded before accessibility",
-    [completion],
-    { a11y: ["stopped"] },
-    { outcome: "stopped" },
   ],
   [
     "gate failure ends failed",
@@ -606,7 +585,6 @@ describe("the assignment Workflow's step names", () => {
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
-    script.a11y = [...(setup.a11y ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
     script.origin = setup.origin ?? "console"
     script.lane = setup.lane ?? {}
@@ -758,6 +736,27 @@ describe("the assignment Workflow's step names", () => {
     expect(unplanned.names.some((n) => n.startsWith("critique"))).toBe(false)
   })
 
+  it("hands the gates an axe run from before the preview: the critic's step when planned, its own step otherwise", async () => {
+    script.lane = full
+    script.critic = [[]]
+    script.gated = []
+    const planned = drive([completion])
+    await planned.run()
+    expect(planned.names.some((n) => n.startsWith("a11y"))).toBe(false)
+    expect(script.gated).toEqual([{ exit_code: 0, key: null, ms: 1 }])
+    script.lane = {}
+    script.gated = []
+    const quick = drive([completion])
+    await quick.run()
+    expect(quick.names.indexOf("a11y 1")).toBeLessThan(
+      quick.names.indexOf("gates 1")
+    )
+    expect(quick.names.indexOf("a11y 1")).toBeGreaterThan(
+      quick.names.indexOf("validating 1")
+    )
+    expect(script.gated).toEqual([{ exit_code: 0, key: null, ms: 1 }])
+  })
+
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
     script.verdicts = ["preview_ready"]
     script.origin = "owner"
@@ -779,9 +778,6 @@ describe("the assignment Workflow's step names", () => {
         "owner build",
         "information round trip",
         "gate failure repaired",
-        "accessibility failed after the preview",
-        "accessibility failed after a quick edit",
-        "superseded before accessibility",
         "gate failure ends failed",
         "budget park",
         "interrupted then resumed",

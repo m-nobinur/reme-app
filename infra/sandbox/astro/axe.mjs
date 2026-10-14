@@ -6,7 +6,13 @@
 // already carries for screenshots. Three pages at one width: the home page,
 // then the pages most likely to differ from it. Exit 0 clean, 1 violations,
 // 2 it could not run. The result is `{ pages: [{ path, violations: [{ id,
-// impact, targets }] }] }`, and packages/gates/src/axe.ts reads it back.
+// impact, help, targets, summary, html }] }] }`, and packages/gates/src/axe.ts
+// reads it back. The same report is printed, so the Developer can run this
+// script itself and see what the gate sees.
+//
+// The page is scanned with `prefers-reduced-motion: reduce` and once its
+// animations have finished: a scroll reveal left mid-fade reads as low
+// contrast, which is not a defect of the site.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { createRequire } from "node:module"
@@ -77,11 +83,28 @@ try {
   try {
     const context = await browser.newContext({
       viewport: { width: WIDTH, height: 900 },
+      reducedMotion: "reduce",
     })
     const pages = []
     for (const path of chosen) {
       const page = await context.newPage()
       await page.goto(base + path, { waitUntil: "load" })
+      // Finite clock-driven animations only: a scroll timeline never finishes.
+      await page.evaluate(() =>
+        Promise.race([
+          Promise.allSettled(
+            document
+              .getAnimations()
+              .filter(
+                (a) =>
+                  a.timeline instanceof DocumentTimeline &&
+                  a.effect.getComputedTiming().iterations !== Infinity
+              )
+              .map((a) => a.finished)
+          ),
+          new Promise((done) => setTimeout(done, 2000)),
+        ])
+      )
       const { violations } = await new AxeBuilder({ page })
         .withTags(TAGS)
         .analyze()
@@ -90,12 +113,23 @@ try {
         violations: violations.map((v) => ({
           id: v.id,
           impact: v.impact ?? null,
+          help: v.help,
           targets: v.nodes.map((n) => n.target.join(" ")).slice(0, 5),
+          // The first node's own explanation and markup, cut to a line each.
+          summary: (v.nodes[0]?.failureSummary ?? "")
+            .replace(/\s+/g, " ")
+            .slice(0, 400),
+          html: (v.nodes[0]?.html ?? "").slice(0, 300),
         })),
       })
       await page.close()
     }
     writeFileSync(out, JSON.stringify({ pages }))
+    for (const { path, violations } of pages)
+      for (const v of violations)
+        console.log(
+          `${path} ${v.id} (${v.impact}): ${v.help}\n  ${v.targets.join("\n  ")}\n  ${v.summary}\n  ${v.html}`
+        )
     code = pages.some((p) => p.violations.length > 0) ? 1 : 0
   } finally {
     await browser.close()

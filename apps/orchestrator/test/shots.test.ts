@@ -31,13 +31,24 @@ const load = async () => {
 const browserOf = (heights: Record<number, number>) => {
   const shots: Shot[] = []
   const order: string[] = []
+  /** The motion preference each width's page was opened with. */
+  const motion: (string | undefined)[] = []
   return {
     shots,
+    motion,
     order,
     browser: {
-      newContext: async ({ viewport }: { viewport: { width: number } }) => ({
+      newContext: async ({
+        viewport,
+        reducedMotion,
+      }: {
+        viewport: { width: number }
+        reducedMotion?: string
+      }) => ({
         newPage: async () => ({
-          goto: async () => undefined,
+          goto: async () => {
+            motion.push(reducedMotion)
+          },
           evaluate: async (fn: { name: string }) => {
             if (fn.name === "inPage") {
               order.push("load")
@@ -109,6 +120,59 @@ describe("the capture script", () => {
   })
 })
 
+describe("motion in a capture", () => {
+  it("opens every width with reduced motion, so no reveal is caught mid-fade", async () => {
+    const { shoot } = await load()
+    const { browser, motion } = browserOf({ 390: 900, 768: 900, 1440: 900 })
+    await shoot(browser, "http://x/", "/tmp", CROPS_MAX)
+    expect(motion).toEqual(["reduce", "reduce", "reduce"])
+  })
+
+  it("waits for clock-driven animations, and not for a scroll timeline", async () => {
+    const { inPage } = await load()
+    const finished: string[] = []
+    const animation = (
+      name: string,
+      timeline: unknown,
+      iterations: number
+    ) => ({
+      timeline,
+      effect: { getComputedTiming: () => ({ iterations }) },
+      get finished() {
+        finished.push(name)
+        return Promise.resolve()
+      },
+    })
+    class DocumentTimeline {}
+    const clock = new DocumentTimeline()
+    const g = globalThis as Record<string, unknown>
+    const before = {
+      document: g.document,
+      window: g.window,
+      tl: g.DocumentTimeline,
+    }
+    g.DocumentTimeline = DocumentTimeline
+    g.document = {
+      images: [],
+      documentElement: { scrollHeight: 100 },
+      getAnimations: () => [
+        animation("fade", clock, 1),
+        animation("spin", clock, Number.POSITIVE_INFINITY),
+        animation("reveal", {}, 1),
+      ],
+    }
+    g.window = { innerHeight: 900, scrollTo: () => undefined }
+    try {
+      await inPage()
+    } finally {
+      g.document = before.document
+      g.window = before.window
+      g.DocumentTimeline = before.tl
+    }
+    expect(finished).toEqual(["fade"])
+  })
+})
+
 describe("lazy images in a capture", () => {
   it("loads the page's images before the first shot at every width", async () => {
     const { shoot } = await load()
@@ -134,7 +198,11 @@ describe("lazy images in a capture", () => {
     const images = [image(), image()]
     const g = globalThis as Record<string, unknown>
     const before = { document: g.document, window: g.window }
-    g.document = { images, documentElement: { scrollHeight: 2000 } }
+    g.document = {
+      images,
+      documentElement: { scrollHeight: 2000 },
+      getAnimations: () => [],
+    }
     g.window = {
       innerHeight: 900,
       scrollTo: (_x: number, y: number) => scrolled.push(y),

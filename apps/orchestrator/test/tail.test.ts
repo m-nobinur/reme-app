@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -183,6 +189,23 @@ describe("the axe step", () => {
         /^rm -f \/tmp\/axe.json; node \/opt\/astro\/axe.mjs dist/
       )
     }
+  })
+
+  // A scroll reveal caught mid-fade reads as low contrast. The script is the
+  // sandbox image's, so its source is what can be checked here: it scans with
+  // reduced motion and waits for clock-driven animations first.
+  it("scans with reduced motion and after animations finish", () => {
+    const script = readFileSync(
+      new URL("../../../infra/sandbox/astro/axe.mjs", import.meta.url),
+      "utf8"
+    )
+    expect(script).toMatch(/reducedMotion:\s*"reduce"/)
+    expect(script.indexOf("getAnimations()")).toBeGreaterThan(
+      script.indexOf("page.goto")
+    )
+    expect(script.indexOf("getAnimations()")).toBeLessThan(
+      script.indexOf("new AxeBuilder")
+    )
   })
 
   it("reports a run that left no JSON as failed, even when the shell said 0", async () => {

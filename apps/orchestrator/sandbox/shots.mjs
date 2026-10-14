@@ -16,6 +16,9 @@ export const HEIGHT = 900
 // the fold stays an empty box. Here the capture alone makes every image eager
 // and scrolls the page through once (which also fires scroll-driven reveals),
 // then waits for each image to decode; the site keeps its `loading="lazy"`.
+// The page is also captured with `prefers-reduced-motion: reduce` and once its
+// clock-driven animations have finished (as infra/sandbox/astro/axe.mjs scans
+// it), so the critic never sees a block caught mid-fade.
 export async function inPage() {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   for (const img of document.images) img.loading = "eager"
@@ -30,6 +33,20 @@ export async function inPage() {
     ),
     wait(5000),
   ])
+  // Finite clock-driven animations only: a scroll timeline never finishes.
+  await Promise.race([
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter(
+          (a) =>
+            a.timeline instanceof DocumentTimeline &&
+            a.effect.getComputedTiming().iterations !== Infinity
+        )
+        .map((a) => a.finished)
+    ),
+    wait(2000),
+  ])
   window.scrollTo(0, 0)
 }
 
@@ -39,6 +56,7 @@ export async function shoot(browser, url, dir, cropMax) {
     try {
       const context = await browser.newContext({
         viewport: { width, height: HEIGHT },
+        reducedMotion: "reduce",
       })
       const page = await context.newPage()
       await page.goto(url, { waitUntil: "load" })

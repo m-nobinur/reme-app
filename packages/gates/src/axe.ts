@@ -12,9 +12,19 @@ import type { CompletionReport, GateResult } from "@workspace/contracts"
 export type AxeResult = {
   pages: {
     path: string
-    violations: { id: string; impact: string | null; targets: string[] }[]
+    violations: {
+      id: string
+      impact: string | null
+      help: string
+      targets: string[]
+      summary: string
+      html: string
+    }[]
   }[]
 }
+
+/** The most violations the failure message spells out; the evidence JSON has them all. */
+const DETAILED = 8
 
 /** The JSON is the sandbox's, so its shape is checked rather than trusted. */
 export function parseAxe(raw: unknown): AxeResult | null {
@@ -30,7 +40,10 @@ export function parseAxe(raw: unknown): AxeResult | null {
       violations: violations.map((v) => ({
         id: String(v?.id),
         impact: typeof v?.impact === "string" ? v.impact : null,
+        help: String(v?.help ?? ""),
         targets: (list(v?.targets) ?? []).map(String),
+        summary: String(v?.summary ?? ""),
+        html: String(v?.html ?? ""),
       })),
     })
   }
@@ -66,10 +79,21 @@ export function checkAxe(
       `axe exited ${check.exit_code} without a result, so the site's accessibility is unchecked`,
       null
     )
-  const count = result?.pages.reduce((n, p) => n + p.violations.length, 0)
+  const all = (result?.pages ?? []).flatMap((p) =>
+    p.violations.map((v) => ({ path: p.path, ...v }))
+  )
+  // What the Developer needs to fix it without guessing: rule, impact, page,
+  // selectors, axe's own summary and the markup of the first node.
+  const detail = all
+    .slice(0, DETAILED)
+    .map(
+      (v) =>
+        `- ${v.id} (${v.impact ?? "unrated"}) on ${v.path}: ${v.help}\n  targets: ${v.targets.join(" | ")}\n  ${v.summary}\n  html: ${v.html}`
+    )
+    .join("\n")
   return gate(
     false,
-    `axe found ${count} violation(s); the first is ${rule.id} (${rule.impact ?? "unrated"}) on ${first.path}`,
+    `axe found ${all.length} violation(s); the first is ${rule.id} (${rule.impact ?? "unrated"}) on ${first.path}\n${detail}${all.length > DETAILED ? `\n- and ${all.length - DETAILED} more in the evidence` : ""}`,
     `${first.path} ${rule.targets[0] ?? rule.id}`
   )
 }
