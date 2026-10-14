@@ -44,6 +44,13 @@ import {
  * `AskDesignOutput` on Build my site or Skip all.
  */
 
+/**
+ * The tray's focus ring is the accent, as the site and the buttons around it
+ * draw theirs, not the neutral grey of the shared token. Each control that
+ * can take focus in the tray carries it.
+ */
+const ACCENT_RING = "focus-visible:border-primary focus-visible:ring-primary"
+
 type Question = AskDesignInput["questions"][number]
 type Option = Question["card"]["options"][number]
 type Answer = AskDesignOutput["answers"][string]
@@ -572,7 +579,7 @@ function QuestionTray({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-t-[var(--composer-radius,var(--radius-4xl))] px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          className="flex w-full items-center gap-3 rounded-t-[var(--composer-radius,var(--radius-4xl))] px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
           onClick={() => setCollapsed(false)}
           type="button"
         >
@@ -603,6 +610,7 @@ function QuestionTray({
               aria-controls={`${id}-body`}
               aria-expanded
               aria-label="Collapse questions"
+              className={ACCENT_RING}
               onClick={collapse}
               size="icon-sm"
               type="button"
@@ -646,6 +654,7 @@ function QuestionTray({
                       className={cn(
                         OPTION,
                         OPTION_TILE,
+                        "has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
                         "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
                       )}
                       key={option.id}
@@ -685,7 +694,10 @@ function QuestionTray({
               {other ? (
                 <Input
                   aria-label={other.label}
-                  className="rounded-[var(--composer-radius,var(--radius-4xl))]"
+                  className={cn(
+                    "rounded-[var(--composer-radius,var(--radius-4xl))]",
+                    ACCENT_RING
+                  )}
                   autoComplete="off"
                   maxLength={200}
                   onChange={(event) => write(event.currentTarget.value)}
@@ -705,6 +717,7 @@ function QuestionTray({
           <div className="flex items-center gap-1 border-border border-t px-3 py-2">
             <Button
               aria-label="Previous question"
+              className={ACCENT_RING}
               disabled={index === 0}
               onClick={() => go(index - 1, false)}
               size="icon-sm"
@@ -715,6 +728,7 @@ function QuestionTray({
             </Button>
             <Button
               aria-label="Next question"
+              className={ACCENT_RING}
               disabled={last || !ready}
               onClick={() => go(index + 1, true)}
               size="icon-sm"
@@ -725,6 +739,7 @@ function QuestionTray({
             </Button>
             <span className="flex-1" />
             <Button
+              className={ACCENT_RING}
               onClick={() => finish(true)}
               size="sm"
               type="button"
@@ -732,7 +747,17 @@ function QuestionTray({
             >
               Skip all
             </Button>
-            <Button disabled={!ready} onClick={next} size="sm" type="button">
+            {/* Filled with the accent, so its ring stands off the fill. */}
+            <Button
+              className={cn(
+                ACCENT_RING,
+                "focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              )}
+              disabled={!ready}
+              onClick={next}
+              size="sm"
+              type="button"
+            >
               {last ? "Build my site" : "Next"}
             </Button>
           </div>
