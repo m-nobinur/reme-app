@@ -2,3 +2,4 @@ dist/
 .astro/
 .vite/
 node_modules/
+.astro-cache/

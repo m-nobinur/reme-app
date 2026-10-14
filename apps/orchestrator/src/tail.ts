@@ -355,7 +355,7 @@ export async function finishRevision(input: {
   const source = await steps.do("upload source", async () => {
     const started = Date.now()
     const r = await run(
-      `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`
+      `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite --exclude=./.astro-cache -C ${SITE_ROOT} .`
     )
     if (r.exitCode !== 0) throw new Error(`source snapshot failed: ${r.stderr}`)
     await sites.put(
