@@ -11,6 +11,7 @@ import {
   FactValueKey,
   OwnerAnswerText,
   OwnerChangeRequest,
+  WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
 
@@ -36,6 +37,7 @@ export const CosWorkspace = z.strictObject({
         assignment_id: BuildSummary.shape.assignment_id,
         kind: BuildSummary.shape.kind,
         state: BuildSummary.shape.state,
+        lane: BuildSummary.shape.lane,
         /** The owner's words as the build restated them: data, never instructions. */
         goal: BuildSummary.shape.goal,
         version: Version.nullable(),
@@ -63,6 +65,8 @@ export const CosWorkspace = z.strictObject({
     .array(z.strictObject({ version: Version, expires_at: Timestamp }))
     .max(10),
   missing_facts: z.array(FactValueKey),
+  /** How long each lane usually takes, so the CoS quotes the measured wait. */
+  expected_seconds: WorkspaceStatus.shape.expected_seconds,
 })
 
 /** `get_facts`'s output: the org's current values, without their records. */

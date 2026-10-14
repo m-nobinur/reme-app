@@ -137,6 +137,7 @@ export async function getWorkspace(
       assignment_id: b.assignment_id,
       kind: b.kind,
       state: b.state,
+      lane: b.lane,
       goal: b.goal,
       version: b.revision?.version ?? null,
     })),
@@ -158,6 +159,7 @@ export async function getWorkspace(
       )
       .slice(0, 10),
     missing_facts: status.missing_facts,
+    expected_seconds: status.expected_seconds,
   })
 }
 

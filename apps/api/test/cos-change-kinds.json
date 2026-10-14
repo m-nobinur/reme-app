@@ -1,0 +1,40 @@
+{
+  "_": "The request_change call the CoS is expected to make for an owner message, one per ChangeKind. Hand-recorded shapes, not live captures: re-record from a real turn when the prompt or model changes.",
+  "cases": [
+    {
+      "owner": "Change the headline to Fresh homes, every week",
+      "input": {
+        "text": "Change the headline to Fresh homes, every week",
+        "change_kind": "copy"
+      }
+    },
+    {
+      "owner": "Make the site green and use a rounder font",
+      "input": {
+        "text": "Make the site green and use a rounder font",
+        "change_kind": "style"
+      }
+    },
+    {
+      "owner": "Add a testimonials section under the services",
+      "input": {
+        "text": "Add a testimonials section under the services",
+        "change_kind": "section"
+      }
+    },
+    {
+      "owner": "Swap the hero picture for one of my van",
+      "input": {
+        "text": "Swap the hero picture for one of my van",
+        "change_kind": "photo"
+      }
+    },
+    {
+      "owner": "I want a completely new look, more modern",
+      "input": {
+        "text": "I want a completely new look, more modern",
+        "change_kind": "creative"
+      }
+    }
+  ]
+}
