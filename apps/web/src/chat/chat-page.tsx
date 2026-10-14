@@ -12,6 +12,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import {
@@ -34,6 +35,7 @@ import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { usePlanCard } from "./blueprint-plan"
 import { conversationList, unstored } from "./conversations"
+import { saveDesignAnswer } from "./design"
 import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SiteReadyCard } from "./site-ready"
@@ -187,21 +189,23 @@ export function ChatPage() {
         ) : (
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
-              <Thread
-                after={
-                  <>
-                    {plan.card}
-                    <SiteReadyCard />
-                  </>
-                }
-                briefing={briefing.line}
-                components={{ ToolFallback: Approval }}
-                mode={mode}
-                placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
-                quickActions={OWNER_QUICK_ACTIONS}
-                reveal={onboarding ? OPENING_REVEAL : undefined}
-                stored={id}
-              />
+              <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                <Thread
+                  after={
+                    <>
+                      {plan.card}
+                      <SiteReadyCard />
+                    </>
+                  }
+                  briefing={briefing.line}
+                  components={{ ToolFallback: Approval }}
+                  mode={mode}
+                  placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
+                  quickActions={OWNER_QUICK_ACTIONS}
+                  reveal={onboarding ? OPENING_REVEAL : undefined}
+                  stored={id}
+                />
+              </SaveDesignAnswerProvider>
             </UploadPhotosProvider>
           </CosToolsProvider>
         )}

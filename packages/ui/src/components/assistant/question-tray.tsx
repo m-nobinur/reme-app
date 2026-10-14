@@ -51,43 +51,10 @@ type Answer = AskDesignOutput["answers"][string]
 /** The two section variants a layout option's wireframe is drawn from. */
 type Layout = { hero: string; services: string }
 
-/**
- * What `ask_design` does not carry: the question text, written by the api as
- * the text part before an ordinary card. The tray reads it by question id and
- * falls back to a line per visual.
- */
-const FALLBACK_PROMPT: Record<Question["visual"], string> = {
-  palette: "Which colour palette feels right?",
-  font_pair: "Which lettering do you prefer?",
-  layout: "Which page arrangement do you prefer?",
-  text: "Your answer",
-}
-
-/**
- * The two faces an option sets. A pair id the contract knows gives its real
- * display weight; otherwise the families come from a label like "Outfit · Figtree".
- */
-function pairOf(option: Option): {
-  display: string
-  body: string
-  weight: number
-} {
-  const pair = FONT_PAIRS.find((each) => each.id === option.id)
-  if (pair) {
-    return {
-      display: pair.display.family,
-      body: pair.body.family,
-      weight: pair.display.weights[0] ?? 400,
-    }
-  }
-  const [display, body] = option.label.split(/\s+[·/]\s+/)
-  const family = option.visual?.kind === "font" ? option.visual.family : ""
-  return {
-    display: display || family || option.label,
-    body: body || display || family || option.label,
-    weight: 400,
-  }
-}
+/** The weight a pair's display face is set in: its first, which is the file the preview loads. */
+const displayWeight = (family: string) =>
+  FONT_PAIRS.find((pair) => pair.display.family === family)?.display
+    .weights[0] ?? 400
 
 /**
  * The preview's @font-face rules. Rendered only while a font_pair question is
@@ -301,17 +268,9 @@ function LayoutSketch({ hero, services }: Layout) {
 }
 
 /** What an option shows above its label, from the question's visual and the option's own data. */
-function Picture({
-  question,
-  option,
-  layouts,
-}: {
-  question: Question
-  option: Option
-  layouts: Record<string, Layout> | undefined
-}) {
+function Picture({ option }: { option: Option }) {
   const { visual } = option
-  if (question.visual === "palette" && visual?.kind === "swatches") {
+  if (visual?.kind === "swatches") {
     return (
       // The strip renders the palette's own colours, data from the call.
       <span
@@ -328,13 +287,16 @@ function Picture({
       </span>
     )
   }
-  if (question.visual === "font_pair") {
-    const { display, body, weight } = pairOf(option)
+  if (visual?.kind === "font_pair") {
+    const { display, body } = visual
     return (
       <span aria-hidden className="flex w-full flex-col gap-0.5">
         <span
           className="truncate text-lg leading-tight"
-          style={{ fontFamily: face(display), fontWeight: weight }}
+          style={{
+            fontFamily: face(display),
+            fontWeight: displayWeight(display),
+          }}
         >
           Title · {display}
         </span>
@@ -347,15 +309,8 @@ function Picture({
       </span>
     )
   }
-  if (question.visual === "layout") {
-    return (
-      <LayoutSketch
-        {...(layouts?.[option.id] ?? {
-          hero: visual?.kind === "template" ? visual.id : "split_arch",
-          services: "photo_cards",
-        })}
-      />
-    )
+  if (visual?.kind === "layout") {
+    return <LayoutSketch hero={visual.hero} services={visual.services} />
   }
   return null
 }
@@ -374,10 +329,6 @@ type Start = {
 
 type QuestionTrayProps = {
   input: AskDesignInput
-  /** The question text by question id. Missing ones read a line per visual. */
-  prompts?: Record<string, string>
-  /** The wireframe's hero and services variants by option id, for `layout` questions. */
-  layouts?: Record<string, Layout>
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
   /** Build my site or Skip all. */
@@ -388,8 +339,6 @@ type QuestionTrayProps = {
 
 function QuestionTray({
   input,
-  prompts,
-  layouts,
   onAnswer,
   onFinish,
   start,
@@ -397,9 +346,20 @@ function QuestionTray({
 }: QuestionTrayProps) {
   const { questions } = input
   const id = useId()
-  const [index, setIndex] = useState(start?.index ?? 0)
+  // Options the api opened ticked are answers already given, so a reload
+  // resumes on the first question without one.
+  const ticked: Record<string, Answer> = Object.fromEntries(
+    questions.flatMap((each) => {
+      const [first] = each.card.preselected
+      return first ? [[each.id, { choice: first }]] : []
+    })
+  )
+  const [answers, setAnswers] = useState(start?.answers ?? ticked)
+  const firstOpen = questions.findIndex((each) => !(each.id in answers))
+  const [index, setIndex] = useState(
+    start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
+  )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
-  const [answers, setAnswers] = useState(start?.answers ?? {})
   const rootRef = useRef<HTMLElement>(null)
   const groupRef = useRef<HTMLDivElement>(null)
   const settled = useRef<boolean>(false)
@@ -427,7 +387,7 @@ function QuestionTray({
   const answer = answers[question.id]
   const skippable = question.card.skippable
   const ready = answer !== undefined || skippable
-  const prompt = prompts?.[question.id] ?? FALLBACK_PROMPT[question.visual]
+  const prompt = question.question ?? "Choose one"
   const other = question.card.other
 
   /** Hands the current answer on, and returns the answers with it. */
@@ -573,11 +533,7 @@ function QuestionTray({
                       type="radio"
                       value={option.id}
                     />
-                    <Picture
-                      layouts={layouts}
-                      option={option}
-                      question={question}
-                    />
+                    <Picture option={option} />
                     <span className="flex items-center gap-1.5 font-medium text-sm">
                       {question.visual === "font_pair" ? (
                         <span className="sr-only">{option.label}</span>

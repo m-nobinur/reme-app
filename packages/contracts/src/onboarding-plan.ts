@@ -84,6 +84,11 @@ export const PlanNext = z.discriminatedUnion("kind", [
     preselected: z.array(Text(40)).max(16),
     initial: z.array(Text(40)).max(4),
   }),
+  /**
+   * The design tray: palette, lettering, page arrangement and pages as four
+   * questions, replacing the template, palette, font and pages cards.
+   */
+  z.strictObject({ kind: z.literal("ask_design") }),
   /** A form for one fact, such as a phone number. */
   z.strictObject({
     kind: z.literal("ask_fact"),

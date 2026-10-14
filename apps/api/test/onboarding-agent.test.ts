@@ -244,7 +244,9 @@ describe("the plan's checks", () => {
           initial: [],
         } as Plan["next"],
       })
-    const building = onboarding(without("site.template", "site.palette"))
+    const building = onboarding(without("site.template", "site.palette"), {
+      oldDesign: true,
+    })
     expect(errorsOf(ask("template"), typed("ok", building))).toEqual([])
     expect(
       errorsOf(ask("template", ["moon"]), typed("ok", building))[0]
@@ -260,6 +262,44 @@ describe("the plan's checks", () => {
     ).toContain(
       "palette belongs to a site you build; site.build_mode must be assistant first"
     )
+  })
+
+  it("asks the design tray where the order says, builds it from the industry, and not twice", () => {
+    const design = plan({ next: { kind: "ask_design" } as Plan["next"] })
+    const open = onboarding(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const s = typed("ok", open)
+    expect(errorsOf(design, s)).toEqual([])
+    const checked = checkPlan(design, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    const [said, card] = planParts(checked.checked, s, counter())
+    expect(said).toMatchObject({ type: "text" })
+    expect(card).toMatchObject({ type: "tool-ask_design" })
+    // Held already, the tray is not asked again; nor is it before building.
+    expect(
+      errorsOf(design, typed("ok", onboarding(EVERYTHING))).join()
+    ).toMatch(/settled already/)
+    expect(
+      errorsOf(
+        design,
+        typed("ok", onboarding(without("site.build_mode", "site.template")))
+      ).join()
+    ).toMatch(/belongs to a site you build/)
+    // Its steps are no longer asked with ask_choice once the tray is due.
+    expect(
+      errorsOf(
+        plan({
+          next: {
+            kind: "ask_choice",
+            step: "palette",
+            preselected: [],
+            initial: [],
+          } as Plan["next"],
+        }),
+        s
+      )[0]
+    ).toMatch(/next step is ask_design/)
   })
 
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
