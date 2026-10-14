@@ -14,10 +14,16 @@ export type { Edit } from "./edits.ts"
 export { applyEdits } from "./edits.ts"
 export { FacadeError } from "./errors.ts"
 export * from "./flue.ts"
-export type { ToolPolicy, TurnGate, TurnGateOptions } from "./hooks.ts"
+export type {
+  MutationQueue,
+  ToolPolicy,
+  TurnGate,
+  TurnGateOptions,
+} from "./hooks.ts"
 export {
   bashRefusal,
   boundResult,
+  createMutationQueue,
   createTurnGate,
   guard,
   guardedTools,

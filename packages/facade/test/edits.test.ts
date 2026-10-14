@@ -51,6 +51,41 @@ describe("the batch edit, on Pi's rules", () => {
     )
   })
 
+  it("skips an edit already in place, applies the rest, and still refuses a missing anchor whose newText is not unique", () => {
+    const done = "const a = 10\nconst b = 2\nconst c = 3\n"
+    // Re-sent after an interrupted turn: nothing to do, nothing refused.
+    expect(
+      applyEdits(
+        done,
+        [{ oldText: "const a = 1\n", newText: "const a = 10\n" }],
+        P
+      )
+    ).toBe(done)
+    // Half re-sent: the applied one is skipped, the new one lands.
+    expect(
+      applyEdits(
+        done,
+        [
+          { oldText: "const a = 1\n", newText: "const a = 10\n" },
+          { oldText: "const c = 3", newText: "const c = 30" },
+        ],
+        P
+      )
+    ).toBe("const a = 10\nconst b = 2\nconst c = 30\n")
+    // "const" is everywhere, so its presence proves nothing.
+    expect(
+      refusal(() =>
+        applyEdits(done, [{ oldText: "let z", newText: "const" }], P)
+      )
+    ).toMatch(/^Could not find the exact text/)
+    // An empty newText (a deletion) is never "already there".
+    expect(
+      refusal(() =>
+        applyEdits(done, [{ oldText: "const z = 9\n", newText: "" }], P)
+      )
+    ).toMatch(/^Could not find the exact text/)
+  })
+
   it("asks for more context when an anchor matches more than once", () => {
     expect(
       refusal(() => applyEdits(file, [{ oldText: "const", newText: "let" }], P))

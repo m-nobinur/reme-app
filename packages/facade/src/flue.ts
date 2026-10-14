@@ -18,6 +18,7 @@ export {
   observe,
   type Sandbox,
   type SandboxFactory,
+  type SubagentDefinition,
   SubmissionConflictError,
   type ToolContext,
   type ToolDefinition,
@@ -30,5 +31,6 @@ export {
   usePersistentState,
   useResponseFinish,
   useSandbox,
+  useSubagent,
   useTool,
 } from "@flue/runtime"
