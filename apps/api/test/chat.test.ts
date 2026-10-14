@@ -2189,10 +2189,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           provenance: { source: "owner_stated" },
         })
         // The card still waits, and opens ticked, so the tray resumes after a reload.
-        const waiting = pendingCall(await talker(who).tail(id))
-        expect(waiting.toolCallId).toBe(card.toolCallId)
+        const waitingCall = pendingCall(await talker(who).tail(id))
+        expect(waitingCall.toolCallId).toBe(card.toolCallId)
         expect(
-          AskDesignInput.parse(waiting.input).questions[0]?.card.preselected
+          AskDesignInput.parse(waitingCall.input).questions[0]?.card.preselected
         ).toEqual([option])
         // An answer the question never offered is refused.
         const bad = await talker(who).send({

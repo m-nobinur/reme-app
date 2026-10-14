@@ -104,6 +104,7 @@ function load(id, dir) {
 
 async function main() {
   const opts = parse(process.argv.slice(2))
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: not passed through turbo, a task that saw the key would run the facade live tests
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is required")
   const manifest = JSON.parse(readFileSync(opts.revisions, "utf8"))

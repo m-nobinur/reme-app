@@ -17,8 +17,8 @@ const woff2 = (dist: string) =>
 
 describe("the pairs", () => {
   test("are the contract's pairs, weights and italics included", () => {
-    expect(Object.keys(PAIRS).sort()).toEqual(
-      FONT_PAIRS.map((p) => p.id).sort()
+    expect(Object.keys(PAIRS).sort((a, b) => a.localeCompare(b))).toEqual(
+      FONT_PAIRS.map((p) => p.id).sort((a, b) => a.localeCompare(b))
     )
     for (const { id, display, body } of FONT_PAIRS) {
       expect(PAIRS[id], id).toEqual({ display, body })

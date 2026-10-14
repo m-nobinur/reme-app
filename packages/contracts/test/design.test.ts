@@ -113,12 +113,12 @@ describe("Palette", () => {
       swatches: _s,
       ...roles
     } of PALETTES) {
-      const palette = Palette.parse({ id, label, ...roles }) as Record<
+      const parsed = Palette.parse({ id, label, ...roles }) as Record<
         string,
         string
       >
       for (const { text, on } of PALETTE_AA_PAIRS) {
-        const ratio = contrast(palette[text] as string, palette[on] as string)
+        const ratio = contrast(parsed[text] as string, parsed[on] as string)
         expect(ratio, `${id}: ${text} on ${on}`).toBeGreaterThanOrEqual(4.5)
       }
     }

@@ -21,6 +21,7 @@ import {
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import {
   BlueprintCard,
@@ -46,6 +47,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { GeneratedPhotos } from "@workspace/ui/components/generated-photos"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import {
   Tooltip,
@@ -61,6 +63,7 @@ import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { useState } from "react"
 import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
+import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
 /**
  * The chat surface's catalog entries. They live apart from the rest because
@@ -1845,6 +1848,56 @@ const assistantCatalog = [
       </UploadPhotosProvider>
     ),
   })),
+  // The design tray as a thread docks it, and the providers it reads.
+  ...(
+    ["AskDesign", "SaveDesignAnswerProvider", "TraySlotProvider"] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <SaveDesignAnswerProvider value={async () => undefined}>
+        <FixtureThread
+          height="h-[44rem]"
+          isDisabled={false}
+          messages={[
+            {
+              content: [
+                {
+                  args: ASK_DESIGN_INPUT,
+                  toolCallId: "design_pending",
+                  toolName: "ask_design",
+                  type: "tool-call" as const,
+                },
+              ],
+              role: "assistant",
+              status: WAITING,
+            },
+          ]}
+        />
+      </SaveDesignAnswerProvider>
+    ),
+  })),
+  {
+    name: "GeneratedPhotos",
+    render: () => (
+      <div className="max-w-xl">
+        <GeneratedPhotos
+          actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+          photos={[
+            {
+              alt: "A bright kitchen after a clean",
+              section: "hero",
+              slot_id: "hero",
+            },
+            {
+              alt: "The team at work",
+              section: "about",
+              slot_id: "about",
+            },
+          ]}
+        />
+      </div>
+    ),
+  },
   // At the end of an open thread, then its other states on their own:
   // approving, refused and approved.
   {

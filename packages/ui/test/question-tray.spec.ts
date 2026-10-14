@@ -22,7 +22,7 @@ test("arrow keys pick and Enter moves on", async ({ page }) => {
   await page.keyboard.press("ArrowRight")
   await expect(first.getByRole("radio").nth(1)).toBeChecked()
   await page.keyboard.press("Enter")
-  await expect(first.getByText("2 of 4")).toBeVisible()
+  await expect(first.getByText("2 of 4", { exact: true })).toBeVisible()
   await expect(first.getByRole("radiogroup")).toHaveAccessibleName(
     "Which lettering do you prefer?"
   )

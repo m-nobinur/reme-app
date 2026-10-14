@@ -57,7 +57,7 @@ const TONES = [
   ["playful", "Playful", "A little cheeky"],
 ] as const
 
-const INPUT: AskDesignInput = {
+export const INPUT: AskDesignInput = {
   questions: [
     {
       id: "palette",
