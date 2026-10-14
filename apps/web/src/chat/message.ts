@@ -1,6 +1,8 @@
 import type {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDesignInput,
+  AskDesignOutput,
   AskDetailsInput,
   AskDetailsOutput,
   AskFactInput,
@@ -29,6 +31,7 @@ export type ChatTools = {
   ask_fact: { input: AskFactInput; output: AskFactOutput }
   ask_details: { input: AskDetailsInput; output: AskDetailsOutput }
   ask_choice: { input: AskChoiceInput; output: AskChoiceOutput }
+  ask_design: { input: AskDesignInput; output: AskDesignOutput }
   ask_upload: { input: AskUploadInput; output: AskUploadOutput }
   review_quote_form: {
     input: ReviewQuoteFormInput

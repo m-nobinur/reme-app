@@ -32,6 +32,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
+import { TraySlotProvider } from "@workspace/ui/components/assistant/ask-design"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -321,70 +322,78 @@ const ThreadRoot: FC<{
   after: ReactNode
 }> = ({ isEmpty, autoFocus, stored, after }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
+  // Where the design tray docks, above the composer; the tray's call sits in
+  // the transcript and draws itself here.
+  const [tray, setTray] = useState<HTMLElement | null>(null)
 
   return (
-    <ThreadPrimitive.Root
-      className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
-      style={{
-        ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]: "var(--color-card)",
-        ["--composer-radius" as string]: "var(--radius-4xl)",
-        ["--composer-padding" as string]: "8px",
-      }}
-    >
-      <ThreadPrimitive.Viewport
-        turnAnchor="top"
-        data-slot="aui_thread-viewport"
-        // Clear of the workspace's floating panel, where there is one; the
-        // padding sits inside the scroller, so its bar stays at the edge.
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
+    <TraySlotProvider value={tray}>
+      <ThreadPrimitive.Root
+        className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
+        style={{
+          ["--thread-max-width" as string]: "44rem",
+          ["--composer-bg" as string]: "var(--color-card)",
+          ["--composer-radius" as string]: "var(--radius-4xl)",
+          ["--composer-padding" as string]: "8px",
+        }}
       >
-        <KeepTurnAnchor />
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center"
-          )}
+        <ThreadPrimitive.Viewport
+          turnAnchor="top"
+          data-slot="aui_thread-viewport"
+          // Clear of the workspace's floating panel, where there is one; the
+          // padding sits inside the scroller, so its bar stays at the edge.
+          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
         >
-          {isEmpty ? (
-            <Welcome />
-          ) : (
-            // The welcome carries the page's heading; a conversation has
-            // its title in the top bar, and this names the page for a
-            // screen reader.
-            <h1 className="sr-only">Conversation</h1>
-          )}
-          <HistoryLoading stored={stored} />
-
+          <KeepTurnAnchor />
           <div
-            data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
-          >
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
-          </div>
-          {/* Always in the page, so a card that appears in it is read out. */}
-          <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
-            {after}
-          </div>
-
-          <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
-              !isEmpty &&
-                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+              "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+              isEmpty && "justify-center"
             )}
           >
-            <ThreadScrollToBottom />
-            <Composer autoFocus={autoFocus} />
-            <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-              <ThreadSuggestions />
-            </AuiIf>
-          </ThreadPrimitive.ViewportFooter>
-        </div>
-      </ThreadPrimitive.Viewport>
-    </ThreadPrimitive.Root>
+            {isEmpty ? (
+              <Welcome />
+            ) : (
+              // The welcome carries the page's heading; a conversation has
+              // its title in the top bar, and this names the page for a
+              // screen reader.
+              <h1 className="sr-only">Conversation</h1>
+            )}
+            <HistoryLoading stored={stored} />
+
+            <div
+              data-slot="aui_message-group"
+              className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            >
+              <ThreadPrimitive.Messages>
+                {() => <ThreadMessage />}
+              </ThreadPrimitive.Messages>
+            </div>
+            {/* Always in the page, so a card that appears in it is read out. */}
+            <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
+              {after}
+            </div>
+
+            <ThreadPrimitive.ViewportFooter
+              className={cn(
+                "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
+                !isEmpty &&
+                  "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+              )}
+            >
+              <ThreadScrollToBottom />
+              <div className="flex flex-col">
+                <div className="empty:hidden" ref={setTray} />
+                <Composer autoFocus={autoFocus} />
+              </div>
+              <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
+                <ThreadSuggestions />
+              </AuiIf>
+            </ThreadPrimitive.ViewportFooter>
+          </div>
+        </ThreadPrimitive.Viewport>
+      </ThreadPrimitive.Root>
+    </TraySlotProvider>
   )
 }
 

@@ -683,3 +683,146 @@ it("a details card sends the facts it resolves, and reads back as the owner's wo
   ).toBe(SKIPPED)
   expect(replyText(details("input-available"))).toBeNull()
 })
+
+const tray = (state: string, extra: object = {}) =>
+  ({
+    type: "tool-ask_design",
+    toolCallId: "call_design",
+    state,
+    input: {
+      questions: [
+        {
+          id: "palette",
+          question: "Which colour palette feels right for your business?",
+          visual: "palette",
+          card: {
+            step: "palette",
+            options: [
+              {
+                id: "ocean",
+                label: "Ocean",
+                hint: null,
+                visual: null,
+              },
+              { id: "forest", label: "Forest", hint: null, visual: null },
+            ],
+            multiple: false,
+            preselected: [],
+            other: { label: "Write your own…", placeholder: "A colour code" },
+            skippable: true,
+          },
+        },
+        {
+          id: "pages",
+          question: "Which pages should the site have?",
+          visual: "text",
+          card: {
+            step: "pages",
+            options: [
+              {
+                id: "essentials",
+                label: "The essentials",
+                hint: null,
+                visual: null,
+              },
+              {
+                id: "everything",
+                label: "Everything",
+                hint: null,
+                visual: null,
+              },
+            ],
+            multiple: false,
+            preselected: [],
+            other: null,
+            skippable: true,
+          },
+        },
+      ],
+    },
+    ...extra,
+  }) as unknown as Part
+
+it("a finished design tray sends its answers, and reads back as the owner's words", () => {
+  const output = {
+    answers: {
+      palette: { own: "Navy and gold" },
+      pages: { choice: "everything" },
+    },
+    skip_all: false,
+  }
+  const reply = replyTo([assistant(tray("input-available"))], {
+    toolCallId: "call_design",
+    output,
+  })
+  expect(reply).toEqual({
+    role: "user",
+    parts: [
+      {
+        type: "text",
+        text: "Which colour palette feels right for your business?: Navy and gold\nWhich pages should the site have?: Everything",
+      },
+    ],
+    metadata: { reply: true },
+  })
+  const sent = [
+    assistant(tray("output-available", { output })),
+    { ...(reply as ChatMessage), id: "msg_reply" },
+  ]
+  expect(sendsOn({ messages: sent.slice(0, 1) })).toBe(false)
+  expect(
+    ChatRequest.parse(chatTurn(CONVERSATION, "act", sent)).turn
+  ).toMatchObject({
+    kind: "results",
+    results: [{ kind: "answer", tool_call_id: "call_design", output }],
+  })
+  // Skip all with nothing answered says so; an answer skipped is left out.
+  expect(
+    replyText(
+      tray("output-available", { output: { answers: {}, skip_all: true } })
+    )
+  ).toBe("Skip all: you choose the look.")
+  expect(
+    replyText(
+      tray("output-available", {
+        output: {
+          answers: {
+            palette: { skipped: true },
+            pages: { choice: "essentials" },
+          },
+          skip_all: false,
+        },
+      })
+    )
+  ).toBe("Which pages should the site have?: The essentials")
+  expect(replyText(tray("input-available"))).toBeNull()
+})
+
+it("saves one answer of the tray as a results turn that carries only that answer", async () => {
+  const sent: RequestInit[] = []
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      sent.push(init)
+      return new Response(null, { status: 204 })
+    })
+  )
+  const { saveDesignAnswer } = await import("./design")
+  await saveDesignAnswer({
+    conversationId: CONVERSATION,
+    messageId: "msg_assistant",
+    toolCallId: "call_design",
+    output: { answers: { palette: { choice: "ocean" } }, skip_all: false },
+  })
+  expect(ChatRequest.parse(JSON.parse(sent[0]?.body as string)).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [
+      {
+        kind: "answer",
+        tool_call_id: "call_design",
+        output: { answers: { palette: { choice: "ocean" } }, skip_all: false },
+      },
+    ],
+  })
+})

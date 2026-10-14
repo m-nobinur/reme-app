@@ -1,6 +1,8 @@
 import {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDesignInput,
+  AskDesignOutput,
   AskDetailsInput,
   AskDetailsOutput,
   AskFactInput,
@@ -245,6 +247,35 @@ export type AskChoiceView = AskView<
 export const askChoiceView = (part: ToolPartView): AskChoiceView =>
   askView(part, AskChoiceInput, AskChoiceOutput)
 
+/**
+ * An `ask_design` tray: waiting, answered, overtaken by a typed message or
+ * broken. Its answers are read back in the owner's reply, so an answered
+ * tray shows nothing.
+ */
+export type AskDesignView = AskView<AskDesignInput, AskDesignOutput>
+export function askDesignView(part: ToolPartView): AskDesignView {
+  const args = AskDesignInput.safeParse(part.args)
+  if (part.isError) {
+    const message = errorOf(part.result)
+    return message === TOOL_CALL_CANCELLED
+      ? { state: "cancelled" }
+      : { state: "error", message: message || BROKEN }
+  }
+  if (part.result === undefined) {
+    return args.success
+      ? { state: "pending", input: args.data }
+      : { state: "error", message: BROKEN }
+  }
+  const output = AskDesignOutput.safeParse(part.result)
+  return output.success
+    ? {
+        state: "answered",
+        input: args.success ? args.data : null,
+        output: output.data,
+      }
+    : { state: "error", message: BROKEN }
+}
+
 export type AskUploadView = AskView<
   AskUploadInput,
   Extract<AskUploadOutput, { answer: "uploaded" }>
@@ -323,6 +354,31 @@ export function choiceText(
     (id) => input?.options.find((option) => option.id === id)?.label ?? id
   )
   return [...labels, ...(output.other ? [output.other] : [])].join(", ")
+}
+
+/**
+ * A finished design tray as the owner's words: each answered question as
+ * "Question: answer", their own words as typed. A question skipped or never
+ * opened is left out, and Skip all with nothing answered says so.
+ */
+export function designText(
+  input: AskDesignInput | null,
+  output: AskDesignOutput
+): string {
+  const lines = (input?.questions ?? []).flatMap((each) => {
+    const answer = output.answers[each.id]
+    if (!answer || "skipped" in answer) return []
+    const said =
+      "own" in answer
+        ? answer.own
+        : (each.card.options.find((option) => option.id === answer.choice)
+            ?.label ?? answer.choice)
+    return [`${each.question ?? each.id}: ${said}`]
+  })
+  if (lines.length > 0) return lines.join("\n")
+  return output.skip_all
+    ? "Skip all: you choose the look."
+    : "No preferences on the look."
 }
 
 /** The fields of a message part `isHeld` reads. */
