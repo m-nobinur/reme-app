@@ -51,6 +51,13 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   const running = useRevealWaiting(waiting)
   const tray = useRef<HTMLDivElement>(null)
   useFocusWhenIdle(waiting, running, tray)
+  // The api runs one turn per conversation and answers a second at the same
+  // moment `chat.busy`, so the saves go one after another and Build my site
+  // waits for the last. What was sent stays here: a refused send reopens the
+  // tray, and the owner's answers must still be in it.
+  const saving = useRef<Promise<unknown>>(Promise.resolve())
+  const sent = useRef<AskDesignOutput | null>(null)
+  const sending = useRef<boolean>(false)
 
   if (view.state === "answered" || view.state === "skipped") return null
   if (view.state !== "pending") {
@@ -76,14 +83,32 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
         key={props.toolCallId}
         onAnswer={(id, answer) => {
           if (!save || !conversationId) return
-          void save({
-            conversationId,
-            messageId,
-            toolCallId: props.toolCallId,
-            output: { answers: { [id]: answer }, skip_all: false },
-          }).catch(() => undefined)
+          saving.current = saving.current.then(() =>
+            save({
+              conversationId,
+              messageId,
+              toolCallId: props.toolCallId,
+              output: { answers: { [id]: answer }, skip_all: false },
+            }).catch(() => undefined)
+          )
         }}
-        onFinish={(output) => props.addResult(output)}
+        onFinish={(output) => {
+          if (sending.current) return
+          sending.current = true
+          sent.current = output
+          void saving.current.then(() => {
+            sending.current = false
+            props.addResult(output)
+          })
+        }}
+        start={
+          sent.current
+            ? {
+                answers: sent.current.answers,
+                index: view.input.questions.length - 1,
+              }
+            : undefined
+        }
       />
     </div>,
     slot

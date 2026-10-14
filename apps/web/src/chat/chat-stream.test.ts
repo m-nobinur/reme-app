@@ -8,12 +8,14 @@ import {
 } from "@assistant-ui/react"
 import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
+import { saveDesignAnswer } from "./design"
 import { useConversationRuntime } from "./runtime"
 import { sendsOn } from "./turn"
 
@@ -195,11 +197,15 @@ function Chat() {
     createElement(
       CosToolsProvider,
       { value: tools },
-      createElement(Thread, {
-        autoFocus: false,
-        stored: ID,
-        components: { ToolFallback: Approval },
-      })
+      createElement(
+        SaveDesignAnswerProvider,
+        { value: saveDesignAnswer },
+        createElement(Thread, {
+          autoFocus: false,
+          stored: ID,
+          components: { ToolFallback: Approval },
+        })
+      )
     )
   )
 }
@@ -1310,4 +1316,127 @@ it("a reply that is only a card offers no thumb", async () => {
   expect(changeCard(chat)).not.toBeNull()
   expect(thumb(chat, "Helpful")).toBeUndefined()
   expect(thumb(chat, "Not helpful")).toBeUndefined()
+})
+
+const TRAY = row(COS, "msg_owner", {
+  role: "assistant",
+  parts: [
+    { type: "step-start" },
+    {
+      type: "tool-ask_design",
+      toolCallId: "call_design",
+      state: "input-available",
+      input: {
+        questions: [
+          {
+            id: "pages",
+            question: "Which pages should the site have?",
+            visual: "text",
+            card: {
+              step: "pages",
+              options: [
+                {
+                  id: "essentials",
+                  label: "The essentials",
+                  hint: null,
+                  visual: null,
+                },
+                {
+                  id: "everything",
+                  label: "Everything",
+                  hint: null,
+                  visual: null,
+                },
+              ],
+              multiple: false,
+              preselected: [],
+              other: null,
+              skippable: false,
+            },
+          },
+        ],
+      },
+    },
+  ],
+})
+
+/** The design tray, open, in a conversation that has reached it. */
+async function openTray() {
+  stored = { messages: [OWNER_ROW, TRAY] }
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="question-tray"]')
+    ).not.toBeNull()
+  )
+  return container
+}
+
+/** Picks an option of the open tray. */
+const pick = (container: HTMLElement, label: string) =>
+  act(async () => {
+    const option = [...container.querySelectorAll("label")].find(
+      (each) => each.textContent?.trim() === label
+    )
+    option?.querySelector("input")?.click()
+  })
+
+it("the design tray's last answer is saved before Build my site is sent, and a refused send keeps the pick", async () => {
+  const chat = await openTray()
+  let saved: () => void = () => undefined
+  turns.push(
+    // The save of the last answer, still running when the owner has pressed Build.
+    () =>
+      new Promise<Response>((resolve) => {
+        saved = () => resolve(new Response(null, { status: 200 }))
+      }),
+    refusal(409, "chat.busy", BUSY)
+  )
+  await pick(chat, "Everything")
+  await press(chat, "Build my site")
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  // Both at once is what made the api answer chat.busy.
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(sent).toHaveLength(1)
+  saved()
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  expect(sent[1]).toMatchObject({
+    turn: {
+      results: [
+        {
+          output: { answers: { pages: { choice: "everything" } } },
+        },
+      ],
+    },
+  })
+  // The refusal reopens the tray with the pick still in it, and Build goes again.
+  await vi.waitFor(() =>
+    expect(chat.querySelector('[role="alert"]')?.textContent).toContain(BUSY)
+  )
+  await vi.waitFor(() =>
+    expect(
+      chat.querySelector<HTMLInputElement>('input[value="everything"]')?.checked
+    ).toBe(true)
+  )
+  turns.push(
+    () => Promise.resolve(new Response(null, { status: 200 })),
+    () =>
+      Promise.resolve(
+        new Response(frames({ type: "finish" }), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      )
+  )
+  await press(chat, "Build my site")
+  // The save of the answer, then the whole tray again, as before.
+  await vi.waitFor(() => expect(sent).toHaveLength(4))
+  const turn = (n: number) => (sent[n] as { turn: object }).turn
+  expect(turn(3)).toMatchObject({
+    results: (turn(1) as { results: object }).results,
+    reply: { text: "Which pages should the site have?: Everything" },
+  })
 })
