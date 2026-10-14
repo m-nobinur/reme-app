@@ -265,6 +265,10 @@ ${ask}`,
     `No problem${comma(v.owner)}. Would you like to build the website yourself with the website builder instead?`,
     `That's fine${comma(v.owner)}. Would you rather put the website together yourself in the builder?`,
   ],
+  design: (v) => [
+    `Wonderful, let's design it together. Four quick questions below set the colours, the lettering, the layout and the pages for ${v.business}. Skip any you like and I'll choose for you.`,
+    `Brilliant. Now the look of ${v.business}. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
+  ],
   template: (v) => [
     `Wonderful, let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
     `Brilliant. We'll start with the overall layout. Which one suits ${v.business} best?`,

@@ -681,18 +681,63 @@
                           "id": {
                             "anyOf": [
                               {
-                                "type": "string",
-                                "enum": [
-                                  "clean_sans",
-                                  "classic_serif",
-                                  "soft_rounded"
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "clean_sans",
+                                      "classic_serif",
+                                      "soft_rounded"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "const": "custom"
+                                  }
                                 ]
                               },
                               {
                                 "type": "string",
-                                "const": "custom"
+                                "enum": [
+                                  "outfit_figtree",
+                                  "dmsans_fraunces",
+                                  "instrument_worksans",
+                                  "sora_manrope",
+                                  "syne_jakarta",
+                                  "newsreader_inter",
+                                  "cormorant_manrope",
+                                  "fraunces_figtree"
+                                ]
                               }
                             ]
+                          },
+                          "custom": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["id"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "site.direction"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{2,31}$"
                           },
                           "custom": {
                             "type": "string",
@@ -2526,18 +2571,63 @@
                         "id": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "enum": [
-                                "clean_sans",
-                                "classic_serif",
-                                "soft_rounded"
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "clean_sans",
+                                    "classic_serif",
+                                    "soft_rounded"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "const": "custom"
+                                }
                               ]
                             },
                             {
                               "type": "string",
-                              "const": "custom"
+                              "enum": [
+                                "outfit_figtree",
+                                "dmsans_fraunces",
+                                "instrument_worksans",
+                                "sora_manrope",
+                                "syne_jakarta",
+                                "newsreader_inter",
+                                "cormorant_manrope",
+                                "fraunces_figtree"
+                              ]
                             }
                           ]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.direction"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{2,31}$"
                         },
                         "custom": {
                           "type": "string",
@@ -3313,18 +3403,63 @@
                             "id": {
                               "anyOf": [
                                 {
-                                  "type": "string",
-                                  "enum": [
-                                    "clean_sans",
-                                    "classic_serif",
-                                    "soft_rounded"
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "clean_sans",
+                                        "classic_serif",
+                                        "soft_rounded"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "const": "custom"
+                                    }
                                   ]
                                 },
                                 {
                                   "type": "string",
-                                  "const": "custom"
+                                  "enum": [
+                                    "outfit_figtree",
+                                    "dmsans_fraunces",
+                                    "instrument_worksans",
+                                    "sora_manrope",
+                                    "syne_jakarta",
+                                    "newsreader_inter",
+                                    "cormorant_manrope",
+                                    "fraunces_figtree"
+                                  ]
                                 }
                               ]
+                            },
+                            "custom": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["id"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.direction"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{2,31}$"
                             },
                             "custom": {
                               "type": "string",
@@ -4297,18 +4432,73 @@
                       "id": {
                         "anyOf": [
                           {
-                            "type": "string",
-                            "enum": [
-                              "clean_sans",
-                              "classic_serif",
-                              "soft_rounded"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "clean_sans",
+                                  "classic_serif",
+                                  "soft_rounded"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "const": "custom"
+                              }
                             ]
                           },
                           {
                             "type": "string",
-                            "const": "custom"
+                            "enum": [
+                              "outfit_figtree",
+                              "dmsans_fraunces",
+                              "instrument_worksans",
+                              "sora_manrope",
+                              "syne_jakarta",
+                              "newsreader_inter",
+                              "cormorant_manrope",
+                              "fraunces_figtree"
+                            ]
                           }
                         ]
+                      },
+                      "custom": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["key", "skippable", "prefill"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "site.direction"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{2,31}$"
                       },
                       "custom": {
                         "type": "string",
@@ -5103,18 +5293,63 @@
                           "id": {
                             "anyOf": [
                               {
-                                "type": "string",
-                                "enum": [
-                                  "clean_sans",
-                                  "classic_serif",
-                                  "soft_rounded"
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "clean_sans",
+                                      "classic_serif",
+                                      "soft_rounded"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "const": "custom"
+                                  }
                                 ]
                               },
                               {
                                 "type": "string",
-                                "const": "custom"
+                                "enum": [
+                                  "outfit_figtree",
+                                  "dmsans_fraunces",
+                                  "instrument_worksans",
+                                  "sora_manrope",
+                                  "syne_jakarta",
+                                  "newsreader_inter",
+                                  "cormorant_manrope",
+                                  "fraunces_figtree"
+                                ]
                               }
                             ]
+                          },
+                          "custom": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": ["id"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "site.direction"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{2,31}$"
                           },
                           "custom": {
                             "type": "string",
@@ -8632,18 +8867,63 @@
                                                     "id": {
                                                       "anyOf": [
                                                         {
-                                                          "type": "string",
-                                                          "enum": [
-                                                            "clean_sans",
-                                                            "classic_serif",
-                                                            "soft_rounded"
+                                                          "anyOf": [
+                                                            {
+                                                              "type": "string",
+                                                              "enum": [
+                                                                "clean_sans",
+                                                                "classic_serif",
+                                                                "soft_rounded"
+                                                              ]
+                                                            },
+                                                            {
+                                                              "type": "string",
+                                                              "const": "custom"
+                                                            }
                                                           ]
                                                         },
                                                         {
                                                           "type": "string",
-                                                          "const": "custom"
+                                                          "enum": [
+                                                            "outfit_figtree",
+                                                            "dmsans_fraunces",
+                                                            "instrument_worksans",
+                                                            "sora_manrope",
+                                                            "syne_jakarta",
+                                                            "newsreader_inter",
+                                                            "cormorant_manrope",
+                                                            "fraunces_figtree"
+                                                          ]
                                                         }
                                                       ]
+                                                    },
+                                                    "custom": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 200,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": ["id"],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": ["key", "value"],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "site.direction"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string",
+                                                      "pattern": "^[a-z][a-z0-9_]{2,31}$"
                                                     },
                                                     "custom": {
                                                       "type": "string",
@@ -9456,18 +9736,63 @@
                                                       "id": {
                                                         "anyOf": [
                                                           {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "clean_sans",
-                                                              "classic_serif",
-                                                              "soft_rounded"
+                                                            "anyOf": [
+                                                              {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "clean_sans",
+                                                                  "classic_serif",
+                                                                  "soft_rounded"
+                                                                ]
+                                                              },
+                                                              {
+                                                                "type": "string",
+                                                                "const": "custom"
+                                                              }
                                                             ]
                                                           },
                                                           {
                                                             "type": "string",
-                                                            "const": "custom"
+                                                            "enum": [
+                                                              "outfit_figtree",
+                                                              "dmsans_fraunces",
+                                                              "instrument_worksans",
+                                                              "sora_manrope",
+                                                              "syne_jakarta",
+                                                              "newsreader_inter",
+                                                              "cormorant_manrope",
+                                                              "fraunces_figtree"
+                                                            ]
                                                           }
                                                         ]
+                                                      },
+                                                      "custom": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": ["id"],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": ["key", "value"],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.direction"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string",
+                                                        "pattern": "^[a-z][a-z0-9_]{2,31}$"
                                                       },
                                                       "custom": {
                                                         "type": "string",
@@ -11251,18 +11576,63 @@
                         "id": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "enum": [
-                                "clean_sans",
-                                "classic_serif",
-                                "soft_rounded"
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "clean_sans",
+                                    "classic_serif",
+                                    "soft_rounded"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "const": "custom"
+                                }
                               ]
                             },
                             {
                               "type": "string",
-                              "const": "custom"
+                              "enum": [
+                                "outfit_figtree",
+                                "dmsans_fraunces",
+                                "instrument_worksans",
+                                "sora_manrope",
+                                "syne_jakarta",
+                                "newsreader_inter",
+                                "cormorant_manrope",
+                                "fraunces_figtree"
+                              ]
                             }
                           ]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.direction"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{2,31}$"
                         },
                         "custom": {
                           "type": "string",
@@ -11869,6 +12239,7 @@
                         "site.template",
                         "site.palette",
                         "site.font",
+                        "site.direction",
                         "site.pages",
                         "media.uploads",
                         "quote.form"
@@ -12490,18 +12861,63 @@
                                 "id": {
                                   "anyOf": [
                                     {
-                                      "type": "string",
-                                      "enum": [
-                                        "clean_sans",
-                                        "classic_serif",
-                                        "soft_rounded"
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "enum": [
+                                            "clean_sans",
+                                            "classic_serif",
+                                            "soft_rounded"
+                                          ]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "const": "custom"
+                                        }
                                       ]
                                     },
                                     {
                                       "type": "string",
-                                      "const": "custom"
+                                      "enum": [
+                                        "outfit_figtree",
+                                        "dmsans_fraunces",
+                                        "instrument_worksans",
+                                        "sora_manrope",
+                                        "syne_jakarta",
+                                        "newsreader_inter",
+                                        "cormorant_manrope",
+                                        "fraunces_figtree"
+                                      ]
                                     }
                                   ]
+                                },
+                                "custom": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": ["id"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["key", "value"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "site.direction"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{2,31}$"
                                 },
                                 "custom": {
                                   "type": "string",
@@ -13848,6 +14264,7 @@
                 "site.template",
                 "site.palette",
                 "site.font",
+                "site.direction",
                 "site.pages",
                 "media.uploads",
                 "quote.form"
@@ -14203,6 +14620,7 @@
                     "site.template",
                     "site.palette",
                     "site.font",
+                    "site.direction",
                     "site.pages",
                     "media.uploads",
                     "quote.form"
@@ -15496,14 +15914,63 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["clean_sans", "classic_serif", "soft_rounded"]
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "clean_sans",
+                              "classic_serif",
+                              "soft_rounded"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "const": "custom"
+                          }
+                        ]
                       },
                       {
                         "type": "string",
-                        "const": "custom"
+                        "enum": [
+                          "outfit_figtree",
+                          "dmsans_fraunces",
+                          "instrument_worksans",
+                          "sora_manrope",
+                          "syne_jakarta",
+                          "newsreader_inter",
+                          "cormorant_manrope",
+                          "fraunces_figtree"
+                        ]
                       }
                     ]
+                  },
+                  "custom": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "site.direction"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{2,31}$"
                   },
                   "custom": {
                     "type": "string",
@@ -17390,7 +17857,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 23,
+            "maxItems": 24,
             "type": "array",
             "items": {
               "oneOf": [
@@ -17932,18 +18399,63 @@
                         "id": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "enum": [
-                                "clean_sans",
-                                "classic_serif",
-                                "soft_rounded"
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "clean_sans",
+                                    "classic_serif",
+                                    "soft_rounded"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "const": "custom"
+                                }
                               ]
                             },
                             {
                               "type": "string",
-                              "const": "custom"
+                              "enum": [
+                                "outfit_figtree",
+                                "dmsans_fraunces",
+                                "instrument_worksans",
+                                "sora_manrope",
+                                "syne_jakarta",
+                                "newsreader_inter",
+                                "cormorant_manrope",
+                                "fraunces_figtree"
+                              ]
                             }
                           ]
+                        },
+                        "custom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": ["id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["key", "value"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.direction"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{2,31}$"
                         },
                         "custom": {
                           "type": "string",
@@ -19357,6 +19869,7 @@
                 "site.template",
                 "site.palette",
                 "site.font",
+                "site.direction",
                 "site.pages",
                 "media.uploads",
                 "quote.form"
@@ -19565,6 +20078,7 @@
                               "site.template",
                               "site.palette",
                               "site.font",
+                              "site.direction",
                               "site.pages",
                               "media.uploads",
                               "quote.form"

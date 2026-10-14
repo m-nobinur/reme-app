@@ -1,4 +1,5 @@
 import {
+  AskDesignInput,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -296,6 +297,15 @@ const answerFor = (card: ToolPart): unknown => {
   if (card.type === "tool-review_quote_form") {
     return { answer: "confirmed", fields: DEFAULT_QUOTE_FIELDS }
   }
+  if (card.type === "tool-ask_design") {
+    const { questions } = AskDesignInput.parse(card.input)
+    return {
+      answers: Object.fromEntries(
+        questions.map((q) => [q.id, { choice: q.card.options[0]?.id }])
+      ),
+      skip_all: false,
+    }
+  }
   if (card.type === "tool-ask_choice") {
     return { answer: "chosen", ids: CHOSEN[step], other: null }
   }
@@ -464,7 +474,46 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       return id
     }
-    return { send, rows, tail, history, turn, onboarding, say, atIndustry }
+    /**
+     * An org that was on the four design cards when the tray shipped: its
+     * conversation already asked one, so it finishes on them.
+     */
+    const onOldCards = async (conversationId: string) => {
+      const last = (await rows(conversationId)).at(-1)
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.insert(conversationMessages).values({
+          conversationId,
+          orgId: who.orgId,
+          format: "ai-sdk/v6",
+          id: crypto.randomUUID(),
+          parentId: last?.id ?? null,
+          content: {
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "tool-ask_choice",
+                toolCallId: "earlier_template",
+                state: "output-available",
+                input: { step: "template" },
+                output: { answer: "chosen", ids: ["classic"], other: null },
+              },
+            ],
+          },
+        })
+      )
+    }
+    return {
+      send,
+      rows,
+      tail,
+      history,
+      turn,
+      onboarding,
+      say,
+      atIndustry,
+      onOldCards,
+    }
   }
 
   /** The call a message waits on, if any. */
@@ -487,7 +536,18 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
   /** Wording varies by org, so a run's bytes are compared with the words taken out. */
   const wordless = (text: string) =>
-    text.replace(/"delta":"(?:[^"\\]|\\.)*"/g, '"delta":""')
+    text
+      .replace(/"delta":"(?:[^"\\]|\\.)*"/g, '"delta":""')
+      // The tray's options are seeded by the org, and its answer picks one.
+      .replace(/^data: (\{.*\})$/gm, (_frame, json: string) => {
+        const chunk = JSON.parse(json) as {
+          input?: { questions?: unknown }
+          output?: { answers?: unknown }
+        }
+        if (chunk.input?.questions) chunk.input = {}
+        if (chunk.output?.answers) chunk.output = {}
+        return `data: ${JSON.stringify(chunk)}`
+      })
 
   /**
    * The whole script through its cards, with no model: what the business
@@ -554,7 +614,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               content: {
                 ...content,
                 parts: content.parts.map((p) =>
-                  p.type === "text" ? { ...p, text: "" } : p
+                  p.type === "text"
+                    ? { ...p, text: "" }
+                    : p.type === "tool-ask_design"
+                      ? { ...p, input: {}, output: {} }
+                      : p
                 ),
               },
             })
@@ -611,10 +675,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         "quote.form",
         "service_area.text",
         "site.build_mode",
+        "site.direction",
         "site.font",
         "site.pages",
         "site.palette",
-        "site.template",
       ]
         .sort()
         .map((key) => [key, "owner_stated"])
@@ -656,9 +720,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
   it("with the owner's replies, gives every step and every reply a row of its own", async () => {
     const legacy = await onboard(uuids())
     const replied = await onboard(uuids(), true)
-    expect(replied.facts.map((f) => [f.key, f.value]).sort()).toEqual(
-      legacy.facts.map((f) => [f.key, f.value]).sort()
-    )
+    // The tray's options are seeded by each run's own org, so its picks differ.
+    const sameFacts = (list: typeof legacy.facts) =>
+      list
+        .map((f) => [f.key, f.key.startsWith("site.") ? null : f.value])
+        .sort()
+    expect(sameFacts(replied.facts)).toEqual(sameFacts(legacy.facts))
     expect(replied.stub.calls).toHaveLength(1)
     // The opening row, then a reply and a step for every answer.
     const { messages } = replied
@@ -1919,6 +1986,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       const opened = talker(who)
       const id = await opened.onboarding()
+      await opened.onOldCards(id)
       // The script's card for the layout, from a typed industry.
       const asked = await opened.turn(id, {
         turn: { kind: "message", message_id: "u_side_0", text: "cleaning" },
@@ -1974,6 +2042,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
       })
       const id = await talker(who).onboarding()
+      await talker(who).onOldCards(id)
       const asked = await talker(who).say(id, "u_jev_0", "ok")
       const card = pendingCall(asked.after)
       expect(card.input).toMatchObject({ step: "template" })
@@ -2079,6 +2148,125 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
     }
 
+    describe("the design tray", () => {
+      /** An org on the tray, asked after its industry and the website question. */
+      const atTray = async (name: string) => {
+        const who = await owner(kit, url as string, name)
+        await who.call(stubOrchestrator(), "/facts", {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+        })
+        const id = await talker(who).onboarding()
+        const asked = await talker(who).say(id, `u_${name}_0`, "ok")
+        const card = pendingCall(asked.after)
+        expect(card.type).toBe("tool-ask_design")
+        return {
+          who,
+          id,
+          card,
+          at: asked.after,
+          tray: AskDesignInput.parse(card.input),
+        }
+      }
+
+      it("states an answer as the owner leaves its question, and stays open for the rest", async () => {
+        const { who, id, card, at, tray } = await atTray("chat-tray-partial")
+        const option = tray.questions[0]?.card.options[0]?.id as string
+        const sent = await talker(who).send({
+          conversation_id: id,
+          mode: "act",
+          ...answer(at, {
+            answers: { palette: { choice: option } },
+            skip_all: false,
+          }),
+        })
+        expect(sent.response.status, sent.text).toBe(204)
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.palette")
+        ).toMatchObject({
+          value: { id: option },
+          provenance: { source: "owner_stated" },
+        })
+        // The card still waits, and opens ticked, so the tray resumes after a reload.
+        const waiting = pendingCall(await talker(who).tail(id))
+        expect(waiting.toolCallId).toBe(card.toolCallId)
+        expect(
+          AskDesignInput.parse(waiting.input).questions[0]?.card.preselected
+        ).toEqual([option])
+        // An answer the question never offered is refused.
+        const bad = await talker(who).send({
+          conversation_id: id,
+          mode: "act",
+          ...answer(at, {
+            answers: { palette: { choice: "not_a_palette" } },
+            skip_all: false,
+          }),
+        })
+        expect(bad.response.status).toBe(400)
+      }, 60_000)
+
+      it("answers a reply that is one option's label by code, and shows the tray again ticked", async () => {
+        const { who, id, tray } = await atTray("chat-tray-typed")
+        const pair = tray.questions[1]?.card.options[0]
+        const unused = planner([plan({ say: "never sent" })])
+        const typed = await talker(who, undefined, {
+          planner: unused.model,
+        }).say(id, "u_tray_typed", pair?.label as string)
+        expect(unused.calls).toHaveLength(0)
+        expect(
+          (await factsOf(who)).find((f) => f.key === "site.font")?.value
+        ).toEqual({ id: pair?.id })
+        const again = pendingCall(typed.after)
+        expect(again.type).toBe("tool-ask_design")
+        expect(
+          AskDesignInput.parse(again.input).questions[1]?.card.preselected
+        ).toEqual([pair?.id])
+      }, 60_000)
+
+      it("finishes on Build my site, and Skip all leaves the look to the builder", async () => {
+        const done = await atTray("chat-tray-done")
+        const picks = Object.fromEntries(
+          done.tray.questions.map((q) => [
+            q.id,
+            { choice: q.card.options[0]?.id },
+          ])
+        )
+        const built = await talker(done.who).turn(
+          done.id,
+          answer(done.at, { answers: picks, skip_all: false })
+        )
+        expect(built.after.parts.slice(-3)).toMatchObject([
+          { type: "tool-ask_design", state: "output-available" },
+          { type: "step-start" },
+          { type: "text", state: "done" },
+        ])
+        const keys = (await factsOf(done.who)).map((f) => f.key)
+        for (const key of [
+          "site.palette",
+          "site.font",
+          "site.direction",
+          "site.pages",
+        ]) {
+          expect(keys).toContain(key)
+        }
+        const skip = await atTray("chat-tray-skip")
+        const skipped = await talker(skip.who).turn(
+          skip.id,
+          answer(skip.at, { answers: {}, skip_all: true })
+        )
+        expect(skipped.after.parts.at(-3)).toMatchObject({
+          type: "tool-ask_design",
+          state: "output-available",
+        })
+        const held = await factsOf(skip.who)
+        expect(held.find((f) => f.key === "site.direction")?.value).toEqual({
+          id: "builder",
+        })
+        expect(held.find((f) => f.key === "site.palette")).toBeUndefined()
+      }, 60_000)
+    })
+
     describe("racing Jev with the planner", () => {
       /** An org at the layout card, with a typed reply's turn ready to send. */
       const atTemplate = async (name: string) => {
@@ -2089,6 +2277,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
         })
         const id = await talker(who).onboarding()
+        await talker(who).onOldCards(id)
         const asked = await talker(who).say(id, `u_${name}_0`, "ok")
         expect(pendingCall(asked.after).input).toMatchObject({
           step: "template",

@@ -82,6 +82,7 @@ const facts = {
   "site.template": { id: "classic", custom: "A bit more like a magazine" },
   "site.palette": { id: "ocean" },
   "site.font": { id: "custom", custom: "Something like a newspaper headline" },
+  "site.direction": { id: "calm_daylight" },
   "site.pages": { ids: ["home", "services", "quote"] },
   "quote.form": {
     fields: [
@@ -233,6 +234,20 @@ describe("FactValue", () => {
         value: { id: "custom", brand: brand?.slice(1) },
       })
     ).toEqual(REFUSED)
+  })
+
+  it("takes a font pair id and a design direction, and refuses a made-up font", () => {
+    const check = (key: string, value: unknown) =>
+      verdict("FactValue", FactValue, { key, value })
+    expect(check("site.font", { id: "sora_manrope" })).toEqual(ACCEPTED)
+    expect(check("site.font", { id: "clean_sans" })).toEqual(ACCEPTED)
+    expect(check("site.font", { id: "comic_sans" })).toEqual(REFUSED)
+    expect(check("site.direction", { id: "calm_daylight" })).toEqual(ACCEPTED)
+    expect(
+      check("site.direction", { id: "custom", custom: "Navy and gold" })
+    ).toEqual(ACCEPTED)
+    expect(check("site.direction", { id: "builder" })).toEqual(ACCEPTED)
+    expect(check("site.direction", { id: "Calm Daylight" })).toEqual(REFUSED)
   })
 
   it("refuses hours that close before or as they open, or past midnight", () => {
@@ -391,6 +406,7 @@ describe("the bridge's building blocks", () => {
       "site.template",
       "site.palette",
       "site.font",
+      "site.direction",
       "site.pages",
       "media.uploads",
       "quote.form",

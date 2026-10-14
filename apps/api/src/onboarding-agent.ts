@@ -46,6 +46,8 @@ import {
   choiceMultiple,
   contactFields,
   currentStep,
+  designCard,
+  designDone,
   detailsCard,
   factCard,
   factValue,
@@ -53,6 +55,7 @@ import {
   mode,
   ONBOARDING_GOAL,
   type Onboarding,
+  oldDesign,
   stepOf,
   text,
   uploadCard,
@@ -160,7 +163,7 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 1. The business: what it does and its main services, the area it covers and the customers it serves, asked together in one natural question for whatever is still missing. Read the industry from what they say the business does; its card comes only when their words do not tell you. Then the phone number and email customers should use, on the ask_details contact card. Never ask for a slogan or how a job runs: the builder drafts those. Ask about the area as a local customer thinks of it, in your own words each time: the town or city they are based in and the nearby places they cover or how far they travel, with a short example answer such as "Leeds and anywhere within about 20 miles"; you may say it helps nearby customers find them.
 2. You: your name, pronouns and tone on the ask_details assistant card, then what to call the owner.
 3. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). If they skip, record site.build_mode "manual" and ask ask_choice manual_builder: would they rather build it themselves in the builder? Be honest that the builder is not in the app yet: it will live on the Website page, and you can build the site for them any time they ask. After that answer, close warmly with answer_only; onboarding is over.
-4. If you build it: the layout (template), the colours (palette), the lettering (font) and the pages.
+4. If you build it: the design, in one tray of four questions (ask_design): the colours, the lettering, the page arrangement and the pages. The owner answers it on the tray, and may skip any question or all of them.
 5. The quote form: ask, in your own words and without examples, what they need to know before they can quote a job. From their answer, propose the form's questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: the form asks those itself. 2 to 8 questions, keys in snake_case, required only where they cannot quote without it, select only with 2 to 12 options. If they ask for changes, propose again with them. If they want no custom questions, don't push: the site uses a default form.
 6. Photos (ask_upload): ask for photos that suit this trade, and say a logo is welcome too. They may skip. There is no image library: never promise stock or hand-picked images. If they have none, the site looks clean without them and they can add some later.
 7. Start the build (start_build). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
@@ -197,6 +200,7 @@ Your next move (next.kind):
 - ask_fact: a small form for one fact. Always use it to ask what to call the owner (owner.preferred_name; it opens with their sign-in name).
 - ask_details: one card for a few facts. Step contact asks the phone number and the email (it opens with their sign-in email); step assistant asks your name, pronouns and tone.
 - ask_choice: a card with a fixed list, for industry, build_for_me, manual_builder, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
+- ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the rest of the checklist waits for it.
 - ask_upload, review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
 - pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it or have no photos, "unanswered" if they wrote about something else (use answer_only, and the card is shown again). null when no card was waiting.
@@ -351,6 +355,14 @@ export const DESIGN: readonly FactValueKey[] = [
   "site.pages",
 ]
 
+/** The facts the design tray's four questions state. */
+const TRAY: readonly FactValueKey[] = [
+  "site.palette",
+  "site.font",
+  "site.direction",
+  "site.pages",
+]
+
 /** Each choice step's fact; `manual_builder` has none. */
 const STEP_FACT: Record<ChoiceStep, FactValueKey | null> = {
   industry: "business.industry",
@@ -375,6 +387,7 @@ function cardFacts(part: ToolPart): readonly string[] {
     const key = STEP_FACT[input.step as ChoiceStep]
     return key ? [key] : []
   }
+  if (part.type === "tool-ask_design") return TRAY
   return []
 }
 
@@ -410,7 +423,8 @@ const quoteDone = (o: Onboarding) =>
 export function buildMissing(o: Onboarding): string[] {
   const missing: string[] = REQUIRED.filter((key) => !has(o, key))
   if (mode(o) !== "assistant") missing.push("site.build_mode is not assistant")
-  missing.push(...DESIGN.filter((key) => !has(o, key)))
+  if (oldDesign(o)) missing.push(...DESIGN.filter((key) => !has(o, key)))
+  else if (!designDone(o)) missing.push("the design tray (ask_design)")
   if (!o.closed.includes("upload")) missing.push("photos not asked yet")
   if (!quoteDone(o)) missing.push("quote.form")
   if (o.offered) missing.push("the build has already started")
@@ -552,7 +566,9 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
         : {}),
       ...(building
         ? {
-            ...Object.fromEntries(DESIGN.map((k) => [k, status(k)])),
+            ...(oldDesign(o)
+              ? Object.fromEntries(DESIGN.map((k) => [k, status(k)]))
+              : { design: designDone(o) ? "done" : "missing: ask_design" }),
             photos: o.closed.includes("upload") ? "done" : "missing",
             "quote.form": has(o, "quote.form")
               ? "have"
@@ -1098,6 +1114,14 @@ export function checkPlan(
         )
       }
       break
+    case "ask_design":
+      if (!building) errors.push("the design belongs to a site you build")
+      else if (designDone(after) || oldDesign(after)) {
+        errors.push(
+          "the design is settled already, or finishes on its own cards; don't ask ask_design"
+        )
+      }
+      break
     case "ask_upload":
       // The logo the photo question must welcome is a `sayProblems` check.
       if (!building) errors.push("photos belong to a site you build")
@@ -1149,7 +1173,9 @@ type Move =
   | { kind: "ask_fact"; key: string }
   | { kind: "ask_details"; step: DetailsStep }
   | { kind: "ask_choice"; step: ChoiceStep }
-  | { kind: "ask_upload" | "review_quote_form" | "start_build" }
+  | {
+      kind: "ask_design" | "ask_upload" | "review_quote_form" | "start_build"
+    }
 
 const OPEN_FACTS = [
   "business.offerings",
@@ -1185,6 +1211,7 @@ export function expectedNext(after: Onboarding): Move[] | null {
       { kind: "review_quote_form" },
     ]
   }
+  if (step === "design") return [{ kind: "ask_design" }]
   if (step === "upload") return [{ kind: "ask_upload" }]
   if (step === "build") return [{ kind: "start_build" }]
   return [{ kind: "ask_choice", step: step as ChoiceStep }]
@@ -1584,7 +1611,12 @@ export function planParts(
       return s.input.kind === "message" &&
         s.pending &&
         plan.pending_card === "unanswered"
-        ? [said, call(s.pending.type, s.pending.input, newId)]
+        ? [
+            said,
+            s.pending.type === "tool-ask_design"
+              ? designCard(after, newId)
+              : call(s.pending.type, s.pending.input, newId),
+          ]
         : [said]
     case "ask_fact":
       return [said, factCard(after, next.key, newId)]
@@ -1600,6 +1632,8 @@ export function planParts(
           ...(next.initial.length > 0 ? { initial: next.initial } : {}),
         }),
       ]
+    case "ask_design":
+      return [said, designCard(after, newId)]
     case "ask_upload":
       return [said, uploadCard(newId)]
     case "review_quote_form":
