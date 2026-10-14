@@ -7,7 +7,7 @@ import {
   InformationRequest,
   RuntimeSpec,
 } from "@workspace/contracts"
-import { type Tenancy, tenancy } from "@workspace/db"
+import { assignments, eq, type Tenancy, tenancy } from "@workspace/db"
 import {
   type AgentProps,
   type BudgetGuard,
@@ -601,8 +601,12 @@ export const askChief = (current: Session) =>
  * steps (the screenshots follow the preview, in the Workflow), writes the revision row, logs the
  * `CompletionReport` and wakes the Workflow. A report with nothing checked
  * cannot exist, because this is the only way to make one.
+ *
+ * Only while the assignment is `implementing`: a lead resumed after an
+ * interruption can call it again for a report the Workflow already took,
+ * and that run would rebuild the disk under the preview's own steps.
  */
-const reportComplete = (current: Session) =>
+export const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
@@ -621,6 +625,18 @@ const reportComplete = (current: Session) =>
       const { spec } = current.runtime
       const orgId = spec.org_id
       const assignmentId = current.brief.snapshot.assignment_id
+      const [row] = await current.kit.withOrg({ orgId }, (db) =>
+        db
+          .select({ state: assignments.state })
+          .from(assignments)
+          .where(eq(assignments.id, assignmentId))
+      )
+      if (row?.state !== "implementing") {
+        return {
+          output: `Nothing to report: the build is ${row?.state ?? "gone"}, not implementing. Your turn is over.`,
+          terminate: true,
+        }
+      }
       const sandbox = harness.sandbox
       const toolStarted = Date.now()
       const { revisionId, check, build, manifest, custom, source } =
