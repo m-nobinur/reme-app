@@ -44,6 +44,13 @@ import {
   GetPreviewInput,
   GetPreviewOutput,
 } from "./cos.ts"
+import {
+  Blueprint,
+  DesignDirection,
+  FontPair,
+  ImageSlot,
+  Palette,
+} from "./design.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
@@ -101,6 +108,7 @@ export const contracts = {
   Asset,
   Assignment,
   AttentionItem,
+  Blueprint,
   BuildSummary,
   CapabilityCall,
   ChatRequest,
@@ -127,6 +135,7 @@ export const contracts = {
   DecisionRequest,
   DeploymentManifest,
   DerivedReminder,
+  DesignDirection,
   ErrorEnvelope,
   EventEnvelope,
   FactList,
@@ -134,13 +143,16 @@ export const contracts = {
   FactSnapshot,
   FactValue,
   FailureReport,
+  FontPair,
   GetPreviewInput,
   GetPreviewOutput,
+  ImageSlot,
   InformationAnswer,
   InformationRequest,
   MessageFeedback,
   Org,
   OwnerChangeRequest,
+  Palette,
   PreviewClaim,
   PreviewLink,
   ProgressEvent,

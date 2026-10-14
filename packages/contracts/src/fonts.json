@@ -1,0 +1,50 @@
+{
+  "outfit_figtree": {
+    "label": "Outfit and Figtree",
+    "display": { "family": "Outfit", "weights": [500, 600], "italic": false },
+    "body": { "family": "Figtree", "weights": [400, 500] }
+  },
+  "dmsans_fraunces": {
+    "label": "Fraunces and DM Sans",
+    "display": { "family": "Fraunces", "weights": [500], "italic": true },
+    "body": { "family": "DM Sans", "weights": [400, 500] }
+  },
+  "instrument_worksans": {
+    "label": "Instrument Serif and Work Sans",
+    "display": {
+      "family": "Instrument Serif",
+      "weights": [400],
+      "italic": false
+    },
+    "body": { "family": "Work Sans", "weights": [400, 500] }
+  },
+  "sora_manrope": {
+    "label": "Sora and Manrope",
+    "display": { "family": "Sora", "weights": [500, 600], "italic": false },
+    "body": { "family": "Manrope", "weights": [400, 500] }
+  },
+  "syne_jakarta": {
+    "label": "Syne and Plus Jakarta Sans",
+    "display": { "family": "Syne", "weights": [600], "italic": false },
+    "body": { "family": "Plus Jakarta Sans", "weights": [400, 500] }
+  },
+  "newsreader_inter": {
+    "label": "Newsreader and Inter",
+    "display": { "family": "Newsreader", "weights": [500], "italic": false },
+    "body": { "family": "Inter", "weights": [400, 500] }
+  },
+  "cormorant_manrope": {
+    "label": "Cormorant Garamond and Manrope",
+    "display": {
+      "family": "Cormorant Garamond",
+      "weights": [500],
+      "italic": true
+    },
+    "body": { "family": "Manrope", "weights": [400, 500] }
+  },
+  "fraunces_figtree": {
+    "label": "Fraunces and Figtree",
+    "display": { "family": "Fraunces", "weights": [600], "italic": false },
+    "body": { "family": "Figtree", "weights": [400] }
+  }
+}
