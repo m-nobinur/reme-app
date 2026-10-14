@@ -59,7 +59,24 @@ export const DIRECTION_LIBRARY: readonly string[] = []
  * carries as its category. VS5 fills this from the packs; an industry with no
  * entry gets the generic copy rules alone, and the segment is left out.
  */
-const PACK_VOICE: Partial<Record<IndustryId, readonly string[]>> = {}
+const PACK_VOICE: Partial<Record<IndustryId, readonly string[]>> = {
+  cleaning: [
+    '- Voice: a neighbour who cleans for a living. Warm, concrete, about rooms and surfaces, never about "solutions". CTA wording "Get a quote", used everywhere a button asks. Section headings come from the pack\'s `headings` in src/recipes.json (cleaning), reworded to name this business\'s services or area; never "What we do".',
+    "- Services lead with the room or the result (a kitchen, a move-out, a weekly visit), then what is included. Steps are practical: the message, the walk-through or quote, the visit. FAQs cover access, pets, supplies, rebooking and what happens if something is missed, answered only as far as the facts go.",
+  ],
+  legal: [
+    '- Voice: a calm, plain-spoken solicitor. No jargon where a plain word works, no hype, no promise about an outcome, no "we will win". CTA wording "Book a consultation", used everywhere a button asks. Section headings come from the pack\'s `headings` in src/recipes.json (legal), reworded to name this practice\'s areas.',
+    '- Never state a price, fee, rate or "no win, no fee" unless a fact states it in those words. The credentials strip (trust1 to trust3) holds only what business.proof says: regulator, years, memberships. Never invent one, and leave it empty without the fact.',
+    '- A regulated-profession disclaimer (regulator name, registration number, "authorised and regulated by") appears only when a fact states it. Without that fact, write none and say nothing about regulation.',
+    "- Practice areas are named as clients would search for them (a house purchase, a will, a dismissal), one line each on what the lawyer does. Steps run from the first call to instruction. FAQs answer how a consultation works, never what the law says about a case.",
+  ],
+  chauffeur: [
+    '- Voice: an unhurried concierge. Short, assured sentences about punctuality, discretion and the journey, never gushing. CTA wording "Reserve a car", used everywhere a button asks. Section headings come from the pack\'s `headings` in src/recipes.json (limousine), reworded to name this business\'s occasions or area; never "What we do".',
+    "- Use occasions (an airport transfer, a wedding, a night out, corporate travel) where a cleaning site would use services. A dark_center hero suits this trade when the palette is dark or the photo is.",
+    '- Fleet entries (make, model, seats, luggage, features) come only from a fact that states them, as Includes lines such as "Seats 3" or "2 large cases". Never invent a vehicle, a capacity, a year or an amenity; with no fleet fact use the occasions as the cards.',
+    "- Never state a rate, a minimum hire or a licence number unless a fact does. The reserve form asks for pick-up, drop-off, date and passengers.",
+  ],
+}
 
 /** The industry the pack is chosen by, when the owner picked one of the listed. */
 export const industryOf = (facts: readonly FactRecord[]) =>
