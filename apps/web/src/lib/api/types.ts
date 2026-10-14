@@ -219,7 +219,7 @@ export type TransportedFact = Omit<FactRecord, "value"> & { value: Json }
  */
 export type DecisionOutcome =
   | { recorded: true }
-  | { recorded: false; reason: "expired" | "replaced" | "gone" }
+  | { recorded: false; reason: "expired" | "replaced" | "gone" | "checking" }
 
 /**
  * Every read the owner screens make. One object, so implementations are

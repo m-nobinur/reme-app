@@ -14,7 +14,7 @@ import { afterAll, describe, expect, it, vi } from "vitest"
 import { takeSnapshot } from "../src/brief.ts"
 import { accessible } from "../src/publish.ts"
 import { advance } from "../src/state.ts"
-import { validateRevision } from "../src/validate.ts"
+import { checkA11y, validateRevision } from "../src/validate.ts"
 import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 
 // The brief names the registry host the sandbox module owns, and that module
@@ -244,6 +244,116 @@ live("the accessibility gate before the preview", () => {
     expect(verdict.outcome).toBe("repairing")
     expect(await none.state()).toBe("implementing")
     expect((await gated("not json", 1)).verdict.outcome).toBe("repairing")
+  })
+})
+
+live("a quick edit's accessibility gate after the preview", () => {
+  const enc = (s: string) => new TextEncoder().encode(s)
+  const DIRTY =
+    '{"pages":[{"path":"/","violations":[{"id":"color-contrast","impact":"serious","targets":["main > h1"]}]}]}'
+
+  /** A build at `preview_ready` with no axe in its report, and axe's run over it. */
+  const previewReady = async () => {
+    const b = await built(GOOD)
+    const verdict = await validateRevision(
+      kit,
+      b.sites,
+      b.ids,
+      { ...b.input, axe: "later" },
+      SUFFIX
+    )
+    expect(verdict.outcome).toBe("preview_ready")
+    const axe = (json: string, exit_code: number) => {
+      const key = `${b.prefix}axe-late.json`
+      b.objects.set(key, enc(json))
+      return { exit_code, key }
+    }
+    const passed = () =>
+      kit.withOrg({ orgId: b.orgId }, (db) =>
+        accessible(db, b.input.revision_id)
+      )
+    const logged = () =>
+      kit.withOrg({ orgId: b.orgId }, (db) =>
+        db
+          .select()
+          .from(events)
+          .where(
+            sql`${events.assignmentId} = ${b.ids.assignmentId} and ${events.type} = 'revision.a11y_checked'`
+          )
+      )
+    return { ...b, axe, passed, logged }
+  }
+
+  it("reaches preview_ready with no a11y row, and nothing publishes it until axe has run", async () => {
+    const b = await previewReady()
+    const [report] = await kit.withOrg({ orgId: b.orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${b.ids.assignmentId} and ${events.type} = 'assignment.validation_reported'`
+        )
+    )
+    const gates = (report?.payload.gates ?? []) as { gate: string }[]
+    expect(gates.map((g) => g.gate)).not.toContain("a11y")
+    expect(await b.passed()).toBe(false)
+  })
+
+  it("logs a pass the review and the publish read, and keeps the preview", async () => {
+    const b = await previewReady()
+    const verdict = await checkA11y(
+      kit,
+      b.sites,
+      b.ids,
+      b.input.revision_id,
+      b.axe(CLEAN, 0)
+    )
+    expect(verdict.outcome).toBe("preview_ready")
+    expect(await b.state()).toBe("preview_ready")
+    expect(await b.passed()).toBe(true)
+    expect(b.objects.has(`${b.prefix}gates/a11y.json`)).toBe(true)
+  })
+
+  it("sends a preview with a violation back through repairing, and a retry answers the same", async () => {
+    const b = await previewReady()
+    const run = () =>
+      checkA11y(kit, b.sites, b.ids, b.input.revision_id, b.axe(DIRTY, 1))
+    const verdict = await run()
+    expect(verdict.outcome).toBe("repairing")
+    if (verdict.outcome !== "repairing") throw new Error("unreachable")
+    expect(verdict.failed[0]?.offending_node).toBe("/ main > h1")
+    expect(await b.state()).toBe("implementing")
+    expect(await b.passed()).toBe(false)
+    expect((await run()).outcome).toBe("repairing")
+    expect(await b.logged()).toHaveLength(1)
+  })
+
+  it("fails closed and moves nothing when a newer edit took the sandbox before axe ran", async () => {
+    const b = await previewReady()
+    const verdict = await checkA11y(
+      kit,
+      b.sites,
+      b.ids,
+      b.input.revision_id,
+      null
+    )
+    expect(verdict.outcome).toBe("stopped")
+    expect(await b.state()).toBe("preview_ready")
+    expect(await b.passed()).toBe(false)
+  })
+
+  it("moves nothing for a preview a newer edit superseded", async () => {
+    const b = await previewReady()
+    await advance(kit, b.ids, "cancelled")
+    const verdict = await checkA11y(
+      kit,
+      b.sites,
+      b.ids,
+      b.input.revision_id,
+      b.axe(DIRTY, 1)
+    )
+    expect(verdict.outcome).toBe("stopped")
+    expect(await b.state()).toBe("cancelled")
   })
 })
 

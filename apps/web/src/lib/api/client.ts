@@ -410,6 +410,7 @@ const REFUSED: Record<
   "approval.not_requested": "gone",
   "approval.not_found": "gone",
   "assignment.not_found": "gone",
+  "revision.a11y_unchecked": "checking",
 }
 
 /**

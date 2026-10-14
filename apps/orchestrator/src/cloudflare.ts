@@ -84,7 +84,7 @@ import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
 import { GIT, runAxe } from "./tail.ts"
 import { logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
-import { assignmentFacts, validateRevision } from "./validate.ts"
+import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -723,8 +723,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // when this build was planned; any other build (the quick lane, a
         // repair round) has nothing to overlap it with and runs it here, in
         // `validating`, where the owner already reads "Checking the site".
-        const axe =
-          looked !== undefined
+        // A quick edit's first pass is the exception: it runs axe after its
+        // preview instead (owner's choice), and a failure there goes to the
+        // section lane, whose repair rounds run axe before the preview.
+        const late = quickBase !== null
+        const axe = late
+          ? undefined
+          : looked !== undefined
             ? looked
             : await step.do(`a11y ${round}`, async () => axeOf())
         const gated = await step.do(`gates ${round}`, async () => {
@@ -738,7 +743,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               {
                 report_id: payload.report_id,
                 revision_id: payload.revision_id,
-                axe,
+                axe: late ? "later" : (axe ?? null),
               },
               this.env.SITE_HOST_SUFFIX,
               gateMs
@@ -750,7 +755,24 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             at: Date.now(),
           }
         })
-        const verdict = gated
+        // The quick edit's accessibility gate, once its preview exists: axe in
+        // the sandbox takes about ten seconds, which the preview does not wait
+        // on. The review below does, and so do the approval and the publish.
+        const a11y =
+          late && gated.outcome === "preview_ready"
+            ? await step.do(`a11y ${round}`, async () => {
+                const started = Date.now()
+                const ran = await axeOf()
+                const result = await run((kit) =>
+                  checkA11y(kit, this.env.SITES, ids, payload.revision_id, ran)
+                )
+                return { ...result, ms: since(started) }
+              })
+            : null
+        const verdict =
+          a11y && a11y.outcome !== "preview_ready"
+            ? { ...gated, ...a11y }
+            : gated
         if (verdict.outcome === "repairing" && quickBase) {
           // The quick edit failed a gate: its files go back to where it
           // started and the Developer takes the change at the section role.
@@ -774,6 +796,25 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           quick = "fell"
           section = true
           admitted = await admit("quick_section", true)
+          // A fall-through for axe carries its findings (rule, impact, page,
+          // targets, summary, html) to the Developer, who reruns the gate's
+          // script until it is clean.
+          if (a11y?.outcome === "repairing") {
+            await step.do(`a11y handoff ${round}`, async () => {
+              await init(Developer, { id: ids.assignmentId }).dispatch({
+                message: {
+                  kind: "signal",
+                  type: "validation.failed",
+                  body: JSON.stringify({
+                    report_id: a11y.report_id,
+                    failed: a11y.failed,
+                  }),
+                  attributes: { report_id: a11y.report_id },
+                },
+              })
+              return { report_id: a11y.report_id }
+            })
+          }
           continue
         }
         if (verdict.outcome === "repairing") {
@@ -885,7 +926,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           upload_reused: t?.upload_reused ?? null,
           upload_bytes: t?.upload_bytes ?? null,
           source_ms: t?.source_ms ?? null,
-          axe_ms: axe?.ms ?? null,
+          axe_ms: a11y?.ms ?? axe?.ms ?? null,
           gates_ms: verdict.gate_ms.total,
           ...Object.fromEntries(
             Object.entries(verdict.gate_ms)
