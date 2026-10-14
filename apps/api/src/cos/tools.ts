@@ -16,7 +16,11 @@ import {
   OwnerAnswerText,
   type OwnerChangeRequest,
   PreviewLink,
+  REVIEW_FACT_KEYS,
+  type RecordReviewInput,
+  type RecordReviewOutput,
   RequestChangeOutput,
+  type ReviewFactKey,
 } from "@workspace/contracts"
 import {
   assignments,
@@ -34,6 +38,7 @@ import {
   type Owner,
   relay,
   startChange,
+  stateFacts,
 } from "../changes.ts"
 import { failure } from "../http.ts"
 import {
@@ -45,7 +50,7 @@ import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
 /**
- * The Chief of Staff's six tools (ADR-034), as plain functions: the
+ * The Chief of Staff's seven tools (ADR-034), as plain functions: the
  * session's org, user and session in, the contract's output out. What they
  * return is what the model reads, so each is cut to its `COS_TOOLS` output:
  * no org or staff id, no URL, no open record, and every refusal the closed
@@ -275,6 +280,15 @@ const answerInvalid = () =>
     detail: {},
   })
 
+const reviewElsewhere = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.review",
+    message:
+      "A review is recorded with record_review, once the owner confirms the customer agreed to be quoted.",
+    detail: {},
+  })
+
 /**
  * The owner's answer, sent through the orchestrator's `/answer` keyed by the
  * approval. The id is looked up only to find the build that asked, which
@@ -318,6 +332,11 @@ export async function answerQuestion(
   const wantsFact = FactValueKey.safeParse(asked.field).success
   if (wantsFact ? fact?.key !== asked.field : fact !== null) {
     return refused(answerInvalid())
+  }
+  // A review goes only through `record_review`, whose card asks the owner
+  // whether the customer agreed to be quoted; an answer card does not.
+  if (fact && (REVIEW_FACT_KEYS as readonly string[]).includes(fact.key)) {
+    return refused(reviewElsewhere())
   }
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {
@@ -374,4 +393,35 @@ export async function createReminder(
   }
   if (made instanceof Response) return refused(made)
   return { outcome: "created", due_at: made.due_at }
+}
+
+/**
+ * A customer's review, stored as the owner's `testimonials.review_<slot>`
+ * fact, replacing the review in that slot. It runs only after the owner said
+ * yes on the card that asks whether the customer agreed to be quoted, and the
+ * contract holds `permission` to true. A replay under the same approval
+ * restates the same value, which `stateFacts` skips; a database error leaves
+ * the outcome unknown.
+ */
+export async function recordReview(
+  { kit, owner }: ToolContext,
+  { slot, ...value }: RecordReviewInput
+): Promise<RecordReviewOutput> {
+  const key: ReviewFactKey = `testimonials.review_${slot}`
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      (db) => stateFacts(db, owner, [{ key, value }])
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.review_failed", error: failureCode(error) })
+    )
+    throw new ToolFailed(503, {
+      class: "transient",
+      code: "review.unconfirmed",
+      message: "The review could not be confirmed.",
+    })
+  }
+  return { outcome: "recorded", slot }
 }

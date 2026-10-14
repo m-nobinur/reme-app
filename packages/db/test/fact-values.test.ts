@@ -19,7 +19,7 @@ const golden = GOLDEN_ORGS.flatMap((org) =>
 describe("golden facts as FactValue", () => {
   it("finds every one of them", () => {
     // Pinned, so a filter that matches nothing cannot pass by parsing nothing.
-    expect(golden).toHaveLength(11)
+    expect(golden).toHaveLength(13)
   })
 
   it.each(golden)("%s parses", (_name, fact) => {

@@ -53,9 +53,10 @@ const MARKETING = [
   fact("guarantees.satisfaction", { statement: "100% satisfaction guarantee" }),
   fact("awards.local", { name: "Award-winning cleaner of the year" }),
   fact("differentiators.value", { statement: "Best value in Fairhaven" }),
-  fact("testimonials.jane", {
+  fact("testimonials.review_1", {
     quote: "They left the kitchen spotless and were on time",
-    author: "Jane R",
+    name: "Jane R",
+    permission: true,
   }),
 ]
 
@@ -194,6 +195,17 @@ describe("the claims gate", () => {
     const result = verdict(invented, MARKETING)
     expect(result.passed).toBe(false)
     expect(result.offending_node).toContain("blockquote")
+  })
+
+  it("fails a quote whose review the customer never agreed to have shown", () => {
+    const real =
+      '<blockquote><p>"They left the kitchen spotless and were on time"</p><cite>Jane R</cite></blockquote>'
+    const unagreed = MARKETING.map((f) =>
+      f.key === "testimonials.review_1"
+        ? { ...f, value: { ...(f.value as object), permission: false } }
+        : f
+    )
+    expect(verdict(real, unagreed).passed).toBe(false)
   })
 
   it("reads a rating, a review count and an award out of structured data", () => {

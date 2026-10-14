@@ -11,6 +11,8 @@ import {
   CreateReminderOutput,
   CreateReminderRequest,
   GetPreviewOutput,
+  RecordReviewInput,
+  RecordReviewOutput,
 } from "@workspace/contracts"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
 import {
@@ -347,6 +349,27 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+// The owner's yes is their word that the customer agreed, so the card asks
+// exactly that, and the button says it.
+const RecordReview: ToolCallMessagePartComponent = (props) => (
+  <Decision
+    busy="Saving"
+    cancelled="Not saved. You sent a message instead."
+    refused="The review could not be saved."
+    detail={(input) =>
+      `From ${input.name}. Only say yes if ${input.name} agreed to be quoted on your website under that name. It becomes review ${input.slot}, replacing any review there.`
+    }
+    done={() => (
+      <Done>Saved. Your website can show it from its next update.</Done>
+    )}
+    props={props}
+    slot="record-review"
+    title={(input) => `"${input.quote}"`}
+    view={decisionView(props, RecordReviewInput, RecordReviewOutput)}
+    yes="They agreed, save it"
+  />
+)
+
 /** The reads, which the thread may fold together, by tool name. */
 export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
   get_workspace: WorkspaceRead,
@@ -358,4 +381,5 @@ export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
 export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   answer_question: AnswerQuestion,
   create_reminder: CreateReminder,
+  record_review: RecordReview,
 }

@@ -120,6 +120,11 @@ const SHAPES: [FactValue, string, string][] = [
     "clean_sans",
   ],
   [
+    { key: "site.direction", value: { id: "calm_daylight" } },
+    "Website look",
+    "calm_daylight",
+  ],
+  [
     { key: "site.pages", value: { ids: ["home", "quote"] } },
     "Website pages",
     "home, quote",
@@ -167,6 +172,22 @@ const SHAPES: [FactValue, string, string][] = [
     },
     "Quote request questions",
     "Pick-up address, Passengers",
+  ],
+  [
+    {
+      key: "testimonials.review_1",
+      value: { quote: "Always on time.", name: "Marta L.", permission: true },
+    },
+    "First review",
+    '"Always on time." Marta L.',
+  ],
+  [
+    {
+      key: "testimonials.review_2",
+      value: { quote: "Spotless.", name: "Owen", permission: true },
+    },
+    "Second review",
+    '"Spotless." Owen',
   ],
 ]
 
