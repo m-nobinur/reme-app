@@ -1,0 +1,163 @@
+---
+// A page's body, from layout[page] in site-config. The page file keeps what
+// is its own (title, description, structured data); the order and variants of
+// its sections are data.
+import ActionLink from "../components/ActionLink/ActionLink.astro"
+import AreaSection from "../components/AreaSection/AreaSection.astro"
+import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
+import CtaBand from "../components/CtaBand/CtaBand.astro"
+import Faq from "../components/Faq/Faq.astro"
+import Gallery from "../components/Gallery/Gallery.astro"
+import Hero from "../components/Hero/Hero.astro"
+import QuoteForm from "../components/QuoteForm/QuoteForm.astro"
+import Section from "../components/Section/Section.astro"
+import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
+import Steps from "../components/Steps/Steps.astro"
+import Testimonials from "../components/Testimonials/Testimonials.astro"
+import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
+import ValueProps from "../components/ValueProps/ValueProps.astro"
+import { phoneText } from "../phone"
+import { HERO_OF, templateOf } from "../presets"
+import { primaryAction } from "../routes"
+import { type LayoutPage, layout, site } from "../site-config"
+import { serviceItems } from "../structured-data"
+import AboutSection from "./AboutSection.astro"
+
+interface Props {
+  page: LayoutPage
+}
+
+const { page } = Astro.props
+// The page's h1 and lede, which are its own fields.
+const HEAD = {
+  home: [site.heroHeading || site.businessName, site.tagline || site.homeIntro],
+  about: [site.aboutHeading, site.aboutIntro],
+  services: [site.servicesHeading, site.servicesIntro],
+  service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
+  contact: [site.contactHeading, site.contactIntro],
+  quote: [site.quoteHeading, site.quoteIntro],
+} as const
+const [heading, lede] = HEAD[page]
+const home = page === "home"
+const offerings = site.offerings
+  .split("\n")
+  .map((item) => item.trim())
+  .filter(Boolean)
+const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
+const talk = site.phone || site.email
+
+// Each component types its own variants; the layout's strings are checked
+// against the contract by a test, so one cast stands for all of them.
+const heroOf = (variant: string | undefined) =>
+  (variant ?? (home ? HERO_OF[templateOf(site.template)] : undefined)) as never
+---
+
+{
+  layout[page].map(({ kind, variant }) => {
+    const v = variant as never
+    switch (kind) {
+      case "hero":
+        return (
+          <Hero
+            variant={heroOf(variant)}
+            eyebrow={home ? site.industry : ""}
+            heading={heading}
+            lede={lede}
+            image={
+              home ? { src: site.heroImage, alt: site.heroImageAlt } : undefined
+            }
+            caption={home ? site.heroCaption : ""}
+            highlights={home ? serviceItems.slice(0, 3) : []}
+          >
+            {home && primaryAction && (
+              <ActionLink href={primaryAction.href} label={primaryAction.label} />
+            )}
+            {home && site.phone && (
+              <ActionLink
+                href={`tel:${site.phone}`}
+                label={phoneText(site.phone)}
+                variant="secondary"
+              />
+            )}
+          </Hero>
+        )
+      case "trust_strip":
+        return <TrustStrip variant={v} />
+      case "service_cards":
+        return (
+          <>
+            <ServiceCards variant={v} />
+            {page === "services" && offerings.length > 0 && (
+              <Section heading={site.offeringsHeading}>
+                <ul class="offerings">
+                  {offerings.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+          </>
+        )
+      case "value_props":
+        return <ValueProps />
+      case "steps":
+        return <Steps variant={v} />
+      case "about":
+        return <AboutSection page={home ? "home" : "about"} />
+      case "testimonials":
+        return <Testimonials variant={v} />
+      case "gallery":
+        return <Gallery />
+      case "service_area":
+        return (
+          <AreaSection heading={home ? site.serviceAreaHeading : undefined} />
+        )
+      case "faq":
+        return <Faq variant={v} />
+      case "cta_band":
+        return <CtaBand variant={v} />
+      case "contact":
+        return (
+          <section class="band">
+            <div class="wrap">
+              <ContactDetails variant="cards" />
+            </div>
+          </section>
+        )
+      case "quote_form":
+        // The quote form sends by email until the platform has an endpoint
+        // for it; see QuoteForm. Beside it, what happens next and the
+        // business's own phone and email. A response time shows only when a
+        // fact gives one, in quoteNext2.
+        return (
+          <section class="band">
+            <div class="wrap quote-layout">
+              <QuoteForm />
+              {(next.length > 0 || talk) && (
+                <aside class="quote-aside">
+                  {next.length > 0 && (
+                    <>
+                      {site.quoteAsideHeading && (
+                        <h2>{site.quoteAsideHeading}</h2>
+                      )}
+                      <ol class="next-list">
+                        {next.map((line) => (
+                          <li>{line}</li>
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                  {talk && (
+                    <>
+                      {site.quoteTalkHeading && <h2>{site.quoteTalkHeading}</h2>}
+                      <ContactDetails />
+                    </>
+                  )}
+                </aside>
+              )}
+            </div>
+          </section>
+        )
+    }
+  })
+}

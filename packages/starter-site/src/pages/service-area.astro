@@ -1,8 +1,6 @@
 ---
-import AreaSection from "../components/AreaSection/AreaSection.astro"
-import CtaBand from "../components/CtaBand/CtaBand.astro"
-import Hero from "../components/Hero/Hero.astro"
 import Base from "../layouts/Base.astro"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
 ---
@@ -12,7 +10,5 @@ import { localBusiness } from "../structured-data"
   description={site.serviceAreaDescription || site.serviceAreaIntro}
   jsonLd={localBusiness(Astro.site)}
 >
-  <Hero heading={site.serviceAreaHeading} lede={site.serviceAreaIntro} />
-  <AreaSection />
-  <CtaBand />
+  <Sections page="service_area" />
 </Base>

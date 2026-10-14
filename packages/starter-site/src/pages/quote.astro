@@ -1,48 +1,12 @@
 ---
-// The quote form sends by email until the platform has an endpoint for it;
-// see QuoteForm. Beside it, what happens next and the business's own phone
-// and email for anyone who would rather call or write. A response time shows
-// only when a fact gives one, in quoteNext2.
-import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
-import Hero from "../components/Hero/Hero.astro"
-import QuoteForm from "../components/QuoteForm/QuoteForm.astro"
 import Base from "../layouts/Base.astro"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
-
-const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
-const talk = site.phone || site.email
 ---
 
 <Base
   title={site.quoteTitle || site.quoteHeading}
   description={site.quoteDescription || site.quoteIntro}
 >
-  <Hero heading={site.quoteHeading} lede={site.quoteIntro} />
-  <section class="band">
-    <div class="wrap quote-layout">
-      <QuoteForm />
-      {
-        (next.length > 0 || talk) && (
-          <aside class="quote-aside">
-            {next.length > 0 && (
-              <>
-                {site.quoteAsideHeading && <h2>{site.quoteAsideHeading}</h2>}
-                <ol class="next-list">
-                  {next.map((line) => (
-                    <li>{line}</li>
-                  ))}
-                </ol>
-              </>
-            )}
-            {talk && (
-              <>
-                {site.quoteTalkHeading && <h2>{site.quoteTalkHeading}</h2>}
-                <ContactDetails />
-              </>
-            )}
-          </aside>
-        )
-      }
-    </div>
-  </section>
+  <Sections page="quote" />
 </Base>

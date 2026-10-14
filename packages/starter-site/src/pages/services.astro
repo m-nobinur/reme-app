@@ -1,18 +1,8 @@
 ---
-import CtaBand from "../components/CtaBand/CtaBand.astro"
-import Faq from "../components/Faq/Faq.astro"
-import Hero from "../components/Hero/Hero.astro"
-import Section from "../components/Section/Section.astro"
-import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
-import Steps from "../components/Steps/Steps.astro"
 import Base from "../layouts/Base.astro"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
 import { faqPage, services } from "../structured-data"
-
-const offerings = site.offerings
-  .split("\n")
-  .map((item) => item.trim())
-  .filter(Boolean)
 ---
 
 <Base
@@ -20,20 +10,5 @@ const offerings = site.offerings
   description={site.servicesDescription || site.servicesIntro}
   jsonLd={[...services(Astro.site), ...faqPage()]}
 >
-  <Hero heading={site.servicesHeading} lede={site.servicesIntro} />
-  <ServiceCards variant="alternating" />
-  {
-    offerings.length > 0 && (
-      <Section heading={site.offeringsHeading}>
-        <ul class="offerings">
-          {offerings.map((item) => (
-            <li>{item}</li>
-          ))}
-        </ul>
-      </Section>
-    )
-  }
-  <Steps />
-  <Faq />
-  <CtaBand />
+  <Sections page="services" />
 </Base>

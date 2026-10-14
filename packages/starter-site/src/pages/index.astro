@@ -1,35 +1,12 @@
 ---
-import ActionLink from "../components/ActionLink/ActionLink.astro"
-import AreaSection from "../components/AreaSection/AreaSection.astro"
-import CtaBand from "../components/CtaBand/CtaBand.astro"
-import Faq from "../components/Faq/Faq.astro"
-import Gallery from "../components/Gallery/Gallery.astro"
-import Hero from "../components/Hero/Hero.astro"
-import Section from "../components/Section/Section.astro"
-import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
-import Steps from "../components/Steps/Steps.astro"
-import Testimonials from "../components/Testimonials/Testimonials.astro"
-import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
-import ValueProps from "../components/ValueProps/ValueProps.astro"
 import Base from "../layouts/Base.astro"
-import { phoneText } from "../phone"
-import { HERO_OF, templateOf } from "../presets"
-import { hasRoute, primaryAction } from "../routes"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
-import {
-  faqPage,
-  localBusiness,
-  serviceItems,
-  webSite,
-} from "../structured-data"
+import { faqPage, localBusiness, webSite } from "../structured-data"
 
-// One order for every template. The template picks the hero's variant and
-// styles/site.css gives it type and surfaces by data-template. A section with
+// The sections and their order are layout.home in site-config. A section with
 // no facts behind it renders nothing, so a business with little to say gets a
-// short page rather than a padded one. Without an about page, the home page's
-// about section says who the business serves too.
-const about = site.aboutIntro || site.overviewBody || site.overview
-const audience = !hasRoute("/about/") && (site.audienceBody || site.audience)
+// short page rather than a padded one.
 ---
 
 <Base
@@ -41,55 +18,5 @@ const audience = !hasRoute("/about/") && (site.audienceBody || site.audience)
     ...faqPage(),
   ]}
 >
-  <Hero
-    variant={HERO_OF[templateOf(site.template)]}
-    eyebrow={site.industry}
-    heading={site.heroHeading || site.businessName}
-    lede={site.tagline || site.homeIntro}
-    image={{ src: site.heroImage, alt: site.heroImageAlt }}
-    caption={site.heroCaption}
-    highlights={serviceItems.slice(0, 3)}
-  >
-    {
-      primaryAction && (
-        <ActionLink href={primaryAction.href} label={primaryAction.label} />
-      )
-    }
-    {
-      site.phone && (
-        <ActionLink
-          href={`tel:${site.phone}`}
-          label={phoneText(site.phone)}
-          variant="secondary"
-        />
-      )
-    }
-  </Hero>
-  <TrustStrip />
-  <ServiceCards />
-  <ValueProps />
-  <Steps />
-  {
-    (about || audience) && (
-      <Section heading={site.aboutHeading}>
-        {site.tagline && site.homeIntro && (
-          <p class="section-lede">{site.homeIntro}</p>
-        )}
-        {about && <p>{about}</p>}
-        {audience && <p>{audience}</p>}
-        {hasRoute("/about/") && site.aboutLink && (
-          <p class="section-more">
-            <a class="more-link" href="/about/">
-              {site.aboutLink}
-            </a>
-          </p>
-        )}
-      </Section>
-    )
-  }
-  <Testimonials />
-  <Gallery />
-  <AreaSection heading={site.serviceAreaHeading} />
-  <Faq />
-  <CtaBand />
+  <Sections page="home" />
 </Base>
