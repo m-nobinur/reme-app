@@ -101,16 +101,13 @@ describe("runCustomSections", () => {
 
 describe("checksOf", () => {
   const ok = { exit_code: 0, output: "", ms: 1 }
-  const axe = { exit_code: 0, key: null, ms: 1 }
 
-  it("lists the custom sections check after axe", () => {
+  it("lists the custom sections check, and no axe: that runs after the preview", () => {
     const custom = { exit_code: 1, key: "k", ms: 1 }
-    expect(
-      checksOf({ check: ok, build: ok, axe: { ...axe, custom } }).at(-1)
-    ).toEqual({ check: "custom sections", exit_code: 1, output_key: "k" })
-  })
-
-  it("leaves it out when none ran, so the gate fails closed", () => {
-    expect(checksOf({ check: ok, build: ok, axe })).toHaveLength(3)
+    expect(checksOf({ check: ok, build: ok, custom })).toEqual([
+      { check: "astro check", exit_code: 0, output_key: null },
+      { check: "astro build", exit_code: 0, output_key: null },
+      { check: "custom sections", exit_code: 1, output_key: "k" },
+    ])
   })
 })

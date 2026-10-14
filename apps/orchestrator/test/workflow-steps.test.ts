@@ -32,7 +32,10 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // publish.test.ts; here only the assignment paths run.
 vi.mock("../src/publish.ts", () => ({
   PROBE_MINUTES: [0, 2, 5, 10],
+  accessible: async () => true,
   activate: async () => ({}),
+  // The superseded preview's revision: the one the served site now names.
+  latestRevision: async () => ({ id: "rev-live", status: "preview" }),
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
   redriveQueued: async () => [],
@@ -128,6 +131,7 @@ const script = {
   claims: [] as { claimed: boolean; superseded: string | null }[],
   provisions: [] as boolean[],
   verdicts: [] as string[],
+  a11y: [] as string[],
   checkpoints: [] as boolean[],
   origin: "console" as "owner" | "console",
   reviews: 0,
@@ -185,6 +189,7 @@ vi.mock("../src/sandbox.ts", () => ({
   keepWarm: async () => undefined,
   takeScreenshots: async () => ({ taken: 3, ms: 1 }),
   takeWarm: async () => script.held,
+  whileHeld: async () => ({ exit_code: 0, key: null, ms: 1 }),
   checkpoint: async () => ({
     taken: script.checkpoints.shift() ?? true,
     key: "k",
@@ -293,6 +298,13 @@ vi.mock("../src/retention.ts", () => ({
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
+  // What the accessibility gate finds after each preview; none left is a pass.
+  checkA11y: async () => {
+    const outcome = script.a11y.shift() ?? "preview_ready"
+    return outcome === "preview_ready"
+      ? { outcome, report_id: "r" }
+      : { outcome, report_id: "r", failed: [] }
+  },
   validateRevision: async () => {
     const outcome = script.verdicts.shift() ?? "preview_ready"
     return outcome === "repairing"
@@ -380,6 +392,7 @@ type Setup = {
   claims?: typeof script.claims
   provisions?: boolean[]
   verdicts?: string[]
+  a11y?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
   looks?: typeof script.looks
@@ -426,6 +439,27 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     [completion, completion],
     { verdicts: ["repairing"] },
     { outcome: "preview_ready" },
+  ],
+  // Axe runs once the preview exists; a failure there goes back for repair
+  // the way a gate failure does.
+  [
+    "accessibility failed after the preview",
+    [completion, completion],
+    { a11y: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "accessibility failed after a quick edit",
+    [completion],
+    { origin: "owner", lane: copy, a11y: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  // The site went to a newer edit before axe could run: this build stops.
+  [
+    "superseded before accessibility",
+    [completion],
+    { a11y: ["stopped"] },
+    { outcome: "stopped" },
   ],
   [
     "gate failure ends failed",
@@ -572,6 +606,7 @@ describe("the assignment Workflow's step names", () => {
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
+    script.a11y = [...(setup.a11y ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
     script.origin = setup.origin ?? "console"
     script.lane = setup.lane ?? {}
@@ -744,6 +779,9 @@ describe("the assignment Workflow's step names", () => {
         "owner build",
         "information round trip",
         "gate failure repaired",
+        "accessibility failed after the preview",
+        "accessibility failed after a quick edit",
+        "superseded before accessibility",
         "gate failure ends failed",
         "budget park",
         "interrupted then resumed",
@@ -940,6 +978,21 @@ describe("the disk a build starts on", () => {
     } finally {
       ROW.kind = "site.build"
       script.held = null
+    }
+  })
+
+  // Back to back: the preview this edit superseded is still taking its
+  // screenshots, so it has not marked the disk, but the disk is its revision.
+  it("maps the disk a superseded preview left, before that preview marks it", async () => {
+    ROW.kind = "site.revise"
+    script.claims = [{ claimed: true, superseded: SUPERSEDED }]
+    script.verdicts = ["preview_ready"]
+    prepared.length = 0
+    try {
+      await drive([completion]).run()
+      expect(prepared).toEqual(["warm"])
+    } finally {
+      ROW.kind = "site.build"
     }
   })
 })

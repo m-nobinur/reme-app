@@ -363,7 +363,6 @@ export async function quickEdit(input: {
         upload_reused: tail.manifest.reused,
         upload_bytes: tail.manifest.bytes,
         source_ms: tail.source.ms,
-        axe_ms: tail.axe.ms,
         tool_ms: since(toolStarted),
         model_turns: attempts,
         reported_at: Date.now(),

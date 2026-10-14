@@ -15,6 +15,8 @@ const { Unavailable } = vi.hoisted(() => {
   return { Unavailable: ContainerUnavailable }
 })
 const files = new Map<string, string>()
+/** Runs once a marker is written, to land a claim before the holder entry is set. */
+let afterMark: ((site: string) => Promise<void>) | null = null
 const destroyed: string[] = []
 /** Sites whose next `exec` the platform refuses for a full pool. */
 const refuse = new Set<string>()
@@ -35,10 +37,20 @@ vi.mock("@cloudflare/sandbox", () => ({
         files.delete(`${id}:revision`)
         return { exitCode: 0, stdout: held, stderr: "" }
       }
+      const unmark = /^grep -qx '([^']+)' /.exec(command)
+      if (unmark) {
+        if (files.get(`${id}:revision`) !== unmark[1]) {
+          return { exitCode: 1, stdout: "", stderr: "" }
+        }
+        files.delete(`${id}:revision`)
+      }
       return { exitCode: 0, stdout: "", stderr: "" }
     },
     writeFile: async (path: string, body: string) => {
-      if (path.endsWith("/.reme/revision")) files.set(`${id}:revision`, body)
+      if (path.endsWith("/.reme/revision")) {
+        files.set(`${id}:revision`, body)
+        await afterMark?.(id)
+      }
     },
     destroy: async () => {
       destroyed.push(id)
@@ -66,13 +78,25 @@ const env = {
     put: async (
       key: string,
       _body: unknown,
-      options?: { customMetadata?: Record<string, string> }
+      options?: {
+        customMetadata?: Record<string, string>
+        onlyIf?: { etagMatches: string }
+      }
     ) => {
-      bucket.set(key, {
+      // R2 answers a failed precondition with null and writes nothing.
+      if (
+        options?.onlyIf &&
+        bucket.get(key)?.etag !== options.onlyIf.etagMatches
+      ) {
+        return null
+      }
+      const entry = {
         uploaded: new Date(now),
         etag: `e${++writes}`,
         customMetadata: options?.customMetadata ?? {},
-      })
+      }
+      bucket.set(key, entry)
+      return entry
     },
     head: async (key: string) => {
       await beforeHead?.(key)
@@ -90,6 +114,15 @@ const env = {
   },
 } as unknown as Env
 const minutes = (n: number) => n * 60 * 1000
+/** A build that held the site's sandbox and left it warm with `revision`. */
+const builtWarm = async (
+  site: string,
+  assignment: string,
+  revision: string
+) => {
+  await provision(env, { orgId: site, assignmentId: assignment })
+  await keepWarm(env, { orgId: site, assignmentId: assignment }, revision)
+}
 const sandbox = (site: string) => getSandbox(env.SANDBOX as never, site)
 
 beforeEach(() => {
@@ -99,13 +132,14 @@ beforeEach(() => {
   refuse.clear()
   lost.clear()
   beforeHead = null
+  afterMark = null
   now = Date.parse("2026-10-14T09:00:00Z")
   vi.setSystemTime(now)
 })
 
 describe("a warm sandbox", () => {
   it("names the revision it was left with, once", async () => {
-    await keepWarm(env, { orgId: "site-a", assignmentId: "a1" }, "rev-1")
+    await builtWarm("site-a", "a1", "rev-1")
     expect(bucket.get("sandboxes/site-a")?.customMetadata).toEqual({
       holder: "a1",
       revision: "rev-1",
@@ -125,7 +159,7 @@ describe("a warm sandbox", () => {
   })
 
   it("stops being evictable once a build holds it", async () => {
-    await keepWarm(env, { orgId: "site-a", assignmentId: "a1" }, "rev-1")
+    await builtWarm("site-a", "a1", "rev-1")
     await provision(env, { orgId: "site-a", assignmentId: "a2" })
     expect(bucket.get("sandboxes/site-a")?.customMetadata).toEqual({
       holder: "a2",
@@ -133,14 +167,41 @@ describe("a warm sandbox", () => {
   })
 })
 
+describe("a superseded preview", () => {
+  it("leaves the newer edit's sandbox unmarked and its holder in place", async () => {
+    // The new edit claimed while the old build was still taking screenshots.
+    await provision(env, { orgId: "site-a", assignmentId: "old" })
+    await provision(env, { orgId: "site-a", assignmentId: "new" })
+    expect(await takeWarm(sandbox("site-a"))).toBeNull()
+    await keepWarm(env, { orgId: "site-a", assignmentId: "old" }, "rev-old")
+    expect(bucket.get("sandboxes/site-a")?.customMetadata).toEqual({
+      holder: "new",
+    })
+    expect(files.has("site-a:revision")).toBe(false)
+  })
+
+  it("takes its marker back when a claim lands between the read and the write", async () => {
+    await provision(env, { orgId: "site-a", assignmentId: "old" })
+    afterMark = async () => {
+      afterMark = null
+      await provision(env, { orgId: "site-a", assignmentId: "new" })
+    }
+    await keepWarm(env, { orgId: "site-a", assignmentId: "old" }, "rev-old")
+    expect(bucket.get("sandboxes/site-a")?.customMetadata).toEqual({
+      holder: "new",
+    })
+    expect(files.has("site-a:revision")).toBe(false)
+  })
+})
+
 describe("a full pool", () => {
   it("evicts the least recently edited warm sandbox and starts", async () => {
     // site-old slept long ago; site-b is the oldest still awake.
-    await keepWarm(env, { orgId: "site-old", assignmentId: "o1" }, "r")
+    await builtWarm("site-old", "o1", "r")
     now += minutes(40)
-    await keepWarm(env, { orgId: "site-b", assignmentId: "b1" }, "r")
+    await builtWarm("site-b", "b1", "r")
     now += minutes(5)
-    await keepWarm(env, { orgId: "site-c", assignmentId: "c1" }, "r")
+    await builtWarm("site-c", "c1", "r")
     // A build mid-flight is never a candidate, however old.
     await provision(env, { orgId: "site-busy", assignmentId: "x1" })
     now += minutes(5)
@@ -157,9 +218,9 @@ describe("a full pool", () => {
   })
 
   it("passes over a warm sandbox its own site's build took since the listing", async () => {
-    await keepWarm(env, { orgId: "site-b", assignmentId: "b1" }, "r")
+    await builtWarm("site-b", "b1", "r")
     now += minutes(5)
-    await keepWarm(env, { orgId: "site-c", assignmentId: "c1" }, "r")
+    await builtWarm("site-c", "c1", "r")
     beforeHead = async (key) => {
       if (key !== "sandboxes/site-b") return
       beforeHead = null

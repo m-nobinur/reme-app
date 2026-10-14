@@ -193,24 +193,67 @@ export async function endSite(env: Env, siteId: string): Promise<void> {
  * Leave the site's sandbox up after `preview_ready`, naming the revision on
  * its disk, instead of destroying it. The TTL runs from this call, the last
  * request the container sees.
+ *
+ * A compare-and-set on the holder entry: a newer edit that claimed the site
+ * since (it superseded this preview) holds the sandbox, and this build
+ * neither marks its disk nor takes the entry back.
  */
 export async function keepWarm(
   env: Env,
   ids: Ids,
   revisionId: string
 ): Promise<void> {
-  const sandbox = sandboxFor(env, ids.orgId)
-  // A container replaced since the build has the image's empty disk: no
-  // marker may claim it holds the revision, so it ends as before.
-  const kept = await sandbox.exec(
-    `test -d ${SITE_ROOT}/.git && mkdir -p /workspace/.reme`
-  )
-  if (kept.exitCode !== 0) return endSandbox(env, ids)
-  await sandbox.writeFile(REVISION_FILE, revisionId)
-  await env.SITES.put(holderKey(ids.orgId), "", {
-    customMetadata: { holder: ids.assignmentId, revision: revisionId },
-  })
-  await env.SITES.delete(checkpointKey(ids))
+  try {
+    const held = await env.SITES.head(holderKey(ids.orgId))
+    if (!held || held.customMetadata?.holder !== ids.assignmentId) return
+    const sandbox = sandboxFor(env, ids.orgId)
+    // A container replaced since the build has the image's empty disk: no
+    // marker may claim it holds the revision, so it ends as before.
+    const kept = await sandbox.exec(
+      `test -d ${SITE_ROOT}/.git && mkdir -p /workspace/.reme`
+    )
+    if (kept.exitCode !== 0) return await endSandbox(env, ids)
+    await sandbox.writeFile(REVISION_FILE, revisionId)
+    const set = await env.SITES.put(holderKey(ids.orgId), "", {
+      customMetadata: { holder: ids.assignmentId, revision: revisionId },
+      onlyIf: { etagMatches: held.etag },
+    })
+    // A claim landed between the read and the write. Its build may already
+    // have looked for a marker and started on the disk, so ours would lie.
+    if (!set) {
+      await sandbox.exec(
+        `grep -qx '${revisionId}' ${REVISION_FILE} && rm -f ${REVISION_FILE}`
+      )
+    }
+  } finally {
+    await env.SITES.delete(checkpointKey(ids))
+  }
+}
+
+/**
+ * Whether this assignment still holds its site's sandbox: false once a newer
+ * edit claimed the site, whose work the disk is from then on.
+ */
+export const holds = async (env: Env, ids: Ids) =>
+  (await env.SITES.head(holderKey(ids.orgId)))?.customMetadata?.holder ===
+  ids.assignmentId
+
+/**
+ * `fn`'s result on the site's sandbox, or null when this assignment did not
+ * hold the sandbox throughout: a newer edit that claimed the site may have
+ * changed the disk under `fn`. A claim writes the holder entry before it
+ * touches the disk, so an unchanged etag means an unchanged disk.
+ */
+export async function whileHeld<T>(
+  env: Env,
+  ids: Ids,
+  fn: () => Promise<T>
+): Promise<T | null> {
+  const before = await env.SITES.head(holderKey(ids.orgId))
+  if (before?.customMetadata?.holder !== ids.assignmentId) return null
+  const out = await fn()
+  const after = await env.SITES.head(holderKey(ids.orgId))
+  return after?.etag === before.etag ? out : null
 }
 
 /**
@@ -418,6 +461,9 @@ export async function takeScreenshots(
   const prefix = `sites/${ids.orgId}/${revisionId}/`
   let taken = 0
   try {
+    // A superseded preview's shots would hold up, and could capture, the
+    // newer edit now working on the disk.
+    if (!(await holds(env, ids))) return { taken, ms: Date.now() - started }
     const sandbox = sandboxFor(env, ids.orgId)
     // `[a]stro` cannot match the shell running this very line, which `-f` reads.
     const script = [

@@ -1,5 +1,10 @@
+import { execFileSync } from "node:child_process"
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { runAxe, uploadDist } from "../src/tail.ts"
+import { SITE_ROOT } from "../src/revise.ts"
+import { finishRevision, runAxe, uploadDist } from "../src/tail.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
@@ -189,5 +194,84 @@ describe("the axe step", () => {
       exit_code: 137,
       key: null,
     })
+  })
+})
+
+describe("the build at the end of a report", () => {
+  /**
+   * `finishRevision`'s own shell commands, run by bash in a scratch site
+   * whose `astro` exits and writes as the case says. The steps after the
+   * build are not reached here: the first one stops the run.
+   */
+  const finish = async (build: string) => {
+    const site = mkdtempSync(join(tmpdir(), "reme-tail-"))
+    mkdirSync(join(site, "node_modules/.bin"), { recursive: true })
+    const astro = join(site, "node_modules/.bin/astro")
+    writeFileSync(
+      astro,
+      `#!/bin/sh\necho "astro $1"\n[ "$1" = check ] && exit 0\n${build}\n`
+    )
+    chmodSync(astro, 0o755)
+    const local = (path: string) => path.replaceAll(SITE_ROOT, site)
+    const ran: string[] = []
+    const sandbox = {
+      exec: async (command: string) => {
+        try {
+          const stdout = execFileSync("bash", ["-c", local(command)], {
+            encoding: "utf8",
+          })
+          return { exitCode: 0, stdout, stderr: "" }
+        } catch (error) {
+          const failed = error as { status: number; stdout: string }
+          return { exitCode: failed.status, stdout: failed.stdout, stderr: "" }
+        }
+      },
+      readFileBuffer: async () => new Uint8Array(),
+      writeFile: async (path: string, content: string) => {
+        mkdirSync(dirname(local(path)), { recursive: true })
+        writeFileSync(local(path), content)
+      },
+    }
+    const db = {
+      select: () => ({
+        from: () => ({ where: async () => [{ slug: "acme" }] }),
+      }),
+    }
+    const outcome = finishRevision({
+      steps: {
+        do: async (name: string, fn: () => Promise<unknown>) => {
+          ran.push(name)
+          if (name === "revision") throw new Error("reached the revision")
+          return fn()
+        },
+      },
+      sandbox,
+      kit: { withOrg: (_: unknown, fn: (d: unknown) => unknown) => fn(db) },
+      sites: {},
+      hostSuffix: "-stg.remeai.co.uk",
+      orgId: "o",
+      assignmentId: "a",
+      facts: [],
+    } as unknown as Parameters<typeof finishRevision>[0])
+    return { outcome, ran }
+  }
+
+  it("fails the report when astro build fails, whatever its output's tail says", async () => {
+    const { outcome, ran } = await finish('echo "ENOENT: font cache"; exit 1')
+    await expect(outcome).rejects.toThrow(/astro build failed[\s\S]*ENOENT/)
+    expect(ran).not.toContain("revision")
+  })
+
+  it("fails the report when astro build exits 0 and writes no page", async () => {
+    const { outcome, ran } = await finish("mkdir -p dist/_astro; exit 0")
+    await expect(outcome).rejects.toThrow(/wrote no pages/)
+    expect(ran).not.toContain("revision")
+  })
+
+  it("goes on to the revision when the build wrote its pages", async () => {
+    const { outcome } = await finish(
+      "mkdir -p dist && echo '<html></html>' > dist/index.html"
+    )
+    await expect(outcome).rejects.toThrow("reached the revision")
   })
 })

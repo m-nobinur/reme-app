@@ -186,6 +186,14 @@ const SECURITY_HEADERS = {
   "x-frame-options": "DENY",
 }
 
+/**
+ * A command's last 20 lines with the command's own exit code. Piped into
+ * `tail`, a failed `astro build` exited 0 and reported a revision with no
+ * files.
+ */
+export const tailed = (command: string) =>
+  `(${command} > /tmp/tailed.log 2>&1; s=$?; tail -20 /tmp/tailed.log; exit $s)`
+
 /** A durable step runner: flue's inside a tool, or a plain call inside one Workflow step. */
 export type Steps = {
   do: <T>(name: string, fn: () => Promise<T>) => Promise<T>
@@ -207,11 +215,11 @@ type Check = { exit_code: number; output: string; ms: number }
 type Run = { exit_code: number; key: string | null; ms: number }
 
 /**
- * The axe run, which also carries the custom-section check's. `finishRevision`'s
- * callers hand `axe` to `checksOf` untouched, so riding on it puts the check in
- * both lanes' reports without a second field in each caller.
+ * Axe runs after the preview exists, in the Workflow (`a11y` step), not here:
+ * the preview does not wait on it, and the review and publish wait on its
+ * result instead.
  */
-type Axe = Run & { custom?: Run }
+export type Axe = Run
 
 /**
  * The end of every build, both lanes (§8.2 "Verify before claiming done"):
@@ -243,7 +251,7 @@ export async function finishRevision(input: {
   )
   const check = await steps.do("astro check", async (): Promise<Check> => {
     const started = Date.now()
-    const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
+    const r = await run(tailed("./node_modules/.bin/astro check"))
     return {
       exit_code: r.exitCode,
       output: r.stdout.slice(-2000),
@@ -264,8 +272,9 @@ export async function finishRevision(input: {
   )
   const build = await steps.do("astro build", async (): Promise<Check> => {
     const started = Date.now()
+    // The last build's pages go first, so a build that writes none is seen.
     const r = await run(
-      `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
+      `rm -rf dist && ${tailed(`./node_modules/.bin/astro build --site https://${host}`)} && test -n "$(find dist -name '*.html' -type f | head -1)"`
     )
     return {
       exit_code: r.exitCode,
@@ -275,7 +284,7 @@ export async function finishRevision(input: {
   })
   if (build.exit_code !== 0) {
     throw new Error(
-      `astro build failed, fix it before reporting:\n${build.output}`
+      `astro build failed or wrote no pages, fix it before reporting:\n${build.output}`
     )
   }
 
@@ -344,14 +353,6 @@ export async function finishRevision(input: {
     }
   })
 
-  const axe = await steps.do("axe", () =>
-    runAxe(
-      { exec: run, readFileBuffer: (path) => sandbox.readFileBuffer(path) },
-      sites,
-      prefix
-    )
-  )
-
   const source = await steps.do("upload source", async () => {
     const started = Date.now()
     const r = await run(
@@ -365,7 +366,7 @@ export async function finishRevision(input: {
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 
-  return { revisionId, check, build, manifest, axe: { ...axe, custom }, source }
+  return { revisionId, check, build, manifest, custom, source }
 }
 
 /**
@@ -420,17 +421,12 @@ export async function runCustomSections(
 }
 
 /** The report's checks, from what `finishRevision` ran. */
-export const checksOf = (tail: { check: Check; build: Check; axe: Axe }) => [
+export const checksOf = (tail: { check: Check; build: Check; custom: Run }) => [
   { check: "astro check", exit_code: tail.check.exit_code, output_key: null },
   { check: "astro build", exit_code: tail.build.exit_code, output_key: null },
-  { check: "axe", exit_code: tail.axe.exit_code, output_key: tail.axe.key },
-  ...(tail.axe.custom
-    ? [
-        {
-          check: CUSTOM_CHECK,
-          exit_code: tail.axe.custom.exit_code,
-          output_key: tail.axe.custom.key,
-        },
-      ]
-    : []),
+  {
+    check: CUSTOM_CHECK,
+    exit_code: tail.custom.exit_code,
+    output_key: tail.custom.key,
+  },
 ]

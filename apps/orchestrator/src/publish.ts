@@ -65,6 +65,36 @@ const toApprovalRequest = (row: ApprovalRow): ApprovalRequest =>
     expires_at: row.expiresAt.toISOString(),
   })
 
+/** The event the `a11y` step logs a revision's accessibility gate in. */
+export const A11Y_CHECKED = "revision.a11y_checked"
+
+/**
+ * Whether the revision passed the accessibility gate, which runs after its
+ * preview exists. A revision from before that has the gate in its validation
+ * report instead. No result is a refusal: the review, the approval and the
+ * publish all wait on it.
+ */
+export async function accessible(
+  db: OrgScopedDb,
+  revisionId: string
+): Promise<boolean> {
+  const [row] = await db.execute<{ passed: boolean }>(
+    sql`select true as passed from events e join site_revisions r on r.assignment_id = e.assignment_id where r.id = ${revisionId} and e.payload->>'revision_id' = ${revisionId} and ((e.type = ${A11Y_CHECKED} and e.payload->>'passed' = 'true') or (e.type = 'assignment.validation_reported' and e.payload->'gates' @> '[{"gate":"a11y","passed":true}]')) limit 1`
+  )
+  return row?.passed === true
+}
+
+/** Refuse a step that needs the revision's accessibility gate passed. */
+async function needAccessible(db: OrgScopedDb, revisionId: string) {
+  if (!(await accessible(db, revisionId))) {
+    throw new TransitionError(
+      "revision.a11y_unchecked",
+      "validation",
+      "the revision has no passing accessibility check yet"
+    )
+  }
+}
+
 /** The assignment's latest revision, whatever its status. */
 export async function latestRevision(db: OrgScopedDb, assignmentId: string) {
   const [row] = await db
@@ -117,6 +147,7 @@ export function requestReview(
         "the assignment's latest revision is not a preview"
       )
     }
+    await needAccessible(db, revision.id)
     const chief = await chiefStaffId(db)
     const now = Date.now()
     const [inserted] = await db
@@ -245,6 +276,7 @@ export function decideApproval(
       if (decided) return { decision: toDecision(decided), replayed: true }
     }
     const { open, expired } = await openForDecision(db, row, input.revisionId)
+    await needAccessible(db, input.revisionId)
     const decidedAt = new Date()
     const [decided] = await db
       .update(approvals)

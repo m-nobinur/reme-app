@@ -56,11 +56,19 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   published: ["release_candidate"],
   blocked_on_information: ["implementing"],
   blocked_on_approval: ["awaiting_review", "implementing"],
-  repairing: ["implementing", "validating"],
+  // A preview goes back when the accessibility gate, which runs after the
+  // preview exists, fails.
+  repairing: ["implementing", "validating", "preview_ready"],
   paused: [],
   // A fourth gate failure cannot enter `repairing`, so it ends here directly.
   // A plan nobody decided on in seven days ends from `planning` (ADR-038).
-  failed: ["planning", "repairing", "validating", "implementing"],
+  failed: [
+    "planning",
+    "repairing",
+    "validating",
+    "implementing",
+    "preview_ready",
+  ],
   cancelled: [],
 }
 

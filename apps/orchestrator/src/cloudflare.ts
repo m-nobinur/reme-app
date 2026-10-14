@@ -43,7 +43,9 @@ import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
 import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
+  accessible,
   activate,
+  latestRevision,
   PROBE_MINUTES,
   type PublishParams,
   probeHost,
@@ -76,12 +78,13 @@ import {
   tailSandbox,
   takeScreenshots,
   takeWarm,
+  whileHeld,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
-import { GIT } from "./tail.ts"
+import { GIT, runAxe } from "./tail.ts"
 import { logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
-import { assignmentFacts, validateRevision } from "./validate.ts"
+import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
@@ -215,6 +218,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     const t0 = event.timestamp.getTime()
     let claimed = false
     let claimedAt = t0
+    let superseded: string | null = null
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !claimed; attempt++) {
       const result = await step.do(`claim ${attempt}`, async () => ({
         ...(await run((kit) => claim(kit, ids, attempt === 1))),
@@ -222,6 +226,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       }))
       claimed = result.claimed
       claimedAt = result.at
+      superseded = result.superseded
       // A superseded preview's container is the site's warm one, which this
       // assignment takes over below, so it is not destroyed here.
       if (!claimed) await step.sleep(`site busy ${attempt}`, "30 seconds")
@@ -387,7 +392,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
      */
     const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
       const briefStarted = Date.now()
-      const { brief, origin, kind, from } = await run((kit) =>
+      const { brief, origin, kind, from, left } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -405,6 +410,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           if (row.kind === "site.revise" && !source) {
             throw new NonRetryableError("site.not_published")
           }
+          // The preview this edit superseded built its revision on the disk
+          // and may not have marked it yet: it is still taking screenshots.
+          const previewed = superseded
+            ? await latestRevision(db, superseded)
+            : null
           const built: Brief = {
             spec,
             snapshot,
@@ -427,6 +437,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             origin: choices.origin,
             kind: row.kind,
             from: source?.revision_id ?? null,
+            left: previewed?.status === "preview" ? previewed.id : null,
           }
         })
       )
@@ -438,7 +449,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       // Developer's first turn.
       const sandbox = sandboxFor(this.env, ids.orgId)
       // Always taken, so a first build clears the marker too.
-      const held = handedOn ? from : await takeWarm(sandbox)
+      let held = handedOn ? from : await takeWarm(sandbox)
+      if (
+        !held &&
+        left &&
+        (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
+      ) {
+        held = left
+      }
       const warm = from !== null && held === from
       if (brief.restore_key) {
         brief.map = warm
@@ -672,7 +690,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         )
-        const verdict = await step.do(`gates ${round}`, async () => {
+        const gated = await step.do(`gates ${round}`, async () => {
           const gateMs: Record<string, number> = {}
           const started = Date.now()
           const result = await run((kit) =>
@@ -694,6 +712,37 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             at: Date.now(),
           }
         })
+        // The accessibility gate, once the preview exists: axe in the
+        // sandbox takes about ten seconds, which the preview no longer waits
+        // on. The review below does, and so do the approval and the publish.
+        const a11y =
+          gated.outcome === "preview_ready"
+            ? await step.do(`a11y ${round}`, async () => {
+                const started = Date.now()
+                const sandbox = tailSandbox(sandboxFor(this.env, ids.orgId))
+                const axe = await whileHeld(this.env, ids, () =>
+                  runAxe(
+                    {
+                      exec: (command) =>
+                        sandbox.exec(`cd ${SITE_ROOT} && ${command}`, {
+                          timeoutMs: 180_000,
+                        }),
+                      readFileBuffer: sandbox.readFileBuffer,
+                    },
+                    this.env.SITES,
+                    `sites/${ids.orgId}/${payload.revision_id}/`
+                  )
+                )
+                const result = await run((kit) =>
+                  checkA11y(kit, this.env.SITES, ids, payload.revision_id, axe)
+                )
+                return { ...result, ms: since(started) }
+              })
+            : null
+        const verdict =
+          a11y && a11y.outcome !== "preview_ready"
+            ? { ...gated, ...a11y }
+            : gated
         if (verdict.outcome === "repairing" && quickBase) {
           // The quick edit failed a gate: its files go back to where it
           // started and the Developer takes the change at the section role.
@@ -828,7 +877,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           upload_reused: t?.upload_reused ?? null,
           upload_bytes: t?.upload_bytes ?? null,
           source_ms: t?.source_ms ?? null,
-          axe_ms: t?.axe_ms ?? null,
+          axe_ms: a11y?.ms ?? null,
           gates_ms: verdict.gate_ms.total,
           ...Object.fromEntries(
             Object.entries(verdict.gate_ms)
@@ -986,9 +1035,24 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       rollback_id: crypto.randomUUID(),
     }))
 
-    const artifact = await step.do("verify artifact", () =>
-      verifyArtifact(this.env.SITES, target.site_id, target.revision_id)
-    )
+    const artifact = await step.do("verify artifact", async () => {
+      const files = await verifyArtifact(
+        this.env.SITES,
+        target.site_id,
+        target.revision_id
+      )
+      if (!files.ok) return files
+      // The accessibility gate runs after the preview; no pass, no publish.
+      const passed = await run((kit) =>
+        kit.withOrg({ orgId }, (db) => accessible(db, target.revision_id))
+      )
+      return passed
+        ? files
+        : {
+            ok: false as const,
+            message: "the revision has no passing accessibility check",
+          }
+    })
     if (!artifact.ok) {
       await step.do("refuse", () =>
         run((kit) =>
