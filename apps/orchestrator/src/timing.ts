@@ -18,6 +18,8 @@ export type ToolTimings = {
   /** Bytes read out of the sandbox, which the reused files are not. */
   upload_bytes: number
   source_ms: number
+  /** Axe over the built pages in the sandbox. */
+  axe_ms: number
   tool_ms: number
   model_turns: number | null
   /** Epoch ms when the tool woke the Workflow. */

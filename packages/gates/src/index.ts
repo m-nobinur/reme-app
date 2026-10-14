@@ -4,10 +4,12 @@ import {
   type FactRecord,
   type GateResult,
 } from "@workspace/contracts"
+import { checkAxe, parseAxe } from "./axe.ts"
 import { claimFindings, generatedImageFindings } from "./claims.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
 import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
+import { checkSize, type SizeBudget } from "./size.ts"
 import {
   type ContentClaim,
   type ContentKind,
@@ -16,6 +18,7 @@ import {
   phoneKey,
 } from "./text.ts"
 
+export { type AxeResult, checkAxe, parseAxe } from "./axe.ts"
 export {
   CLAIM_IMAGE_SECTIONS,
   CLAIM_VOCABULARY,
@@ -29,6 +32,7 @@ export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage } from "./page.ts"
 export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
+export { checkSize, type SizeBudget } from "./size.ts"
 export { factsForContent } from "./text.ts"
 
 /**
@@ -403,7 +407,7 @@ export function checkClaims(
 const READS = 8
 
 /**
- * All six gates over one artifact, in the contract's order. Each file is
+ * All eight gates over one artifact, in the contract's order. Each file is
  * read once: the build gate hashes every file while the pages are read for
  * the other gates, and a page both need comes from the same read.
  */
@@ -414,6 +418,10 @@ export async function runGates(input: {
   facts: readonly FactRecord[]
   /** The site's own host names, as `astro build --site` wrote them. */
   hosts?: readonly string[]
+  /** `size-budget.json`: the home page's gzip line; fonts and images have their own. */
+  budget: SizeBudget
+  /** Reads the sandbox's evidence by the key its check reported (the axe JSON). */
+  evidence?: (key: string) => Promise<Uint8Array | null>
   /** Filled with milliseconds per gate, and `read` for the page reads. */
   timings?: Record<string, number>
 }): Promise<GateResult[]> {
@@ -434,6 +442,13 @@ export async function runGates(input: {
     return once
   }
   const types = checkTypes(input.report)
+  const axeKey = input.report.checks.find((c) => c.check === "axe")?.output_key
+  const axeBytes =
+    axeKey && input.evidence ? await input.evidence(axeKey) : null
+  const axe = checkAxe(
+    input.report,
+    axeBytes ? parseAxe(safeJson(new TextDecoder().decode(axeBytes))) : null
+  )
   const parsed = DeploymentManifest.safeParse(input.manifest)
   if (!parsed.success) {
     const unreadable =
@@ -445,6 +460,8 @@ export async function runGates(input: {
       fail("structured_data", unreadable),
       fail("content", unreadable),
       fail("claims", unreadable),
+      axe,
+      fail("size", unreadable),
     ]
   }
   const decoder = new TextDecoder()
@@ -477,7 +494,22 @@ export async function runGates(input: {
     lap("structured_data", () => checkStructuredData(pages)),
     lap("content", () => checkContent(pages, input.facts, input.hosts)),
     lap("claims", () => checkClaims(pages, input.facts)),
+    axe,
+    await (async () => {
+      const started = Date.now()
+      const result = await checkSize(parsed.data.files, read, input.budget)
+      if (input.timings) input.timings.size = Date.now() - started
+      return result
+    })(),
   ]
+}
+
+const safeJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
 export type { Located }

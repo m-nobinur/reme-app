@@ -46,6 +46,7 @@ vi.mock("../src/tail.ts", async (importOriginal) => ({
           "[copy-check] /index.html: em dash in heading\n[copy-check] 1 finding(s); fix each one in text you wrote",
       },
       manifest: { files: 3, reused: 2, bytes: 10, ms: 1 },
+      axe: { exit_code: 0, key: null, ms: 1 },
       source: { key: "k", ms: 1 },
     }
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { uploadDist } from "../src/tail.ts"
+import { runAxe, uploadDist } from "../src/tail.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
@@ -136,5 +136,58 @@ describe("the dist upload", () => {
     const out = await r.run()
     expect(out.sent).toBe(31)
     expect(r.peak()).toBe(8)
+  })
+})
+
+describe("the axe step", () => {
+  const axeRig = (exitCode: number, json: string | null) => {
+    const put = new Map<string, Uint8Array>()
+    const commands: string[] = []
+    return {
+      put,
+      commands,
+      run: () =>
+        runAxe(
+          {
+            exec: async (command) => {
+              commands.push(command)
+              return { exitCode }
+            },
+            readFileBuffer: async () => {
+              if (json === null) throw new Error("no such file")
+              return enc(json)
+            },
+          },
+          { put: async (key, value) => void put.set(key, value as Uint8Array) },
+          "sites/o/r/"
+        ),
+    }
+  }
+
+  it("keeps the JSON as evidence and reports the script's own exit code", async () => {
+    for (const code of [0, 1]) {
+      const r = axeRig(code, '{"pages":[]}')
+      expect(await r.run()).toMatchObject({
+        exit_code: code,
+        key: "sites/o/r/axe.json",
+      })
+      expect(new TextDecoder().decode(r.put.get("sites/o/r/axe.json"))).toBe(
+        '{"pages":[]}'
+      )
+      expect(r.commands[0]).toMatch(
+        /^rm -f \/tmp\/axe.json; node \/opt\/astro\/axe.mjs dist/
+      )
+    }
+  })
+
+  it("reports a run that left no JSON as failed, even when the shell said 0", async () => {
+    expect(await axeRig(0, null).run()).toMatchObject({
+      exit_code: 2,
+      key: null,
+    })
+    expect(await axeRig(137, null).run()).toMatchObject({
+      exit_code: 137,
+      key: null,
+    })
   })
 })

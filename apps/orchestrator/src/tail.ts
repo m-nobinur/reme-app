@@ -24,6 +24,9 @@ import { since } from "./timing.ts"
 /** Uploads in flight at once. */
 const UPLOADS = 8
 
+/** Where the sandbox's axe script leaves its JSON. */
+const AXE_OUT = "/tmp/axe.json"
+
 /** How many earlier revisions are tried for a manifest to reuse. */
 const LOOKBACK = 3
 
@@ -190,6 +193,9 @@ export type TailSandbox = {
 
 type Check = { exit_code: number; output: string; ms: number }
 
+/** The axe run: its exit code, where its JSON went, and how long it took. */
+type Axe = { exit_code: number; key: string | null; ms: number }
+
 /**
  * The end of every build, both lanes (§8.2 "Verify before claiming done"):
  * one `astro check` and one `astro build`, the revision row, the changed
@@ -307,6 +313,14 @@ export async function finishRevision(input: {
     }
   })
 
+  const axe = await steps.do("axe", () =>
+    runAxe(
+      { exec: run, readFileBuffer: (path) => sandbox.readFileBuffer(path) },
+      sites,
+      prefix
+    )
+  )
+
   const source = await steps.do("upload source", async () => {
     const started = Date.now()
     const r = await run(
@@ -320,11 +334,39 @@ export async function finishRevision(input: {
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 
-  return { revisionId, check, build, manifest, source }
+  return { revisionId, check, build, manifest, axe, source }
 }
 
-/** The report's two checks, from what `finishRevision` ran. */
-export const checksOf = (tail: { check: Check; build: Check }) => [
+/**
+ * Axe over the built site, from the sandbox: three pages at one width, so
+ * about two seconds a build. The JSON goes to R2 as the check's evidence. A run
+ * that left no JSON is reported as exit 2 (or its own non-zero code), which
+ * the gate fails closed on.
+ */
+export async function runAxe(
+  sandbox: {
+    exec: (command: string) => Promise<{ exitCode: number }>
+    readFileBuffer: (path: string) => Promise<Uint8Array>
+  },
+  sites: Pick<DistBucket, "put">,
+  prefix: string
+): Promise<Axe> {
+  const started = Date.now()
+  // A stale file from the last build must not stand in for this run's.
+  const r = await sandbox.exec(
+    `rm -f ${AXE_OUT}; node /opt/astro/axe.mjs dist ${AXE_OUT}`
+  )
+  const json = await sandbox.readFileBuffer(AXE_OUT).catch(() => null)
+  if (!json)
+    return { exit_code: r.exitCode || 2, key: null, ms: since(started) }
+  const key = `${prefix}axe.json`
+  await sites.put(key, json)
+  return { exit_code: r.exitCode, key, ms: since(started) }
+}
+
+/** The report's checks, from what `finishRevision` ran. */
+export const checksOf = (tail: { check: Check; build: Check; axe: Axe }) => [
   { check: "astro check", exit_code: tail.check.exit_code, output_key: null },
   { check: "astro build", exit_code: tail.build.exit_code, output_key: null },
+  { check: "axe", exit_code: tail.axe.exit_code, output_key: tail.axe.key },
 ]

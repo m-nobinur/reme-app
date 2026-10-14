@@ -41,6 +41,8 @@ export const GateName = z.enum([
   "structured_data",
   "content",
   "claims",
+  "a11y",
+  "size",
 ])
 
 export const GateResult = z.strictObject({

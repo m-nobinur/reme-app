@@ -20,6 +20,7 @@ import {
   toFactRecord,
 } from "@workspace/db"
 import { runGates } from "@workspace/gates"
+import budget from "@workspace/starter-site/size-budget.json"
 import { lockSite } from "./publish.ts"
 import { type Ids, TransitionError, transition } from "./state.ts"
 
@@ -180,12 +181,16 @@ export async function validateRevision(
   const manifest = manifestObject
     ? JSON.parse(new TextDecoder().decode(await manifestObject.arrayBuffer()))
     : null
+  const bytesOf = async (key: string) => {
+    const object = await sites.get(key)
+    return object ? new Uint8Array(await object.arrayBuffer()) : null
+  }
   const results = await runGates({
     manifest,
-    read: async (file) => {
-      const object = await sites.get(`${base}dist/${file}`)
-      return object ? new Uint8Array(await object.arrayBuffer()) : null
-    },
+    read: (file) => bytesOf(`${base}dist/${file}`),
+    evidence: bytesOf,
+    // The starter's line for the home page; its baseline is the starter's own.
+    budget: { limit: budget.limit },
     report,
     facts: factsUsed,
     hosts: [siteHost(slug ?? "", hostSuffix)],

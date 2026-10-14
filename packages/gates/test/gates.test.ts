@@ -431,8 +431,12 @@ describe("all the gates", () => {
             ? contactBody
             : null,
       report: {
-        checks: [{ check: "astro check", exit_code: 0, output_key: null }],
+        checks: [
+          { check: "astro check", exit_code: 0, output_key: null },
+          { check: "axe", exit_code: 0, output_key: null },
+        ],
       } as CompletionReport,
+      budget: { limit: 102_400 },
       facts: FACTS,
       timings,
     })
@@ -442,6 +446,7 @@ describe("all the gates", () => {
       "content",
       "links",
       "read",
+      "size",
       "structured_data",
     ])
     expect(results.map((r) => r.gate)).toEqual([
@@ -451,6 +456,8 @@ describe("all the gates", () => {
       "structured_data",
       "content",
       "claims",
+      "a11y",
+      "size",
     ])
     for (const r of results) expect(GateResult.parse(r)).toEqual(r)
     expect(results.every((r) => r.passed)).toBe(true)
@@ -485,8 +492,12 @@ describe("all the gates", () => {
         return bodies[file] ?? null
       },
       report: {
-        checks: [{ check: "astro check", exit_code: 0, output_key: null }],
+        checks: [
+          { check: "astro check", exit_code: 0, output_key: null },
+          { check: "axe", exit_code: 0, output_key: null },
+        ],
       } as CompletionReport,
+      budget: { limit: 102_400 },
       facts: FACTS,
     })
     expect(results[0]).toMatchObject({ gate: "build", passed: true })

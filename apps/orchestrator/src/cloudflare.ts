@@ -670,6 +670,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           upload_reused: t?.upload_reused ?? null,
           upload_bytes: t?.upload_bytes ?? null,
           source_ms: t?.source_ms ?? null,
+          axe_ms: t?.axe_ms ?? null,
           gates_ms: verdict.gate_ms.total,
           ...Object.fromEntries(
             Object.entries(verdict.gate_ms)
