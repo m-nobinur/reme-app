@@ -20,6 +20,19 @@ describe("the toolchain", () => {
     }
   })
 
+  // node_modules links to the image's read-only /opt/astro: a font pair the
+  // image never built failed with ENOENT in node_modules/.astro/fonts.
+  test("keeps Astro's and Vite's caches out of node_modules and git", async () => {
+    const config = (await import("../astro.config.mjs")).default
+    const ignored = read("../.gitignore").toString("utf8").split("\n")
+    for (const dir of [config.cacheDir, config.vite?.cacheDir]) {
+      expect(dir, "cacheDir unset").toBeTypeOf("string")
+      const name = String(dir).replace(/^\.\//, "")
+      expect(name).not.toMatch(/node_modules/)
+      expect(ignored).toContain(`${name}/`)
+    }
+  })
+
   test("carries the tokens byte for byte", () => {
     const copy = read("../src/styles/tokens.css")
     const source = read("../../ui/src/styles/tokens.css")

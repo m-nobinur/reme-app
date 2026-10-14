@@ -28,7 +28,8 @@ const copyCheck = {
 }
 
 // node_modules is a read-only link to the sandbox image's toolchain when the
-// Developer builds this site, so Vite's cache lives beside the site. See
+// Developer builds this site, so Vite's cache and Astro's (fonts and resized
+// images, `node_modules/.astro` by default) live beside the site. See
 // infra/sandbox/astro/README.md.
 //
 // The fonts are the chosen pair's @fontsource files and nothing else, read
@@ -37,6 +38,7 @@ const copyCheck = {
 const provider = fontProviders.local()
 
 export default defineConfig({
+  cacheDir: "./.astro-cache",
   vite: { cacheDir: ".vite" },
   fonts: familiesOf(pairOf(site.font)).map((family) => ({
     provider,

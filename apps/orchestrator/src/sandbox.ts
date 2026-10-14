@@ -253,7 +253,7 @@ export async function checkpoint(
     return { taken: false, key, bytes: 0, ms: Date.now() - started }
   }
   const packed = await sandbox.exec(
-    `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`,
+    `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite --exclude=./.astro-cache -C ${SITE_ROOT} .`,
     { timeout: 120_000 }
   )
   if (packed.exitCode !== 0) {

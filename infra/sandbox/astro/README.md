@@ -8,7 +8,7 @@ rather than installing, so a build never reaches the registry:
 ln -s /opt/astro/node_modules node_modules
 ```
 
-The link is read-only, so a site's `astro.config.mjs` sets `vite.cacheDir` the
+The link is read-only, so a site's `astro.config.mjs` sets `cacheDir` and `vite.cacheDir` the
 way this one does. A site's `package.json` has to name the same versions as
 this one. A different version is a change to this directory, which rebuilds
 the image on its own workflow.
