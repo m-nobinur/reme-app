@@ -91,9 +91,9 @@ dollars later.
 - The owner sees the design and the page plan before anything is built, and every first build
   pays one more Sonnet call, two on a retry. Its cost is unmeasured until a recorded run; the
   `runtime.turn` rows tagged `plan` meter it with the rest of the build.
-- An owner's build holds its site lock and its provisioned container while it waits on the card.
-  The container sleeps on its own and a first build reseeds anyway, but a pool slot may stay
-  taken; index open item 1 covers pool pressure.
+- An owner's build holds its site lock while it waits on the card, but no container: the
+  Workflow plans and waits before it provisions, so an undecided owner never holds one of the
+  pool's slots. Provisioning time after the decision is logged apart from planning time.
 - The plan and the built site can be compared by code (index exit gate 3).
 - The fallback means a provider outage yields a plainer site, not a stopped build. The log says
   which builds fell back.

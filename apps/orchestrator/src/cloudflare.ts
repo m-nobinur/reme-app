@@ -220,43 +220,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     if (!claimed) return { outcome: "queued" }
 
-    // The container, after the site lock and not before: the lock is one
-    // org's, the pool is everyone's, so the scarce thing is taken last. The
-    // same loop as the claim, with one `pool.exhausted` event on the first
-    // refusal only. Only a full pool waits; any other error takes the step's
-    // retry policy, so a bad image fails rather than retrying for ten minutes.
-    let ready = false
-    let coldStartMs = 0
-    let readyAt = claimedAt
-    for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !ready; attempt++) {
-      const got = await step.do(`sandbox ${attempt}`, async () => {
-        try {
-          const { cold_start_ms, evicted } = await provision(this.env, ids)
-          await run((kit) =>
-            appendAudit(kit, ids, "sandbox.provisioned", {
-              cold_start_ms,
-              evicted,
-            })
-          )
-          return { ready: true, cold_start_ms, at: Date.now() }
-        } catch (error) {
-          if (!(error instanceof PoolExhaustedError)) throw error
-          if (attempt === 1) {
-            await run((kit) =>
-              appendAudit(kit, ids, "pool.exhausted", { reason: error.reason })
-            )
-          }
-          return { ready: false, cold_start_ms: 0, at: Date.now() }
-        }
-      })
-      ready = got.ready
-      coldStartMs = got.cold_start_ms
-      readyAt = got.at
-      if (!ready) await step.sleep(`pool full ${attempt}`, "30 seconds")
-    }
-    if (!ready) return { outcome: "pool_exhausted" }
-
     // A build that cannot continue ends in `failed` and destroys its sandbox,
+    // if it holds one (`endSandbox` leaves a warm one another build holds),
     // which releases the site lock (§13): a provider that keeps failing, a
     // Developer that never reports or a plan nobody decides on must not hold
     // the site for good.
@@ -353,6 +318,47 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         if (decision === "build") break
       }
     }
+    // The container, after the site lock and the owner's plan decision and
+    // not before: the lock is one org's, the pool is everyone's, so the
+    // scarce thing is taken last, and an owner who has not decided on a
+    // Blueprint for days holds no slot (ADR-038). The
+    // same loop as the claim, with one `pool.exhausted` event on the first
+    // refusal only. Only a full pool waits; any other error takes the step's
+    // retry policy, so a bad image fails rather than retrying for ten minutes.
+    let ready = false
+    let coldStartMs = 0
+    let readyAt = claimedAt
+    let askedAt = claimedAt
+    for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !ready; attempt++) {
+      const got = await step.do(`sandbox ${attempt}`, async () => {
+        const started = Date.now()
+        try {
+          const { cold_start_ms, evicted } = await provision(this.env, ids)
+          await run((kit) =>
+            appendAudit(kit, ids, "sandbox.provisioned", {
+              cold_start_ms,
+              evicted,
+            })
+          )
+          return { ready: true, cold_start_ms, started, at: Date.now() }
+        } catch (error) {
+          if (!(error instanceof PoolExhaustedError)) throw error
+          if (attempt === 1) {
+            await run((kit) =>
+              appendAudit(kit, ids, "pool.exhausted", { reason: error.reason })
+            )
+          }
+          return { ready: false, cold_start_ms: 0, started, at: Date.now() }
+        }
+      })
+      ready = got.ready
+      if (attempt === 1) askedAt = got.started
+      coldStartMs = got.cold_start_ms
+      readyAt = got.at
+      if (!ready) await step.sleep(`pool full ${attempt}`, "30 seconds")
+    }
+    if (!ready) return { outcome: "pool_exhausted" }
+
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
@@ -722,7 +728,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           rounds: round,
           warm: admitted.warm,
           lock_ms: claimedAt - t0,
-          provision_ms: readyAt - claimedAt,
+          // Planning and the owner's wait on the Blueprint come before the
+          // container, so they are their own line.
+          plan_ms: askedAt - claimedAt,
+          provision_ms: readyAt - askedAt,
           cold_start_ms: coldStartMs,
           brief_ms: admitted.brief_ms,
           restore_ms: admitted.restore_ms,
