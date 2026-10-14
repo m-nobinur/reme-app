@@ -440,6 +440,64 @@ export interface components {
                   kind: "template"
                   id: string
                 }
+              | {
+                  /** @constant */
+                  kind: "font_pair"
+                  display: string
+                  body: string
+                }
+              | {
+                  /** @constant */
+                  kind: "layout"
+                  /** @enum {string} */
+                  hero:
+                    | "wash"
+                    | "split_arch"
+                    | "split_frame"
+                    | "dark_center"
+                    | "text_led"
+                    | "icons"
+                    | "phrases"
+                    | "photo_cards"
+                    | "numbered_rows"
+                    | "alternating"
+                    | "fleet"
+                    | "practice_list"
+                    | "default"
+                    | "circles"
+                    | "dark_band"
+                    | "timeline"
+                    | "featured"
+                    | "wall"
+                    | "split"
+                    | "stacked"
+                    | "solid"
+                    | "photo"
+                  /** @enum {string} */
+                  services:
+                    | "wash"
+                    | "split_arch"
+                    | "split_frame"
+                    | "dark_center"
+                    | "text_led"
+                    | "icons"
+                    | "phrases"
+                    | "photo_cards"
+                    | "numbered_rows"
+                    | "alternating"
+                    | "fleet"
+                    | "practice_list"
+                    | "default"
+                    | "circles"
+                    | "dark_band"
+                    | "timeline"
+                    | "featured"
+                    | "wall"
+                    | "split"
+                    | "stacked"
+                    | "solid"
+                    | "photo"
+                }
             )
           | null
       }[]
@@ -467,6 +525,7 @@ export interface components {
     AskDesignInput: {
       questions: {
         id: string
+        question?: string
         /** @enum {string} */
         visual: "palette" | "font_pair" | "layout" | "text"
         card: {
@@ -501,6 +560,64 @@ export interface components {
                       /** @constant */
                       kind: "template"
                       id: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "font_pair"
+                      display: string
+                      body: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "layout"
+                      /** @enum {string} */
+                      hero:
+                        | "wash"
+                        | "split_arch"
+                        | "split_frame"
+                        | "dark_center"
+                        | "text_led"
+                        | "icons"
+                        | "phrases"
+                        | "photo_cards"
+                        | "numbered_rows"
+                        | "alternating"
+                        | "fleet"
+                        | "practice_list"
+                        | "default"
+                        | "circles"
+                        | "dark_band"
+                        | "timeline"
+                        | "featured"
+                        | "wall"
+                        | "split"
+                        | "stacked"
+                        | "solid"
+                        | "photo"
+                      /** @enum {string} */
+                      services:
+                        | "wash"
+                        | "split_arch"
+                        | "split_frame"
+                        | "dark_center"
+                        | "text_led"
+                        | "icons"
+                        | "phrases"
+                        | "photo_cards"
+                        | "numbered_rows"
+                        | "alternating"
+                        | "fleet"
+                        | "practice_list"
+                        | "default"
+                        | "circles"
+                        | "dark_band"
+                        | "timeline"
+                        | "featured"
+                        | "wall"
+                        | "split"
+                        | "stacked"
+                        | "solid"
+                        | "photo"
                     }
                 )
               | null
@@ -5100,7 +5217,6 @@ export interface components {
           max_output_tokens: number
           /** @enum {string} */
           effort?: "low" | "medium" | "high" | "xhigh" | "max"
-          max_tokens?: number
         }
       }
       tool_manifest: string[]

@@ -1386,6 +1386,94 @@
                           },
                           "required": ["kind", "id"],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "font_pair"
+                            },
+                            "display": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "body": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": ["kind", "display", "body"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "layout"
+                            },
+                            "hero": {
+                              "type": "string",
+                              "enum": [
+                                "wash",
+                                "split_arch",
+                                "split_frame",
+                                "dark_center",
+                                "text_led",
+                                "icons",
+                                "phrases",
+                                "photo_cards",
+                                "numbered_rows",
+                                "alternating",
+                                "fleet",
+                                "practice_list",
+                                "default",
+                                "circles",
+                                "dark_band",
+                                "timeline",
+                                "featured",
+                                "wall",
+                                "split",
+                                "stacked",
+                                "solid",
+                                "photo"
+                              ]
+                            },
+                            "services": {
+                              "type": "string",
+                              "enum": [
+                                "wash",
+                                "split_arch",
+                                "split_frame",
+                                "dark_center",
+                                "text_led",
+                                "icons",
+                                "phrases",
+                                "photo_cards",
+                                "numbered_rows",
+                                "alternating",
+                                "fleet",
+                                "practice_list",
+                                "default",
+                                "circles",
+                                "dark_band",
+                                "timeline",
+                                "featured",
+                                "wall",
+                                "split",
+                                "stacked",
+                                "solid",
+                                "photo"
+                              ]
+                            }
+                          },
+                          "required": ["kind", "hero", "services"],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -1531,6 +1619,12 @@
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9_]{1,39}$"
                 },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "\\S"
+                },
                 "visual": {
                   "type": "string",
                   "enum": ["palette", "font_pair", "layout", "text"]
@@ -1640,6 +1734,94 @@
                                       }
                                     },
                                     "required": ["kind", "id"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "font_pair"
+                                      },
+                                      "display": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 80,
+                                        "pattern": "\\S"
+                                      },
+                                      "body": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 80,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    "required": ["kind", "display", "body"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "layout"
+                                      },
+                                      "hero": {
+                                        "type": "string",
+                                        "enum": [
+                                          "wash",
+                                          "split_arch",
+                                          "split_frame",
+                                          "dark_center",
+                                          "text_led",
+                                          "icons",
+                                          "phrases",
+                                          "photo_cards",
+                                          "numbered_rows",
+                                          "alternating",
+                                          "fleet",
+                                          "practice_list",
+                                          "default",
+                                          "circles",
+                                          "dark_band",
+                                          "timeline",
+                                          "featured",
+                                          "wall",
+                                          "split",
+                                          "stacked",
+                                          "solid",
+                                          "photo"
+                                        ]
+                                      },
+                                      "services": {
+                                        "type": "string",
+                                        "enum": [
+                                          "wash",
+                                          "split_arch",
+                                          "split_frame",
+                                          "dark_center",
+                                          "text_led",
+                                          "icons",
+                                          "phrases",
+                                          "photo_cards",
+                                          "numbered_rows",
+                                          "alternating",
+                                          "fleet",
+                                          "practice_list",
+                                          "default",
+                                          "circles",
+                                          "dark_band",
+                                          "timeline",
+                                          "featured",
+                                          "wall",
+                                          "split",
+                                          "stacked",
+                                          "solid",
+                                          "photo"
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "hero", "services"],
                                     "additionalProperties": false
                                   }
                                 ]
@@ -16849,11 +17031,6 @@
                 "effort": {
                   "type": "string",
                   "enum": ["low", "medium", "high", "xhigh", "max"]
-                },
-                "max_tokens": {
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991
                 }
               },
               "required": ["model", "max_output_tokens"],
