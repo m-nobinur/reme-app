@@ -1,4 +1,5 @@
 import {
+  type Blueprint,
   type BuildLane,
   ChangeKind,
   FactSnapshot,
@@ -46,6 +47,8 @@ export type Brief = {
   map: string | null
   /** The routing role the Developer starts on when not `build`: a section change's quick lane. */
   role?: "quick_section"
+  /** The plan this build follows (ADR-038); absent when the build did not plan. */
+  blueprint?: Blueprint | null
 }
 
 /**
@@ -97,6 +100,9 @@ export async function creationChoices(
   origin: "owner" | "console"
   lane: BuildLane
   change_kind: ChangeKind | null
+  kind: string
+  /** The owner chose "Skip all" in onboarding: build from the plan without the card's wait. */
+  skip_review: boolean
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -116,6 +122,8 @@ export async function creationChoices(
     // A row written before lanes existed ran full.
     lane: payload.lane === "quick" ? "quick" : "full",
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
+    kind: typeof payload.kind === "string" ? payload.kind : "site.build",
+    skip_review: payload.review === "skip",
   }
 }
 

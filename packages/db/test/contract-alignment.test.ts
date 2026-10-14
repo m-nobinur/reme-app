@@ -175,6 +175,7 @@ describe("rows map onto contracts", () => {
     packRefs: [{ key: "cleaning", version: "0.1.0" }],
     budgetUsd: 12.5,
     costUsd: null,
+    blueprint: null,
     deadline: null,
     priority: "normal",
     workflowInstanceId: null,

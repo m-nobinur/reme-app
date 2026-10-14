@@ -14,6 +14,7 @@ import {
 import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
+import { DIRECTIONS, directionLine } from "./directions.ts"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
@@ -49,10 +50,11 @@ export const DESIGN_RULES = [
 ]
 
 /**
- * The directions library as prompt lines, stable across every build. VS6
- * fills it from `src/directions.json`; empty, the segment is left out.
+ * The directions library as prompt lines, stable across every build: VS6's
+ * `src/directions.json`, or the stand-in pair until it lands (directions.ts).
  */
-export const DIRECTION_LIBRARY: readonly string[] = []
+export const DIRECTION_LIBRARY: readonly string[] =
+  DIRECTIONS.map(directionLine)
 
 /**
  * Each industry pack's copy voice notes, by the id `business.industry`
@@ -177,7 +179,7 @@ const STARTER_PAGES = {
 }
 
 /** A fact's value, when the stored one still parses. */
-function factValue<K extends FactValueKey>(
+export function factValue<K extends FactValueKey>(
   facts: readonly FactRecord[],
   key: K
 ): Extract<FactValue, { key: K }>["value"] | undefined {

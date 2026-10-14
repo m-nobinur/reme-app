@@ -6,6 +6,7 @@ import {
   InformationRequest,
 } from "./assignment.ts"
 import { Timestamp, Ulid, Uuid } from "./common.ts"
+import { Blueprint } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { choiceFacts } from "./onboarding.ts"
 import { Text } from "./text.ts"
@@ -241,6 +242,21 @@ export const BuildActivity = z.strictObject({
 export const BUILD_ACTIVITY_MAX = 5
 
 /**
+ * The plan a build was given (ADR-038), for the Blueprint card. `round`
+ * counts plans within the build: a "Change something" re-plans and adds one.
+ * `previous` is the plan this one changed, a re-plan's last round or, for a
+ * creative change, the plan the live site was built from; the card marks the
+ * rows that differ. `awaiting` says the build waits on the owner's "Build it"
+ * or "Change something" for this round.
+ */
+export const BuildBlueprint = z.strictObject({
+  plan: Blueprint,
+  round: z.int().positive(),
+  previous: Blueprint.nullable(),
+  awaiting: z.boolean(),
+})
+
+/**
  * One owner build, as the workspace panel shows it. `lane` and `activity`
  * are optional while producers catch up: a build with no `lane` is `full`,
  * and one with no `activity` shows only its state.
@@ -253,6 +269,8 @@ export const BuildSummary = z.strictObject({
   lane: BuildLane.optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
+  /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
+  blueprint: BuildBlueprint.optional(),
   created_at: Timestamp,
   updated_at: Timestamp,
 })
@@ -423,6 +441,7 @@ export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>
 export type BuildSummary = z.infer<typeof BuildSummary>
+export type BuildBlueprint = z.infer<typeof BuildBlueprint>
 export type AttentionItem = z.infer<typeof AttentionItem>
 export type ActivityFeed = z.infer<typeof ActivityFeed>
 export type Reminder = z.infer<typeof Reminder>

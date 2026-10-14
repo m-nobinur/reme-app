@@ -25,6 +25,7 @@ export { steerByKey, steerKeyHash } from "./steers.ts"
 export type {
   Identity,
   OrgScopedDb,
+  RecentDesign,
   Tenancy,
   TenantContext,
 } from "./tenancy.ts"
@@ -37,6 +38,7 @@ export {
   logFailure,
   ORG_SETTING,
   pgCode,
+  recentDesigns,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,

@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   type AssignmentState,
   type AttentionItem,
+  Blueprint,
   type BuildActivity,
   type BuildLane,
   type BuildSummary,
@@ -121,6 +122,17 @@ export async function readBuilds(
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
+      // ADR-038: the plan on the row, the round it is and the plan it
+      // changed from the newest `blueprint.proposed`, and the newest round
+      // the owner decided on, all by `events_assignment_type_idx`.
+      blueprint: assignments.blueprint,
+      proposed: sql<Record<
+        string,
+        unknown
+      > | null>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'blueprint.proposed' order by e.event_id desc limit 1)`,
+      decidedRound: sql<
+        number | null
+      >`(select max((e.payload->>'round')::int) from events e where e.assignment_id = assignments.id and e.type = 'blueprint.decided')`,
     })
     .from(assignments)
     .where(
@@ -138,10 +150,38 @@ export async function readBuilds(
       lane,
       activity: activityFor(lane, row.state),
       revision: row.revision,
+      ...planOf(row),
       created_at: iso(row.createdAt),
       updated_at: iso(row.updatedAt),
     }
   })
+}
+
+/**
+ * The build's Blueprint for the card, when it planned one that still parses.
+ * It waits on the owner while the build is planning, its round asked for a
+ * review, and no decision on that round is stored.
+ */
+export function planOf(row: {
+  state: AssignmentState
+  blueprint: unknown
+  proposed: Record<string, unknown> | null
+  decidedRound: number | null
+}): Pick<BuildSummary, "blueprint"> {
+  const plan = Blueprint.safeParse(row.blueprint)
+  const round = Number(row.proposed?.round)
+  if (!plan.success || !Number.isInteger(round) || round < 1) return {}
+  return {
+    blueprint: {
+      plan: plan.data,
+      round,
+      previous: Blueprint.safeParse(row.proposed?.previous).data ?? null,
+      awaiting:
+        row.state === "planning" &&
+        row.proposed?.review === true &&
+        row.decidedRound !== round,
+    },
+  }
 }
 
 /** The lane one assignment was created in; `full` when none was recorded. */

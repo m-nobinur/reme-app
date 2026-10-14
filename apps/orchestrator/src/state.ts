@@ -59,7 +59,8 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   repairing: ["implementing", "validating"],
   paused: [],
   // A fourth gate failure cannot enter `repairing`, so it ends here directly.
-  failed: ["repairing", "validating", "implementing"],
+  // A plan nobody decided on in seven days ends from `planning` (ADR-038).
+  failed: ["planning", "repairing", "validating", "implementing"],
   cancelled: [],
 }
 
