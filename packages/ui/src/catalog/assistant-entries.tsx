@@ -1282,6 +1282,20 @@ const CREATE_REMINDER_STATES = decisionStates(
   refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
+const RECORD_REVIEW_STATES = decisionStates(
+  "record_review",
+  {
+    slot: 1,
+    quote:
+      "They worked around my hours and the kitchen has never looked so clean.",
+    name: "Marta L.",
+    permission: true,
+  },
+  { slot: 1, quote: "", name: "", permission: true },
+  { outcome: "recorded", slot: 1 },
+  refusal("review.unconfirmed", "The review could not be confirmed.")
+)
+
 /** Two replies with words: one the owner rated up, one not yet rated. */
 const RATED: ThreadMessageLike[] = [
   ask("What is live now?"),
@@ -1932,6 +1946,12 @@ const assistantCatalog = [
     name: "CreateReminder",
     render: () => (
       <FixtureThread height="h-[180rem]" messages={CREATE_REMINDER_STATES} />
+    ),
+  },
+  {
+    name: "RecordReview",
+    render: () => (
+      <FixtureThread height="h-[180rem]" messages={RECORD_REVIEW_STATES} />
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },

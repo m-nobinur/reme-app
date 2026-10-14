@@ -8,6 +8,7 @@ import {
 import {
   assignments,
   eq,
+  facts,
   reminders,
   sql,
   supersedeFact,
@@ -29,6 +30,7 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  recordReview,
   requestChange,
   type ToolContext,
   ToolFailed,
@@ -45,7 +47,7 @@ import {
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
- * The CoS's six tool bodies on a live connection, the orchestrator stood in
+ * The CoS's seven tool bodies on a live connection, the orchestrator stood in
  * for. What they return is what the model reads, so every output is kept and
  * walked at the end for anything a model must never see.
  */
@@ -793,6 +795,34 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       await s.state(asking, "cancelled")
     })
 
+    it("refuses a review, which only record_review's card may store", async () => {
+      const s = seed(kit, me)
+      const asking = await s.assignment("blocked_on_information")
+      const asked = question(me, asking, "testimonials.review_1")
+      await s.event(asking, "information.requested", asked)
+      const stub = answering({ [asked.request_id]: asked.field })
+      const output = kept(
+        "answer_question",
+        await answerQuestion(
+          context(me, stub),
+          {
+            request_id: asked.request_id,
+            value: {
+              key: "testimonials.review_1",
+              value: { quote: "Spotless.", name: "Ann", permission: true },
+            },
+          },
+          crypto.randomUUID()
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { class: "validation", code: "answer.review" },
+      })
+      expect(stub.calls).toHaveLength(0)
+      await s.state(asking, "cancelled")
+    })
+
     it("refuses an id no build asked, without calling the orchestrator", async () => {
       const stub = stubOrchestrator()
       const output = kept(
@@ -1020,6 +1050,61 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(utc).toEqual({
         outcome: "created",
         due_at: new Date(nine).toISOString(),
+      })
+    })
+  })
+
+  describe("record_review", () => {
+    const versions = (who: Owner, key: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({
+            value: facts.value,
+            version: facts.version,
+            source: facts.provenanceSource,
+            validTo: facts.validTo,
+          })
+          .from(facts)
+          .where(eq(facts.key, key))
+          .orderBy(facts.version)
+      )
+    const MARTA = {
+      quote: "They worked around my hours and the kitchen shines.",
+      name: "Marta L.",
+      permission: true,
+    } as const
+
+    it("stores the owner's review in its slot once, however often it runs, and replaces it on a new one", async () => {
+      const first = kept(
+        "record_review",
+        await recordReview(context(me), { slot: 1, ...MARTA })
+      )
+      expect(await recordReview(context(me), { slot: 1, ...MARTA })).toEqual(
+        first
+      )
+      expect(first).toEqual({ outcome: "recorded", slot: 1 })
+      expect(await versions(me, "testimonials.review_1")).toEqual([
+        { value: MARTA, version: 1, source: "owner_stated", validTo: null },
+      ])
+
+      const owen = {
+        quote: "Simple to book.",
+        name: "Owen",
+        permission: true,
+      } as const
+      await recordReview(context(me), { slot: 1, ...owen })
+      const rows = await versions(me, "testimonials.review_1")
+      expect(rows.map((r) => [r.version, r.value, r.validTo === null])).toEqual(
+        [
+          [1, MARTA, false],
+          [2, owen, true],
+        ]
+      )
+      expect(await versions(me, "testimonials.review_2")).toEqual([])
+      expect(await versions(other, "testimonials.review_1")).toEqual([])
+      expect((await getFacts(context(me), {})).facts).toContainEqual({
+        key: "testimonials.review_1",
+        value: owen,
       })
     })
   })

@@ -66,18 +66,19 @@ const values = {
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
   areaServed: "",
   /**
-   * A review as its own words and its author, from a `testimonials.` fact:
-   * the claims gate accepts a quote only when one carries it. No onboarding
-   * step stores those facts yet, so these stay empty and the section is left
-   * out. Never write one.
+   * A review as the customer's words and name, from a `testimonials.review_N`
+   * fact, which holds { quote, name, permission } and is stored only once the
+   * owner confirms the customer agreed to be quoted. The claims gate accepts
+   * a quote only when such a fact carries it. With no fact both stay empty
+   * and the section is left out. Never write one.
    */
-  /** testimonials.quote_1, the review's own words, unedited. */
+  /** testimonials.review_1's quote, unedited and untrimmed. */
   testimonial1Quote: "",
-  /** testimonials.author_1, the reviewer's name as the review gives it. */
+  /** testimonials.review_1's name, exactly as given. */
   testimonial1Author: "",
-  /** testimonials.quote_2, the review's own words, unedited. */
+  /** testimonials.review_2's quote, unedited and untrimmed. */
   testimonial2Quote: "",
-  /** testimonials.author_2, the reviewer's name as the review gives it. */
+  /** testimonials.review_2's name, exactly as given. */
   testimonial2Author: "",
   /**
    * Three figures for the trust strip, each the number on its own ("12",
@@ -412,10 +413,10 @@ const FACTS: Partial<Record<keyof typeof site, Field>> = {
   disclaimer: fact("business.disclaimer"),
   openingHours: fact("hours.weekday"),
   areaServed: fact("service_area.radius"),
-  testimonial1Quote: fact("testimonials.quote_1"),
-  testimonial1Author: fact("testimonials.author_1"),
-  testimonial2Quote: fact("testimonials.quote_2"),
-  testimonial2Author: fact("testimonials.author_2"),
+  testimonial1Quote: fact("testimonials.review_1"),
+  testimonial1Author: fact("testimonials.review_1"),
+  testimonial2Quote: fact("testimonials.review_2"),
+  testimonial2Author: fact("testimonials.review_2"),
   logo: fact("media.uploads"),
   heroImage: fact("media.uploads"),
 }

@@ -47,6 +47,8 @@ import {
   CreateReminderOutput,
   GetPreviewInput,
   GetPreviewOutput,
+  RecordReviewInput,
+  RecordReviewOutput,
 } from "./cos.ts"
 import {
   Blueprint,
@@ -167,6 +169,8 @@ export const contracts = {
   Reminder,
   ReminderPatch,
   QuoteField,
+  RecordReviewInput,
+  RecordReviewOutput,
   RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,

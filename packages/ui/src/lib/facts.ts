@@ -28,6 +28,8 @@ const LABEL: Record<FactValueKey, string> = {
   "site.pages": "Website pages",
   "media.uploads": "Your photos",
   "quote.form": "Quote request questions",
+  "testimonials.review_1": "First review",
+  "testimonials.review_2": "Second review",
 }
 
 /** `service_area` to `Service area`. */
@@ -52,6 +54,9 @@ export function factText(key: string, raw: unknown): string {
     return String(raw)
   }
   const value = raw as Record<string, unknown>
+  if (typeof value.quote === "string" && typeof value.name === "string") {
+    return `"${value.quote}" ${value.name}`
+  }
   for (const field of [
     "name",
     "tagline",

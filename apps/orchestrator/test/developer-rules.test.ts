@@ -88,6 +88,12 @@ describe("the Developer's site rules", () => {
     expect(rules).not.toContain(String.fromCharCode(0x2014))
   })
 
+  it("quotes a review only from the facts the owner recorded", () => {
+    const rules = text(false)
+    expect(rules).toContain("testimonials.review_1 and testimonials.review_2")
+    expect(rules).toContain("Never write, shorten or correct a review")
+  })
+
   it("keeps proof to what the owner said and asks the owner rarely", () => {
     const rules = text(false)
     expect(rules).toContain("business.proof is the only source")

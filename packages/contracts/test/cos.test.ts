@@ -12,8 +12,14 @@ import {
   CosWorkspace,
   CreateReminderOutput,
   GetPreviewOutput,
+  RecordReviewInput,
+  RecordReviewOutput,
 } from "../src/cos.ts"
-import { ANSWER_TEXT_MAX, CreateReminderRequest } from "../src/owner.ts"
+import {
+  ANSWER_TEXT_MAX,
+  CreateReminderRequest,
+  FactValue,
+} from "../src/owner.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -45,17 +51,18 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the six tools, in order", () => {
-    const six = [
+  it("has exactly the seven tools, in order", () => {
+    const seven = [
       "get_workspace",
       "get_facts",
       "get_preview",
       "request_change",
       "answer_question",
       "create_reminder",
+      "record_review",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(six)
-    expect(CosToolName.options).toStrictEqual(six)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(seven)
+    expect(CosToolName.options).toStrictEqual(seven)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -225,6 +232,7 @@ describe("the refusal a tool shows the model", () => {
     ["AnswerQuestionOutput", AnswerQuestionOutput],
     ["GetPreviewOutput", GetPreviewOutput],
     ["CreateReminderOutput", CreateReminderOutput],
+    ["RecordReviewOutput", RecordReviewOutput],
   ] as const)("%s takes code, class and message only", (name, schema) => {
     expect(verdict(name, schema, refusal)).toEqual(ACCEPTED)
     const leaky = {
@@ -283,6 +291,40 @@ describe("create_reminder", () => {
     expect(
       verdict("CreateReminderOutput", CreateReminderOutput, withId)
     ).toEqual(REFUSED)
+  })
+})
+
+describe("record_review", () => {
+  const review = samples.RecordReviewInput as Record<string, unknown>
+
+  it("takes an object at its root, every property required", () => {
+    const schema = z.toJSONSchema(RecordReviewInput) as {
+      type: string
+      properties: object
+      required: string[]
+    }
+    expect(schema.type).toBe("object")
+    expect(new Set(schema.required)).toEqual(
+      new Set(Object.keys(schema.properties))
+    )
+  })
+
+  it.each([
+    ["no permission", { ...review, permission: false }],
+    ["a missing permission", { ...review, permission: undefined }],
+    ["a third slot", { ...review, slot: 3 }],
+    ["a blank name", { ...review, name: "  " }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("RecordReviewInput", RecordReviewInput, value)).toEqual(
+      REFUSED
+    )
+  })
+
+  it("stores as the fact for its slot", () => {
+    const { slot, ...value } = review
+    expect(
+      FactValue.parse({ key: `testimonials.review_${slot}`, value })
+    ).toEqual({ key: "testimonials.review_1", value })
   })
 })
 

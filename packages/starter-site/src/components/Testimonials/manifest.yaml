@@ -7,9 +7,10 @@ props:
     required: false
     description: featured sets the first review larger on a tint, wall sets them evenly.
 constraints:
-  - Quote and author are fact fields from testimonials. facts, which nothing
-    stores yet, so the section is left out. A quote is rendered as the fact
-    gives it, unedited and untrimmed.
+  - Quote and author are fact fields from the testimonials.review_1 and
+    testimonials.review_2 facts, reviews the owner confirmed the customer agreed
+    to have quoted. With neither fact the section is left out. A quote and a
+    name are rendered as the fact gives them, unedited and untrimmed.
   - featured sets the first review larger on the tint; wall sets them evenly.
     The eyebrow is site.testimonialsEyebrow.
 examples:

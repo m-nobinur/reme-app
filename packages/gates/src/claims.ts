@@ -20,7 +20,8 @@ import { factsForContent, maskContentClaims } from "./text.ts"
  *   "certified" to "certification"; a phrase has to appear as consecutive
  *   stems, so "phone number" does not support "number one".
  * - A **testimonial**, meaning quoted text or a blockquote of twenty
- *   characters or more, passes when a `testimonials.` fact carries that text.
+ *   characters or more, passes when a `testimonials.` fact carries that text
+ *   and its `permission` is true: the customer agreed to be quoted.
  *
  * Nothing else is inspected, and no rule guesses at intent: a false positive
  * costs the Developer a rewrite or one `ask_chief`, a false negative puts a
@@ -244,6 +245,12 @@ type Support = {
 function supportFrom(facts: readonly FactRecord[]): Support {
   const support: Support = { numbers: new Set(), words: [], testimonials: [] }
   for (const fact of factsForContent(facts)) {
+    // A review the customer never agreed to have quoted supports nothing.
+    if (
+      fact.key.startsWith(TESTIMONIAL_PREFIX) &&
+      (fact.value as { permission?: unknown } | null)?.permission !== true
+    )
+      continue
     const text = JSON.stringify(fact.value) ?? ""
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))

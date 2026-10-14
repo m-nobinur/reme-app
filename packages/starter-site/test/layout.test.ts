@@ -138,21 +138,11 @@ describe("the page recipes", () => {
 })
 
 describe("the facts the site reads", () => {
-  // Every fact field names a key onboarding can store (FactValue), except the
-  // reviews: the claims gate takes a quote only from a `testimonials.` fact,
-  // and nothing stores one yet. Adding a key to this list is a decision.
-  const NOT_STORED = [
-    "testimonials.quote_1",
-    "testimonials.author_1",
-    "testimonials.quote_2",
-    "testimonials.author_2",
-  ]
-
-  test("are keys FactValue holds, or a named exception", () => {
+  // Every fact field names a key the platform can store (FactValue), the
+  // reviews included: a key outside it is a field the site can never fill.
+  test("are keys FactValue holds", () => {
     const unknown = Object.values(fields).flatMap((field) =>
-      field.kind === "fact" &&
-      !FactValueKey.safeParse(field.fact_key).success &&
-      !NOT_STORED.includes(field.fact_key)
+      field.kind === "fact" && !FactValueKey.safeParse(field.fact_key).success
         ? [field.fact_key]
         : []
     )
