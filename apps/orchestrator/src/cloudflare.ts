@@ -1140,11 +1140,18 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
         const factRecords = assignmentId
           ? await run((kit) => assignmentFacts(kit, { orgId, assignmentId }))
           : null
-        const probe = await probeHost(target.host, factRecords, undefined, {
-          revision_id: target.revision_id,
-          config_version: deployment.config_version,
-          proof: await probeProof(target.host, this.env.PREVIEW_KEY),
-        })
+        const probe = await probeHost(
+          target.host,
+          factRecords,
+          undefined,
+          {
+            revision_id: target.revision_id,
+            config_version: deployment.config_version,
+            proof: await probeProof(target.host, this.env.PREVIEW_KEY),
+          },
+          undefined,
+          this.env.SITE_PORT
+        )
         return run((kit) =>
           kit.withOrg({ orgId }, async (db) => {
             const at = `probe ${minute}`

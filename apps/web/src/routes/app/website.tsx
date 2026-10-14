@@ -62,7 +62,7 @@ function Website() {
     )
   }
 
-  const { live, host, open, builds } = workspace
+  const { live, host, url, open, builds } = workspace
   const build = open ? currentBuild(builds) : undefined
 
   if (live === null && host === null) {
@@ -119,10 +119,10 @@ function Website() {
         title="Website"
       />
       <div className="flex max-w-xl flex-col gap-4">
-        {host ? (
+        {host && url ? (
           <a
             className={cn(LINK, "self-start")}
-            href={`https://${host}`}
+            href={url}
             rel="noreferrer"
             target="_blank"
           >

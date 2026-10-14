@@ -8022,6 +8022,7 @@ export interface components {
     WorkspaceStatus: {
       site: {
         host: string | null
+        url: string | null
         live: {
           /** Format: uuid */
           revision_id: string

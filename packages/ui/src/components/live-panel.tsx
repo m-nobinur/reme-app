@@ -1419,12 +1419,15 @@ type Thumbnail = { src: string } | "loading" | null
  */
 function YourWebsite({
   host,
+  url,
   live,
   thumbnail = null,
   blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
+  /** Where `host` opens, as the api built it (http and a port on local dev). */
+  url?: string | null
   live: number | null
   thumbnail?: Thumbnail
   /** The plan the live site was built from, kept under it read-only. */
@@ -1470,7 +1473,7 @@ function YourWebsite({
                 buttonVariants({ variant: "outline", size: "lg" }),
                 "grow"
               )}
-              href={`https://${host}`}
+              href={url ?? `https://${host}`}
               rel="noreferrer"
               target="_blank"
               title={host}

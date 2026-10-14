@@ -20,4 +20,10 @@ interface Env {
   COS_MODEL?: string
   /** The onboarding planner's model id, when not `DEFAULT_ONBOARDING_MODEL`. Same table. */
   ONBOARDING_MODEL?: string
+  /**
+   * Local dev only, from `.dev.vars` with `SITE_HOST_SUFFIX=.reme.localhost`:
+   * the local router's port. Never in `wrangler.jsonc`; `siteUrl` refuses it
+   * on a real host.
+   */
+  SITE_PORT?: string
 }

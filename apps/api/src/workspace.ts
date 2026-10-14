@@ -16,6 +16,7 @@ import {
   PAGES,
   SiteFields,
   siteHost,
+  siteUrl,
   TERMINAL_STATES,
   thumbnailOf,
   WorkspaceStatus,
@@ -480,10 +481,13 @@ export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {
   return (await currentFacts(db)).map(toFactRecord)
 }
 
-/** The revision the site serves now, and its host while it serves one. */
+/** Where an environment's site links point: its host suffix and, on local dev, the router's port. */
+export type SiteConfig = Pick<Env, "SITE_HOST_SUFFIX" | "SITE_PORT">
+
+/** The revision the site serves now, and its host and link while it serves one. */
 export async function readSite(
   db: OrgScopedDb,
-  suffix: string
+  config: SiteConfig
 ): Promise<WorkspaceStatus["site"]> {
   const [row] = await db
     .select({
@@ -496,7 +500,8 @@ export async function readSite(
     .from(orgs)
     .limit(1)
   const live = row?.live ?? null
-  return { host: row && live ? siteHost(row.slug, suffix) : null, live }
+  const host = row && live ? siteHost(row.slug, config.SITE_HOST_SUFFIX) : null
+  return { host, url: host && siteUrl(host, config.SITE_PORT), live }
 }
 
 /** Required facts the org does not hold yet, minus the ones it keeps off the site. */
@@ -610,7 +615,7 @@ const PANEL_HOURS = 24
 export async function readWorkspace(
   kit: Tenancy,
   orgId: string,
-  suffix: string,
+  config: SiteConfig,
   now = new Date()
 ): Promise<WorkspaceStatus> {
   return kit.withOrg({ orgId }, async (db) => {
@@ -623,7 +628,7 @@ export async function readWorkspace(
         readQuestions(db),
         readFeed(db, PANEL_HOURS, 10),
         readFacts(db),
-        readSite(db, suffix),
+        readSite(db, config),
         readReminderNotes(db),
       ])
     const missing = missingFacts(current)

@@ -13,6 +13,7 @@ import {
   previewHost,
   REQUEST_FAILED,
   siteHost,
+  siteUrl,
   type TaintLabel,
   Uuid,
 } from "@workspace/contracts"
@@ -1263,7 +1264,7 @@ bridge.get("/:id/preview", async (c) => {
       c.env.PREVIEW_KEY
     )
   const [token, shots] = await Promise.all([sign("site"), sign("screenshots")])
-  const base = `https://${host}`
+  const base = siteUrl(host, c.env.SITE_PORT)
   return c.json({
     revision_id: found.revision.id,
     url: `${base}/open?t=${token}`,

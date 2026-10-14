@@ -162,7 +162,7 @@ export async function ownerRoute(
   const { pathname } = new URL(request.url)
   const method = request.method
   if (pathname === "/workspace" && method === "GET") {
-    const status = await readWorkspace(kit, owner.orgId, env.SITE_HOST_SUFFIX)
+    const status = await readWorkspace(kit, owner.orgId, env)
     const body = JSON.stringify(status)
     const headers = {
       etag: await etag(body),

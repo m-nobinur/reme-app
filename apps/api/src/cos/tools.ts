@@ -132,7 +132,7 @@ export async function getWorkspace(
   { env, kit, owner }: ToolContext,
   _input: Empty
 ): Promise<CosWorkspace> {
-  const status = await readWorkspace(kit, owner.orgId, env.SITE_HOST_SUFFIX)
+  const status = await readWorkspace(kit, owner.orgId, env)
   return CosWorkspace.parse({
     site: {
       host: status.site.host,
