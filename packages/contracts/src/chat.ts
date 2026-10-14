@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
-import { Blueprint } from "./design.ts"
+import { Blueprint, SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
@@ -121,6 +121,16 @@ const ChoiceVisual = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("font"), family: Text(80) }),
   z.strictObject({ kind: z.literal("template"), id: Text(20) }),
+  z.strictObject({
+    kind: z.literal("font_pair"),
+    display: Text(80),
+    body: Text(80),
+  }),
+  z.strictObject({
+    kind: z.literal("layout"),
+    hero: SectionVariant,
+    services: SectionVariant,
+  }),
 ])
 
 /**
@@ -208,6 +218,8 @@ export const AskDesignInput = z.strictObject({
     .array(
       z.strictObject({
         id: QuestionId,
+        /** The question the tray shows; absent only in calls written before it existed. */
+        question: Text(120).optional(),
         visual: DesignVisual,
         card: AskChoiceInput,
       })

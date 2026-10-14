@@ -9,6 +9,7 @@ import {
   ChatRequest,
   RequestChangeOutput,
 } from "../src/chat.ts"
+import { SectionVariant } from "../src/design.ts"
 import {
   BuildSummary,
   ChangeKind,
@@ -387,7 +388,7 @@ describe("BlueprintReview", () => {
   })
 })
 
-describe("ModelRoute effort and max_tokens", () => {
+describe("ModelRoute effort", () => {
   const ok = (v: unknown) => ModelRoute.safeParse(v).success
   const base = { model: "small", max_output_tokens: 1024 }
 
@@ -395,11 +396,57 @@ describe("ModelRoute effort and max_tokens", () => {
     expect(ok(base)).toBe(true)
   })
 
-  it("takes each effort and a positive cap, and refuses anything else", () => {
+  it("takes each effort, refuses anything else, and has no second cap", () => {
     for (const effort of ["low", "medium", "high", "xhigh", "max"])
-      expect(ok({ ...base, effort, max_tokens: 4096 }), effort).toBe(true)
+      expect(ok({ ...base, effort }), effort).toBe(true)
     expect(ok({ ...base, effort: "extreme" })).toBe(false)
-    expect(ok({ ...base, max_tokens: 0 })).toBe(false)
-    expect(ok({ ...base, max_tokens: 1.5 })).toBe(false)
+    expect(ok({ ...base, max_tokens: 4096 })).toBe(false)
+  })
+})
+
+describe("AskDesign question text and ChoiceVisual shapes", () => {
+  const card = (visual: unknown) => ({
+    step: "font",
+    options: [
+      { id: "a", label: "A", hint: null, visual },
+      { id: "b", label: "B", hint: null, visual: null },
+    ],
+    multiple: false,
+    preselected: [],
+    other: null,
+    skippable: true,
+  })
+  const ok = (visual: unknown, question?: string) =>
+    AskDesignInput.safeParse({
+      questions: [
+        {
+          id: "typeface",
+          ...(question === undefined ? {} : { question }),
+          visual: "font_pair",
+          card: card(visual),
+        },
+      ],
+    }).success
+
+  it("takes a question of at most 120 characters, and an old call without one", () => {
+    expect(ok(null)).toBe(true)
+    expect(ok(null, "Which type feels like you?")).toBe(true)
+    expect(ok(null, "x".repeat(120))).toBe(true)
+    expect(ok(null, "x".repeat(121))).toBe(false)
+    expect(ok(null, "")).toBe(false)
+  })
+
+  it("parses font_pair and layout visuals, and the old ones", () => {
+    expect(
+      ok({ kind: "font_pair", display: "Fraunces", body: "Figtree" })
+    ).toBe(true)
+    expect(ok({ kind: "font", family: "Fraunces" })).toBe(true)
+    const variant = SectionVariant.options[0]
+    expect(ok({ kind: "layout", hero: variant, services: variant })).toBe(true)
+  })
+
+  it("refuses a layout with an unknown variant or a font pair missing a half", () => {
+    expect(ok({ kind: "layout", hero: "nope", services: "nope" })).toBe(false)
+    expect(ok({ kind: "font_pair", display: "Fraunces" })).toBe(false)
   })
 })
