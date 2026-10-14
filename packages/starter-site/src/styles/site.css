@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: the rule compares any two selectors ending alike, as a hero pill's li and a FAQ's li, which never match one element; order here follows the page, not specificity */
 /* Every colour here comes from a token: tokens.css, which is a byte-identical
    copy of packages/ui/src/styles/tokens.css, or the marketing layer over it in
    theme.css. Light only: the tokens flip under a `.dark` class, and a static
@@ -162,7 +163,7 @@ p {
     align-items: start;
   }
 
-  :is(.faq-inner, .value-inner) > .section-head {
+  :is(.faq-split .faq-inner, .value-inner) > .section-head {
     margin: 0;
   }
 }
@@ -769,6 +770,11 @@ p {
   );
 }
 
+/* The copy fills the photo's foot, so the caption takes its top corner. */
+.hero-dark_center .hero-caption {
+  inset-block: var(--space-md) auto;
+}
+
 .hero-dark_center.hero-plain {
   --foreground: var(--brand-foreground);
   --muted-foreground: var(--brand-foreground);
@@ -1095,6 +1101,7 @@ p {
 
 .service-rows li::before {
   content: counter(row, decimal-leading-zero);
+  min-width: 1.5rem;
   color: var(--muted-foreground);
   font-family: var(--font-display);
   font-size: var(--text-sm);
@@ -1102,7 +1109,9 @@ p {
 }
 
 .service-rows .card-icon {
+  border: 1px solid var(--brand-line);
   border-radius: 50%;
+  background: none;
 }
 
 .row-text :is(h3, p) {
