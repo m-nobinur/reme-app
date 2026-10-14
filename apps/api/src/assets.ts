@@ -185,6 +185,9 @@ export async function uploadAssets(
   return Response.json(body, { status: 201 })
 }
 
+/** The thumbnail's width in pixels, about three times its tile for sharp screens. */
+const THUMB_WIDTH = 320
+
 /** The types a generated photo is stored as, most likely first. */
 const PHOTO_EXTENSIONS = ["png", "webp", "jpg"] as const
 
@@ -195,8 +198,12 @@ const PHOTO_EXTENSIONS = ["png", "webp", "jpg"] as const
  * about whether it exists. The id is the picture's hash, so the bytes behind
  * it never change and the answer is cached for good, privately.
  *
- * shortcut: the original file, not a resized one; bind Cloudflare Images and
- * transform to a small WebP once thumbnail weight shows in the panel's budget.
+ * The answer is a 320 px WebP made by the Images binding: the originals are
+ * about 2 MB and the tiles show them about 100 px wide. Without the binding,
+ * or if it refuses the bytes, the original is served instead.
+ *
+ * shortcut: re-made on every uncached request (billed once per image a
+ * month); store it beside the original if that cost or latency shows.
  */
 export async function readPhoto(
   env: Env,
@@ -208,11 +215,24 @@ export async function readPhoto(
       `generated/${owner.orgId}/${assetId}.${ext}`
     )
     if (!object) continue
-    return new Response(object.body, {
+    const headers = {
+      "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
+    }
+    const [forThumb, original] = object.body.tee()
+    const thumb = await env.IMAGES?.input(forThumb)
+      .transform({ width: THUMB_WIDTH })
+      .output({ format: "image/webp", quality: 75 })
+      .catch(() => null)
+    if (thumb) {
+      return new Response(thumb.image(), {
+        headers: { ...headers, "content-type": thumb.contentType() },
+      })
+    }
+    return new Response(original, {
       headers: {
+        ...headers,
         "content-type": object.httpMetadata?.contentType ?? `image/${ext}`,
-        "cache-control": "private, max-age=31536000, immutable",
-        "x-content-type-options": "nosniff",
       },
     })
   }

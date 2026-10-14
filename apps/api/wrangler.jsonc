@@ -90,6 +90,9 @@
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
   // the build's sandbox.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // Resizes generated photos to thumbnails in `GET /photos/:id`. Local
+  // `wrangler dev` runs a low-fidelity offline version (width and format).
+  "images": { "binding": "IMAGES" },
   // Each signed-in person's writes a minute; the number is argued in
   // src/limit.ts and a test holds this block to it. `period` takes 10 or 60.
   // A `namespace_id` is shared by every binding in the account that names it,
@@ -142,6 +145,7 @@
         }
       ],
       "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" },
+      "images": { "binding": "IMAGES" },
       "r2_buckets": [
         {
           "binding": "SITES",

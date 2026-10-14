@@ -6,7 +6,8 @@ import {
 } from "@workspace/contracts"
 import { type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { cleanName, sniff, uploadKey } from "../src/assets.ts"
+import { cleanName, readPhoto, sniff, uploadKey } from "../src/assets.ts"
+import type { Owner } from "../src/changes.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
 
@@ -43,6 +44,75 @@ describe("an uploaded photo's type and name", () => {
     )
     expect(cleanName("   ", "image/webp")).toBe("photo.webp")
     expect(cleanName(`${"a".repeat(300)}.png`, "image/png")).toHaveLength(104)
+  })
+})
+
+describe("GET /photos/:id's thumbnail", () => {
+  const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+  const ORIGINAL = new Uint8Array(2000)
+  const THUMB = new Uint8Array([1, 2, 3])
+  const mine = { orgId: "org-a" } as Owner
+  const sites = {
+    get: async (key: string) =>
+      key === `generated/org-a/${id}.png`
+        ? {
+            body: new Blob([ORIGINAL]).stream(),
+            httpMetadata: { contentType: "image/png" },
+          }
+        : null,
+  }
+  /** An Images binding that answers a tiny WebP and records the width asked. */
+  const asked: unknown[] = []
+  const images = {
+    input: (stream: ReadableStream) => {
+      void stream.cancel()
+      const handle = {
+        transform: (t: unknown) => {
+          asked.push(t)
+          return handle
+        },
+        output: async () => ({
+          image: () => new Blob([THUMB]).stream(),
+          contentType: () => "image/webp",
+        }),
+      }
+      return handle
+    },
+  }
+  const env = (extra: object) => ({ SITES: sites, ...extra }) as unknown as Env
+  const bytes = async (r: Response) => new Uint8Array(await r.arrayBuffer())
+
+  it("is the small WebP, cached for good", async () => {
+    const response = await readPhoto(env({ IMAGES: images }), mine, id)
+    expect(response.headers.get("content-type")).toBe("image/webp")
+    expect(response.headers.get("cache-control")).toContain("immutable")
+    expect(await bytes(response)).toEqual(THUMB)
+    expect(asked).toEqual([{ width: 320 }])
+  })
+
+  it("is the original where there is no binding", async () => {
+    const response = await readPhoto(env({}), mine, id)
+    expect(response.headers.get("content-type")).toBe("image/png")
+    expect(await bytes(response)).toEqual(ORIGINAL)
+  })
+
+  it("is the original when the binding refuses the bytes", async () => {
+    const refusing = {
+      input: () => ({
+        transform: () => ({ output: async () => Promise.reject(new Error()) }),
+      }),
+    }
+    const response = await readPhoto(env({ IMAGES: refusing }), mine, id)
+    expect(await bytes(response)).toEqual(ORIGINAL)
+  })
+
+  it("is a 404 for another org, binding or not", async () => {
+    const response = await readPhoto(
+      env({ IMAGES: images }),
+      { orgId: "org-b" } as Owner,
+      id
+    )
+    expect(response.status).toBe(404)
   })
 })
 
