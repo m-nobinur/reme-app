@@ -128,6 +128,11 @@ const SHAPES: [FactValue, string, string][] = [
     "clean_sans",
   ],
   [
+    { key: "site.direction", value: { id: "counsel" } },
+    "Website look",
+    "counsel",
+  ],
+  [
     { key: "site.pages", value: { ids: ["home", "quote"] } },
     "Website pages",
     "home, quote",
