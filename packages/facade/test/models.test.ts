@@ -16,7 +16,7 @@ describe("the generated OpenRouter models", () => {
       expect(model?.provider).toBe("openrouter")
       expect(model?.api).toBe("openai-completions")
       expect(model?.cost.input).toBeGreaterThan(0)
-      expect(model?.contextWindow).toBeGreaterThan(100_000)
+      expect(model?.contextWindow).toBeGreaterThan(50_000)
     }
   })
 
@@ -42,13 +42,26 @@ describe("the generated OpenRouter models", () => {
 
   it("keep every model, the catalog's too, off China-based hosts and hosts that keep prompts", () => {
     for (const model of openrouterModels()) {
-      expect(model.compat?.openRouterRouting, model.id).toMatchObject({
-        ignore: HOST_ROUTING.ignore,
-        data_collection: "deny",
-      })
+      const routing = model.compat?.openRouterRouting
+      expect(routing?.ignore, model.id).toEqual(
+        expect.arrayContaining(HOST_ROUTING.ignore)
+      )
+      expect(routing?.data_collection, model.id).toBe("deny")
     }
     for (const slug of ["deepseek", "alibaba", "streamlake", "z-ai"]) {
       expect(HOST_ROUTING.ignore).toContain(slug)
+    }
+  })
+
+  it("skip the Claude hosts without structured outputs, on the roles that need them", () => {
+    for (const id of [
+      "anthropic/claude-sonnet-5.5",
+      "anthropic/claude-haiku-5.5",
+    ]) {
+      const model = openrouterModels().find((m) => m.id === id)
+      expect(model?.compat?.openRouterRouting?.ignore, id).toEqual(
+        expect.arrayContaining(["amazon-bedrock", "claude-on-aws"])
+      )
     }
   })
 

@@ -38,14 +38,22 @@ export {
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"
 export type { ToolInput } from "./schema.ts"
 export { toolInput } from "./schema.ts"
-export type { ModelChoice, ResolvedRuntime, UnsignedSpec } from "./spec.ts"
+export type {
+  Effort,
+  ModelChoice,
+  ResolvedRuntime,
+  Role,
+  UnsignedSpec,
+} from "./spec.ts"
 export {
   loggableSpec,
   MODELS,
   modelRouting,
+  outputCaps,
+  ROLES,
   resolveRuntime,
+  roleOf,
   signSpec,
-  TASK_CLASSES,
   verifySpec,
 } from "./spec.ts"
 export type { EventSink, Tee, TeeIds } from "./tee.ts"

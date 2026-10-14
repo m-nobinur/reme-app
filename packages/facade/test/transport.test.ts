@@ -2,6 +2,7 @@ import { type Context, createModels } from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
 import { FacadeError } from "../src/errors.ts"
 import { HOST_ROUTING } from "../src/models/price.ts"
+import { modelRouting, outputCaps } from "../src/spec.ts"
 import {
   buildProviders,
   outboundUrl,
@@ -149,12 +150,17 @@ async function call(
   id = "deepseek/deepseek-v4.1-flash",
   context: Context = {
     messages: [{ role: "user", content: "Say ready", timestamp: 0 }],
-  }
+  },
+  extra: {
+    caps?: Record<string, number>
+    reasoning?: "low" | "medium" | "high"
+  } = {}
 ) {
   const models = createModels()
   for (const provider of buildProviders(
     { OPENROUTER_API_KEY: "or-key" },
-    "direct:openrouter"
+    "direct:openrouter",
+    extra.caps
   )) {
     models.setProvider(provider)
   }
@@ -162,9 +168,12 @@ async function call(
   if (!model) throw new Error("model did not resolve")
   const sent: Record<string, unknown>[] = []
   const headers: Headers[] = []
-  const reply = await models.complete(model, context, {
+  // flue's loop calls the simple API, whose `reasoning` is the thinking level.
+  const run = extra.reasoning ? models.completeSimple : models.complete
+  const reply = await run.call(models, model, context, {
     // As flue's agent loop calls it: a session id, no cache retention.
     sessionId: "build-1",
+    ...(extra.reasoning ? { reasoning: extra.reasoning } : {}),
     fetch: async (_input, init) => {
       sent.push(JSON.parse(String(init?.body)))
       headers.push(new Headers(init?.headers))
@@ -261,5 +270,43 @@ describe("an OpenRouter call's prompt cache", () => {
   it("marks nothing for a model whose host caches on its own", async () => {
     const { sent } = await call(undefined, undefined, context)
     expect(JSON.stringify(sent[0])).not.toContain("cache_control")
+  })
+})
+
+describe("a role's effort and output cap on the wire", () => {
+  const spec = modelRouting({}, "A")
+  const caps = outputCaps(spec)
+  const sonnet = "anthropic/claude-sonnet-5.5"
+  const haiku = "anthropic/claude-haiku-5.5"
+
+  it("sends the role's effort as reasoning.effort and no reasoning.max_tokens", async () => {
+    const { sent } = await call(undefined, sonnet, undefined, {
+      caps,
+      reasoning: "medium",
+    })
+    expect(sent[0]?.reasoning).toEqual({ effort: "medium" })
+  })
+
+  it("applies the routing table's cap to a call that sets none", async () => {
+    const big = await call(undefined, sonnet, undefined, { caps })
+    expect(big.sent[0]?.max_completion_tokens).toBe(32_000)
+    const small = await call(undefined, haiku, undefined, { caps })
+    expect(small.sent[0]?.max_completion_tokens).toBe(8_000)
+    const none = await call(undefined, sonnet)
+    expect(none.sent[0]?.max_completion_tokens).toBeUndefined()
+  })
+
+  it("never sets provider.order on a cached model and skips hosts without structured outputs", async () => {
+    const { sent } = await call(undefined, sonnet, undefined, { caps })
+    const provider = sent[0]?.provider as {
+      order?: unknown
+      ignore: string[]
+      data_collection: string
+    }
+    expect(provider.order).toBeUndefined()
+    expect(provider.ignore).toEqual(
+      expect.arrayContaining(["z-ai", "amazon-bedrock", "claude-on-aws"])
+    )
+    expect(provider.data_collection).toBe("deny")
   })
 })

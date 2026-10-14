@@ -1,5 +1,58 @@
 [
   {
+    "id": "anthropic/claude-haiku-5.5",
+    "name": "Anthropic: Claude Haiku 5.5",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "cost": {
+      "input": 0.21,
+      "output": 1.05,
+      "cacheRead": 0.055,
+      "cacheWrite": 0.6875,
+      "tiers": [
+        {
+          "inputTokensAbove": 99999,
+          "input": 1.05,
+          "output": 5.25,
+          "cacheRead": 0.105,
+          "cacheWrite": 1.3125
+        }
+      ]
+    },
+    "contextWindow": 1000000,
+    "maxTokens": 128000,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 0.21,
+          "completion": 1.05
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai",
+          "amazon-bedrock",
+          "claude-on-aws"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
     "id": "anthropic/claude-sonnet-5.5",
     "name": "Anthropic: Claude Sonnet 5.5",
     "api": "openai-completions",
@@ -10,7 +63,7 @@
     "cost": {
       "input": 4.2,
       "output": 21,
-      "cacheRead": 0.22,
+      "cacheRead": 0.11,
       "cacheWrite": 2.75
     },
     "contextWindow": 1000000,
@@ -35,7 +88,9 @@
           "streamlake",
           "tencent",
           "xiaomi",
-          "z-ai"
+          "z-ai",
+          "amazon-bedrock",
+          "claude-on-aws"
         ],
         "data_collection": "deny"
       }
@@ -50,19 +105,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.0567,
-      "output": 1.26,
-      "cacheRead": 0.027,
+      "input": 0.042336,
+      "output": 1.8711,
+      "cacheRead": 0.009,
       "cacheWrite": 0
     },
-    "contextWindow": 1040000,
-    "maxTokens": 384000,
+    "contextWindow": 1048576,
+    "maxTokens": 943718,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.0567,
-          "completion": 1.26
+          "prompt": 0.042336,
+          "completion": 1.8711
         },
         "ignore": [
           "alibaba",
@@ -105,6 +160,48 @@
         "max_price": {
           "prompt": 1.575,
           "completion": 7.875
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
+    "id": "google/gemini-nano-banana-2.1",
+    "name": "Google: Nano Banana 2.1",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["image", "text"],
+    "cost": {
+      "input": 3.15,
+      "output": 15.75,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "contextWindow": 65536,
+    "maxTokens": 58982,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 3.15,
+          "completion": 15.75
         },
         "ignore": [
           "alibaba",
@@ -236,19 +333,19 @@
     "reasoning": true,
     "input": ["text", "image"],
     "cost": {
-      "input": 0.315,
-      "output": 1.05,
-      "cacheRead": 0.08,
+      "input": 0.0756,
+      "output": 1.89,
+      "cacheRead": 0.04,
       "cacheWrite": 0
     },
     "contextWindow": 262144,
-    "maxTokens": 65536,
+    "maxTokens": 131072,
     "compat": {
       "thinkingFormat": "openrouter",
       "openRouterRouting": {
         "max_price": {
-          "prompt": 0.315,
-          "completion": 1.05
+          "prompt": 0.0756,
+          "completion": 1.89
         },
         "ignore": [
           "alibaba",

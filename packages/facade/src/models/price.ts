@@ -73,6 +73,17 @@ export const HOST_ROUTING = {
 }
 
 /**
+ * Hosts a model's calls skip because they lack `structured_outputs` for it
+ * (OpenRouter's endpoint list, 2026-10-14): the Claude hosts that are not
+ * Anthropic, Vertex or Azure. Goes in `ignore`, never `order`, which would
+ * turn off the sticky routing the prompt cache depends on.
+ */
+export const NO_STRUCTURED_OUTPUTS: Record<string, readonly string[]> = {
+  "anthropic/claude-sonnet-5.5": ["amazon-bedrock", "claude-on-aws"],
+  "anthropic/claude-haiku-5.5": ["amazon-bedrock", "claude-on-aws"],
+}
+
+/**
  * The fewest live providers a model's cap must admit, or the generator stops.
  * The primary model's third provider cleared the cap by 1.5% on 2026-09-27,
  * so a small price move can take it back to one.
@@ -80,6 +91,7 @@ export const HOST_ROUTING = {
 const MIN_LIVE_PROVIDERS: Record<string, number> = {
   "deepseek/deepseek-v4.1-flash": 3,
   "anthropic/claude-sonnet-5.5": 3,
+  "anthropic/claude-haiku-5.5": 3,
 }
 
 /** Dollars per million, rounded as OpenRouter's own figures are. */
@@ -159,9 +171,13 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       Math.max(...listed.map(rate("completion"))) * ROUTING_CAP_FACTOR
     ),
   }
+  const ignore = [
+    ...HOST_ROUTING.ignore,
+    ...(NO_STRUCTURED_OUTPUTS[model.id] ?? []),
+  ]
   const admitted = endpoints.filter(
     (e) =>
-      !HOST_ROUTING.ignore.includes(e.tag?.split("/")[0] ?? "") &&
+      !ignore.includes(e.tag?.split("/")[0] ?? "") &&
       hours(e.pricing).some(
         (r) =>
           rate("prompt")(r) <= cap.prompt &&
@@ -208,7 +224,11 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       0,
     compat: {
       thinkingFormat: "openrouter",
-      openRouterRouting: { max_price: cap, ...HOST_ROUTING },
+      openRouterRouting: {
+        max_price: cap,
+        ...HOST_ROUTING,
+        ignore,
+      },
     },
   }
   const live = new Set(

@@ -363,9 +363,9 @@ export function Developer({ id }: AgentProps) {
     (onFallback || askedForFallback) && runtime.fallback
       ? runtime.fallback
       : runtime.model
-  // Sonnet 5.5's own default is adaptive thinking at effort high. pi-ai sends
-  // effort "none" when no level is given, so the default is named here.
-  useModel(model, { thinkingLevel: "high" })
+  // pi-ai sends effort "none" when no level is given, so the build role's
+  // effort (medium: the Blueprint is the specification) is named here.
+  useModel(model, { thinkingLevel: runtime.effort })
   const stub = getSandbox(env.SANDBOX as never, id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(
