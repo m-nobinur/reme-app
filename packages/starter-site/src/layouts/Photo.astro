@@ -1,0 +1,82 @@
+---
+import { getImage, Picture } from "astro:assets"
+
+// An image from the owner's uploads (src/assets/uploads/) or the photo
+// director (src/assets/generated/), resized and re-encoded at build time.
+// `src` is the path the site config holds: "/uploads/<id>.jpg" or
+// "src/assets/generated/<slot>.png". A path no file answers to renders as a
+// plain <img>, so a page never breaks on a missing photo.
+interface Props {
+  src: string
+  alt: string
+  class?: string
+  /** Widths to emit, never above the source's own. */
+  widths?: number[]
+  /** What the browser picks from the srcset with. */
+  sizes?: string
+  /** The one image above the fold: eager, high priority, preloaded. */
+  priority?: boolean
+}
+
+const files = import.meta.glob<{ default: ImageMetadata }>(
+  "/src/assets/**/*.{jpg,jpeg,png,webp,avif}",
+  { eager: true }
+)
+const {
+  src,
+  alt,
+  class: className,
+  widths = [480, 768, 1280, 1920],
+  sizes = "(min-width: 64rem) 50vw, 100vw",
+  priority = false,
+} = Astro.props
+const meta =
+  files[`/src/assets/${src.replace(/^\/?(?:src\/assets\/)?/, "")}`]?.default
+const emitted = meta ? [...new Set(widths.filter((w) => w <= meta.width))] : []
+if (meta && emitted.length === 0) emitted.push(meta.width)
+// shortcut: one quality for every photo, tune per slot if a hero still misses its budget.
+const quality = 55
+const preload =
+  meta && priority
+    ? await getImage({ src: meta, widths: emitted, format: "avif", quality })
+    : null
+---
+
+{
+  preload && (
+    <link
+      rel="preload"
+      as="image"
+      type="image/avif"
+      imagesrcset={preload.srcSet.attribute}
+      imagesizes={sizes}
+      fetchpriority="high"
+    />
+  )
+}
+{
+  meta ? (
+    <Picture
+      src={meta}
+      alt={alt}
+      class={className}
+      widths={emitted}
+      sizes={sizes}
+      formats={["avif", "webp"]}
+      fallbackFormat="webp"
+      quality={quality}
+      loading={priority ? "eager" : "lazy"}
+      decoding="async"
+      fetchpriority={priority ? "high" : undefined}
+    />
+  ) : (
+    <img
+      src={src}
+      alt={alt}
+      class={className}
+      loading={priority ? "eager" : "lazy"}
+      decoding="async"
+      fetchpriority={priority ? "high" : undefined}
+    />
+  )
+}

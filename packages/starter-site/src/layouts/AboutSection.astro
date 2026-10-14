@@ -2,6 +2,7 @@
 import Section from "../components/Section/Section.astro"
 import { hasRoute } from "../routes"
 import { site } from "../site-config"
+import Photo from "./Photo.astro"
 
 interface Props {
   /** The home page's short about section, or the about page's story and proof. */
@@ -58,12 +59,11 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
               {audience && <p>{audience}</p>}
             </div>
             {photo && (
-              <img
+              <Photo
                 class="story-photo"
                 src={photo.src}
                 alt={photo.alt}
-                loading="lazy"
-                decoding="async"
+                sizes="(min-width: 56rem) 50vw, 100vw"
               />
             )}
           </div>

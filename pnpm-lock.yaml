@@ -442,6 +442,9 @@ importers:
       astro:
         specifier: 7.3.2
         version: 7.3.2(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@22.19.19)(aws4fetch@1.0.20)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@22.19.19)
     devDependencies:
       '@astrojs/check':
         specifier: 0.9.10

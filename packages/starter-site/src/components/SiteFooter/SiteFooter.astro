@@ -1,4 +1,5 @@
 ---
+import Photo from "../../layouts/Photo.astro"
 import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
@@ -21,7 +22,7 @@ const blurb = site.tagline || site.homeIntro
         <div class="footer-brand">
           {site.logo && site.logoAlt ? (
             <p class="site-name">
-              <img class="site-logo" src={site.logo} alt={site.logoAlt} />
+              <Photo class="site-logo" src={site.logo} alt={site.logoAlt} widths={[160, 320, 480]} sizes="160px" />
             </p>
           ) : (
             site.businessName && <p class="site-name">{site.businessName}</p>
