@@ -1,4 +1,4 @@
-import type { FactRecord } from "@workspace/contracts"
+import type { Blueprint, FactRecord } from "@workspace/contracts"
 import type { Page } from "./page.ts"
 import { factsForContent, maskContentClaims } from "./text.ts"
 
@@ -122,6 +122,7 @@ export type ClaimKind =
   | "credential"
   | "guarantee"
   | "testimonial"
+  | "generated_image"
 
 export type ClaimFinding = {
   file: string
@@ -344,4 +345,40 @@ export function claimFindings(
         claim: c.text,
       }))
   )
+}
+
+/**
+ * Where a photo is a claim about the business (ADR-039): who works there,
+ * what it owns, what it has done, what customers said. A generated image in
+ * one of these is a picture of something that may not exist.
+ */
+export const CLAIM_IMAGE_SECTIONS = [
+  "about",
+  "gallery",
+  "testimonials",
+] as const
+
+/** Every generated slot whose section is a claim, with the slot as its node. */
+export function generatedImageFindings(
+  plan: Pick<Blueprint, "images" | "pages">
+): ClaimFinding[] {
+  return plan.images.flatMap((slot) => {
+    if (slot.source !== "generated") return []
+    const section = plan.pages
+      .find((p) => p.page === slot.page)
+      ?.sections.find((s) => s.kind === slot.section)
+    const claim =
+      (CLAIM_IMAGE_SECTIONS as readonly string[]).includes(slot.section) ||
+      (section?.kind === "service_cards" && section.variant === "fleet")
+    return claim
+      ? [
+          {
+            file: `blueprint ${slot.page}`,
+            node: `images.${slot.id}`,
+            kind: "generated_image" as const,
+            claim: slot.subject,
+          },
+        ]
+      : []
+  })
 }
