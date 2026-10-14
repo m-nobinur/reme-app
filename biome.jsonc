@@ -16,7 +16,7 @@
       "!**/*.gen.ts",
       "!**/worker-configuration.d.ts",
       "!packages/db/drizzle",
-      "!packages/contracts/generated"
+      "!packages/contracts/generated/openapi.json"
     ]
   },
   "formatter": {

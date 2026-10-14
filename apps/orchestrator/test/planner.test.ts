@@ -132,7 +132,9 @@ describe("the structured output schema", () => {
 
   // Anthropic refused the per-kind union as "compiled grammar is too large".
   it("sends a section as one object with every kind and variant pooled", () => {
-    const pages = (outputSchema().properties as Record<string, any>).pages
+    // biome-ignore lint/suspicious/noExplicitAny: walks a JSON Schema
+    const props = outputSchema().properties as Record<string, any>
+    const pages = props.pages
     const section = pages.items.properties.sections.items
     expect(section.anyOf).toBeUndefined()
     expect(section.properties.kind.enum).toEqual(Object.keys(SECTION_VARIANTS))
@@ -143,9 +145,7 @@ describe("the structured output schema", () => {
       expect.arrayContaining(["kind", "variant", "purpose", "content_notes"])
     )
     // A union whose branches differ beyond kind stays a union.
-    expect(
-      (outputSchema().properties as Record<string, any>).palette.anyOf
-    ).toHaveLength(2)
+    expect(props.palette.anyOf).toHaveLength(2)
   })
 })
 
