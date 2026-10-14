@@ -298,6 +298,20 @@ export async function finishRevision(input: {
   )
   const prefix = `sites/${orgId}/${revisionId}/`
 
+  // Before anything is uploaded, on the tree that was just built: the sandbox
+  // is idle for the rest of the tail, so what is linted is what ships.
+  const custom = await steps.do("custom sections", () =>
+    runCustomSections(
+      {
+        exec: run,
+        readFileBuffer: (path) => sandbox.readFileBuffer(path),
+        writeFile: (path, content) => sandbox.writeFile(path, content),
+      },
+      sites,
+      prefix
+    )
+  )
+
   const manifest = await steps.do("upload dist", async () => {
     const started = Date.now()
     const previous = await kit.withOrg({ orgId }, (db) =>
@@ -333,18 +347,6 @@ export async function finishRevision(input: {
   const axe = await steps.do("axe", () =>
     runAxe(
       { exec: run, readFileBuffer: (path) => sandbox.readFileBuffer(path) },
-      sites,
-      prefix
-    )
-  )
-
-  const custom = await steps.do("custom sections", () =>
-    runCustomSections(
-      {
-        exec: run,
-        readFileBuffer: (path) => sandbox.readFileBuffer(path),
-        writeFile: (path, content) => sandbox.writeFile(path, content),
-      },
       sites,
       prefix
     )
