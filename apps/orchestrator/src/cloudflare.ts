@@ -59,6 +59,7 @@ import {
   sandboxFor,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
+import { logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, validateRevision } from "./validate.ts"
 
@@ -116,7 +117,12 @@ export type AssignmentParams = { assignment_id: string; org_id: string }
 /** What the Developer's tools send the Workflow: a kind and ids, never a body (R8). */
 type DeveloperEvent =
   | { kind: "information"; request_id: string }
-  | { kind: "completion"; report_id: string; revision_id: string }
+  | {
+      kind: "completion"
+      report_id: string
+      revision_id: string
+      timings?: ToolTimings
+    }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
   | { kind: "interrupted"; reason: string }
 
@@ -184,12 +190,18 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
 
+    // The instance's creation time is durable; a clock read between steps
+    // would restart on every replay.
+    const t0 = event.timestamp.getTime()
     let claimed = false
+    let claimedAt = t0
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !claimed; attempt++) {
-      const result = await step.do(`claim ${attempt}`, () =>
-        run((kit) => claim(kit, ids, attempt === 1))
-      )
+      const result = await step.do(`claim ${attempt}`, async () => ({
+        ...(await run((kit) => claim(kit, ids, attempt === 1))),
+        at: Date.now(),
+      }))
       claimed = result.claimed
+      claimedAt = result.at
       const superseded = result.superseded
       if (superseded) {
         // §13 rule 3: a cancelled assignment's container does not outlive it.
@@ -211,14 +223,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // refusal only. Only a full pool waits; any other error takes the step's
     // retry policy, so a bad image fails rather than retrying for ten minutes.
     let ready = false
+    let coldStartMs = 0
+    let readyAt = claimedAt
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !ready; attempt++) {
-      ready = await step.do(`sandbox ${attempt}`, async () => {
+      const got = await step.do(`sandbox ${attempt}`, async () => {
         try {
           const { cold_start_ms } = await provision(this.env, ids.assignmentId)
           await run((kit) =>
             appendAudit(kit, ids, "sandbox.provisioned", { cold_start_ms })
           )
-          return true
+          return { ready: true, cold_start_ms, at: Date.now() }
         } catch (error) {
           if (!(error instanceof PoolExhaustedError)) throw error
           if (attempt === 1) {
@@ -226,9 +240,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               appendAudit(kit, ids, "pool.exhausted", { reason: error.reason })
             )
           }
-          return false
+          return { ready: false, cold_start_ms: 0, at: Date.now() }
         }
       })
+      ready = got.ready
+      coldStartMs = got.cold_start_ms
+      readyAt = got.at
       if (!ready) await step.sleep(`pool full ${attempt}`, "30 seconds")
     }
     if (!ready) return { outcome: "pool_exhausted" }
@@ -243,7 +260,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // instance and returns. The spec and the snapshot are bodies, so they
     // travel inside the step and never cross its boundary (R8).
     const admitted = await step.do("developer", async () => {
-      const { brief, origin } = await run((kit) =>
+      const briefStarted = Date.now()
+      const { brief, origin, kind } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -271,10 +289,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             restore_key: source?.source_key ?? null,
             map: null,
           }
-          return { brief: built, origin: choices.origin }
+          return { brief: built, origin: choices.origin, kind: row.kind }
         })
       )
+      const briefMs = since(briefStarted)
+      let restoreMs = 0
       if (brief.restore_key) {
+        const restoreStarted = Date.now()
         // The container is provisioned; the restored site's map goes into the
         // stable segment before the Developer's first turn.
         brief.map = await restoreAndMap(
@@ -282,6 +303,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           this.env.SITES,
           brief.restore_key
         )
+        restoreMs = since(restoreStarted)
+      }
+      const dispatchedAt = Date.now()
+      const timing = {
+        kind,
+        brief_ms: briefMs,
+        restore_ms: restoreMs,
+        dispatched_at: dispatchedAt,
       }
       try {
         const receipt = await init(Developer, {
@@ -301,10 +330,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             : `Build the site from the canonical facts. ${brief.goal}`,
           initialData: brief,
         })
-        return { submission_id: receipt.submissionId, origin }
+        return { submission_id: receipt.submissionId, origin, ...timing }
       } catch (error) {
         if (error instanceof AgentInstanceExistsError) {
-          return { submission_id: null, origin }
+          return { submission_id: null, origin, ...timing }
         }
         throw error
       }
@@ -378,8 +407,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         )
-        const verdict = await step.do(`gates ${round}`, () =>
-          run((kit) =>
+        const verdict = await step.do(`gates ${round}`, async () => {
+          const gateMs: Record<string, number> = {}
+          const started = Date.now()
+          const result = await run((kit) =>
             validateRevision(
               kit,
               this.env.SITES,
@@ -388,10 +419,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                 report_id: payload.report_id,
                 revision_id: payload.revision_id,
               },
-              this.env.SITE_HOST_SUFFIX
+              this.env.SITE_HOST_SUFFIX,
+              gateMs
             )
           )
-        )
+          return {
+            ...result,
+            gate_ms: { ...gateMs, total: since(started) },
+            at: Date.now(),
+          }
+        })
         if (verdict.outcome === "repairing") {
           // The failed rows go back to the same conversation, the way an
           // answer does; the Developer fixes them and reports again.
@@ -412,9 +449,46 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           continue
         }
         // ADR-032: the sandbox ends with the build, not at publish.
-        await step.do("destroy sandbox", async () => {
+        const destroyMs = await step.do("destroy sandbox", async () => {
+          const started = Date.now()
           await endSandbox(this.env, ids)
-          return { destroyed: ids.assignmentId }
+          return since(started)
+        })
+        const done = Date.now()
+        const t = payload.timings
+        logTiming({
+          assignment_id: ids.assignmentId,
+          org_id: ids.orgId,
+          kind: admitted.kind,
+          outcome: verdict.outcome,
+          rounds: round,
+          lock_ms: claimedAt - t0,
+          provision_ms: readyAt - claimedAt,
+          cold_start_ms: coldStartMs,
+          brief_ms: admitted.brief_ms,
+          restore_ms: admitted.restore_ms,
+          // Dispatch to report_complete, less the tool's own time: the agent's
+          // restore, its model turns and every tool it ran. It includes any
+          // wait on an owner's answer.
+          agent_ms: t
+            ? t.reported_at - admitted.dispatched_at - t.tool_ms
+            : null,
+          model_turns: t?.model_turns ?? null,
+          check_ms: t?.check_ms ?? null,
+          build_ms: t?.build_ms ?? null,
+          screenshots_ms: t?.screenshots_ms ?? null,
+          upload_ms: t?.upload_ms ?? null,
+          upload_files: t?.upload_files ?? null,
+          upload_bytes: t?.upload_bytes ?? null,
+          source_ms: t?.source_ms ?? null,
+          gates_ms: verdict.gate_ms.total,
+          ...Object.fromEntries(
+            Object.entries(verdict.gate_ms)
+              .filter(([k]) => k !== "total")
+              .map(([k, v]) => [`gate_${k}_ms`, v])
+          ),
+          destroy_ms: destroyMs,
+          end_to_end_ms: done - t0,
         })
         // An owner's build goes in front of the owner as soon as the preview
         // exists, so the 72 h clock starts then. `requestReview` answers a

@@ -119,7 +119,9 @@ export async function validateRevision(
   sites: Artifacts,
   ids: Ids,
   input: { report_id: string; revision_id: string },
-  hostSuffix: string
+  hostSuffix: string,
+  /** Filled with milliseconds per gate for the timing line. */
+  timings?: Record<string, number>
 ): Promise<Verdict> {
   const loaded = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [row] = await db
@@ -184,6 +186,7 @@ export async function validateRevision(
     report,
     facts: factsUsed,
     hosts: [siteHost(slug ?? "", hostSuffix)],
+    timings,
   })
 
   const gates: GateResult[] = []
