@@ -15,6 +15,11 @@ import {
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
+import {
+  type GeneratedPhoto,
+  GeneratedPhotos,
+  type PhotoActions,
+} from "@workspace/ui/components/generated-photos"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   type AnswerSpec,
@@ -796,6 +801,8 @@ function ApprovalItem({
   pending: busy = null,
   error = null,
   defaultAsking = false,
+  photos = [],
+  photoActions,
 }: {
   target: ApprovalTarget
   version: number
@@ -811,6 +818,9 @@ function ApprovalItem({
   error?: string | null
   /** Open on the change note, for the catalog. */
   defaultAsking?: boolean
+  /** The pictures the assistant made for this version, to badge and offer changes on. */
+  photos?: readonly GeneratedPhoto[]
+  photoActions?: PhotoActions | undefined
 }) {
   const id = useId()
   const decision = approvalDecision(target, "approved")
@@ -850,6 +860,13 @@ function ApprovalItem({
       />
       {typeof preview === "object" ? (
         <OutLink href={preview.url}>Open preview</OutLink>
+      ) : null}
+      {photoActions ? (
+        <GeneratedPhotos
+          actions={photoActions}
+          disabled={busy !== null}
+          photos={photos}
+        />
       ) : null}
       <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
       <ApprovalTargetSummary

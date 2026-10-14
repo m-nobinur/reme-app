@@ -282,6 +282,17 @@ export const AttentionItem = z.discriminatedUnion("kind", [
     // `/workspace` lists revision approvals only, until another target has a producer.
     request: ApprovalRequest,
     version: z.int().positive(),
+    /** The generated photos of this version, so the review can badge them (IG4). Absent when none. */
+    photos: z
+      .array(
+        z.strictObject({
+          slot_id: z.string().min(1),
+          section: z.string().min(1),
+          alt: z.string(),
+        })
+      )
+      .max(24)
+      .optional(),
   }),
   ReportItem,
   AlertItem,

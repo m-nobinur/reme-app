@@ -1,6 +1,7 @@
 import type {
   ApprovalRequest,
   BuildSummary,
+  ChangeKind,
   Conversation,
   ConversationMessage,
   ConversationPatch,
@@ -91,6 +92,8 @@ export type AttentionItem =
       request: ApprovalRequest
       /** The version number of the revision the approval is bound to. */
       version: number
+      /** The pictures the assistant generated for this version (IG4). */
+      photos?: { slot_id: string; section: string; alt: string }[]
     })
 
 /** The frame's one read of `/workspace`: what needs the owner, and where the site is. */
@@ -269,7 +272,11 @@ export type OwnerDataSource = {
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */
-  requestChange: (text: string, key: string) => Promise<WriteOutcome>
+  requestChange: (
+    text: string,
+    key: string,
+    changeKind?: ChangeKind
+  ) => Promise<WriteOutcome>
   conversations: () => Promise<Conversation[]>
   conversation: (id: string) => Promise<Conversation | null>
   /**

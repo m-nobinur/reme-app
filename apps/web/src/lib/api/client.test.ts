@@ -706,6 +706,15 @@ it("sends a change in the owner's words, and says why one is refused", async () 
   })
 })
 
+it("sends the change kind a photo action names", async () => {
+  answers["POST /changes"] = refusal(409, "change.question_open")
+  await apiSource.requestChange("Try another photo", "k-4", "photo")
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Try another photo",
+    change_kind: "photo",
+  })
+})
+
 it("says a cancelled change was stopped, not that the page is stale", async () => {
   answers["POST /changes"] = refusal(409, "change.cancelled")
   expect(await apiSource.requestChange("Bigger logo", "k-3")).toEqual({

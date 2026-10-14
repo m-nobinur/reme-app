@@ -5899,6 +5899,28 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "photos": {
+                "maxItems": 24,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slot_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "section": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "alt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slot_id", "section", "alt"],
+                  "additionalProperties": false
+                }
               }
             },
             "required": ["kind", "request", "version"],
@@ -19082,6 +19104,28 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "photos": {
+                      "maxItems": 24,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slot_id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "section": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "alt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["slot_id", "section", "alt"],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": ["kind", "request", "version"],

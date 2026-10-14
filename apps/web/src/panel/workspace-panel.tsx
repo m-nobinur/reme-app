@@ -52,6 +52,7 @@ import { type Panel, panelFor, type Suggestion } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { photoActions } from "./photo-actions"
 
 /**
  * The live panel, wired: the sections come from `@workspace/ui`, the reads
@@ -249,6 +250,7 @@ export function Decidable({
       return outcome
     })
 
+  const photos = (item.photos ?? []).length > 0
   return (
     <ApprovalItem
       error={error}
@@ -258,6 +260,19 @@ export function Decidable({
       onExpiry={item.onExpiry}
       onRetryPreview={retryPreview}
       pending={pending}
+      photoActions={
+        photos
+          ? photoActions((write) => {
+              void run("change", async () => {
+                const outcome = await write()
+                if (outcome.done)
+                  announce("Sent. A new version replaces this one.")
+                return outcome
+              })
+            })
+          : undefined
+      }
+      photos={item.photos ?? []}
       preview={preview}
       rationale={item.detail}
       target={item.request.target}
