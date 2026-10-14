@@ -541,6 +541,7 @@ export interface components {
         placeholder: string
       } | null
       skippable: boolean
+      own?: string
       initial?: string[]
       color?: boolean
     }
@@ -662,6 +663,7 @@ export interface components {
             placeholder: string
           } | null
           skippable: boolean
+          own?: string
           initial?: string[]
           color?: boolean
         }

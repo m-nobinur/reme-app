@@ -162,6 +162,12 @@ export const AskChoiceInput = z
       .nullable(),
     skippable: z.boolean(),
     /**
+     * The owner's own words, held from an earlier answer to this card: the
+     * design tray reads it as that question already answered, so a reload
+     * resumes after it rather than asking again.
+     */
+    own: Text(200).optional(),
+    /**
      * The options the card shows first, when the list is long. The owner
      * reaches the rest with a Show others button, as many at a time.
      * Absent, the card shows every option.

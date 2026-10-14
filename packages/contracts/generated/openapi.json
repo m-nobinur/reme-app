@@ -1832,6 +1832,12 @@
           "skippable": {
             "type": "boolean"
           },
+          "own": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
           "initial": {
             "minItems": 3,
             "maxItems": 4,
@@ -2216,6 +2222,12 @@
                     },
                     "skippable": {
                       "type": "boolean"
+                    },
+                    "own": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "\\S"
                     },
                     "initial": {
                       "minItems": 3,

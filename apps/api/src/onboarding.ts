@@ -572,14 +572,16 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     step: ChoiceStep,
     options: Option[],
     held: string | undefined,
-    own: string
+    placeholder: string,
+    words?: string
   ): AskChoiceInput => ({
     step,
     options,
     multiple: false,
     preselected: ticked(held, options),
-    other: { label: "Write your own…", placeholder: own },
+    other: { label: "Write your own…", placeholder },
     skippable: true,
+    ...(words ? { own: words } : {}),
   })
   const paletteOptions = palettes.map((id): Option => {
     const palette = PALETTES.find((p) => p.id === id)
@@ -622,6 +624,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
   )
   const palette = factValue(o.facts, "site.palette")
   const font = factValue(o.facts, "site.font")
+  const direction = factValue(o.facts, "site.direction")
+  const pagesHeld = factValue(o.facts, "site.pages")
   return call(
     "tool-ask_design",
     AskDesignInput.parse({
@@ -634,7 +638,10 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "palette",
             paletteOptions,
             palette?.id,
-            "A colour code, or describe your colours"
+            "A colour code, or describe your colours",
+            palette?.id === "custom"
+              ? (palette.custom ?? palette.brand)
+              : undefined
           ),
         },
         {
@@ -645,7 +652,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "font",
             pairOptions,
             font?.id,
-            "Describe the lettering you like"
+            "Describe the lettering you like",
+            font?.id === "custom" ? font.custom : undefined
           ),
         },
         {
@@ -655,8 +663,9 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           card: card(
             "template",
             layoutOptions,
-            factValue(o.facts, "site.direction")?.id,
-            "Describe the layout you have in mind"
+            direction?.id,
+            "Describe the layout you have in mind",
+            direction?.id === "custom" ? direction.custom : undefined
           ),
         },
         {
@@ -667,7 +676,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "pages",
             pageOptions,
             heldSet?.id,
-            "Name the pages you want and what goes on them"
+            "Name the pages you want and what goes on them",
+            pagesHeld?.custom
           ),
         },
       ],

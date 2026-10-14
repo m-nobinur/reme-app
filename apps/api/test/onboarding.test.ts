@@ -1311,6 +1311,44 @@ describe("the design tray", () => {
     expect(input.questions[1]?.card.preselected).toEqual([])
   })
 
+  it("opens on the owner's own words where the org wrote its own", () => {
+    // Pages are left unanswered: with all four held the tray is done.
+    const input = tray({
+      facts: [
+        ...heldBefore(),
+        {
+          key: "site.palette",
+          value: { id: "custom", custom: "warm greys and brass" },
+        },
+        { key: "site.font", value: { id: "custom", custom: "a quiet serif" } },
+        { key: "site.direction", value: { id: "custom", custom: "airy" } },
+      ],
+    })
+    expect(input.questions.map((q) => q.card.own)).toEqual([
+      "warm greys and brass",
+      "a quiet serif",
+      "airy",
+      undefined,
+    ])
+    for (const q of input.questions) expect(q.card.preselected).toEqual([])
+    // A hex code is held as the brand colour and comes back as the words;
+    // pages' own words ride beside the ids they came with.
+    const code = PALETTES[0]?.brand as string
+    const rest = tray({
+      facts: [
+        ...heldBefore(),
+        { key: "site.palette", value: { id: "custom", brand: code } },
+        { key: "site.pages", value: { ids: ["home"], custom: "home, fees" } },
+      ],
+    })
+    expect(rest.questions.map((q) => q.card.own)).toEqual([
+      code,
+      undefined,
+      undefined,
+      "home, fees",
+    ])
+  })
+
   const card = () =>
     onboardingStep(start({ facts: heldBefore() }), counter())[1] as ToolPart
   const input = () => AskDesignInput.parse(card().input)
