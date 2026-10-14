@@ -185,11 +185,14 @@ const values = {
   /** The subject line of a request sent by email. */
   quoteEmailSubject: "Quote request",
   bookingIntro: "",
+  aboutEyebrow: "About",
   aboutHeading: "About us",
   /** The link from the home page's about section to the about page. */
   aboutLink: "More about us",
+  overviewEyebrow: "Our story",
   overviewHeading: "How we work",
   audienceHeading: "Who we work with",
+  proofEyebrow: "Our record",
   proofHeading: "What sets us apart",
   /** business.overview in the site's voice, in two to four sentences: rephrase it, never add to it. Empty shows overview as given. */
   overviewBody: "",
@@ -205,7 +208,9 @@ const values = {
   trust1: "",
   trust2: "",
   trust3: "",
+  offeringsEyebrow: "The full list",
   offeringsHeading: "Everything we offer",
+  valuePropsEyebrow: "Why us",
   valuePropsHeading: "Why choose us",
   /**
    * Three reasons to choose the business, each a fact or business.proof put
@@ -223,7 +228,9 @@ const values = {
   valueProp3Icon: "",
   /**
    * The short label above a section's h2: a word or two, set small and
-   * uppercase, never a claim. Empty leaves the heading on its own.
+   * uppercase, never a claim. Every section heading has one, and a section
+   * heading may set its last clause in the accent by wrapping it in asterisks,
+   * as "Why agents keep *rebooking us*". Empty leaves the heading on its own.
    */
   serviceCardsEyebrow: "Services",
   serviceCardsHeading: "What we do",
@@ -301,7 +308,9 @@ const values = {
   statRatingLabel: "Average rating",
   testimonialsEyebrow: "Reviews",
   testimonialsHeading: "What clients say",
+  galleryEyebrow: "Gallery",
   galleryHeading: "Our work",
+  areaEyebrow: "Coverage",
   /**
    * The places service_area.text names, one to a line, and nothing it does
    * not name. Empty shows service_area.text as given.
@@ -334,6 +343,7 @@ const values = {
   faq7Answer: "",
   faq8Question: "",
   faq8Answer: "",
+  ctaEyebrow: "Next step",
   ctaHeading: "",
   ctaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
@@ -341,6 +351,7 @@ const values = {
   /** A photo behind the closing band, under the brand colour; decoration, so no alt. */
   ctaImage: "",
   /** The quote page's side column: what happens after a visitor sends the form. */
+  quoteEyebrow: "Your quote",
   quoteAsideHeading: "What happens next",
   quoteNext1: "Send the form with as much detail as you can.",
   quoteNext2: "We read your request and check what the job needs.",

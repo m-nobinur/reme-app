@@ -273,15 +273,25 @@
         "type": "string",
         "required": true,
         "description": "The section's h2, read from a site field."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": true,
+        "description": "The short label above the h2, read from a site field."
       }
     ],
     "constraints": [
       "Wrap it in the condition its content needs, so an empty section never renders."
     ],
     "examples": [
-      "{site.serviceArea && (<Section heading={site.serviceAreaHeading}><p>{site.serviceArea}</p></Section>)}"
+      "{site.serviceArea && (<Section eyebrow={site.areaEyebrow} heading={site.serviceAreaHeading}><p>{site.serviceArea}</p></Section>)}"
     ],
-    "forbidden": ["a Section with no content", "literal text in heading"],
+    "forbidden": [
+      "a Section with no content",
+      "literal text in heading",
+      "a Section with no eyebrow"
+    ],
     "source": "generated"
   },
   {

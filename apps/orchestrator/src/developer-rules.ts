@@ -150,6 +150,7 @@ export function stableRules(): string[] {
     "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
     ...COPY_RULES,
     ...CONTENT_RULES,
+    ...LOOK_RULES,
     CUSTOM_SECTION_RULES,
     "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
     "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact field empty when its fact is missing or when the owner has asked for that fact not to appear: an empty field renders nothing, which is how the site leaves something out. A composed field is text you may write or keep. It may say why the business is worth calling. Every checkable thing in it traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A sentence about the care taken over the work is not checkable and needs no fact. Never add, remove or re-key fields, and never change a field's kind, fact_key or required flag: the platform reads its own copy of fields, so an edit here changes nothing it believes.",
@@ -244,6 +245,11 @@ export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
  * that no fact mentioned; these rules name that kind of specific and end in
  * a check the Developer runs on its own copy before it reports.
  */
+/** What the starter's section look needs from the copy: design rules 2 and 3 as fields. */
+const LOOK_RULES = [
+  '- Every section heading has an eyebrow field (valuePropsEyebrow, galleryEyebrow, aboutEyebrow and the rest): keep it, or set a word or two for the section, never a claim and never empty. In each section heading field wrap the last clause in asterisks, as "Why agents keep *rebooking us*", so it shows in the accent; never in heroHeading, a Title or a Description.',
+]
+
 const CONTENT_RULES = [
   "- Write the copy from business.industry, business.offerings, business.audience, business.overview, service_area.text and the contact facts below: what the business does, for whom, how it works with a customer and where. Every service description, benefit, process step, FAQ answer and line that reads like a customer's words traces to one of them. Rephrase; never add.",
   '- A benefit heading may stay general ("Easy to book", "Local to you"), but no line states a specific that no fact states: no place beyond service_area.text (no airports, venues or landmarks), no service extra such as meet and greet or a driver who keeps in touch, no response or arrival time, no years, no award, no fleet or team size, no qualification or membership, no named equipment, product or brand.',

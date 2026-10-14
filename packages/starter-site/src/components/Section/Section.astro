@@ -1,15 +1,19 @@
 ---
+import SectionHead from "../../layouts/SectionHead.astro"
+
 interface Props {
   /** The section's h2, read from a site field. */
   heading: string
+  /** The short label above the h2, read from a site field. */
+  eyebrow: string
 }
 
-const { heading } = Astro.props
+const { heading, eyebrow } = Astro.props
 ---
 
 <section class="band section">
   <div class="wrap section-inner">
-    {heading && <h2>{heading}</h2>}
+    <SectionHead eyebrow={eyebrow} heading={heading} />
     <div class="section-body">
       <slot />
     </div>

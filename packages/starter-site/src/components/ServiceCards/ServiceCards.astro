@@ -1,5 +1,6 @@
 ---
 import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { hasRoute, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import { serviceItems } from "../../structured-data"
@@ -39,13 +40,11 @@ const href = (id: string) => `/services/#${id}`
       ]}
     >
       <div class="wrap">
-        {!(detail && onServices) && site.serviceCardsHeading && (
-          <div class="section-head">
-            {site.serviceCardsEyebrow && (
-              <p class="eyebrow">{site.serviceCardsEyebrow}</p>
-            )}
-            <h2>{site.serviceCardsHeading}</h2>
-          </div>
+        {!(detail && onServices) && (
+          <SectionHead
+            eyebrow={site.serviceCardsEyebrow}
+            heading={site.serviceCardsHeading}
+          />
         )}
         {(variant === "photo_cards" || variant === "fleet") && (
           <ul class="card-grid">
@@ -129,6 +128,9 @@ const href = (id: string) => `/services/#${id}`
               )}
               <div class="service-detail-main">
                 <Icon name={item.icon} />
+                {site.serviceCardsEyebrow && (
+                  <p class="eyebrow">{site.serviceCardsEyebrow}</p>
+                )}
                 {item.name && <h2>{item.name}</h2>}
                 {item.body && <p class="service-detail-body">{item.body}</p>}
                 {primaryAction && (

@@ -3,6 +3,7 @@ import Section from "../components/Section/Section.astro"
 import { hasRoute } from "../routes"
 import { site } from "../site-config"
 import Photo from "./Photo.astro"
+import SectionHead from "./SectionHead.astro"
 
 interface Props {
   /** The home page's short about section, or the about page's story and proof. */
@@ -30,7 +31,7 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
 {
   page === "home" ? (
     (homeAbout || homeAudience) && (
-      <Section heading={site.aboutHeading}>
+      <Section eyebrow={site.aboutEyebrow} heading={site.aboutHeading}>
         {site.tagline && site.homeIntro && (
           <p class="section-lede">{site.homeIntro}</p>
         )}
@@ -51,7 +52,10 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
         <section class="band about-story">
           <div class:list={["wrap", "story-inner", photo && "story-split"]}>
             <div class="story-text">
-              {storyHeading && <h2>{storyHeading}</h2>}
+              <SectionHead
+                eyebrow={site.overviewEyebrow}
+                heading={storyHeading}
+              />
               {story && <p class="section-lede">{story}</p>}
               {story && audience && site.audienceHeading && (
                 <h3>{site.audienceHeading}</h3>
@@ -70,7 +74,7 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
         </section>
       )}
       {proof && (
-        <Section heading={site.proofHeading}>
+        <Section eyebrow={site.proofEyebrow} heading={site.proofHeading}>
           <p>{proof}</p>
         </Section>
       )}

@@ -169,7 +169,7 @@ p {
   }
 }
 
-.section-inner > h2 {
+.section-inner > .section-head {
   margin: 0;
 }
 
@@ -511,7 +511,7 @@ picture {
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 50%;
-  background: var(--brand-accent);
+  background: currentcolor;
 }
 
 /* The last word of a headline, never the whole line: in the italic face
@@ -1240,6 +1240,24 @@ picture {
   margin-block-end: var(--space-sm);
 }
 
+.service-details {
+  counter-reset: service;
+}
+
+.service-detail {
+  counter-increment: service;
+}
+
+/* The number is drawn, so the label stays the site's own word. */
+.service-detail-main .eyebrow {
+  margin-block-end: var(--space-2xs);
+}
+
+.service-detail-main .eyebrow::after {
+  content: counter(service, decimal-leading-zero);
+  font-variant-numeric: tabular-nums;
+}
+
 .service-detail-main h2 {
   margin-block-end: var(--space-sm);
 }
@@ -1596,7 +1614,7 @@ picture {
   font-size: var(--text-lg);
 }
 
-.area-copy h2 {
+.area-copy .section-head {
   margin-block-end: var(--space-md);
 }
 
@@ -1679,6 +1697,10 @@ picture {
   padding: var(--space-lg) var(--space-md);
   border-radius: var(--radius-card);
   background: var(--brand-soft);
+}
+
+.quote-aside .section-head {
+  margin: 0;
 }
 
 .quote-aside h2 {
@@ -1990,9 +2012,17 @@ picture {
   max-width: 36rem;
 }
 
+.cta-text .eyebrow {
+  color: var(--brand-foreground);
+}
+
 .cta-text h2 {
   margin: 0 0 var(--space-2xs);
   color: var(--brand-foreground);
+}
+
+.cta-text .accent {
+  color: inherit;
 }
 
 .cta-body {
