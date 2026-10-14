@@ -251,6 +251,18 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(without).not.toContain("if business.overview and business.proof")
   })
 
+  it("names the design tray's direction and font pair", () => {
+    const rules = ownerChoices([
+      fact("site.direction", { id: "counsel" }),
+      fact("site.font", { id: "sora_manrope" }),
+    ]).join("\n")
+    expect(rules).toContain('set direction in src/site-config.ts to "counsel"')
+    expect(rules).toContain('set font in src/site-config.ts to "sora_manrope"')
+    expect(
+      ownerChoices([fact("site.direction", { id: "builder" })]).join("\n")
+    ).not.toContain("Direction:")
+  })
+
   it("quotes the owner's own words as guidance", () => {
     const rules = ownerChoices([
       fact("site.template", {
