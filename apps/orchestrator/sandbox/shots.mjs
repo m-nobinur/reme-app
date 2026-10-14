@@ -12,6 +12,27 @@ import { fileURLToPath } from "node:url"
 export const WIDTHS = [390, 768, 1440]
 export const HEIGHT = 900
 
+// Runs in the page. A full-page capture never scrolls, so a lazy image below
+// the fold stays an empty box. Here the capture alone makes every image eager
+// and scrolls the page through once (which also fires scroll-driven reveals),
+// then waits for each image to decode; the site keeps its `loading="lazy"`.
+export async function inPage() {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  for (const img of document.images) img.loading = "eager"
+  const step = Math.max(window.innerHeight, 1)
+  for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+    window.scrollTo(0, y)
+    await wait(50)
+  }
+  await Promise.race([
+    Promise.all(
+      [...document.images].map((img) => img.decode().catch(() => undefined))
+    ),
+    wait(5000),
+  ])
+  window.scrollTo(0, 0)
+}
+
 export async function shoot(browser, url, dir, cropMax) {
   let failed = false
   for (const width of WIDTHS) {
@@ -21,6 +42,7 @@ export async function shoot(browser, url, dir, cropMax) {
       })
       const page = await context.newPage()
       await page.goto(url, { waitUntil: "load" })
+      await page.evaluate(inPage)
       await page.screenshot({
         path: `${dir}/home-${width}.png`,
         fullPage: true,

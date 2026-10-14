@@ -23,20 +23,30 @@ const load = async () => {
       cropMax: number
     ) => Promise<boolean>
     HEIGHT: number
+    inPage: () => Promise<void>
   }
 }
 
-/** A browser whose home page is `heights[width]` px tall; records every screenshot. */
+/** A browser whose home page is `heights[width]` px tall; records every screenshot and the page's loading step. */
 const browserOf = (heights: Record<number, number>) => {
   const shots: Shot[] = []
+  const order: string[] = []
   return {
     shots,
+    order,
     browser: {
       newContext: async ({ viewport }: { viewport: { width: number } }) => ({
         newPage: async () => ({
           goto: async () => undefined,
-          evaluate: async () => heights[viewport.width],
+          evaluate: async (fn: { name: string }) => {
+            if (fn.name === "inPage") {
+              order.push("load")
+              return undefined
+            }
+            return heights[viewport.width]
+          },
           screenshot: async (shot: Shot) => {
+            order.push("shot")
             shots.push(shot)
           },
         }),
@@ -96,6 +106,49 @@ describe("the capture script", () => {
     }
     expect(await shoot(broken, "http://x/", "/tmp", CROPS_MAX)).toBe(false)
     expect(shots.some((s) => s.path.includes("home-1440"))).toBe(true)
+  })
+})
+
+describe("lazy images in a capture", () => {
+  it("loads the page's images before the first shot at every width", async () => {
+    const { shoot } = await load()
+    const { browser, order } = browserOf({ 390: 900, 768: 900, 1440: 900 })
+    await shoot(browser, "http://x/", "/tmp", CROPS_MAX)
+    // Per width: load, whole page, one piece.
+    expect(order).toEqual([...Array(3).fill(["load", "shot", "shot"]).flat()])
+  })
+
+  it("makes every image eager, scrolls the whole page and waits for the decodes", async () => {
+    const { inPage } = await load()
+    const scrolled: number[] = []
+    const image = () => {
+      const img = {
+        loading: "lazy",
+        decoded: false,
+        decode: async () => {
+          img.decoded = true
+        },
+      }
+      return img
+    }
+    const images = [image(), image()]
+    const g = globalThis as Record<string, unknown>
+    const before = { document: g.document, window: g.window }
+    g.document = { images, documentElement: { scrollHeight: 2000 } }
+    g.window = {
+      innerHeight: 900,
+      scrollTo: (_x: number, y: number) => scrolled.push(y),
+    }
+    try {
+      await inPage()
+    } finally {
+      g.document = before.document
+      g.window = before.window
+    }
+    expect(images.map((i) => i.loading)).toEqual(["eager", "eager"])
+    expect(images.every((i) => i.decoded)).toBe(true)
+    // Through the page in screen steps, then back to the top.
+    expect(scrolled).toEqual([0, 900, 1800, 0])
   })
 })
 
