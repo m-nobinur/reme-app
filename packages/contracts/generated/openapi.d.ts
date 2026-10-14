@@ -2096,6 +2096,7 @@ export interface components {
             slot_id: string
             section: string
             alt: string
+            thumbnail?: string
           }[]
         }
       | {
@@ -2702,6 +2703,10 @@ export interface components {
         label: string
         done: number
         total: number
+        items?: {
+          label: string
+          done: boolean
+        }[]
       }[]
       revision: {
         /** Format: uuid */
@@ -3244,6 +3249,14 @@ export interface components {
         } | null
         awaiting: boolean
       }
+      photos?: {
+        slot_id: string
+        /** @enum {string} */
+        state: "drawing" | "made" | "fallback"
+        alt: string | null
+        thumbnail: string | null
+      }[]
+      review_ms?: number
       /** Format: date-time */
       created_at: string
       /** Format: date-time */
@@ -4996,6 +5009,10 @@ export interface components {
                     label: string
                     done: number
                     total: number
+                    items?: {
+                      label: string
+                      done: boolean
+                    }[]
                   }[]
                   revision: {
                     /** Format: uuid */
@@ -5538,6 +5555,14 @@ export interface components {
                     } | null
                     awaiting: boolean
                   }
+                  photos?: {
+                    slot_id: string
+                    /** @enum {string} */
+                    state: "drawing" | "made" | "fallback"
+                    alt: string | null
+                    thumbnail: string | null
+                  }[]
+                  review_ms?: number
                   /** Format: date-time */
                   created_at: string
                   /** Format: date-time */
@@ -6868,6 +6893,10 @@ export interface components {
               label: string
               done: number
               total: number
+              items?: {
+                label: string
+                done: boolean
+              }[]
             }[]
             revision: {
               /** Format: uuid */
@@ -7410,6 +7439,14 @@ export interface components {
               } | null
               awaiting: boolean
             }
+            photos?: {
+              slot_id: string
+              /** @enum {string} */
+              state: "drawing" | "made" | "fallback"
+              alt: string | null
+              thumbnail: string | null
+            }[]
+            review_ms?: number
             /** Format: date-time */
             created_at: string
             /** Format: date-time */
@@ -8025,6 +8062,10 @@ export interface components {
           label: string
           done: number
           total: number
+          items?: {
+            label: string
+            done: boolean
+          }[]
         }[]
         revision: {
           /** Format: uuid */
@@ -8567,6 +8608,14 @@ export interface components {
           } | null
           awaiting: boolean
         }
+        photos?: {
+          slot_id: string
+          /** @enum {string} */
+          state: "drawing" | "made" | "fallback"
+          alt: string | null
+          thumbnail: string | null
+        }[]
+        review_ms?: number
         /** Format: date-time */
         created_at: string
         /** Format: date-time */
@@ -8658,6 +8707,7 @@ export interface components {
               slot_id: string
               section: string
               alt: string
+              thumbnail?: string
             }[]
           }
         | {

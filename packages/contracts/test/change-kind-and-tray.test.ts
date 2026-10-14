@@ -14,6 +14,7 @@ import {
   BuildSummary,
   ChangeKind,
   OwnerChangeRequest,
+  thumbnailOf,
   WorkspaceStatus,
 } from "../src/owner.ts"
 import { ModelRoute } from "../src/runtime.ts"
@@ -294,6 +295,55 @@ describe("lane and activity on a build", () => {
     ).toBe(false)
   })
 
+  it("carries the photos as they settle, each thumbnail on the app's own photo door", () => {
+    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d.webp"
+    const photos = [
+      {
+        slot_id: "hero",
+        state: "made",
+        alt: "A van",
+        thumbnail: `/api/photos/${file}`,
+      },
+      { slot_id: "about", state: "fallback", alt: null, thumbnail: null },
+      { slot_id: "team", state: "drawing", alt: "The team", thumbnail: null },
+    ]
+    const at = (thumbnail: unknown) =>
+      BuildSummary.safeParse({
+        ...build,
+        photos: [{ ...photos[0], thumbnail }],
+        review_ms: 0,
+      }).success
+    expect(
+      BuildSummary.safeParse({ ...build, photos, review_ms: 42_000 }).success
+    ).toBe(true)
+    expect(at(`https://evil.example/${file}`)).toBe(false)
+    expect(at(`/api/photos/../${file}`)).toBe(false)
+    expect(at(`/api/photos/${file.replace("webp", "svg")}`)).toBe(false)
+    expect(BuildSummary.safeParse({ ...build, review_ms: -1 }).success).toBe(
+      false
+    )
+    expect(
+      BuildSummary.safeParse({
+        ...build,
+        photos: [{ ...photos[0], state: "done" }],
+      }).success
+    ).toBe(false)
+  })
+
+  it("reads a thumbnail from a generated photo's key, and none from any other", () => {
+    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d.png"
+    expect(thumbnailOf(`generated/org-1/${file}`)).toBe(`/api/photos/${file}`)
+    for (const key of [
+      `uploads/org-1/${file}`,
+      `generated/org-1/x/${file}`,
+      "generated/org-1/not-an-id.png",
+      null,
+      undefined,
+    ]) {
+      expect(thumbnailOf(key), String(key)).toBeNull()
+    }
+  })
+
   it("refuses a lane nobody runs", () => {
     for (const lane of ["slow", "", null]) {
       expect(BuildSummary.safeParse({ ...build, lane }).success).toBe(false)
@@ -328,7 +378,13 @@ describe("lane and activity on a build", () => {
       { ...row, done: 1.5 },
       { ...row, id: "Pages" },
       { ...row, percent: 60 },
+      { ...row, items: [{ label: "", done: true }] },
+      { ...row, items: Array(10).fill({ label: "Home", done: false }) },
     ]
+    const named = { ...row, items: [{ label: "Home", done: true }] }
+    expect(
+      BuildSummary.safeParse({ ...build, activity: [named] }).success
+    ).toBe(true)
     for (const candidate of bad) {
       expect(
         BuildSummary.safeParse({ ...build, activity: [candidate] }).success

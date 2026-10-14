@@ -7699,6 +7699,10 @@
                     },
                     "alt": {
                       "type": "string"
+                    },
+                    "thumbnail": {
+                      "type": "string",
+                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
                     }
                   },
                   "required": [
@@ -9819,6 +9823,29 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 999
+                },
+                "items": {
+                  "maxItems": 9,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "\\S"
+                      },
+                      "done": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "done"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
@@ -11735,6 +11762,61 @@
               "awaiting"
             ],
             "additionalProperties": false
+          },
+          "photos": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slot_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "drawing",
+                    "made",
+                    "fallback"
+                  ]
+                },
+                "alt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "thumbnail": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "slot_id",
+                "state",
+                "alt",
+                "thumbnail"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "review_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "created_at": {
             "type": "string",
@@ -18148,6 +18230,29 @@
                                   "type": "integer",
                                   "exclusiveMinimum": 0,
                                   "maximum": 999
+                                },
+                                "items": {
+                                  "maxItems": 9,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "label": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 60,
+                                        "pattern": "\\S"
+                                      },
+                                      "done": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "label",
+                                      "done"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 }
                               },
                               "required": [
@@ -20064,6 +20169,61 @@
                               "awaiting"
                             ],
                             "additionalProperties": false
+                          },
+                          "photos": {
+                            "maxItems": 24,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "slot_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "drawing",
+                                    "made",
+                                    "fallback"
+                                  ]
+                                },
+                                "alt": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "maxLength": 200
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "thumbnail": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "slot_id",
+                                "state",
+                                "alt",
+                                "thumbnail"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "review_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           "created_at": {
                             "type": "string",
@@ -24768,6 +24928,29 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 999
+                        },
+                        "items": {
+                          "maxItems": 9,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 60,
+                                "pattern": "\\S"
+                              },
+                              "done": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "done"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -26684,6 +26867,61 @@
                       "awaiting"
                     ],
                     "additionalProperties": false
+                  },
+                  "photos": {
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "slot_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "made",
+                            "fallback"
+                          ]
+                        },
+                        "alt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thumbnail": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "slot_id",
+                        "state",
+                        "alt",
+                        "thumbnail"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "review_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "created_at": {
                     "type": "string",
@@ -29058,6 +29296,29 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 999
+                      },
+                      "items": {
+                        "maxItems": 9,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 60,
+                              "pattern": "\\S"
+                            },
+                            "done": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "done"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -30975,6 +31236,61 @@
                   ],
                   "additionalProperties": false
                 },
+                "photos": {
+                  "maxItems": 24,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slot_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "drawing",
+                          "made",
+                          "fallback"
+                        ]
+                      },
+                      "alt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "thumbnail": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "slot_id",
+                      "state",
+                      "alt",
+                      "thumbnail"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "review_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
                 "created_at": {
                   "type": "string",
                   "format": "date-time",
@@ -31338,6 +31654,10 @@
                           },
                           "alt": {
                             "type": "string"
+                          },
+                          "thumbnail": {
+                            "type": "string",
+                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
                           }
                         },
                         "required": [
