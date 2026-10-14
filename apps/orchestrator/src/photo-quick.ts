@@ -97,8 +97,8 @@ export class PhotoFell extends Error {}
  *
  * shortcut: the new file must keep the old one's extension (the site config
  * names the file); a different type falls through. The slot is drawn alone,
- * so a non-hero slot is drawn at 2K and the rest of the set is not passed as
- * a reference. Both are cheap to lift once the Blueprint carries them.
+ * so a non-hero slot is drawn at 2K. The site's other generated photos ride
+ * along as references, so the grade matches the set.
  */
 export async function regenerateSlot(input: {
   env: { OPENROUTER_API_KEY?: string; SITES: unknown }
@@ -130,6 +130,11 @@ export async function regenerateSlot(input: {
     orgId,
     plan: { images: [fresh], pages: [] },
     brief: photos.brief,
+    siblings: photos.slots.flatMap((s) =>
+      s.id !== slot.id && s.source === "generated" && s.asset_id
+        ? [s.asset_id]
+        : []
+    ),
     variation: input.assignmentId,
     ...(input.fetch ? { fetch: input.fetch } : {}),
   })

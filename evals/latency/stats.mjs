@@ -67,6 +67,40 @@ export function turnsOf(text) {
     })
 }
 
+/** Dollars a drawn photo costs when the event carries no figure (images.ts ESTIMATE, 2026-10-14). */
+const PHOTO_ESTIMATE = { "1K": 0.034, "2K": 0.05 }
+
+/**
+ * Photos drawn per assignment, from `site.photos` events (IG4's shape:
+ * `payload.slots`, each with `source`, `resolution` and an `asset_id` once
+ * drawn, and `regenerated` for a lone redraw). A build drew every generated
+ * slot that has an asset; a redraw drew only the slot it names. Cost is the
+ * payload's `cost_usd` when it has one, else the estimate per resolution:
+ * the event holds no billed figure (that sits in R2 metadata).
+ */
+export function photosOf(text) {
+  const out = new Map()
+  for (const o of objects(text).filter((o) => o.type === "site.photos")) {
+    const p = o.payload ?? {}
+    const id = o.assignment_id ?? o.assignmentId
+    if (!id || !Array.isArray(p.slots)) continue
+    const drawn = p.slots.filter(
+      (s) =>
+        s.source === "generated" &&
+        s.asset_id &&
+        (!p.regenerated || s.id === p.regenerated)
+    )
+    out.set(id, {
+      images: drawn.length,
+      cost:
+        typeof p.cost_usd === "number"
+          ? p.cost_usd
+          : drawn.reduce((n, s) => n + (PHOTO_ESTIMATE[s.resolution] ?? 0), 0),
+    })
+  }
+  return out
+}
+
 /** The lane a timing line belongs to: `quick:copy`, `full:creative`, or `full:site.build` for a line from before lanes. */
 export const laneOf = (t) =>
   `${t.lane ?? "full"}:${t.change_kind ?? t.kind ?? "unknown"}`
@@ -78,7 +112,7 @@ export const laneOf = (t) =>
  * p50 of `preview_ready_ms` (or `end_to_end_ms` where the line predates it)
  * over the same assignment `kind`, because the baseline has no lanes.
  */
-export function laneRows(timings, turns, baseline = []) {
+export function laneRows(timings, turns, baseline = [], photos = new Map()) {
   const spent = Map.groupBy(
     turns.filter((t) => t.assignment),
     (t) => t.assignment
@@ -99,6 +133,7 @@ export function laneRows(timings, turns, baseline = []) {
     const costs = group
       .filter((t) => spent.has(t.assignment_id))
       .map((t) => spent.get(t.assignment_id).reduce((n, r) => n + r.cost, 0))
+    const drawn = group.map((t) => photos.get(t.assignment_id)).filter(Boolean)
     const ready = seconds("preview_ready_ms")
     const base = baseOf(group[0].kind)
     return {
@@ -112,6 +147,15 @@ export function laneRows(timings, turns, baseline = []) {
       costN: costs.length,
       costP50: percentile(costs, 0.5),
       costP95: percentile(costs, 0.95),
+      imagesN: drawn.length,
+      imagesP50: percentile(
+        drawn.map((d) => d.images),
+        0.5
+      ),
+      imageCostP50: percentile(
+        drawn.map((d) => d.cost),
+        0.5
+      ),
     }
   })
 }
@@ -158,6 +202,9 @@ export function render(lanes, roles) {
         "cost n",
         "cost p50 $",
         "cost p95 $",
+        "photo builds",
+        "images p50",
+        "image cost p50 $",
       ],
       lanes.map((r) => [
         r.lane,
@@ -170,6 +217,9 @@ export function render(lanes, roles) {
         r.costN,
         fmt(r.costP50, 4),
         fmt(r.costP95, 4),
+        r.imagesN,
+        fmt(r.imagesP50, 0),
+        fmt(r.imageCostP50, 3),
       ])
     ),
     "",

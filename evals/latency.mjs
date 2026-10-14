@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import {
   laneRows,
+  photosOf,
   render,
   roleRows,
   timingsOf,
@@ -16,7 +17,8 @@ import {
  * tail, a Workers Logs export, or the bare lines); anything else in it is
  * skipped. `--cost` is the billed-cost tap read back: `runtime.turn` event
  * rows, one JSON per line, whose `response.usage.cost.total` is what
- * OpenRouter billed (the facade's tap writes it there). `--baseline` is QE1's
+ * OpenRouter billed (the facade's tap writes it there); `site.photos` rows in
+ * the same file give images per build and their cost. `--baseline` is QE1's
  * timing lines from before the change, for the `preview_ready` comparison.
  * Reads files only; no model calls.
  */
@@ -44,7 +46,12 @@ try {
   const turns = turnsOf(read(opts.cost))
   console.log(
     render(
-      laneRows(timings, turns, timingsOf(read(opts.baseline))),
+      laneRows(
+        timings,
+        turns,
+        timingsOf(read(opts.baseline)),
+        photosOf(read(opts.cost))
+      ),
       roleRows(turns)
     )
   )

@@ -6,14 +6,15 @@ import { inflateSync } from "node:zlib"
  */
 
 /**
- * Which `site` field holds each part of the tuple, first non-empty wins. The
- * names after the first are today's starter (`template`, `font`, `brandColor`),
- * so the same code reads a baseline build from `main`. VS6's field names are
- * not final: when they land, this table is the one line to change.
+ * Which `site` field holds each part of the tuple, first non-empty wins:
+ * `direction` (a direction id), `font` (a font pair id) and `palette` (the six
+ * roles as "paper:#.. ink:#.. primary:#.. ..."), with `brandColor` when the
+ * owner named a colour instead. `template` is the starter before VS6, so a
+ * baseline build from `main` still reads.
  */
 export const TUPLE_KEYS = {
   direction: ["direction", "template"],
-  pair: ["fontPair", "fonts", "font"],
+  pair: ["font"],
   palette: ["palette", "brandColor"],
 }
 
@@ -31,20 +32,23 @@ const paletteOf = (p) =>
 /**
  * `(direction, hero, services, pair, palette)` of one build, as strings.
  * `site` and `layout` are the exports of the revision's `src/site-config.ts`;
- * `blueprint` is the plan the build followed, when it was kept, and wins over
- * the site's own fields because it is what the planner decided. A hero with no
- * variant is the template's own hero, so it reads as `default/<template>` and
- * two legacy builds differ exactly when their templates do.
+ * `blueprint` is the plan the build followed (BA3's shape: `direction`,
+ * `fonts`, `palette` as preset id or brand colour), read only for a part the
+ * site does not state, because the site is what shipped. A hero with no
+ * variant takes its direction's, so it reads as `default/<direction>`.
  */
 export function tupleOf({ site, layout, blueprint }) {
   const home = layout?.home ?? []
   const variant = (kind) => home.find((s) => s.kind === kind)?.variant
   return {
-    direction: blueprint?.direction || firstOf(site, TUPLE_KEYS.direction),
-    hero: variant("hero") || `default/${site.template || "classic"}`,
+    direction:
+      firstOf(site, TUPLE_KEYS.direction) || blueprint?.direction || "",
+    hero:
+      variant("hero") ||
+      `default/${site.direction || site.template || "classic"}`,
     services: variant("service_cards") || "none",
-    pair: blueprint?.fonts || firstOf(site, TUPLE_KEYS.pair),
-    palette: paletteOf(blueprint?.palette) || firstOf(site, TUPLE_KEYS.palette),
+    pair: firstOf(site, TUPLE_KEYS.pair) || blueprint?.fonts || "",
+    palette: firstOf(site, TUPLE_KEYS.palette) || paletteOf(blueprint?.palette),
   }
 }
 
