@@ -376,8 +376,35 @@ async function main() {
   if (args.edits) {
     summary.edits = []
     let prev = await call("GET", `/${buildId}`)
-    for (const edit of EDITS) {
+    // `--variant b` changes what the hero and phone edits ask for, so a second
+    // pass on the same site is not a no-op.
+    const variant = {
+      "hero-title": "Change the hero title to: Come home to breathing room.",
+      phone:
+        "Our phone number is now (206) 555-0177. Update it everywhere on the site.",
+    }
+    for (const base of EDITS) {
+      const edit =
+        args.variant === "b" && variant[base.name]
+          ? {
+              ...base,
+              goal: variant[base.name],
+              ...(base.facts
+                ? {
+                    facts: [
+                      {
+                        key: "business.phone",
+                        value: { e164: "+12065550177" },
+                      },
+                    ],
+                  }
+                : {}),
+            }
+          : base
       if ((await keyUsage()) - spentAtStart >= SPEND_STOP_USD) break
+      // An owner looks at the preview first; the last edit's screenshots
+      // and warm keep run after its preview_ready.
+      await sleep(Number(args["gap-ms"] ?? 0))
       await serve(latestRevision(prev))
       if (edit.facts) await call("POST", "/facts", { facts: edit.facts })
       const t0 = Date.now()
