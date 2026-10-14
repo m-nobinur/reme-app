@@ -362,6 +362,8 @@ function QuestionTray({
     start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
   )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
+  const [more, setMore] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLElement>(null)
   const groupRef = useRef<HTMLDivElement>(null)
   const settled = useRef<boolean>(false)
@@ -381,6 +383,22 @@ function QuestionTray({
         ?.focus()
     }
   }, [index])
+
+  // Whether the body hides options below its fold, so a fade can say so.
+  const measure = () => {
+    const body = bodyRef.current
+    if (body)
+      setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the question or its state changes
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(body)
+    return () => watch.disconnect()
+  }, [index, collapsed])
 
   const question = questions[index]
   if (!question) return null
@@ -445,7 +463,7 @@ function QuestionTray({
     <section
       aria-label="Design questions"
       className={cn(
-        "flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-t-3xl border border-border border-b-0 bg-card text-card-foreground",
+        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-t-3xl border border-border border-b-0 bg-card text-card-foreground",
         className
       )}
       data-slot="question-tray"
@@ -501,72 +519,88 @@ function QuestionTray({
               <CaretDownIcon aria-hidden />
             </Button>
           </Row>
-          <div
-            className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pb-3"
-            id={`${id}-body`}
-          >
-            {question.visual === "font_pair" && <PreviewFaces />}
+          <div className="relative flex min-h-0 flex-col">
             <div
-              aria-labelledby={`${id}-question`}
-              className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2"
-              key={question.id}
-              ref={groupRef}
-              role="radiogroup"
+              className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pb-3"
+              id={`${id}-body`}
+              onScroll={measure}
+              ref={bodyRef}
             >
-              {question.card.options.map((option) => {
-                const checked =
-                  answer !== undefined &&
-                  "choice" in answer &&
-                  answer.choice === option.id
-                return (
-                  <label
-                    className={cn(
-                      OPTION,
-                      OPTION_TILE,
-                      "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
-                    )}
-                    key={option.id}
-                  >
-                    <input
-                      checked={checked}
-                      className="sr-only"
-                      name={`${id}-${question.id}`}
-                      onChange={() => pick(option.id)}
-                      type="radio"
-                      value={option.id}
-                    />
-                    <Picture option={option} />
-                    <span className="flex items-center gap-1.5 font-medium text-sm">
-                      {question.visual === "font_pair" ? (
-                        <span className="sr-only">{option.label}</span>
-                      ) : (
-                        option.label
+              {question.visual === "font_pair" && <PreviewFaces />}
+              <div
+                aria-labelledby={`${id}-question`}
+                className={cn(
+                  "grid grid-cols-1 gap-2 min-[380px]:grid-cols-2",
+                  // Four wireframes in a row once the tray is wide, so the
+                  // arrangement question fits without a scroll.
+                  question.visual === "layout" && "@xl:grid-cols-4"
+                )}
+                key={question.id}
+                ref={groupRef}
+                role="radiogroup"
+              >
+                {question.card.options.map((option) => {
+                  const checked =
+                    answer !== undefined &&
+                    "choice" in answer &&
+                    answer.choice === option.id
+                  return (
+                    <label
+                      className={cn(
+                        OPTION,
+                        OPTION_TILE,
+                        "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
                       )}
-                      {checked ? (
-                        <CheckCircleIcon
-                          aria-hidden
-                          className="ml-auto size-4 shrink-0 text-primary"
-                          weight="fill"
-                        />
-                      ) : null}
-                    </span>
-                    {option.hint ? (
-                      <span className="text-muted-foreground text-xs">
-                        {option.hint}
+                      key={option.id}
+                    >
+                      <input
+                        checked={checked}
+                        className="sr-only"
+                        name={`${id}-${question.id}`}
+                        onChange={() => pick(option.id)}
+                        type="radio"
+                        value={option.id}
+                      />
+                      <Picture option={option} />
+                      <span className="flex items-center gap-1.5 font-medium text-sm">
+                        {question.visual === "font_pair" ? (
+                          <span className="sr-only">{option.label}</span>
+                        ) : (
+                          option.label
+                        )}
+                        {checked ? (
+                          <CheckCircleIcon
+                            aria-hidden
+                            className="ml-auto size-4 shrink-0 text-primary"
+                            weight="fill"
+                          />
+                        ) : null}
                       </span>
-                    ) : null}
-                  </label>
-                )
-              })}
+                      {option.hint ? (
+                        <span className="text-muted-foreground text-xs">
+                          {option.hint}
+                        </span>
+                      ) : null}
+                    </label>
+                  )
+                })}
+              </div>
+              {other ? (
+                <Input
+                  aria-label={other.label}
+                  autoComplete="off"
+                  maxLength={200}
+                  onChange={(event) => write(event.currentTarget.value)}
+                  placeholder={other.placeholder}
+                  value={own}
+                />
+              ) : null}
             </div>
-            {other ? (
-              <Input
-                aria-label={other.label}
-                autoComplete="off"
-                maxLength={200}
-                onChange={(event) => write(event.currentTarget.value)}
-                placeholder={other.placeholder}
-                value={own}
+            {more ? (
+              // A fade, not a decoration: it says there are more options below.
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent"
               />
             ) : null}
           </div>
