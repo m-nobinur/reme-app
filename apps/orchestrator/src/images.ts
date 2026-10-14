@@ -306,6 +306,8 @@ export async function directPhotos(input: {
   uploads?: { id: string; content_type: string }[]
   /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
   variation?: string
+  /** Told as each slot settles, for the build's per-photo progress; a throw is ignored. */
+  onSlot?: (result: PhotoResult) => unknown
   fetch?: typeof fetch
   now?: Date
 }): Promise<PhotoResult[]> {
@@ -315,6 +317,13 @@ export async function directPhotos(input: {
     fetch: input.fetch ?? fetch,
   }
   const results = new Map<string, PhotoResult>()
+  const told: Promise<unknown>[] = []
+  const settle = (id: string, result: PhotoResult) => {
+    results.set(id, result)
+    if (input.onSlot) {
+      told.push(Promise.resolve(input.onSlot(result)).catch(() => undefined))
+    }
+  }
   const claims = new Set(
     generatedImageFindings(plan).map((f) => f.node.replace(/^images\./, ""))
   )
@@ -326,9 +335,9 @@ export async function directPhotos(input: {
   const planned: Planned[] = []
   for (const slot of ordered) {
     if (claims.has(slot.id)) {
-      results.set(slot.id, fallback(slot.id, "claim section"))
+      settle(slot.id, fallback(slot.id, "claim section"))
     } else if (planned.length >= MAX_PER_BUILD) {
-      results.set(slot.id, fallback(slot.id, "build cap"))
+      settle(slot.id, fallback(slot.id, "build cap"))
     } else {
       const resolution = slot === hero ? "2K" : "1K"
       const hash = await sha256(
@@ -360,7 +369,7 @@ export async function directPhotos(input: {
     const contentType =
       Object.entries(EXTENSION).find(([, e]) => e === ext)?.[0] ?? "image/png"
     stored.set(p.slot.id, { key: found.key, contentType })
-    results.set(p.slot.id, {
+    settle(p.slot.id, {
       slot_id: p.slot.id,
       status: "reused",
       asset_id: p.assetId,
@@ -380,7 +389,7 @@ export async function directPhotos(input: {
   )
   const toDraw = misses.slice(0, room)
   for (const p of misses.slice(room))
-    results.set(p.slot.id, fallback(p.slot.id, "daily cap"))
+    settle(p.slot.id, fallback(p.slot.id, "daily cap"))
 
   if (toDraw.length) {
     const written = await writePrompts(deps, brief, toDraw)
@@ -411,7 +420,7 @@ export async function directPhotos(input: {
           []
         )
       if (!drawn.ok) {
-        results.set(p.slot.id, fallback(p.slot.id, drawn.reason))
+        settle(p.slot.id, fallback(p.slot.id, drawn.reason))
         return null
       }
       const objectKey = `${generatedKey(orgId, p.assetId)}.${extension(drawn.contentType)}`
@@ -426,10 +435,10 @@ export async function directPhotos(input: {
           },
         })
       } catch {
-        results.set(p.slot.id, fallback(p.slot.id, "store failed"))
+        settle(p.slot.id, fallback(p.slot.id, "store failed"))
         return null
       }
-      results.set(p.slot.id, {
+      settle(p.slot.id, {
         slot_id: p.slot.id,
         status: "generated",
         asset_id: p.assetId,
@@ -467,8 +476,13 @@ export async function directPhotos(input: {
     await Promise.all(rest.map((p) => bounded(() => one(p, shared))))
   }
 
+  await Promise.all(told)
   return ordered.map((s) => results.get(s.id) ?? fallback(s.id, "not planned"))
 }
+
+/** Where a generated slot's picture lives in the site, which its site field names. */
+export const generatedPath = (slotId: string, contentType: string | null) =>
+  `src/assets/generated/${slotId}.${extension(contentType ?? "")}`
 
 /**
  * Copies generated photos from the bucket into the site's
@@ -482,7 +496,10 @@ export async function placeGenerated(
     writeFile: (path: string, content: Uint8Array) => Promise<unknown>
   },
   sites: Pick<PhotoBucket, "get">,
-  results: readonly PhotoResult[]
+  results: readonly Pick<
+    PhotoResult,
+    "slot_id" | "status" | "key" | "content_type"
+  >[]
 ): Promise<Record<string, string>> {
   const placed: Record<string, string> = {}
   const ready = results.filter((r) => r.key && r.status !== "fallback")
@@ -491,7 +508,7 @@ export async function placeGenerated(
   for (const r of ready) {
     const object = await sites.get(r.key as string)
     if (!object) continue
-    const path = `src/assets/generated/${r.slot_id}.${extension(r.content_type ?? "")}`
+    const path = generatedPath(r.slot_id, r.content_type)
     await sandbox.writeFile(
       `${SITE_ROOT}/${path}`,
       new Uint8Array(await object.arrayBuffer())

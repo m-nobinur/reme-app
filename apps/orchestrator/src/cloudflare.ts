@@ -39,6 +39,7 @@ import {
   issueSpec,
   takeSnapshot,
 } from "./brief.ts"
+import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
   activate,
@@ -362,6 +363,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
+    // BA4: a planned build's photos, before any page is written, so a slot
+    // that fell back leaves the plan and its section takes the no-image form.
+    const photos = route.plan
+      ? await step.do("photos", () =>
+          run((kit) => makePhotos({ env: this.env, kit, ids }))
+        )
+      : null
 
     /**
      * The brief and the site's disk, inside whichever step runs the change.
@@ -401,6 +409,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             map: null,
             ...(role ? { role } : {}),
             blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
+            ...(photos?.files.length ? { photos: photos.files } : {}),
           }
           return {
             brief: built,

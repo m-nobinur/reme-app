@@ -251,6 +251,21 @@ vi.mock("../src/planner.ts", () => ({
   readDecision: async () =>
     script.decisions.length > 0 ? script.decisions.shift() : "build",
 }))
+// BA4's photos: one generated file, so the brief is seen to carry it.
+vi.mock("../src/photo-step.ts", () => ({
+  makePhotos: async () => ({
+    generated: 1,
+    fell_back: 0,
+    files: [
+      {
+        slot_id: "hero",
+        status: "generated",
+        key: "generated/o/a.png",
+        content_type: "image/png",
+      },
+    ],
+  }),
+}))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
   retireOthers: async () => [],
@@ -639,6 +654,22 @@ describe("the assignment Workflow's step names", () => {
       `Build the site from the canonical facts. ${ROW.goal}`
     )
     expect(console_.initialData.goal_tainted).toBe(false)
+  })
+
+  it("hands a planned build's photos to the Developer and an unplanned one none", async () => {
+    const photosOf = async (lane: typeof script.lane) => {
+      dispatched.length = 0
+      script.verdicts = ["preview_ready"]
+      script.lane = lane
+      await drive([completion]).run()
+      return (
+        dispatched[0] as unknown as { initialData: { photos?: unknown[] } }
+      ).initialData.photos
+    }
+    expect(await photosOf(full)).toEqual([
+      expect.objectContaining({ slot_id: "hero", key: "generated/o/a.png" }),
+    ])
+    expect(await photosOf({})).toBeUndefined()
   })
 
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {

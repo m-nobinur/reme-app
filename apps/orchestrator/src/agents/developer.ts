@@ -39,6 +39,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
+import { placeGenerated } from "../images.ts"
 import { instructions } from "../instructions.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
@@ -380,7 +381,8 @@ export function Developer({ id }: AgentProps) {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return
     const sandbox = harness.sandbox
-    // The owner's photos, which the instructions list, copied in from the bucket.
+    // The owner's photos and the plan's generated ones, which the
+    // instructions list, copied in from the bucket.
     const photos = async (into: typeof sandbox) => {
       const missing = await placePhotos(
         into,
@@ -390,6 +392,16 @@ export function Developer({ id }: AgentProps) {
       )
       if (missing.length > 0) {
         current.tee.emit("sandbox.photos_missing", { asset_ids: missing })
+      }
+      // BA4: the plan's generated photos the Workflow made, by slot.
+      const files = brief.photos ?? []
+      if (files.length === 0) return
+      const placed = await placeGenerated(into, env.SITES, files)
+      const lost = files.filter((f) => !placed[f.slot_id])
+      if (lost.length > 0) {
+        current.tee.emit("sandbox.photos_missing", {
+          slot_ids: lost.map((f) => f.slot_id),
+        })
       }
     }
     await sandbox.exec(`mkdir -p ${SITE_ROOT}`)

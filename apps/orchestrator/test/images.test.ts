@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { applyPhotos } from "../src/photo-step.ts"
 
 vi.mock("cloudflare:workers", () => ({
   WorkflowEntrypoint: class {},
@@ -129,6 +130,7 @@ describe("the photo director", () => {
   it("draws the hero at 2K first, the rest at 1K with the hero as a reference, and stores them", async () => {
     const sites = bucket()
     const { calls, fetcher } = openrouter()
+    const told: string[] = []
     const out = await directPhotos({
       env: { OPENROUTER_API_KEY: "k", SITES: sites },
       orgId: ORG,
@@ -138,7 +140,13 @@ describe("the photo director", () => {
       ]),
       brief: BRIEF,
       fetch: fetcher,
+      // The build's per-photo progress: one call per settled slot.
+      onSlot: (r) => told.push(r.slot_id),
     })
+    expect(told.toSorted((a, b) => a.localeCompare(b))).toEqual([
+      "hero",
+      "kitchen",
+    ])
     const drawn = images(calls)
     expect(drawn).toHaveLength(2)
     expect(drawn[0]?.body).toMatchObject({
@@ -267,5 +275,44 @@ describe("the photo director", () => {
     )
     expect(placed).toEqual({ hero: "src/assets/generated/hero.png" })
     expect(written).toEqual(["/workspace/site/src/assets/generated/hero.png"])
+  })
+})
+
+describe("the plan once its photos are made", () => {
+  const result = (slot_id: string, status: "generated" | "fallback") => ({
+    slot_id,
+    status,
+    asset_id: status === "generated" ? `${slot_id}-asset` : null,
+    key: status === "generated" ? `generated/o/${slot_id}.png` : null,
+    content_type: status === "generated" ? "image/png" : null,
+    cost_usd: null,
+    reason: status === "fallback" ? "refused" : null,
+  })
+
+  it("drops a slot that fell back, ids the made one and keeps the owner's", () => {
+    const own = slot("own", "about", {
+      source: "upload",
+      asset_id: "20000001-0000-4000-8000-000000000000",
+    })
+    const { images: kept, step } = applyPhotos(
+      [slot("hero", "hero"), slot("kitchen", "gallery"), own] as never,
+      [result("hero", "generated"), result("kitchen", "fallback")]
+    )
+    expect(kept.map((s) => [s.id, s.asset_id])).toEqual([
+      ["hero", "hero-asset"],
+      ["own", "20000001-0000-4000-8000-000000000000"],
+    ])
+    expect(step).toEqual({
+      generated: 1,
+      fell_back: 1,
+      files: [
+        {
+          slot_id: "hero",
+          status: "generated",
+          key: "generated/o/hero.png",
+          content_type: "image/png",
+        },
+      ],
+    })
   })
 })

@@ -72,7 +72,9 @@ export function instructions(brief: Brief, budgetUsd: number): string {
       .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
       .join("\n") || "- (none)",
     "",
-    ...(brief.blueprint ? [...blueprintLines(brief.blueprint), ""] : []),
+    ...(brief.blueprint
+      ? [...blueprintLines(brief.blueprint, brief.photos), ""]
+      : []),
     "Site map (every file, in path order):",
     // The seed's own map, built from the files the sandbox is seeded with so
     // it cannot drift from them. A restored site (`site.revise`) carries its

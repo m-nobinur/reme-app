@@ -24,6 +24,7 @@ import {
   signSpec,
 } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
+import type { PhotoFile } from "./photo-step.ts"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import type { Ids } from "./state.ts"
 
@@ -49,6 +50,8 @@ export type Brief = {
   role?: "quick_section"
   /** The plan this build follows (ADR-038); absent when the build did not plan. */
   blueprint?: Blueprint | null
+  /** The plan's generated photos the Workflow made, which the Developer copies into the site (BA4). */
+  photos?: PhotoFile[]
 }
 
 /**
