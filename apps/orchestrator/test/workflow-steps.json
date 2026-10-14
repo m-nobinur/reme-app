@@ -10,6 +10,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "screenshots",
       "keep warm"
     ],
     "owner build": [
@@ -21,8 +22,9 @@
       "developer 1",
       "validating 1",
       "gates 1",
-      "keep warm",
-      "review"
+      "review",
+      "screenshots",
+      "keep warm"
     ],
     "information round trip": [
       "claim 1",
@@ -42,6 +44,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "screenshots",
       "keep warm"
     ],
     "gate failure repaired": [
@@ -57,6 +60,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "screenshots",
       "keep warm"
     ],
     "gate failure ends failed": [
@@ -91,6 +95,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "screenshots",
       "keep warm"
     ],
     "interrupted past the resume budget": [
@@ -128,6 +133,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "screenshots",
       "keep warm"
     ],
     "site busy then claimed": [
@@ -141,6 +147,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "screenshots",
       "keep warm"
     ],
     "pool full then provisioned": [
@@ -154,6 +161,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "screenshots",
       "keep warm"
     ],
     "checkpoint found the site gone": [
@@ -258,6 +266,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "screenshots",
       "keep warm"
     ]
   },

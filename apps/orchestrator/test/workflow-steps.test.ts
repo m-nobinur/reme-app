@@ -163,6 +163,7 @@ vi.mock("../src/sandbox.ts", () => ({
   }),
   endSandbox: async () => undefined,
   keepWarm: async () => undefined,
+  takeScreenshots: async () => ({ taken: 3, ms: 1 }),
   takeWarm: async () => script.held,
   checkpoint: async () => ({
     taken: script.checkpoints.shift() ?? true,
