@@ -39,6 +39,7 @@ import {
   useSandbox,
   useSubagent,
   useTool,
+  withOutputCap,
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
@@ -369,10 +370,16 @@ export function Developer({ id }: AgentProps) {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     brief.role && !(onBuildRole || askedForBuildRole) ? brief.role : null
   const route = sectionRole ? roleOf(runtime.spec, sectionRole) : runtime
+  // The wire cap is the role's, found by these instructions (withOutputCap).
   const shown = () =>
-    (sectionRole ? sectionInstructions : instructions)(
-      brief,
-      runtime.budget.model_usd_cap
+    withOutputCap(
+      (sectionRole ? sectionInstructions : instructions)(
+        brief,
+        runtime.budget.model_usd_cap
+      ),
+      sectionRole
+        ? roleOf(runtime.spec, sectionRole).maxTokens
+        : runtime.maxOutputTokens
     )
   const model =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
@@ -520,14 +527,14 @@ export function Developer({ id }: AgentProps) {
   useSubagent({
     name: "page",
     description: PAGE_AGENT,
-    agent: () => pageInstructions(brief),
+    agent: () => withOutputCap(pageInstructions(brief), page.maxTokens),
     model: page.model,
     thinkingLevel: page.effort,
   })
   useSubagent({
     name: "copy",
     description: COPY_AGENT,
-    agent: () => copyInstructions(brief),
+    agent: () => withOutputCap(copyInstructions(brief), copy.maxTokens),
     model: copy.model,
     thinkingLevel: copy.effort,
   })

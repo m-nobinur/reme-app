@@ -1,5 +1,11 @@
-import { type Context, createModels } from "@earendil-works/pi-ai"
+import {
+  type Context,
+  createInitialSystemMessage,
+  createModels,
+  type Message,
+} from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
+import { registeredCap, withOutputCap } from "../src/caps.ts"
 import { FacadeError } from "../src/errors.ts"
 import { HOST_ROUTING } from "../src/models/price.ts"
 import { modelRouting, outputCaps } from "../src/spec.ts"
@@ -294,6 +300,50 @@ describe("a role's effort and output cap on the wire", () => {
     expect(small.sent[0]?.max_completion_tokens).toBe(8_000)
     const none = await call(undefined, sonnet)
     expect(none.sent[0]?.max_completion_tokens).toBeUndefined()
+  })
+
+  it("gives a subagent its own role's cap, found by the instructions its system prompt starts with", async () => {
+    // The leading system message flue's agent loop seeds from its prompt.
+    const asked = (systemPrompt: string): Context => ({
+      messages: [
+        createInitialSystemMessage(systemPrompt, []) as Message,
+        { role: "user", content: "Go", timestamp: 0 },
+      ],
+    })
+    // As the agent registers them, and as flue composes the prompt: the
+    // instructions first, then the catalog of agents and the date.
+    const lead = withOutputCap("You lead the build of a site.", 32_000)
+    const page = withOutputCap("You build one page.", 16_000)
+    const copyWriter = withOutputCap("You write the site's copy.", 8_000)
+    const extras = "\n\n## Available Agents\n\n- **page**\n\nDate: Wed, Oct 14"
+    const cap = async (id: string, prompt: string) =>
+      (await call(undefined, id, asked(prompt + extras), { caps })).sent[0]
+        ?.max_completion_tokens
+
+    // Both Sonnet: the table's per-model cap is 32k, so only the prompt says 16k.
+    expect(caps[sonnet]).toBe(32_000)
+    expect(await cap(sonnet, lead)).toBe(32_000)
+    expect(await cap(sonnet, page)).toBe(16_000)
+    expect(await cap(haiku, copyWriter)).toBe(8_000)
+    // A prompt nobody registered keeps the model's cap, and an explicit one wins.
+    expect(await cap(sonnet, "Some other agent.")).toBe(32_000)
+  })
+
+  it("takes the longest registered prompt a call's starts with, and forgets the oldest past sixteen", async () => {
+    const messages = (prompt: string) =>
+      [{ role: "system", content: prompt }] as Message[]
+    withOutputCap("Shared start.", 1_000)
+    withOutputCap("Shared start. And more of it.", 2_000)
+    expect(registeredCap(messages("Shared start. And more of it. Plus"))).toBe(
+      2_000
+    )
+    expect(registeredCap(messages("Shared start. Different."))).toBe(1_000)
+    expect(registeredCap([{ role: "user", content: "x", timestamp: 0 }])).toBe(
+      undefined
+    )
+    for (let i = 0; i < 16; i++) withOutputCap(`Filler ${i}.`, 5)
+    expect(registeredCap(messages("Shared start."))).toBeUndefined()
+    expect(registeredCap(messages("Filler 15."))).toBe(5)
   })
 
   it("never sets provider.order on a cached model and skips hosts without structured outputs", async () => {

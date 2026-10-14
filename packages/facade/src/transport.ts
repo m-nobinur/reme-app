@@ -16,6 +16,7 @@ import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messag
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy"
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic"
 import { setProvider } from "@flue/runtime"
+import { registeredCap } from "./caps.ts"
 import { FacadeError } from "./errors.ts"
 import { openrouterModels } from "./models/index.ts"
 import { modelRouting, outputCaps } from "./spec.ts"
@@ -195,8 +196,13 @@ function billed(
       let bill: { id: unknown; cost: number } | undefined
       const inner = call(model, context, {
         ...(options as O),
-        // flue never sets maxTokens, so the role table's cap is applied here.
-        maxTokens: options?.maxTokens ?? caps[model.id],
+        // flue never sets maxTokens, so the role table's cap is applied here:
+        // the calling role's when its instructions were registered with
+        // withOutputCap, else the largest any role gives this model.
+        maxTokens:
+          options?.maxTokens ??
+          registeredCap(context.messages) ??
+          caps[model.id],
         onPayload: async (params, at) => {
           const next = (await options?.onPayload?.(params, at)) ?? params
           return { ...(next as object), usage: { include: true } }

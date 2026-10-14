@@ -8,6 +8,7 @@
 export type { BudgetEvent, BudgetGuard } from "./budget.ts"
 export { createBudgetGuard } from "./budget.ts"
 export { canonical, canonicalHash, canonicalHmac } from "./canonical.ts"
+export { withOutputCap } from "./caps.ts"
 export type { DerivedContext } from "./derive.ts"
 export { contextHash, deriveContext } from "./derive.ts"
 export type { Edit } from "./edits.ts"
