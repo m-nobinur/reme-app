@@ -1,13 +1,9 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import {
-  FONTS as FONT_PRESETS,
-  PALETTES,
-  TEMPLATES,
-} from "@workspace/contracts"
+import { PALETTES, TEMPLATES } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { brandRamp, contrast } from "../src/brand"
-import { FONTS, fontTheme, HERO_OF, TEMPLATES as LAYOUTS } from "../src/presets"
+import { HERO_OF, TEMPLATES as LAYOUTS } from "../src/presets"
 import { type Built, build, clean, type Page, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -22,14 +18,6 @@ const MIDNIGHT = PALETTES.find((each) => each.id === "midnight")?.brand ?? ""
 describe("the presets", () => {
   test("offer the contract's templates, the first the default", () => {
     expect([...LAYOUTS]).toEqual(TEMPLATES.map((each) => each.id))
-  })
-
-  test("carry the contract's font stacks", () => {
-    expect(FONTS).toEqual(
-      Object.fromEntries(FONT_PRESETS.map((each) => [each.id, each.family]))
-    )
-    expect(fontTheme("classic_serif")).toContain("ui-serif")
-    expect(fontTheme("constructor")).toBe("")
   })
 
   for (const palette of PALETTES) {
@@ -185,8 +173,9 @@ describe("a template", () => {
   })
 
   test("carries the chosen type and colour in the head", () => {
-    expect(home("modern").html).toContain("--font-display:ui-serif")
+    // The modern build's legacy classic_serif is the Newsreader and Inter pair.
+    expect(home("modern").html).toContain("--display-weight:500")
     expect(home("bold").html).toContain(`--brand:${brandRamp(MIDNIGHT)?.brand}`)
-    expect(home("classic").html).not.toContain("--font-display:")
+    expect(home("classic").html).not.toContain("--display-weight:")
   })
 })
