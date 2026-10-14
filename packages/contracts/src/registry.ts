@@ -8,6 +8,8 @@ import {
 import {
   AskChoiceInput,
   AskChoiceOutput,
+  AskDesignInput,
+  AskDesignOutput,
   AskDetailsInput,
   AskDetailsOutput,
   AskFactInput,
@@ -92,6 +94,8 @@ export const contracts = {
   ApprovalRequest,
   AskChoiceInput,
   AskChoiceOutput,
+  AskDesignInput,
+  AskDesignOutput,
   AskDetailsInput,
   AskDetailsOutput,
   AskFactInput,

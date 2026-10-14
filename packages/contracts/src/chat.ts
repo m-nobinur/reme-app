@@ -185,6 +185,54 @@ export const AskChoiceOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
+/** What a design question shows beside its options. */
+export const DesignVisual = z.enum(["palette", "font_pair", "layout", "text"])
+
+/** A question id: how an answer finds its question. */
+const QuestionId = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)
+
+/** The most questions one tray holds. */
+export const DESIGN_QUESTIONS_MAX = 8
+
+/**
+ * `ask_design`'s input: the design questions of a build, shown as one tray
+ * the owner works through in any order. Each `card` is an ordinary
+ * `AskChoiceInput`, so its limits, `other` and `skippable` mean what they do
+ * there; `visual` says how the tray draws it. The api builds every card from
+ * the contracts' lists, so an option is never the model's, and checks that
+ * question ids are distinct and that no card takes several answers.
+ */
+export const AskDesignInput = z.strictObject({
+  questions: z
+    .array(
+      z.strictObject({
+        id: QuestionId,
+        visual: DesignVisual,
+        card: AskChoiceInput,
+      })
+    )
+    .min(1)
+    .max(DESIGN_QUESTIONS_MAX),
+})
+
+/** One answer in the tray: an option's id, the owner's own words, or a skip. */
+const DesignAnswer = z.union([
+  z.strictObject({ choice: Text(40) }),
+  z.strictObject({ own: Text(200) }),
+  z.strictObject({ skipped: z.literal(true) }),
+])
+
+/**
+ * `ask_design`'s output, keyed by question id. A question the owner left
+ * unopened has no entry; `skip_all` means they chose the defaults for every
+ * question not answered. Card answers stay code-answered (ADR-037): the api
+ * reads this against the call's own questions and no model sees the tray.
+ */
+export const AskDesignOutput = z.strictObject({
+  answers: z.record(QuestionId, DesignAnswer),
+  skip_all: z.boolean(),
+})
+
 /**
  * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
  * on the wire so the web enforces what the api will.
@@ -297,6 +345,7 @@ const ChatResult = z.discriminatedUnion("kind", [
       AskFactOutput,
       AskDetailsOutput,
       AskChoiceOutput,
+      AskDesignOutput,
       AskUploadOutput,
       ReviewQuoteFormOutput,
     ]),
@@ -376,6 +425,8 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type AskDesignInput = z.infer<typeof AskDesignInput>
+export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
 export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
 export type AskUploadInput = z.infer<typeof AskUploadInput>

@@ -464,6 +464,75 @@ export interface components {
           /** @constant */
           answer: "skipped"
         }
+    AskDesignInput: {
+      questions: {
+        id: string
+        /** @enum {string} */
+        visual: "palette" | "font_pair" | "layout" | "text"
+        card: {
+          /** @enum {string} */
+          step:
+            | "industry"
+            | "pronouns"
+            | "tone"
+            | "build_for_me"
+            | "manual_builder"
+            | "template"
+            | "palette"
+            | "font"
+            | "pages"
+          options: {
+            id: string
+            label: string
+            hint: string | null
+            visual:
+              | (
+                  | {
+                      /** @constant */
+                      kind: "swatches"
+                      colors: string[]
+                    }
+                  | {
+                      /** @constant */
+                      kind: "font"
+                      family: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "template"
+                      id: string
+                    }
+                )
+              | null
+          }[]
+          multiple: boolean
+          preselected: string[]
+          other: {
+            label: string
+            placeholder: string
+          } | null
+          skippable: boolean
+          initial?: string[]
+          color?: boolean
+        }
+      }[]
+    }
+    AskDesignOutput: {
+      answers: {
+        [key: string]:
+          | {
+              choice: string
+            }
+          | {
+              own: string
+            }
+          | {
+              /** @constant */
+              skipped: true
+            }
+      }
+      skip_all: boolean
+    }
     AskDetailsInput: {
       /** @enum {string} */
       step: "contact" | "assistant"
@@ -1687,6 +1756,14 @@ export interface components {
         | "failed"
         | "cancelled"
       goal: string
+      /** @enum {string} */
+      lane?: "full" | "quick"
+      activity?: {
+        id: string
+        label: string
+        done: number
+        total: number
+      }[]
       revision: {
         /** Format: uuid */
         revision_id: string
@@ -2277,6 +2354,22 @@ export interface components {
                             answer: "skipped"
                           }
                       )
+                    | {
+                        answers: {
+                          [key: string]:
+                            | {
+                                choice: string
+                              }
+                            | {
+                                own: string
+                              }
+                            | {
+                                /** @constant */
+                                skipped: true
+                              }
+                        }
+                        skip_all: boolean
+                      }
                     | (
                         | {
                             /** @constant */
@@ -3179,6 +3272,14 @@ export interface components {
                     | "failed"
                     | "cancelled"
                   goal: string
+                  /** @enum {string} */
+                  lane?: "full" | "quick"
+                  activity?: {
+                    id: string
+                    label: string
+                    done: number
+                    total: number
+                  }[]
                   revision: {
                     /** Format: uuid */
                     revision_id: string
@@ -4048,6 +4149,11 @@ export interface components {
     }
     OwnerChangeRequest: {
       text: string
+      /**
+       * @description How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure.
+       * @enum {string}
+       */
+      change_kind?: "copy" | "style" | "section" | "photo" | "creative"
     }
     PreviewClaim: {
       /** Format: uuid */
@@ -4148,6 +4254,14 @@ export interface components {
               | "failed"
               | "cancelled"
             goal: string
+            /** @enum {string} */
+            lane?: "full" | "quick"
+            activity?: {
+              id: string
+              label: string
+              done: number
+              total: number
+            }[]
             revision: {
               /** Format: uuid */
               revision_id: string
@@ -4704,6 +4818,14 @@ export interface components {
           | "failed"
           | "cancelled"
         goal: string
+        /** @enum {string} */
+        lane?: "full" | "quick"
+        activity?: {
+          id: string
+          label: string
+          done: number
+          total: number
+        }[]
         revision: {
           /** Format: uuid */
           revision_id: string
@@ -4714,6 +4836,16 @@ export interface components {
         /** Format: date-time */
         updated_at: string
       }[]
+      expected_seconds?: {
+        full: {
+          p50: number
+          p95: number
+        }
+        quick: {
+          p50: number
+          p95: number
+        }
+      }
       attention: (
         | {
             /** @constant */

@@ -116,6 +116,47 @@ export const samples: Record<ContractName, unknown> = {
     skippable: false,
   },
   AskChoiceOutput: { answer: "chosen", ids: ["friendly"], other: null },
+  AskDesignInput: {
+    questions: [
+      {
+        id: "palette",
+        visual: "palette",
+        card: {
+          step: "palette",
+          options: [
+            { id: "forest", label: "Forest", hint: null, visual: null },
+            { id: "sage", label: "Sage", hint: null, visual: null },
+          ],
+          multiple: false,
+          preselected: [],
+          other: { label: "Your own colour", placeholder: "A colour code" },
+          skippable: true,
+        },
+      },
+      {
+        id: "typeface",
+        visual: "font_pair",
+        card: {
+          step: "font",
+          options: [
+            { id: "outfit_figtree", label: "Outfit", hint: null, visual: null },
+            { id: "sora_manrope", label: "Sora", hint: null, visual: null },
+          ],
+          multiple: false,
+          preselected: [],
+          other: null,
+          skippable: true,
+        },
+      },
+    ],
+  },
+  AskDesignOutput: {
+    answers: {
+      palette: { choice: "forest" },
+      typeface: { own: "Something rounder" },
+    },
+    skip_all: false,
+  },
   AskUploadInput: {
     accept: ["image/jpeg", "image/png", "image/webp"],
     max_files: 12,
@@ -244,6 +285,8 @@ export const samples: Record<ContractName, unknown> = {
     kind: "site.revise",
     state: "implementing",
     goal: "Put the weekend hours on the contact page.",
+    lane: "quick",
+    activity: [{ id: "edit", label: "Changing the page", done: 1, total: 2 }],
     revision: { revision_id: REVISION, version: 4 },
     created_at: NOW,
     updated_at: NOW,
@@ -659,6 +702,7 @@ export const samples: Record<ContractName, unknown> = {
   },
   OwnerChangeRequest: {
     text: "Add a line saying we bring our own supplies.",
+    change_kind: "copy",
   },
   PreviewClaim: {
     org_id: ORG,
@@ -817,11 +861,20 @@ export const samples: Record<ContractName, unknown> = {
         kind: "site.revise",
         state: "awaiting_review",
         goal: "Put the weekend hours on the contact page.",
+        lane: "full",
+        activity: [
+          { id: "pages", label: "Writing the pages", done: 3, total: 5 },
+          { id: "photos", label: "Making photos", done: 4, total: 7 },
+        ],
         revision: null,
         created_at: NOW,
         updated_at: NOW,
       },
     ],
+    expected_seconds: {
+      full: { p50: 240, p95: 420 },
+      quick: { p50: 20, p95: 45 },
+    },
     attention: [
       {
         kind: "approval",

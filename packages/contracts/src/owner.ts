@@ -160,9 +160,27 @@ export const SetFactsRequest = z.strictObject({
 /** `GET /facts`: the org's current facts. */
 export const FactList = z.strictObject({ facts: z.array(FactRecord) })
 
+/**
+ * How big a change is, which picks the lane it runs in. The Chief of Staff
+ * fills it in the `request_change` call it already makes, so each kind's
+ * sentence below is the field's description in the tool schema, where the
+ * model reads it. Missing reads as `creative`: an old client, or a model
+ * that skips the field, takes the full build.
+ */
+export const ChangeKind = z.enum([
+  "copy",
+  "style",
+  "section",
+  "photo",
+  "creative",
+])
+
 /** `POST /changes`: what the owner asked for, in their words. */
 export const OwnerChangeRequest = z.strictObject({
   text: Text(GOAL_MAX),
+  change_kind: ChangeKind.optional().describe(
+    "How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure."
+  ),
 })
 
 /**
@@ -201,12 +219,39 @@ const RevisionRef = z.strictObject({
   version: z.int().positive(),
 })
 
-/** One owner build, as the workspace panel shows it. */
+/**
+ * The lane a build runs in: the full pipeline, or the quick edit lane for a
+ * small change. Orthogonal to `AssignmentState`, which both lanes share.
+ */
+export const BuildLane = z.enum(["full", "quick"])
+
+/**
+ * One row of a build's progress, such as "Writing the pages, 3 of 5". The
+ * orchestrator writes `label` from fixed strings and counts `done` and
+ * `total` from the build's own events, so no model ever writes one.
+ */
+export const BuildActivity = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9_]{1,29}$/),
+  label: Text(60),
+  done: z.int().nonnegative().max(999),
+  total: z.int().positive().max(999),
+})
+
+/** The most progress rows a build shows at once. */
+export const BUILD_ACTIVITY_MAX = 5
+
+/**
+ * One owner build, as the workspace panel shows it. `lane` and `activity`
+ * are optional while producers catch up: a build with no `lane` is `full`,
+ * and one with no `activity` shows only its state.
+ */
 export const BuildSummary = z.strictObject({
   assignment_id: Uuid,
   kind: z.enum(["site.build", "site.revise"]),
   state: AssignmentState,
   goal: z.string().min(1).max(GOAL_MAX),
+  lane: BuildLane.optional(),
+  activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
   created_at: Timestamp,
   updated_at: Timestamp,
@@ -325,6 +370,24 @@ export const WorkspaceStatus = z.strictObject({
   }),
   /** Non-terminal, newest first. */
   builds: z.array(BuildSummary).max(10),
+  /**
+   * How long each lane usually takes, in seconds from the last measurement,
+   * so the panel's "usually takes" copy is data. `p50` is not above `p95`;
+   * the producer keeps that, since a JSON Schema cannot compare two fields.
+   * Absent until the api sends it, and the panel keeps its own range.
+   */
+  expected_seconds: z
+    .strictObject({
+      full: z.strictObject({
+        p50: z.int().positive(),
+        p95: z.int().positive(),
+      }),
+      quick: z.strictObject({
+        p50: z.int().positive(),
+        p95: z.int().positive(),
+      }),
+    })
+    .optional(),
   /** Approvals by expiry, then questions, alerts, reports. */
   attention: z.array(AttentionItem),
   /** The required facts still to ask for. */
@@ -341,7 +404,10 @@ export const WorkspaceStatus = z.strictObject({
 export type FactValue = z.infer<typeof FactValue>
 export type SetFactsRequest = z.infer<typeof SetFactsRequest>
 export type FactList = z.infer<typeof FactList>
+export type ChangeKind = z.infer<typeof ChangeKind>
 export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
+export type BuildLane = z.infer<typeof BuildLane>
+export type BuildActivity = z.infer<typeof BuildActivity>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>
