@@ -14,6 +14,7 @@ import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
+  blueprintChanges,
   cancelOvertaken,
   chatFetch,
   quoteChanges,
@@ -160,9 +161,12 @@ export function useConversationRuntime({
       addToolOutput,
       sendMessage: (message, options) => {
         const carried = intent?.current
-        // Typed while a proposed quote form waits: the words answer it, and
-        // go out as the owner's reply.
-        const changes = quoteChanges(chat.messages, typedText(message), carried)
+        // Typed while a proposed quote form or a plan waits: the words answer
+        // it, and go out as the owner's reply.
+        const text = typedText(message)
+        const changes =
+          quoteChanges(chat.messages, text, carried) ??
+          blueprintChanges(chat.messages, text, carried)
         if (changes) return addToolOutput(changes)
         chat.setMessages(cancelOvertaken)
         if (!carried) return chat.sendMessage(message, options)

@@ -237,6 +237,7 @@ describe("owner routes refuse before the database", () => {
     ["POST", "/changes"],
     ["GET", "/activity"],
     ["POST", `/builds/${A}/answer`],
+    ["POST", `/builds/${A}/blueprint`],
     ["POST", `/builds/${A}/cancel`],
     ["GET", `/builds/${A}/preview`],
     ["POST", `/approvals/${A}/decision`],
