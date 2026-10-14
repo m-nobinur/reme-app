@@ -304,6 +304,8 @@ export async function directPhotos(input: {
   plan: Pick<Blueprint, "images" | "pages">
   brief: PhotoBrief
   uploads?: { id: string; content_type: string }[]
+  /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
+  variation?: string
   fetch?: typeof fetch
   now?: Date
 }): Promise<PhotoResult[]> {
@@ -337,6 +339,7 @@ export async function directPhotos(input: {
           slot.subject,
           slot.text_side ?? "none",
           brief,
+          ...(input.variation ? [input.variation] : []),
         ])
       )
       planned.push({ slot, resolution, hash, assetId: uuidFrom(hash) })

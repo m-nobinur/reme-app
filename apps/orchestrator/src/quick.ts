@@ -14,6 +14,7 @@ import {
 import { z } from "zod"
 import type { Brief } from "./brief.ts"
 import { stableRules } from "./developer-rules.ts"
+import { type PhotosEvent, regenerateSlot } from "./photo-quick.ts"
 import { SITE_ROOT } from "./revise.ts"
 import {
   checksOf,
@@ -36,12 +37,11 @@ export function pickLane(
 ): { lane: BuildLane; change_kind: ChangeKind | null } {
   const parsed = ChangeKind.safeParse(changeKind)
   const change = parsed.success ? parsed.data : null
-  // shortcut: photo runs full until IG's one-slot regenerate exists; move it to QUICK then.
   const quick = kind === "site.revise" && QUICK.includes(change as ChangeKind)
   return { lane: quick ? "quick" : "full", change_kind: change }
 }
 
-const QUICK: readonly ChangeKind[] = ["copy", "style", "section"]
+const QUICK: readonly ChangeKind[] = ["copy", "style", "section", "photo"]
 
 /** The kinds one model call can edit; `section` goes to the Developer at low effort. */
 export type OneCallKind = "copy" | "style"
@@ -201,9 +201,12 @@ export async function quickEdit(input: {
   kit: Tenancy
   sandbox: TailSandbox & {
     readFile: (path: string) => Promise<{ content: string }>
+    /** A picture's bytes, for the photo kind. */
+    writeBytes: (path: string, content: Uint8Array) => Promise<unknown>
   }
   brief: Brief
-  kind: OneCallKind
+  /** `photo` draws one picture instead of calling the edit model (IG4). */
+  kind: OneCallKind | "photo"
 }): Promise<QuickDone | QuickFell> {
   const { env, kit, sandbox, brief, kind } = input
   const { spec, snapshot } = brief
@@ -216,36 +219,67 @@ export async function quickEdit(input: {
   const base = head.exitCode === 0 ? head.stdout.trim() : ""
   try {
     if (!base) throw new Fell("disk: no site to edit")
-    const files: Record<string, string> = {}
-    for (const path of QUICK_FILES[kind]) {
-      files[path] = (await sandbox.readFile(`${SITE_ROOT}/${path}`)).content
-    }
-    const prompt = quickPrompt(kind, files, snapshot.facts, brief.goal)
-    let applied: ReturnType<typeof applyQuick> | null = null
-    let error = ""
+    let applied: {
+      summary: string
+      changed: Record<string, string>
+      /** Files written already, as bytes (a picture). */
+      written?: string[]
+      photos?: PhotosEvent
+    } | null = null
     let attempts = 0
-    // Haiku first; one retry on Sonnet with what went wrong (index runtime table).
-    for (const role of ["quick_copy", "quick_section"] as const) {
-      attempts++
-      const route = roleOf(spec, role)
-      const user = error
-        ? `${prompt.user}\n<previous_attempt_failed>\n${error}\n</previous_attempt_failed>`
-        : prompt.user
+    let error = ""
+    if (kind === "photo") {
+      attempts = 1
       try {
-        const reply = await completeOnce(env, {
-          model: route.model,
-          effort: "low",
-          maxTokens: route.maxTokens,
-          system: prompt.system,
-          user,
-          sessionId: ids.assignmentId,
-          schema: SCHEMA,
+        const drawn = await regenerateSlot({
+          env,
+          kit,
+          sandbox: {
+            exec: (command) => sandbox.exec(command),
+            writeFile: (path, content) => sandbox.writeBytes(path, content),
+          },
+          orgId: ids.orgId,
+          assignmentId: ids.assignmentId,
+          goal: brief.goal,
         })
-        await logTurn(kit, ids, spec.staff_id, role, reply)
-        applied = applyQuick(kind, files, reply.text)
-        break
+        applied = {
+          summary: drawn.summary,
+          changed: {},
+          written: [drawn.path],
+          photos: drawn.photos,
+        }
       } catch (thrown) {
         error = message(thrown).slice(0, 1000)
+      }
+    } else {
+      const files: Record<string, string> = {}
+      for (const path of QUICK_FILES[kind]) {
+        files[path] = (await sandbox.readFile(`${SITE_ROOT}/${path}`)).content
+      }
+      const prompt = quickPrompt(kind, files, snapshot.facts, brief.goal)
+      // Haiku first; one retry on Sonnet with what went wrong (index runtime table).
+      for (const role of ["quick_copy", "quick_section"] as const) {
+        attempts++
+        const route = roleOf(spec, role)
+        const user = error
+          ? `${prompt.user}\n<previous_attempt_failed>\n${error}\n</previous_attempt_failed>`
+          : prompt.user
+        try {
+          const reply = await completeOnce(env, {
+            model: route.model,
+            effort: "low",
+            maxTokens: route.maxTokens,
+            system: prompt.system,
+            user,
+            sessionId: ids.assignmentId,
+            schema: SCHEMA,
+          })
+          await logTurn(kit, ids, spec.staff_id, role, reply)
+          applied = applyQuick(kind, files, reply.text)
+          break
+        } catch (thrown) {
+          error = message(thrown).slice(0, 1000)
+        }
       }
     }
     modelMs = since(started)
@@ -274,7 +308,10 @@ export async function quickEdit(input: {
       session_id: spec.session_id,
       revision_id: tail.revisionId,
       summary: applied.summary,
-      changes: Object.keys(applied.changed).map((path) => ({
+      changes: [
+        ...Object.keys(applied.changed),
+        ...(applied.written ?? []),
+      ].map((path) => ({
         path,
         reason: applied.summary,
       })),
@@ -297,6 +334,20 @@ export async function quickEdit(input: {
         taint: ["inferred"],
       })
     )
+    // The new slot list, for the review card and the next "Try another".
+    if (applied.photos) {
+      const photos = applied.photos
+      await kit.withOrg({ orgId: ids.orgId }, (db) =>
+        appendEvent(db, {
+          orgId: ids.orgId,
+          assignmentId: ids.assignmentId,
+          staffId: spec.staff_id,
+          type: "site.photos",
+          payload: photos,
+          taint: ["inferred"],
+        })
+      )
+    }
     return {
       done: true,
       base,
