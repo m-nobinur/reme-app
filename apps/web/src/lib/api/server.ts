@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start"
 import { getCookie } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
 import {
+  ChangeKind,
   GOAL_MAX,
   MessageFeedback,
   Reminder,
@@ -225,13 +226,18 @@ export const getPreview = createServerFn({ method: "GET" })
 export const askForChanges = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
-    return { text: text(data.text, GOAL_MAX), key: keyOf(data.key) }
+    const kind = ChangeKind.safeParse(data.changeKind)
+    return {
+      text: text(data.text, GOAL_MAX),
+      key: keyOf(data.key),
+      changeKind: kind.success ? kind.data : undefined,
+    }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     if (!data.text) {
       return { done: false, reason: "Write what should change first." }
     }
-    return await source.requestChange(data.text, data.key)
+    return await source.requestChange(data.text, data.key, data.changeKind)
   })
 
 export const createReminder = createServerFn({ method: "POST" })

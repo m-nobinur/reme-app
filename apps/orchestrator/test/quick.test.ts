@@ -77,7 +77,6 @@ describe("pickLane", () => {
 
   it("runs everything else full", () => {
     expect(pickLane("site.revise", "creative").lane).toBe("full")
-    expect(pickLane("site.revise", "photo").lane).toBe("full")
     expect(pickLane("site.revise", undefined)).toEqual({
       lane: "full",
       change_kind: null,
@@ -168,6 +167,7 @@ describe("quickEdit", () => {
     writeFile: async (path: string, content: string) => {
       disk.set(path, content)
     },
+    writeBytes: async () => undefined,
   }
   const kit = {
     withOrg: async (_: unknown, fn: (db: unknown) => Promise<unknown>) =>

@@ -4,6 +4,11 @@ import {
   SpinnerGapIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  type GeneratedPhoto,
+  GeneratedPhotos,
+  type PhotoActions,
+} from "@workspace/ui/components/generated-photos"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { cn } from "@workspace/ui/lib/utils"
 import { useId } from "react"
@@ -23,6 +28,8 @@ export function SiteReady({
   onApprove,
   onMakeChanges,
   onSeePreview,
+  photos = [],
+  photoActions,
 }: {
   version: number
   /** The owner approved it here and the server recorded it. */
@@ -35,6 +42,9 @@ export function SiteReady({
   onMakeChanges: () => void
   /** Opens the panel on the review, with its preview and screenshots. */
   onSeePreview: () => void
+  /** The pictures the assistant made, badged with the three ways to change one. */
+  photos?: readonly GeneratedPhoto[]
+  photoActions?: PhotoActions | undefined
 }) {
   const id = useId()
   if (approved) {
@@ -71,6 +81,13 @@ export function SiteReady({
           </Button>
         </p>
       </div>
+      {photoActions ? (
+        <GeneratedPhotos
+          actions={photoActions}
+          disabled={pending}
+          photos={photos}
+        />
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button disabled={pending} onClick={onApprove} size="sm" type="button">
           {pending ? (

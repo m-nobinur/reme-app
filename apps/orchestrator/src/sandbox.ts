@@ -74,6 +74,8 @@ export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
   },
   writeFile: (path: string, content: string) =>
     sandbox.writeFile(path, content),
+  writeBytes: (path: string, content: Uint8Array) =>
+    sandbox.writeFile(path, new Blob([content]).stream()),
 })
 
 type Ids = { orgId: string; assignmentId: string }

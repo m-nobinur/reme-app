@@ -1843,6 +1843,11 @@ export interface components {
             expires_at: string
           }
           version: number
+          photos?: {
+            slot_id: string
+            section: string
+            alt: string
+          }[]
         }
       | {
           /** @constant */
@@ -5868,6 +5873,11 @@ export interface components {
               expires_at: string
             }
             version: number
+            photos?: {
+              slot_id: string
+              section: string
+              alt: string
+            }[]
           }
         | {
             /** @constant */

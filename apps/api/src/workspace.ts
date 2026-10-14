@@ -176,6 +176,28 @@ export async function readApprovals(
       sql`${approvals.decision} is null and ${siteRevisions.version} is not null and ((${assignments.state} = 'awaiting_review' and ${approvals.expiresAt} > now()) or ${assignments.state} = 'blocked_on_approval')`
     )
     .orderBy(approvals.expiresAt)
+  // The generated photos each build placed, from its newest `site.photos` event.
+  const ids = rows.flatMap(({ row }) =>
+    row.assignmentId ? [row.assignmentId] : []
+  )
+  const placed = new Map<string, NonNullable<ApprovalPhotos>>()
+  if (ids.length > 0) {
+    const found = await db.execute(
+      sql`select distinct on (assignment_id) assignment_id, payload->'slots' as slots from events where type = 'site.photos' and assignment_id in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `
+      )}) order by assignment_id, event_id desc`
+    )
+    for (const r of found as unknown as {
+      assignment_id: string
+      slots: { id: string; section: string; alt: string; source: string }[]
+    }[]) {
+      const photos = r.slots
+        .filter((s) => s.source === "generated")
+        .map((s) => ({ slot_id: s.id, section: s.section, alt: s.alt }))
+      if (photos.length > 0) placed.set(r.assignment_id, photos)
+    }
+  }
   return rows.map(({ row, version }) => ({
     kind: "approval",
     request: ApprovalRequest.parse({
@@ -191,8 +213,13 @@ export async function readApprovals(
       expires_at: iso(row.expiresAt),
     }),
     version,
+    ...(row.assignmentId && placed.has(row.assignmentId)
+      ? { photos: placed.get(row.assignmentId) }
+      : {}),
   }))
 }
+
+type ApprovalPhotos = Extract<AttentionItem, { kind: "approval" }>["photos"]
 
 /**
  * The question each waiting build is blocked on (`waitedOn`), open ones only,

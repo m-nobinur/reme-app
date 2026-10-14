@@ -165,6 +165,25 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const reviewing = await s.assignment("blocked_on_approval")
     const reviewRevision = await s.revision(reviewing, 2)
     const review = await s.approval(reviewing, reviewRevision, -1)
+    // The photos this build placed: only the generated one is badged.
+    await s.event(reviewing, "site.photos", {
+      slots: [
+        {
+          id: "hero_room",
+          section: "hero",
+          alt: "A sunlit room",
+          source: "generated",
+        },
+        {
+          id: "owner_team",
+          section: "about",
+          alt: "Our team",
+          source: "upload",
+        },
+      ],
+      brief: { industry: "cleaning", imageStyle: "airy", palette: "sage" },
+      regenerated: null,
+    })
     const dropped = await s.assignment("cancelled")
     const dangling = await s.approval(dropped, await s.revision(dropped, 3), 48)
     const failed = await s.assignment("failed")
@@ -281,7 +300,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       busyIds.failure,
       busyIds.published,
     ])
-    expect(body.attention[0]).toMatchObject({ kind: "approval", version: 2 })
+    expect(body.attention[0]).toMatchObject({
+      kind: "approval",
+      version: 2,
+      photos: [{ slot_id: "hero_room", section: "hero", alt: "A sunlit room" }],
+    })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
       live: {

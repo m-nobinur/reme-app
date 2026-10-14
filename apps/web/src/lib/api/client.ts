@@ -3,6 +3,7 @@ import {
   ApprovalDecision,
   type AttentionItem as Attention,
   CHAT_TURN_MS,
+  type ChangeKind,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -305,6 +306,7 @@ function toAttention(
         kind: "approval",
         request: item.request,
         version: item.version,
+        ...(item.photos ? { photos: item.photos } : {}),
         id: item.request.approval_id,
         title: approvalTitle(item.version),
         detail: item.request.rationale,
@@ -495,8 +497,15 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   }
 }
 
-async function requestChange(text: string, key: string): Promise<WriteOutcome> {
-  return await outcome(await post("/changes", { text }, key), "/changes")
+async function requestChange(
+  text: string,
+  key: string,
+  changeKind?: ChangeKind
+): Promise<WriteOutcome> {
+  return await outcome(
+    await post("/changes", { text, change_kind: changeKind }, key),
+    "/changes"
+  )
 }
 
 async function createReminder(

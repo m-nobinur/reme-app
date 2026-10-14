@@ -383,7 +383,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // section to the full build role. The owner sees no failure for a lane.
     const oneCall =
       route.lane === "quick" &&
-      (route.change_kind === "copy" || route.change_kind === "style")
+      (route.change_kind === "copy" ||
+        route.change_kind === "style" ||
+        route.change_kind === "photo")
         ? route.change_kind
         : null
     /** The Developer runs at the section role and moves to the build role on trouble. */
