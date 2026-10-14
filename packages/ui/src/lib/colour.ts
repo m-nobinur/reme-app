@@ -50,6 +50,9 @@ const ratio = (a: Rgb, b: Rgb) => {
 const toHex = (value: Rgb) =>
   `#${value.map((part) => part.toString(16).padStart(2, "0")).join("")}`
 
+/** The contrast of two `#rrggbb` colours, 1 to 21. */
+export const contrast = (a: string, b: string) => ratio(rgb(a), rgb(b))
+
 /** The contrast of white text on a `#rrggbb` colour, 1 to 21. */
 export const whiteContrast = (hex: string) => ratio(WHITE, rgb(hex))
 

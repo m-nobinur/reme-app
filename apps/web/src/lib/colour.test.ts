@@ -1,6 +1,7 @@
 import { PALETTES } from "@workspace/contracts"
 import {
   AA,
+  contrast,
   hexColour,
   nextShown,
   textOn,
@@ -27,10 +28,13 @@ it("reads a colour code in any case and with three digits, and nothing else", ()
   }
 })
 
-it("carries white text on every preset, and not on a tint", () => {
+it("carries text that reads on every preset, white where white does, and not white on a tint", () => {
+  const white = textOn(ocean)
   for (const palette of PALETTES) {
-    expect(whiteContrast(palette.brand), palette.id).toBeGreaterThanOrEqual(AA)
-    expect(textOn(palette.brand)).toBe(textOn(ocean))
+    const text = textOn(palette.brand)
+    // A light brand (champagne) takes dark text, not a white that fails AA.
+    expect(contrast(text, palette.brand), palette.id).toBeGreaterThanOrEqual(AA)
+    if (whiteContrast(palette.brand) >= AA) expect(text, palette.id).toBe(white)
   }
   expect(whiteContrast(tint)).toBeLessThan(AA)
   expect(textOn(tint)).not.toBe(textOn(ocean))
@@ -50,18 +54,27 @@ it("shows every option once before any repeats, and never the same four twice ru
   let shown = ids.slice(0, 4)
   let seen = [...shown]
   const round = [...shown]
-  for (let press = 0; press < ids.length / 4 - 1; press++) {
+  // Whole pages first, none repeating; the odd ones left over come on the last.
+  for (let press = 0; press < Math.floor(ids.length / 4) - 1; press++) {
     const next = nextShown(ids, shown, seen, random)
     expect(next.shown).toHaveLength(4)
     expect(next.shown.some((id) => shown.includes(id))).toBe(false)
     round.push(...next.shown)
     ;({ shown, seen } = next)
   }
-  expect(new Set(round).size).toBe(ids.length)
+  if (ids.length % 4) {
+    const last = nextShown(ids, shown, seen, random)
+    expect(last.shown).toHaveLength(4)
+    expect(last.shown.some((id) => shown.includes(id))).toBe(false)
+    round.push(...last.shown)
+    ;({ shown, seen } = last)
+  }
+  expect(new Set(round)).toEqual(new Set(ids))
   // The pool is spent: a new round starts, still without the current four.
   const again = nextShown(ids, shown, seen, random)
   expect(again.shown.some((id) => shown.includes(id))).toBe(false)
-  expect(again.seen).toEqual(again.shown)
+  // The leftover page already started the new round; otherwise this one does.
+  if (ids.length % 4 === 0) expect(again.seen).toEqual(again.shown)
 })
 
 it("shows the last unseen options first when fewer than a page are left", () => {
