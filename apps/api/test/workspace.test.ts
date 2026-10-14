@@ -702,7 +702,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const response = await changes.call(
         stub,
         "/changes",
-        json({ text: "Make the hero say we clean ovens." }, "change-build-1")
+        json(
+          { text: "Make the hero say we clean ovens.", change_kind: "copy" },
+          "change-build-1"
+        )
       )
       expect(response.status).toBe(201)
       expect(BuildSummary.parse(await response.json()).kind).toBe("site.build")
@@ -717,6 +720,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(call?.body).toEqual({
         kind: "site.build",
         goal: "Make the hero say we clean ovens.",
+        change_kind: "copy",
       })
     })
 
@@ -744,7 +748,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const response = await changes.call(
         stub,
         "/changes",
-        json({ text: "Use a darker blue." })
+        json({ text: "Use a darker blue.", change_kind: "style" })
       )
       expect(response.status).toBe(202)
       expect(BuildSummary.parse(await response.json()).assignment_id).toBe(

@@ -3,6 +3,12 @@ import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
 
+interface Props {
+  /** split, centered on the name, or minimal: a two-line wordmark and the menu. */
+  variant?: "split" | "centered" | "minimal"
+}
+
+const { variant = "split" } = Astro.props
 const current = Astro.url.pathname
 // The action is one of the nav links, and a header that offers the same page
 // twice reads as a mistake, so the button takes it and the list drops it.
@@ -19,7 +25,7 @@ const items = links.map((link) => ({
 
 {
   (site.businessName || links.length > 0) && (
-    <header class="site-header">
+    <header class:list={["site-header", `header-${variant}`]}>
       <div class="wrap header-inner">
         {logo ? (
           <a class="site-name" href="/">
@@ -29,6 +35,9 @@ const items = links.map((link) => ({
           site.businessName && (
             <a class="site-name" href="/">
               {site.businessName}
+              {variant === "minimal" && site.industry && (
+                <span class="site-line">{site.industry}</span>
+              )}
             </a>
           )
         )}

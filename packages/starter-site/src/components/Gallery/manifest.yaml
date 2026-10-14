@@ -1,15 +1,15 @@
 component: Gallery
 path: src/components/Gallery/Gallery.astro
-summary: The owner's photos, each with the alt text its fact gives.
+summary: The gallery's photos, each with its alt text.
 props: []
 constraints:
-  - Path and alt text are both fact fields; a photo renders only when it has
-    both. The site ships with none.
+  - Path and alt text are composed fields filled from the gallery image slots; a
+    photo renders only when it has both. The site ships with none.
   - Two or more photos are cropped tiles in a grid; one photo is a single
     contained figure, never a full-width image.
 examples:
   - "<Gallery />"
 forbidden:
-  - a path or alt text written here
+  - a path or alt text written here, or a path no image slot placed
   - a stock or remote image
 source: generated

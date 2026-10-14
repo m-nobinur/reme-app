@@ -1,12 +1,24 @@
 component: Steps
 path: src/components/Steps/Steps.astro
 summary: How working with the business goes, as numbered steps.
-props: []
+props:
+  - name: variant
+    type: '"circles" | "dark_band" | "timeline"'
+    required: false
+    description: circles on a tint band, dark_band beside its heading, timeline on a line.
 constraints:
   - Reads step1Title to step3Body itself; a step renders only when one of its
-    two fields is set. The numbers are drawn by CSS, not written into a field.
+    two fields is set. The numbers, 01 to 03, are drawn by CSS, not written into
+    a field.
+  - timeline puts the steps on one line across, down the side on a phone;
+    circles centres each under an outlined number on the tint; dark_band sets
+    the heading beside the steps on a dark band.
+  - The section's eyebrow is site.stepsEyebrow.
 examples:
   - "<Steps />"
+  - '<Steps variant="circles" />'
+  - '<Steps variant="dark_band" />'
+  - '<Steps variant="timeline" />'
 forbidden:
   - a time, price or promise no fact states
 source: generated

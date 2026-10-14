@@ -13,6 +13,16 @@ export type Template = (typeof TEMPLATES)[number]
 export const templateOf = (value: string): Template =>
   TEMPLATES.find((id) => id === value.trim()) ?? "classic"
 
+/**
+ * The home hero each template had before section variants, so an owner's
+ * pick keeps its look until directions replace templates.
+ */
+export const HERO_OF = {
+  classic: "split_frame",
+  modern: "dark_center",
+  bold: "text_led",
+} as const satisfies Record<Template, string>
+
 /** System stacks only: the site ships no font files and no script. */
 export const FONTS: Record<string, string> = {
   clean_sans: "system-ui, sans-serif",

@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { digest, loadManifests, ROOT } from "../scripts/manifests"
 
-const DIGEST_LIMIT = 3000
+const DIGEST_LIMIT = 6000
 
 const loaded = loadManifests()
 const problemsOf = (kind: string) =>

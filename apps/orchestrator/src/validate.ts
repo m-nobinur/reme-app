@@ -158,7 +158,12 @@ export async function validateRevision(
   if (row.state !== "validating")
     return recordedVerdict(row.state, logged, input.revision_id)
 
-  const factsUsed = await assignmentFacts(kit, ids)
+  // The facts and the manifest are independent reads: one database, one bucket.
+  const base = revision.manifestKey.replace(/manifest\.json$/, "")
+  const [factsUsed, manifestObject] = await Promise.all([
+    assignmentFacts(kit, ids),
+    sites.get(revision.manifestKey),
+  ])
   const reportEvent = logged.find(
     (e) =>
       e.type === "assignment.completion_reported" &&
@@ -172,8 +177,6 @@ export async function validateRevision(
     )
   const report = CompletionReport.parse(reportEvent.payload)
 
-  const base = revision.manifestKey.replace(/manifest\.json$/, "")
-  const manifestObject = await sites.get(revision.manifestKey)
   const manifest = manifestObject
     ? JSON.parse(new TextDecoder().decode(await manifestObject.arrayBuffer()))
     : null
@@ -189,12 +192,13 @@ export async function validateRevision(
     timings,
   })
 
-  const gates: GateResult[] = []
-  for (const result of results) {
-    const key = `${base}gates/${result.gate}.json`
-    await sites.put(key, JSON.stringify(result))
-    gates.push({ ...result, evidence_key: result.evidence_key ?? key })
-  }
+  const gates: GateResult[] = await Promise.all(
+    results.map(async (result) => {
+      const key = `${base}gates/${result.gate}.json`
+      await sites.put(key, JSON.stringify(result))
+      return { ...result, evidence_key: result.evidence_key ?? key }
+    })
+  )
   const validation = ValidationReport.parse({
     report_id: crypto.randomUUID(),
     org_id: ids.orgId,

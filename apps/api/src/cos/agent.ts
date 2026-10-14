@@ -139,7 +139,7 @@ const DESCRIPTIONS: Record<CosToolName, string> = {
   get_preview:
     "Check whether a build has a preview ready, and its version and expiry. Use it when the owner asks about a build's preview. The owner opens the preview from the card; you never get a link.",
   request_change:
-    "Propose a change to the website, in the owner's words. The owner's yes on the card starts the build straight away. Use it only for a change the owner asked for, one change per call. Not for questions the Developer asked.",
+    "Propose a change to the website, in the owner's words. The owner's yes on the card starts the build straight away. Use it only for a change the owner asked for, one change per call. Not for questions the Developer asked. Set change_kind by the biggest part of the change. copy is words only, such as a headline, a phone number or a button label. style is colours, fonts or spacing across the site. section adds, removes, moves or reworks one section or page. photo replaces, adds or removes a picture. creative is a new look, new pages or anything you are unsure of.",
   answer_question:
     "Propose an answer to one of the Developer's open questions, by its request_id. For a fact field, value is the fact object {key, value}; otherwise it is the owner's text. The owner approves it on a card. Use it only with an answer the owner gave you.",
   create_reminder:

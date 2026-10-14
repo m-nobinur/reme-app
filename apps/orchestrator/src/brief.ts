@@ -1,4 +1,9 @@
-import { FactSnapshot, type RuntimeSpec } from "@workspace/contracts"
+import {
+  type BuildLane,
+  ChangeKind,
+  FactSnapshot,
+  type RuntimeSpec,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -88,6 +93,8 @@ export async function creationChoices(
   withhold: string[]
   model: ModelChoice
   origin: "owner" | "console"
+  lane: BuildLane
+  change_kind: ChangeKind | null
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -104,6 +111,9 @@ export async function creationChoices(
     withhold,
     model: payload.model === "B" ? "B" : "A",
     origin: payload.origin === "owner" ? "owner" : "console",
+    // A row written before lanes existed ran full.
+    lane: payload.lane === "quick" ? "quick" : "full",
+    change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
   }
 }
 

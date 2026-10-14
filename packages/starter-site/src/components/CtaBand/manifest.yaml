@@ -1,15 +1,23 @@
 component: CtaBand
 path: src/components/CtaBand/CtaBand.astro
 summary: A closing band with a heading, a line and the site's main action.
-props: []
+props:
+  - name: variant
+    type: '"solid" | "photo"'
+    required: false
+    description: solid is the brand colour, photo puts site.ctaImage under it.
 constraints:
   - Reads ctaHeading, ctaBody and ctaLabel; renders nothing until the heading or
     the body is set. The links come from the pages that exist and the phone
     fact. An empty ctaLabel takes the label of the page it links to, which is
     the quote page when there is one.
   - Last on a page, after everything else.
+  - solid is the brand colour; photo lays site.ctaImage under it, and is solid
+    while that field is empty.
 examples:
   - "<CtaBand />"
+  - '<CtaBand variant="solid" />'
+  - '<CtaBand variant="photo" />'
 forbidden:
   - an offer, discount or deadline
 source: generated

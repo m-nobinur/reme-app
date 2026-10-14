@@ -1,12 +1,21 @@
 component: Testimonials
 path: src/components/Testimonials/Testimonials.astro
 summary: Reviews quoted from the facts, with the reviewer's name.
-props: []
+props:
+  - name: variant
+    type: '"featured" | "wall"'
+    required: false
+    description: featured sets the first review larger on a tint, wall sets them evenly.
 constraints:
-  - Quote and author are both fact fields. A quote is rendered as the fact gives
-    it, unedited and untrimmed.
+  - Quote and author are fact fields from testimonials. facts, which nothing
+    stores yet, so the section is left out. A quote is rendered as the fact
+    gives it, unedited and untrimmed.
+  - featured sets the first review larger on the tint; wall sets them evenly.
+    The eyebrow is site.testimonialsEyebrow.
 examples:
   - "<Testimonials />"
+  - '<Testimonials variant="featured" />'
+  - '<Testimonials variant="wall" />'
 forbidden:
   - a review written here
   - editing or shortening a quote

@@ -63,7 +63,10 @@ export function declaredProps(file: string): Prop[] {
     )
     .map((member) => ({
       name: member.name.getText(tree),
-      type: member.type?.getText(tree) ?? "unknown",
+      // One line, without the leading bar a formatter gives a wrapped union.
+      type:
+        member.type?.getText(tree).replace(/\s+/g, " ").replace(/^\| /, "") ??
+        "unknown",
       required: !member.questionToken,
       description: ts
         .getJSDocCommentsAndTags(member)

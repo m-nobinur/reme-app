@@ -78,7 +78,8 @@ async function requestChange(
   if (!key) return keyMissing()
   const parsed = OwnerChangeRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  return startChange(env, kit, owner, parsed.data.text, key)
+  const { text, change_kind } = parsed.data
+  return startChange(env, kit, owner, text, key, change_kind)
 }
 
 async function buildAction(

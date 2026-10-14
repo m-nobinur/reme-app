@@ -52,6 +52,7 @@ import { checkpoint, recover } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
+import { previousArtifact, uploadDist } from "../tail.ts"
 import { since } from "../timing.ts"
 
 /**
@@ -474,8 +475,6 @@ export const askChief = (current: Session) =>
     },
   })
 
-const VIEWPORTS = [390, 768, 1440] as const
-
 const SECURITY_HEADERS = {
   "content-security-policy":
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
@@ -484,16 +483,10 @@ const SECURITY_HEADERS = {
   "x-frame-options": "DENY",
 }
 
-const sha256 = async (bytes: Uint8Array) =>
-  Array.from(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-    (b) => b.toString(16).padStart(2, "0")
-  ).join("")
-
 /**
  * The end of a build (§8.2 "Verify before claiming done"): the tool itself
- * runs the checks, takes the screenshots, uploads the artifact and the
- * source snapshot as durable steps, writes the revision row, logs the
+ * runs the checks, uploads the artifact and the source snapshot as durable
+ * steps (the screenshots follow the preview, in the Workflow), writes the revision row, logs the
  * `CompletionReport` and wakes the Workflow. A report with nothing checked
  * cannot exist, because this is the only way to make one.
  */
@@ -501,7 +494,7 @@ const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
-      "Report the build done. Runs astro check and astro build, takes screenshots, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
+      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
     input: toolInput(
       CompletionReport.pick({
         summary: true,
@@ -584,63 +577,34 @@ const reportComplete = (current: Session) =>
       )
       const prefix = `sites/${orgId}/${revisionId}/`
 
-      const screenshots = await step.do("screenshots", async () => {
-        const started = Date.now()
-        const script = [
-          "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
-          "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
-          ...VIEWPORTS.map(
-            (w) =>
-              `playwright screenshot --browser chromium --viewport-size=${w},900 --full-page http://127.0.0.1:4321/ /tmp/home-${w}.png`
-          ),
-          "pkill -f 'astro preview' || true",
-        ].join(" && ")
-        const r = await run(script)
-        const keys: string[] = []
-        for (const w of VIEWPORTS) {
-          const path = `/tmp/home-${w}.png`
-          if (!(await sandbox.exists(path))) continue
-          const key = `${prefix}screenshots/home-${w}.png`
-          await env.SITES.put(key, await sandbox.readFileBuffer(path))
-          keys.push(key)
-        }
-        return {
-          keys,
-          exit_code: r.exitCode,
-          output: r.stdout.slice(-500),
-          ms: since(started),
-        }
-      })
-
       const manifest = await step.do("upload dist", async () => {
         const started = Date.now()
-        let bytesUploaded = 0
-        const listing = await run("find dist -type f | sort")
-        const files: Record<string, string> = {}
-        const routes: { path: string; file: string }[] = []
-        for (const line of listing.stdout.split("\n").filter(Boolean)) {
-          const file = line.replace(/^dist\//, "")
-          const bytes = await sandbox.readFileBuffer(`${SITE_ROOT}/${line}`)
-          files[file] = await sha256(bytes)
-          bytesUploaded += bytes.byteLength
-          await env.SITES.put(`${prefix}dist/${file}`, bytes)
-          if (file.endsWith("index.html")) {
-            routes.push({ path: `/${file.replace(/index\.html$/, "")}`, file })
-          }
-        }
+        const previous = await current.kit.withOrg({ orgId }, (db) =>
+          previousArtifact(db, env.SITES, orgId, revisionId)
+        )
+        const uploaded = await uploadDist({
+          sandbox: {
+            exec: run,
+            readFileBuffer: (p) => sandbox.readFileBuffer(p),
+          },
+          sites: env.SITES,
+          prefix,
+          previous,
+        })
         const parsed = DeploymentManifest.parse({
           revision_id: revisionId,
           site_id: orgId,
           org_id: orgId,
-          routes,
+          routes: uploaded.routes,
           headers: SECURITY_HEADERS,
-          files,
+          files: uploaded.files,
           built_at: new Date().toISOString(),
         })
         await env.SITES.put(`${prefix}manifest.json`, JSON.stringify(parsed))
         return {
-          files: Object.keys(files).length,
-          bytes: bytesUploaded,
+          files: Object.keys(uploaded.files).length,
+          reused: uploaded.reused,
+          bytes: uploaded.bytes,
           ms: since(started),
         }
       })
@@ -667,7 +631,9 @@ const reportComplete = (current: Session) =>
         revision_id: revisionId,
         summary: data.summary,
         changes: data.changes,
-        screenshots: screenshots.keys,
+        // Taken after the preview is ready, by the Workflow; the router serves
+        // them by name from this revision's prefix.
+        screenshots: [],
         checks: [
           {
             check: "astro check",
@@ -680,14 +646,7 @@ const reportComplete = (current: Session) =>
             output_key: null,
           },
         ],
-        risks: [
-          ...data.risks,
-          ...(screenshots.keys.length < VIEWPORTS.length
-            ? [
-                `only ${screenshots.keys.length} of ${VIEWPORTS.length} screenshots were taken`,
-              ]
-            : []),
-        ],
+        risks: data.risks,
         decisions_needed: data.decisions_needed,
         reported_at: new Date().toISOString(),
       })
@@ -706,9 +665,9 @@ const reportComplete = (current: Session) =>
           timings: {
             check_ms: check.ms,
             build_ms: build.ms,
-            screenshots_ms: screenshots.ms,
             upload_ms: manifest.ms,
             upload_files: manifest.files,
+            upload_reused: manifest.reused,
             upload_bytes: manifest.bytes,
             source_ms: source.ms,
             // Replayed steps return their first run's ms, so the tool's own

@@ -1,4 +1,6 @@
 import {
+  type BuildLane,
+  type ChangeKind,
   type EnvelopeBody,
   envelope,
   GOAL_MAX,
@@ -65,6 +67,7 @@ import {
   requestReview,
 } from "./publish.ts"
 import { answers } from "./question.ts"
+import { pickLane } from "./quick.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
@@ -275,6 +278,7 @@ bridge.post("/", async (c) => {
     goal?: unknown
     model?: unknown
     withhold?: unknown
+    change_kind?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -316,7 +320,13 @@ bridge.post("/", async (c) => {
       detail: { length: goal.length, max: GOAL_MAX },
     })
   }
-  return createAssignment(c, key, { kind, goal, model, withhold })
+  return createAssignment(c, key, {
+    kind,
+    goal,
+    model,
+    withhold,
+    ...pickLane(kind, body.change_kind),
+  })
 })
 
 /** Builds an owner may start in 24 hours (open item 76: a guess until someone hits it). */
@@ -339,9 +349,11 @@ async function createAssignment(
     goal: string
     model: "A" | "B"
     withhold: string[]
+    lane: BuildLane
+    change_kind: ChangeKind | null
   }
 ) {
-  const { kind, goal, model, withhold } = input
+  const { kind, goal, model, withhold, lane, change_kind } = input
   const orgId = c.get("orgId")
   const owner = byOwner(c)
   const taint: TaintLabel[] =
@@ -415,6 +427,9 @@ async function createAssignment(
         model,
         goal,
         withhold,
+        // The lane is chosen once, here, and read back by the Workflow and EV3.
+        lane,
+        change_kind,
         origin: owner ? "owner" : "console",
         ...(source ? { revises_revision_id: source.revision_id } : {}),
       },

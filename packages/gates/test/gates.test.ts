@@ -13,6 +13,7 @@ import {
   checkTypes,
   factsForContent,
   HIDDEN_FACTS_KEY,
+  limit,
   parsePage,
   runGates,
 } from "../src/index.ts"
@@ -436,6 +437,7 @@ describe("all the gates", () => {
       timings,
     })
     expect(Object.keys(timings).sort()).toEqual([
+      "build",
       "claims",
       "content",
       "links",
@@ -452,5 +454,97 @@ describe("all the gates", () => {
     ])
     for (const r of results) expect(GateResult.parse(r)).toEqual(r)
     expect(results.every((r) => r.passed)).toBe(true)
+  })
+  it("reads every file once, a page the build gate hashes and the pages share included, a few at a time", async () => {
+    const bodies: Record<string, Uint8Array> = {
+      "index.html": new TextEncoder().encode(home()),
+    }
+    for (let i = 0; i < 20; i++)
+      bodies[`img/${i}.png`] = new TextEncoder().encode(`image ${i}`)
+    const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex")
+    const reads: string[] = []
+    let inFlight = 0
+    let peak = 0
+    const results = await runGates({
+      manifest: {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: Object.fromEntries(
+          Object.entries(bodies).map(([f, b]) => [f, hash(b)])
+        ),
+        built_at: AT,
+      },
+      read: async (file) => {
+        reads.push(file)
+        peak = Math.max(peak, ++inFlight)
+        await new Promise((r) => setTimeout(r, 1))
+        inFlight--
+        return bodies[file] ?? null
+      },
+      report: {
+        checks: [{ check: "astro check", exit_code: 0, output_key: null }],
+      } as CompletionReport,
+      facts: FACTS,
+    })
+    expect(results[0]).toMatchObject({ gate: "build", passed: true })
+    expect([...reads].sort()).toEqual(Object.keys(bodies).sort())
+    expect(peak).toBeLessThanOrEqual(8)
+  })
+
+  it("names the first failing file in manifest order, whichever read finishes first", async () => {
+    const good = new TextEncoder().encode("ok")
+    const hash = createHash("sha256").update(good).digest("hex")
+    const result = await checkBuild(
+      {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: {
+          "index.html": hash,
+          "a.css": "0".repeat(64),
+          "b.css": "1".repeat(64),
+        },
+        built_at: AT,
+      },
+      async (file) => {
+        // The later file answers first.
+        await new Promise((r) => setTimeout(r, file === "b.css" ? 1 : 10))
+        return good
+      }
+    )
+    expect(result).toMatchObject({ passed: false, offending_node: "a.css" })
+  })
+})
+
+describe("the limiter", () => {
+  it("never runs more than its limit, and runs every task", async () => {
+    const run = limit(3)
+    let active = 0
+    let peak = 0
+    const done = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        run(async () => {
+          peak = Math.max(peak, ++active)
+          await new Promise((r) => setTimeout(r, 1))
+          active--
+          return i
+        })
+      )
+    )
+    expect(peak).toBe(3)
+    expect(done).toEqual(Array.from({ length: 12 }, (_, i) => i))
+  })
+
+  it("frees the slot of a task that throws", async () => {
+    const run = limit(1)
+    await expect(
+      run(async () => Promise.reject(new Error("no")))
+    ).rejects.toThrow("no")
+    expect(await run(async () => "next")).toBe("next")
   })
 })

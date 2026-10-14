@@ -59,6 +59,12 @@ const values = {
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
   areaServed: "",
+  /**
+   * A review as its own words and its author, from a `testimonials.` fact:
+   * the claims gate accepts a quote only when one carries it. No onboarding
+   * step stores those facts yet, so these stay empty and the section is left
+   * out. Never write one.
+   */
   /** testimonials.quote_1, the review's own words, unedited. */
   testimonial1Quote: "",
   /** testimonials.author_1, the reviewer's name as the review gives it. */
@@ -67,23 +73,26 @@ const values = {
   testimonial2Quote: "",
   /** testimonials.author_2, the reviewer's name as the review gives it. */
   testimonial2Author: "",
-  /** about.years_in_business, the number on its own, as "12". */
+  /**
+   * Three figures for the trust strip, each the number on its own ("12",
+   * "400", "4.8") and only when business.proof states it. Composed: the
+   * claims gate matches the number against the facts, and no fact carries a
+   * figure but business.proof.
+   */
   statYearsValue: "",
-  /** about.clients_served, the number on its own, as "400". */
   statClientsValue: "",
-  /** reviews.average_rating, as "4.8". */
   statRatingValue: "",
-  /** media.photo_1, a path the site already holds, as "/photos/kitchen.jpg". */
+  /**
+   * The gallery's photos, by number: a path the build placed for one of the
+   * Blueprint's gallery image slots, as "/uploads/<id>.jpg", and what it shows
+   * in one sentence. Composed: an owner's upload or a slot's own photo, never
+   * a path no slot placed. Shown only with both halves.
+   */
   photo1Src: "",
-  /** media.photo_1_alt, what that photo shows, in one sentence. */
   photo1Alt: "",
-  /** media.photo_2, a path the site already holds. */
   photo2Src: "",
-  /** media.photo_2_alt, what that photo shows, in one sentence. */
   photo2Alt: "",
-  /** media.photo_3, a path the site already holds. */
   photo3Src: "",
-  /** media.photo_3_alt, what that photo shows, in one sentence. */
   photo3Alt: "",
   /**
    * The colour the owner chose, as #rrggbb: their palette's brand colour
@@ -112,6 +121,11 @@ const values = {
   heroImage: "",
   /** What that photo shows, in one sentence: its alt text. The hero shows the photo only with it. */
   heroImageAlt: "",
+  /**
+   * A few words on the hero photo, as a pill or a stamp card: a fact restated
+   * in under six words, as "Fully insured". Empty shows the photo bare.
+   */
+  heroCaption: "",
   /**
    * The home page's h1: the main service and the area, as "Weekly house
    * cleaning in Fairhaven". Falls back to the business name.
@@ -187,6 +201,11 @@ const values = {
   valueProp3Title: "",
   valueProp3Body: "",
   valueProp3Icon: "",
+  /**
+   * The short label above a section's h2: a word or two, set small and
+   * uppercase, never a claim. Empty leaves the heading on its own.
+   */
+  serviceCardsEyebrow: "Services",
   serviceCardsHeading: "What we do",
   /** The link under the service cards to the services page, off that page. */
   serviceCardsLink: "See all services",
@@ -230,6 +249,25 @@ const values = {
   service6Icon: "",
   service6Includes: "",
   service6For: "",
+  /**
+   * A photo for each service, by number: a path the build placed, as
+   * "/uploads/<id>.jpg", and its alt text. Shown only with both. A fleet's
+   * photos are the owner's own uploads, never generated. Empty shows the
+   * service without a photo.
+   */
+  service1Image: "",
+  service1ImageAlt: "",
+  service2Image: "",
+  service2ImageAlt: "",
+  service3Image: "",
+  service3ImageAlt: "",
+  service4Image: "",
+  service4ImageAlt: "",
+  service5Image: "",
+  service5ImageAlt: "",
+  service6Image: "",
+  service6ImageAlt: "",
+  stepsEyebrow: "Process",
   stepsHeading: "How it works",
   /** Three steps from first contact to the finished job. */
   step1Title: "",
@@ -241,6 +279,7 @@ const values = {
   statYearsLabel: "Years in business",
   statClientsLabel: "Clients served",
   statRatingLabel: "Average rating",
+  testimonialsEyebrow: "Reviews",
   testimonialsHeading: "What clients say",
   galleryHeading: "Our work",
   /**
@@ -252,6 +291,7 @@ const values = {
   areaBody: "",
   /** The link from the home page's area section to the service area page. */
   areaLink: "See the areas we cover",
+  faqEyebrow: "Questions",
   faqHeading: "Common questions",
   /**
    * Six to eight questions a customer of this trade asks before booking,
@@ -278,6 +318,8 @@ const values = {
   ctaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
   ctaLabel: "",
+  /** A photo behind the closing band, under the brand colour; decoration, so no alt. */
+  ctaImage: "",
   /** The quote page's side column: what happens after a visitor sends the form. */
   quoteAsideHeading: "What happens next",
   quoteNext1: "Send the form with as much detail as you can.",
@@ -354,15 +396,6 @@ const FACTS: Partial<Record<keyof typeof site, Field>> = {
   testimonial1Author: fact("testimonials.author_1"),
   testimonial2Quote: fact("testimonials.quote_2"),
   testimonial2Author: fact("testimonials.author_2"),
-  statYearsValue: fact("about.years_in_business"),
-  statClientsValue: fact("about.clients_served"),
-  statRatingValue: fact("reviews.average_rating"),
-  photo1Src: fact("media.photo_1"),
-  photo1Alt: fact("media.photo_1_alt"),
-  photo2Src: fact("media.photo_2"),
-  photo2Alt: fact("media.photo_2_alt"),
-  photo3Src: fact("media.photo_3"),
-  photo3Alt: fact("media.photo_3_alt"),
   logo: fact("media.uploads"),
   heroImage: fact("media.uploads"),
 }
@@ -373,3 +406,79 @@ export const fields = Object.fromEntries(
     FACTS[key as keyof typeof site] ?? { kind: "composed" },
   ])
 ) as Record<keyof typeof site, Field>
+
+/**
+ * The sections of each page, in order. src/layouts/Sections.astro renders
+ * them, so composing a page is editing this data: reorder, drop, or change a
+ * variant. A section with no content behind it renders nothing, whatever its
+ * place here. `kind` and `variant` are the contract's SECTION_VARIANTS (a test
+ * fails when they drift). A hero with no variant is the plain page hero,
+ * except on the home page, where it takes the hero of the template the owner
+ * picked until directions replace templates.
+ */
+export type LayoutSection = {
+  kind:
+    | "hero"
+    | "trust_strip"
+    | "service_cards"
+    | "value_props"
+    | "steps"
+    | "about"
+    | "testimonials"
+    | "gallery"
+    | "service_area"
+    | "faq"
+    | "cta_band"
+    | "contact"
+    | "quote_form"
+  variant?: string
+}
+export type LayoutPage =
+  | "home"
+  | "about"
+  | "services"
+  | "service_area"
+  | "contact"
+  | "quote"
+
+export const layout: Record<LayoutPage, LayoutSection[]> = {
+  home: [
+    { kind: "hero" },
+    { kind: "trust_strip", variant: "icons" },
+    { kind: "service_cards", variant: "photo_cards" },
+    { kind: "value_props" },
+    { kind: "steps", variant: "timeline" },
+    { kind: "about" },
+    { kind: "testimonials", variant: "wall" },
+    { kind: "gallery" },
+    { kind: "service_area" },
+    { kind: "faq", variant: "split" },
+    { kind: "cta_band", variant: "solid" },
+  ],
+  about: [
+    { kind: "hero" },
+    { kind: "trust_strip", variant: "icons" },
+    { kind: "about" },
+    { kind: "value_props" },
+    { kind: "testimonials", variant: "wall" },
+    { kind: "cta_band", variant: "solid" },
+  ],
+  services: [
+    { kind: "hero" },
+    { kind: "service_cards", variant: "alternating" },
+    { kind: "steps", variant: "timeline" },
+    { kind: "faq", variant: "split" },
+    { kind: "cta_band", variant: "solid" },
+  ],
+  service_area: [
+    { kind: "hero" },
+    { kind: "service_area" },
+    { kind: "cta_band", variant: "solid" },
+  ],
+  contact: [
+    { kind: "hero" },
+    { kind: "contact" },
+    { kind: "cta_band", variant: "solid" },
+  ],
+  quote: [{ kind: "hero" }, { kind: "quote_form" }],
+}

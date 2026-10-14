@@ -4,8 +4,9 @@ import {
   type FactRecord,
   type GateResult,
 } from "@workspace/contracts"
-import { claimFindings } from "./claims.ts"
+import { claimFindings, generatedImageFindings } from "./claims.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
+import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
 import {
   type ContentClaim,
@@ -16,14 +17,17 @@ import {
 } from "./text.ts"
 
 export {
+  CLAIM_IMAGE_SECTIONS,
   CLAIM_VOCABULARY,
   type ClaimFinding,
   type ClaimKind,
   claimFindings,
+  generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage } from "./page.ts"
+export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
 export { factsForContent } from "./text.ts"
 
@@ -72,20 +76,27 @@ export async function checkBuild(
   const { files } = parsed.data
   if (!Object.hasOwn(files, "index.html"))
     return fail("build", "the build has no index.html")
-  for (const [file, expected] of Object.entries(files)) {
-    const bytes = await read(file)
-    if (!bytes)
-      return fail(
-        "build",
-        `${file} is listed in the manifest and missing from the artifact`,
-        file
+  // Every file is read at once (the caller bounds the reads) and the first
+  // failure in manifest order is the one reported, as when they ran in turn.
+  const checked = await Promise.all(
+    Object.entries(files).map(async ([file, expected]) => {
+      const bytes = await read(file)
+      if (!bytes)
+        return fail(
+          "build",
+          `${file} is listed in the manifest and missing from the artifact`,
+          file
+        )
+      const actual = hex(
+        await crypto.subtle.digest("SHA-256", new Uint8Array(bytes))
       )
-    const actual = hex(
-      await crypto.subtle.digest("SHA-256", new Uint8Array(bytes))
-    )
-    if (actual !== expected)
-      return fail("build", `${file} does not match its manifest hash`, file)
-  }
+      return actual === expected
+        ? null
+        : fail("build", `${file} does not match its manifest hash`, file)
+    })
+  )
+  const failed = checked.find((result) => result !== null)
+  if (failed) return failed
   return pass(
     "build",
     `${Object.keys(files).length} files match their manifest hashes`
@@ -368,9 +379,13 @@ export function checkContent(
 /** The claims gate v0: every rating, count, superlative, credential, guarantee and testimonial traced to a fact (§8.5). */
 export function checkClaims(
   pages: readonly Page[],
-  facts: readonly FactRecord[]
+  facts: readonly FactRecord[],
+  plan?: Parameters<typeof generatedImageFindings>[0]
 ): GateResult {
-  const findings = claimFindings(pages, facts)
+  const findings = [
+    ...claimFindings(pages, facts),
+    ...(plan ? generatedImageFindings(plan) : []),
+  ]
   const first = findings[0]
   if (!first)
     return pass(
@@ -384,7 +399,14 @@ export function checkClaims(
   )
 }
 
-/** All six gates over one artifact, in the contract's order. */
+/** Reads in flight at once against the artifact store. */
+const READS = 8
+
+/**
+ * All six gates over one artifact, in the contract's order. Each file is
+ * read once: the build gate hashes every file while the pages are read for
+ * the other gates, and a page both need comes from the same read.
+ */
 export async function runGates(input: {
   manifest: unknown
   read: (file: string) => Promise<Uint8Array | null>
@@ -401,14 +423,23 @@ export async function runGates(input: {
     if (input.timings) input.timings[name] = Date.now() - started
     return out
   }
-  const build = await checkBuild(input.manifest, input.read)
+  const bounded = limit(READS)
+  const reads = new Map<string, Promise<Uint8Array | null>>()
+  const read = (file: string) => {
+    let once = reads.get(file)
+    if (!once) {
+      once = bounded(() => input.read(file))
+      reads.set(file, once)
+    }
+    return once
+  }
   const types = checkTypes(input.report)
   const parsed = DeploymentManifest.safeParse(input.manifest)
   if (!parsed.success) {
     const unreadable =
       "the manifest does not parse, so the pages could not be read"
     return [
-      build,
+      await checkBuild(input.manifest, read),
       types,
       fail("links", unreadable),
       fail("structured_data", unreadable),
@@ -417,15 +448,28 @@ export async function runGates(input: {
     ]
   }
   const decoder = new TextDecoder()
-  const pages: Page[] = []
   const readStarted = Date.now()
-  for (const file of Object.keys(parsed.data.files)
-    .filter((f) => f.endsWith(".html"))
-    .sort()) {
-    const bytes = await input.read(file)
-    if (bytes) pages.push(parsePage(file, decoder.decode(bytes)))
-  }
-  if (input.timings) input.timings.read = Date.now() - readStarted
+  const [build, pages] = await Promise.all([
+    (async () => {
+      const started = Date.now()
+      const result = await checkBuild(input.manifest, read)
+      if (input.timings) input.timings.build = Date.now() - started
+      return result
+    })(),
+    (async () => {
+      const found = await Promise.all(
+        Object.keys(parsed.data.files)
+          .filter((f) => f.endsWith(".html"))
+          .sort()
+          .map(async (file) => {
+            const bytes = await read(file)
+            return bytes ? parsePage(file, decoder.decode(bytes)) : null
+          })
+      )
+      if (input.timings) input.timings.read = Date.now() - readStarted
+      return found.filter((page): page is Page => page !== null)
+    })(),
+  ])
   return [
     build,
     types,

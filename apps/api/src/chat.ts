@@ -1,11 +1,13 @@
 import {
   BuildSummary,
+  type ChangeKind,
   ChatRequest,
   type ChatResult,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
   OnboardingPlan,
+  type OwnerChangeRequest,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -1636,8 +1638,16 @@ async function approve(
   const approval = { id: turn.approval_id, approved: turn.approved }
   let done: ToolPart = { ...call, state: "output-denied", approval }
   if (turn.approved) {
-    const text = (call.input as { text: string }).text
-    const output = await changed(env, kit, owner, text, turn.approval_id)
+    // The orchestrator checks change_kind again; an unknown one runs full.
+    const { text, change_kind } = call.input as OwnerChangeRequest
+    const output = await changed(
+      env,
+      kit,
+      owner,
+      text,
+      turn.approval_id,
+      change_kind
+    )
     if (output instanceof Response) return output
     done = { ...call, state: "output-available", approval, output }
   }
@@ -1676,9 +1686,10 @@ async function changed(
   kit: Tenancy,
   owner: Owner,
   text: string,
-  key: string
+  key: string,
+  changeKind?: ChangeKind
 ): Promise<RequestChangeOutput | Response> {
-  const response = await startChange(env, kit, owner, text, key)
+  const response = await startChange(env, kit, owner, text, key, changeKind)
   const body: unknown = await response.clone().json()
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }

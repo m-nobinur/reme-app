@@ -110,6 +110,6 @@ describe("the manifest digest", () => {
 
   it("throws past the cap rather than hiding a forbidden use", () => {
     const many = Array.from({ length: 60 }, (_, i) => manifest(`Component${i}`))
-    expect(() => manifestDigest(many)).toThrow(/3000 characters/)
+    expect(() => manifestDigest(many)).toThrow(/6000 characters/)
   })
 })
