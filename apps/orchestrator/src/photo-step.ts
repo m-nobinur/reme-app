@@ -134,7 +134,7 @@ export async function makePhotos(input: {
     palette: paletteWords(plan.data),
   }
   // The "0 of n" row first, then one per slot as it settles, with its
-  // object key so the panel can show the picture the moment it exists.
+  // asset id so the panel can show the picture the moment it exists.
   const progress = (slot: PhotoResult | null) =>
     kit.withOrg({ orgId: ids.orgId }, (db) =>
       appendEvent(db, {
@@ -146,7 +146,7 @@ export async function makePhotos(input: {
           stage: "photos",
           item: slot?.slot_id ?? null,
           total: wanted.length,
-          ...(slot ? { status: slot.status, key: slot.key } : {}),
+          ...(slot ? { status: slot.status, asset_id: slot.asset_id } : {}),
         },
       })
     )
