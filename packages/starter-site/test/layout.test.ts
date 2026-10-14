@@ -60,7 +60,10 @@ describe("the section variants", () => {
       const declared = [...(prop?.type.matchAll(/"([a-z_]+)"/g) ?? [])].map(
         (match) => String(match[1])
       )
-      expect(declared.sort(), name).toEqual([...(variants[kind] ?? [])].sort())
+      expect(
+        declared.sort((a, b) => a.localeCompare(b)),
+        name
+      ).toEqual([...(variants[kind] ?? [])].sort((a, b) => a.localeCompare(b)))
     }
   )
 

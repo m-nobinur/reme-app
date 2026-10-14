@@ -80,7 +80,7 @@ const PHOTO_ESTIMATE = { "1K": 0.034, "2K": 0.05 }
  */
 export function photosOf(text) {
   const out = new Map()
-  for (const o of objects(text).filter((o) => o.type === "site.photos")) {
+  for (const o of objects(text).filter((e) => e.type === "site.photos")) {
     const p = o.payload ?? {}
     const id = o.assignment_id ?? o.assignmentId
     if (!id || !Array.isArray(p.slots)) continue

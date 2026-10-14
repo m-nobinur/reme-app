@@ -46,6 +46,7 @@ async function chat(model, system, user) {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
+      // biome-ignore lint/suspicious/noUndeclaredEnvVars: not passed through turbo, a task that saw the key would run the facade live tests
       authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "content-type": "application/json",
     },
@@ -158,6 +159,7 @@ async function main() {
     )
     return
   }
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: not passed through turbo, a task that saw the key would run the facade live tests
   if (!process.env.OPENROUTER_API_KEY)
     throw new Error("OPENROUTER_API_KEY is not set")
   const rows = []

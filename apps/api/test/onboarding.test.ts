@@ -1258,8 +1258,8 @@ describe("the design tray", () => {
         )[1] as ToolPart
       ).input
     )
-  const ids = (input: AskDesignInput, id: string) =>
-    input.questions.find((q) => q.id === id)?.card.options.map((o) => o.id) ??
+  const ids = (design: AskDesignInput, id: string) =>
+    design.questions.find((q) => q.id === id)?.card.options.map((o) => o.id) ??
     []
 
   it("is one step of four questions, each with its own text, after the website question", () => {

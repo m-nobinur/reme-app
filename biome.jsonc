@@ -15,7 +15,8 @@
       "**",
       "!**/*.gen.ts",
       "!**/worker-configuration.d.ts",
-      "!packages/db/drizzle"
+      "!packages/db/drizzle",
+      "!packages/contracts/generated"
     ]
   },
   "formatter": {
