@@ -147,6 +147,38 @@ describe("the axe gate", () => {
     })
   })
 
+  it("spells out every violation with what a repair needs: rule, impact, page, targets, summary and markup", () => {
+    const result = parseAxe({
+      pages: [
+        {
+          path: "/services/",
+          violations: [
+            {
+              id: "color-contrast",
+              impact: "serious",
+              help: "Elements must meet minimum color contrast",
+              targets: ["a[href$='#service-1']", "a[href$='#service-2']"],
+              summary: "Fix any of the following: contrast 3.1:1",
+              html: '<a href="/services/#service-1">Deep clean</a>',
+            },
+            { id: "image-alt", impact: "critical", targets: ["img"] },
+          ],
+        },
+      ],
+    })
+    const { message } = checkAxe(check(1), result)
+    for (const part of [
+      "2 violation(s)",
+      "color-contrast (serious) on /services/",
+      "Elements must meet minimum color contrast",
+      "a[href$='#service-1'] | a[href$='#service-2']",
+      "contrast 3.1:1",
+      '<a href="/services/#service-1">Deep clean</a>',
+      "image-alt (critical) on /services/",
+    ])
+      expect(message).toContain(part)
+  })
+
   it("fails closed: no axe run, a run that crashed, a result that does not parse", () => {
     expect(checkAxe({ checks: [] }, null).passed).toBe(false)
     expect(checkAxe(check(2), null).passed).toBe(false)
