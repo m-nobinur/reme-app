@@ -224,6 +224,7 @@ describe("the photo director", () => {
       down: (body) => body.model === out429,
     })
     const sites = bucket()
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined)
     // Two hero-section slots: the first is drawn alone, the second after it.
     const out = await directPhotos({
       env: { OPENROUTER_API_KEY: "k", SITES: sites },
@@ -234,6 +235,38 @@ describe("the photo director", () => {
       ]),
       brief: BRIEF,
       fetch: fetcher,
+    })
+    const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)))
+    log.mockRestore()
+    expect(
+      lines
+        .filter((l) => l.type === "photos.draw")
+        .map((l) => ({
+          slot: l.slot,
+          model: l.model,
+          outcome: l.outcome,
+          status: l.status,
+        }))
+    ).toEqual([
+      { slot: "hero", model: out429, outcome: "down", status: 429 },
+      {
+        slot: "hero",
+        model: QUALITY_MODELS[1]?.id,
+        outcome: "drawn",
+        status: 200,
+      },
+      {
+        slot: "banner",
+        model: QUALITY_MODELS[1]?.id,
+        outcome: "drawn",
+        status: 200,
+      },
+    ])
+    expect(lines.find((l) => l.type === "photos.summary")).toEqual({
+      type: "photos.summary",
+      slots: 2,
+      generated: 2,
+      models_down: [out429],
     })
     expect(out.map((r) => r.status)).toEqual(["generated", "generated"])
     expect(images(calls).map((c) => c.body.model)).toEqual([

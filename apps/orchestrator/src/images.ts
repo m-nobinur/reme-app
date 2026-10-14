@@ -249,7 +249,7 @@ type Drawn =
       cost: number | null
     }
   /** `down`: the model, not the prompt, failed (quota, outage, timeout), so the build skips it. */
-  | { ok: false; reason: string; down: boolean }
+  | { ok: false; reason: string; down: boolean; status: number | null }
 
 /** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
 async function draw(
@@ -287,6 +287,7 @@ async function draw(
         ok: false,
         reason: `http ${response.status}`,
         down: response.status !== 400,
+        status: response.status,
       }
     const body = (await response.json()) as {
       data?: { b64_json?: string; media_type?: string }[]
@@ -294,7 +295,12 @@ async function draw(
     }
     const image = body.data?.find((d) => d.b64_json)
     if (!image?.b64_json)
-      return { ok: false, reason: "no image returned", down: false }
+      return {
+        ok: false,
+        reason: "no image returned",
+        down: false,
+        status: response.status,
+      }
     return {
       ok: true,
       model,
@@ -308,8 +314,25 @@ async function draw(
       ok: false,
       reason: error instanceof Error ? error.name : "error",
       down: true,
+      status: null,
     }
   }
+}
+
+/** One line per draw attempt, so a build's model choices and failures can be read off the log. */
+function logDraw(slot: string, model: string, drawn: Drawn, ms: number) {
+  console.log(
+    JSON.stringify({
+      type: "photos.draw",
+      slot,
+      model,
+      outcome: drawn.ok ? "drawn" : drawn.down ? "down" : "refused",
+      status: drawn.ok ? 200 : drawn.status,
+      ms,
+      cost_usd: drawn.ok ? drawn.cost : null,
+      reason: drawn.ok ? null : drawn.reason,
+    })
+  )
 }
 
 /** The first clause of a subject: what is left when the long one is refused. */
@@ -485,7 +508,12 @@ export async function directPhotos(input: {
     const one = async (p: Planned, references: Reference[]) => {
       let prompt = promptFor(p, subjectOf(p))
       let refs = references
-      let drawn: Drawn = { ok: false, reason: "no model up", down: false }
+      let drawn: Drawn = {
+        ok: false,
+        reason: "no model up",
+        down: false,
+        status: null,
+      }
       let tries = 0
       for (const model of chainFor(
         p.slot.section === "hero",
@@ -493,7 +521,9 @@ export async function directPhotos(input: {
       )) {
         if (down.has(model.id)) continue
         if (tries++ === TRIES) break
+        const started = Date.now()
         drawn = await draw(deps, model.id, prompt, p, model.refs ? refs : [])
+        logDraw(p.slot.id, model.id, drawn, Date.now() - started)
         if (drawn.ok) break
         if (drawn.down) down.add(model.id)
         else {
@@ -557,6 +587,16 @@ export async function directPhotos(input: {
     }
     const bounded = limit(PARALLEL)
     await Promise.all(rest.map((p) => bounded(() => one(p, shared))))
+    console.log(
+      JSON.stringify({
+        type: "photos.summary",
+        slots: toDraw.length,
+        generated: toDraw.filter(
+          (p) => results.get(p.slot.id)?.status === "generated"
+        ).length,
+        models_down: [...down],
+      })
+    )
   }
 
   await Promise.all(told)
