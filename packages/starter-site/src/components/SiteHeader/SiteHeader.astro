@@ -60,8 +60,8 @@ const items = links.map((link) => ({
             <ActionLink href={primaryAction.href} label={primaryAction.label} />
           </span>
         )}
-        {items.length > 0 && site.navMenu && (
-          <details class="nav-narrow">
+        {(items.length > 0 || primaryAction) && site.navMenu && (
+          <details class:list={["nav-narrow", items.length === 0 && "nav-solo"]}>
             <summary class="menu-toggle">{site.navMenu}</summary>
             <nav aria-label={site.primaryNavLabel}>
               <ul>
@@ -72,6 +72,11 @@ const items = links.map((link) => ({
                     </a>
                   </li>
                 ))}
+                {primaryAction && (
+                  <li class="menu-action">
+                    <a href={primaryAction.href}>{primaryAction.label}</a>
+                  </li>
+                )}
               </ul>
             </nav>
           </details>

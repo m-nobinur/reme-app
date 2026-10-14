@@ -32,8 +32,12 @@ body {
   line-height: 1.7;
 }
 
+/* height: auto, because Astro writes the file's own height onto every <img>
+   and that attribute would otherwise beat a class's aspect-ratio: a portrait
+   upload then stood 1,500 px tall in a hero cropped to 5:4. */
 img {
   max-width: 100%;
+  height: auto;
 }
 
 .wrap {
@@ -472,10 +476,26 @@ picture {
   white-space: nowrap;
 }
 
+/* On a phone the name needs the row, so the action moves into the menu, where
+   it stays one tap away, and the hero below carries the same button. */
+.menu-action {
+  display: none;
+}
+
+/* A menu holding only the action has nothing to open once the button shows. */
+@media (min-width: 30rem) {
+  .nav-solo {
+    display: none;
+  }
+}
+
 @media (max-width: 29.99rem) {
-  .header-action .action {
-    padding-inline: var(--space-xs);
-    font-size: 0.8125rem;
+  .header-action {
+    display: none;
+  }
+
+  .menu-action {
+    display: block;
   }
 }
 
@@ -535,6 +555,30 @@ picture {
 
 .hero-page h1 {
   max-width: 22ch;
+}
+
+/* The heading takes the left of a wide screen and the lede and actions the
+   right, so a three-line h1 never stands beside an empty half. */
+@media (min-width: 56rem) {
+  .hero-page .hero-text {
+    display: grid;
+    max-width: none;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0 var(--space-2xl);
+    align-items: end;
+  }
+
+  .hero-page h1 {
+    max-width: none;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .hero-page .lede,
+  .hero-page .actions {
+    grid-column: 2;
+    margin-block-end: 0;
+  }
 }
 
 /* The owner's photo, cropped to a fixed shape so no upload stretches the
