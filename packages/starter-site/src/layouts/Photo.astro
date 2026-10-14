@@ -18,9 +18,10 @@ interface Props {
   priority?: boolean
 }
 
+// Lazy, so only the photo this page names is imported: an eager glob makes
+// Astro emit every original beside its resized variants.
 const files = import.meta.glob<{ default: ImageMetadata }>(
-  "/src/assets/**/*.{jpg,jpeg,png,webp,avif}",
-  { eager: true }
+  "/src/assets/**/*.{jpg,jpeg,png,webp,avif}"
 )
 const {
   src,
@@ -30,9 +31,17 @@ const {
   sizes = "(min-width: 64rem) 50vw, 100vw",
   priority = false,
 } = Astro.props
-const meta =
-  files[`/src/assets/${src.replace(/^\/?(?:src\/assets\/)?/, "")}`]?.default
-const emitted = meta ? [...new Set(widths.filter((w) => w <= meta.width))] : []
+const load = files[`/src/assets/${src.replace(/^\/?(?:src\/assets\/)?/, "")}`]
+const meta = load ? (await load()).default : undefined
+// A source under the largest width asked for is offered at its own width too.
+const emitted = meta
+  ? [
+      ...new Set([
+        ...widths.filter((w) => w <= meta.width),
+        ...(meta.width < Math.max(...widths) ? [meta.width] : []),
+      ]),
+    ].sort((a, b) => a - b)
+  : []
 if (meta && emitted.length === 0) emitted.push(meta.width)
 // shortcut: one quality for every photo, tune per slot if a hero still misses its budget.
 const quality = 55
