@@ -1,5 +1,6 @@
 import type {
   ApprovalRequest,
+  BlueprintReviewOutput,
   BuildSummary,
   ChangeKind,
   Conversation,
@@ -258,6 +259,12 @@ export type OwnerDataSource = {
     assignmentId: string,
     requestId: string,
     value: unknown,
+    key: string
+  ) => Promise<WriteOutcome>
+  /** The owner's decision on a plan: build it, or change it in their words. Idempotent on `key`. */
+  decideBlueprint: (
+    assignmentId: string,
+    decision: BlueprintReviewOutput,
     key: string
   ) => Promise<WriteOutcome>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>

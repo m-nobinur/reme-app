@@ -7,6 +7,8 @@ import type {
   AskFactOutput,
   AskUploadInput,
   AskUploadOutput,
+  BlueprintReviewInput,
+  BlueprintReviewOutput,
   COS_TOOLS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
@@ -33,6 +35,10 @@ export type ChatTools = {
   review_quote_form: {
     input: ReviewQuoteFormInput
     output: ReviewQuoteFormOutput
+  }
+  review_blueprint: {
+    input: BlueprintReviewInput
+    output: BlueprintReviewOutput
   }
 }
 

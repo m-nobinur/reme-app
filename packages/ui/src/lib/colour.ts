@@ -94,3 +94,7 @@ export function nextShown(
   const next = [...unseen, ...rest, ...shuffled(shown, random)].slice(0, size)
   return { shown: next, seen: next }
 }
+
+/** `hex` moved `t` (0 to 1) of the way to `end`, a channel value: 255 for light, 0 for dark. */
+export const shade = (hex: string, end: number, t: number) =>
+  toHex(rgb(hex).map((part) => Math.round(part + (end - part) * t)) as Rgb)

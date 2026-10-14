@@ -2,6 +2,7 @@ import {
   AnswerRequest,
   ApprovalDecision,
   Assignment,
+  BlueprintReviewOutput,
   DecisionRequest,
   FactList,
   InformationAnswer,
@@ -43,7 +44,7 @@ import {
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
+  /^\/(workspace|facts|assets|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -94,9 +95,11 @@ async function buildAction(
   if ((action === "preview") !== (method === "GET")) return null
   const key = idempotencyKey(request)
   if (method === "POST" && !key) return keyMissing()
-  let body: AnswerRequest | undefined
-  if (action === "answer") {
-    const parsed = AnswerRequest.safeParse(await readBody(request))
+  let body: AnswerRequest | BlueprintReviewOutput | undefined
+  if (action === "answer" || action === "blueprint") {
+    const parsed = (
+      action === "answer" ? AnswerRequest : BlueprintReviewOutput
+    ).safeParse(await readBody(request))
     if (!parsed.success) return invalid(parsed.error.issues)
     body = parsed.data
   }
@@ -113,7 +116,8 @@ async function buildAction(
   })
   if (action === "answer") return relay(result, InformationAnswer.parse)
   if (action === "preview") return relay(result, PreviewLink.parse)
-  // `/cancel` answers the id and the state it settled in.
+  // `/cancel` and `/blueprint` (the plan's decision, which the orchestrator turns
+  // into `blueprint.decided`) answer the id and the state it settled in.
   return relay(result, (b) =>
     Assignment.pick({ assignment_id: true, state: true }).parse(b)
   )

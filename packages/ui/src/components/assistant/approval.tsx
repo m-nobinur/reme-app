@@ -12,6 +12,7 @@ import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
 import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
 import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
+import { ReviewBlueprint } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   COS_CARDS,
   COS_READS,
@@ -149,6 +150,7 @@ export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_choice: AskChoice,
   ask_upload: AskUpload,
   review_quote_form: ReviewQuoteForm,
+  review_blueprint: ReviewBlueprint,
   request_change: RequestChange,
   ...COS_CARDS,
 }
