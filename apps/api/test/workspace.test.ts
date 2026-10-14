@@ -28,7 +28,11 @@ import {
   vi,
 } from "vitest"
 import { startChange } from "../src/changes.ts"
-import { readQuestions, readWorkspace } from "../src/workspace.ts"
+import {
+  EXPECTED_SECONDS,
+  readQuestions,
+  readWorkspace,
+} from "../src/workspace.ts"
 import {
   type Owner,
   owner,
@@ -277,6 +281,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       attention: [],
       missing_facts: REQUIRED,
       assistant_name: null,
+      expected_seconds: EXPECTED_SECONDS,
       reminders: {
         notes: [],
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
@@ -558,7 +563,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of seven statements", async () => {
+  it("reads the workspace in one transaction of eight statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -579,7 +584,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     }
     await readWorkspace(counted, busy.orgId, SUFFIX)
     expect(transactions).toBe(1)
-    expect(statements).toBe(7)
+    // The eighth reads the generated photos of the waiting approval.
+    expect(statements).toBe(8)
   })
 
   it("lists 30 days of reports and alerts as activity, newest first", async () => {
