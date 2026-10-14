@@ -120,7 +120,7 @@ describe("regenerateSlot", () => {
     expect(out.path).toBe("src/assets/generated/kitchen.png")
     expect(out.photos.regenerated).toBe("kitchen")
     const next = out.photos.slots.find((s) => s.id === "kitchen")
-    expect(next?.asset_id).not.toBe(SLOTS[1].asset_id)
+    expect(next?.asset_id).not.toBe(SLOTS.at(1)?.asset_id)
   })
 
   it("stops at the daily cap without drawing", async () => {
