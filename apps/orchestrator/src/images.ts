@@ -7,8 +7,9 @@ import { photoKey, SITE_ROOT } from "./revise.ts"
 /**
  * The photo director (ADR-039). Runs in this Worker, never in the sandbox,
  * whose egress is the npm registry only and which holds no key (ADR-031).
- * One Haiku call writes the prompts, Nano Banana 2.1 draws each slot through
- * OpenRouter's images endpoint, and the bytes land in the site bucket under
+ * One Haiku call writes the prompts, a chain of image models draws each slot
+ * through OpenRouter's images endpoint (`QUALITY_MODELS` for the hero,
+ * `FAST_MODELS` for the rest), and the bytes land in the site bucket under
  * `generated/{org}/{id}.{ext}`. A build never fails for a photo: every slot
  * that cannot be filled comes back `fallback` and the section takes its
  * no-image variant.
@@ -22,7 +23,44 @@ import { photoKey, SITE_ROOT } from "./revise.ts"
  * `packages/db` once a second Worker generates for the same org.
  */
 
-export const PHOTO_MODEL = "google/gemini-nano-banana-2.1"
+type PhotoModel = {
+  id: string
+  /** Takes `input_references`. */
+  refs: boolean
+}
+
+/**
+ * The hero sets the grade the rest match, so it gets the best picture. One
+ * draw each at 2K 16:9 with a reference, 2026-10-15, cheapest and fastest
+ * first. Flux 3 (39.0 s, $0.10) is left out for cost. Nano Banana 2.1 is out:
+ * its only provider, Google AI Studio, answers 429.
+ */
+export const QUALITY_MODELS: readonly PhotoModel[] = [
+  { id: "openai/gpt-image-2.5-flare", refs: true }, // 19.8 s, $0.012, 1536 px wide
+  { id: "openai/gpt-image-2.5-sunburst", refs: true }, // 21.6 s, $0.012, 1536 px wide
+  { id: "meta/muse-image", refs: true }, // 25.3 s, $0.010; drew 3:2 when asked 16:9
+  { id: "google/gemini-3.1-flash-image", refs: true }, // 22.6 s, $0.10, 2752 px wide
+]
+/** Every other slot, fastest and cheapest first. One draw each at 1K 4:3, 2026-10-15. */
+export const FAST_MODELS: readonly PhotoModel[] = [
+  { id: "recraft/recraft-v4.1-flash", refs: false }, // 5.4 s, $0.007
+  { id: "google/gemini-3.1-flash-lite-image", refs: true }, // 4.8 s, $0.034
+  { id: "bytedance-seed/seedream-5-0-flash", refs: true }, // 12.3 s, $0.018
+  { id: "tencent/hy-image-v3.5-preview", refs: true }, // 11.1 s, $0.024
+]
+/** Models a slot tries before it falls back. */
+const TRIES = 3
+
+/** With references to match, the models that read them go first. */
+const chainFor = (hero: boolean, withRefs: boolean): PhotoModel[] => [
+  ...(hero ? QUALITY_MODELS : []),
+  ...(withRefs
+    ? [
+        ...FAST_MODELS.filter((m) => m.refs),
+        ...FAST_MODELS.filter((m) => !m.refs),
+      ]
+    : FAST_MODELS),
+]
 export const MAX_PER_BUILD = 8
 export const MAX_PER_DAY = 30
 const PARALLEL = 4
@@ -30,7 +68,7 @@ const PARALLEL = 4
 const OWNER_REFERENCES = 2
 /** The site's other generated photos a lone redraw is graded against. */
 const SIBLING_REFERENCES = 4
-const GENERATE_TIMEOUT_MS = 120_000
+const GENERATE_TIMEOUT_MS = 60_000
 const PROMPT_TIMEOUT_MS = 30_000
 /** Dollars, for a result whose response carried no cost. Verified 2026-10-14. */
 const ESTIMATE = { "1K": 0.034, "2K": 0.05 } as const
@@ -201,22 +239,26 @@ const SIDE_NOTE = (side: Slot["text_side"]) =>
 
 type Reference = { content_type: string; b64: string }
 
-/** One image, or the reason there is none. A refusal is any answer without a picture. */
-async function draw(
-  { key, fetch }: Deps,
-  prompt: string,
-  planned: Planned,
-  references: Reference[]
-): Promise<
+type Drawn =
   | {
       ok: true
+      model: string
       bytes: Uint8Array
       b64: string
       contentType: string
       cost: number | null
     }
-  | { ok: false; reason: string }
-> {
+  /** `down`: the model, not the prompt, failed (quota, outage, timeout), so the build skips it. */
+  | { ok: false; reason: string; down: boolean }
+
+/** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
+async function draw(
+  { key, fetch }: Deps,
+  model: string,
+  prompt: string,
+  planned: Planned,
+  references: Reference[]
+): Promise<Drawn> {
   try {
     const response = await fetch(`${OPENROUTER}/images`, {
       method: "POST",
@@ -226,7 +268,7 @@ async function draw(
       },
       signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
       body: JSON.stringify({
-        model: PHOTO_MODEL,
+        model,
         prompt,
         resolution: planned.resolution,
         aspect_ratio: planned.slot.aspect,
@@ -240,22 +282,33 @@ async function draw(
           : {}),
       }),
     })
-    if (!response.ok) return { ok: false, reason: `http ${response.status}` }
+    if (!response.ok)
+      return {
+        ok: false,
+        reason: `http ${response.status}`,
+        down: response.status !== 400,
+      }
     const body = (await response.json()) as {
       data?: { b64_json?: string; media_type?: string }[]
       usage?: { cost?: number }
     }
     const image = body.data?.find((d) => d.b64_json)
-    if (!image?.b64_json) return { ok: false, reason: "no image returned" }
+    if (!image?.b64_json)
+      return { ok: false, reason: "no image returned", down: false }
     return {
       ok: true,
+      model,
       b64: image.b64_json,
       bytes: fromBase64(image.b64_json),
       contentType: image.media_type ?? "image/png",
       cost: typeof body.usage?.cost === "number" ? body.usage.cost : null,
     }
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.name : "error" }
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.name : "error",
+      down: true,
+    }
   }
 }
 
@@ -346,7 +399,6 @@ export async function directPhotos(input: {
       const resolution = slot === hero ? "2K" : "1K"
       const hash = await sha256(
         JSON.stringify([
-          PHOTO_MODEL,
           resolution,
           slot.aspect,
           slot.subject,
@@ -428,16 +480,28 @@ export async function directPhotos(input: {
       }
     }
 
+    // A model that is down for one slot is down for the rest of this build.
+    const down = new Set<string>()
     const one = async (p: Planned, references: Reference[]) => {
-      let drawn = await draw(deps, promptFor(p, subjectOf(p)), p, references)
-      // A refused slot gets one more try on its simplest subject, no references.
-      if (!drawn.ok)
-        drawn = await draw(
-          deps,
-          promptFor(p, simplified(p.slot.subject) || p.slot.subject),
-          p,
-          []
-        )
+      let prompt = promptFor(p, subjectOf(p))
+      let refs = references
+      let drawn: Drawn = { ok: false, reason: "no model up", down: false }
+      let tries = 0
+      for (const model of chainFor(
+        p.slot.section === "hero",
+        refs.length > 0
+      )) {
+        if (down.has(model.id)) continue
+        if (tries++ === TRIES) break
+        drawn = await draw(deps, model.id, prompt, p, model.refs ? refs : [])
+        if (drawn.ok) break
+        if (drawn.down) down.add(model.id)
+        else {
+          // A refused slot moves on with its simplest subject, no references.
+          prompt = promptFor(p, simplified(p.slot.subject) || p.slot.subject)
+          refs = []
+        }
+      }
       if (!drawn.ok) {
         settle(p.slot.id, fallback(p.slot.id, drawn.reason))
         return null
@@ -448,7 +512,7 @@ export async function directPhotos(input: {
           httpMetadata: { contentType: drawn.contentType },
           customMetadata: {
             source: "generated",
-            model: PHOTO_MODEL,
+            model: drawn.model,
             prompt_hash: p.hash,
             cost_usd: String(drawn.cost ?? ESTIMATE[p.resolution]),
           },

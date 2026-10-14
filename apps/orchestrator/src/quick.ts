@@ -245,7 +245,7 @@ export async function quickEdit(input: {
         applied = {
           summary: drawn.summary,
           changed: {},
-          written: [drawn.path],
+          written: drawn.written,
           photos: drawn.photos,
         }
       } catch (thrown) {

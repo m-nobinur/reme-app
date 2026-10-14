@@ -10,11 +10,12 @@ vi.mock("cloudflare:workflows", () => ({
 
 const {
   directPhotos,
+  FAST_MODELS,
   MAX_PER_BUILD,
   MAX_PER_DAY,
   NEVER,
-  PHOTO_MODEL,
   placeGenerated,
+  QUALITY_MODELS,
 } = await import("../src/images.ts")
 
 const ORG = "10000001-0000-4000-8000-000000000000"
@@ -55,6 +56,8 @@ type Call = { url: string; body: Record<string, unknown> }
 function openrouter(
   options: {
     refuse?: (body: Call["body"]) => boolean
+    /** Answers 429, the way a provider out of quota does. */
+    down?: (body: Call["body"]) => boolean
     noPrompts?: boolean
   } = {}
 ) {
@@ -83,6 +86,7 @@ function openrouter(
       })
     }
     if (options.refuse?.(body)) return new Response("no", { status: 400 })
+    if (options.down?.(body)) return new Response("quota", { status: 429 })
     return Response.json({
       data: [{ b64_json: PNG, media_type: "image/png" }],
       usage: { cost: 0.034 },
@@ -150,12 +154,16 @@ describe("the photo director", () => {
     const drawn = images(calls)
     expect(drawn).toHaveLength(2)
     expect(drawn[0]?.body).toMatchObject({
-      model: PHOTO_MODEL,
+      model: QUALITY_MODELS[0]?.id,
       resolution: "2K",
     })
     expect(drawn[0]?.body.input_references).toBeUndefined()
     expect(drawn[0]?.body.prompt).toContain(NEVER)
-    expect(drawn[1]?.body).toMatchObject({ resolution: "1K" })
+    // With the hero to match, the first fast model that reads references draws.
+    expect(drawn[1]?.body).toMatchObject({
+      model: FAST_MODELS.find((m) => m.refs)?.id,
+      resolution: "1K",
+    })
     expect(drawn[1]?.body.input_references).toHaveLength(1)
     expect(out.map((r) => [r.slot_id, r.status])).toEqual([
       ["hero", "generated"],
@@ -164,7 +172,7 @@ describe("the photo director", () => {
     const [key] = [...sites.objects.keys()]
     expect(key).toMatch(new RegExp(`^generated/${ORG}/[0-9a-f-]{36}\\.png$`))
     expect([...sites.objects.values()][0]?.meta).toMatchObject({
-      model: PHOTO_MODEL,
+      model: QUALITY_MODELS[0]?.id,
       cost_usd: "0.034",
     })
   })
@@ -200,10 +208,43 @@ describe("the photo director", () => {
       ["hero", "fallback", "http 400"],
       ["team", "fallback", "claim section"],
     ])
-    // The hero was tried twice (full subject, then the simplified one); the team never.
-    expect(images(calls)).toHaveLength(2)
+    // The hero tried three models (full subject, then the simplified one); the team never.
+    expect(images(calls).map((c) => c.body.model)).toEqual([
+      QUALITY_MODELS[0]?.id,
+      QUALITY_MODELS[1]?.id,
+      QUALITY_MODELS[2]?.id,
+    ])
     expect(String(images(calls)[1]?.body.prompt)).toContain("a sunlit hero")
     expect(String(images(calls)[1]?.body.prompt)).not.toContain("with a plant")
+  })
+
+  it("moves past a model out of quota and skips it for the rest of the build", async () => {
+    const out429 = QUALITY_MODELS[0]?.id
+    const { calls, fetcher } = openrouter({
+      down: (body) => body.model === out429,
+    })
+    const sites = bucket()
+    // Two hero-section slots: the first is drawn alone, the second after it.
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["banner", "hero"],
+      ]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    expect(out.map((r) => r.status)).toEqual(["generated", "generated"])
+    expect(images(calls).map((c) => c.body.model)).toEqual([
+      out429,
+      QUALITY_MODELS[1]?.id,
+      QUALITY_MODELS[1]?.id,
+    ])
+    expect([...sites.objects.values()].map((o) => o.meta.model)).toEqual([
+      QUALITY_MODELS[1]?.id,
+      QUALITY_MODELS[1]?.id,
+    ])
   })
 
   it("still draws when the prompt writer is down", async () => {

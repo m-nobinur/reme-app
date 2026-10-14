@@ -4,6 +4,8 @@ import { z } from "zod"
 import { directPhotos, type PhotoBucket, placeGenerated } from "./images.ts"
 import { SITE_ROOT } from "./revise.ts"
 
+const CONFIG = "src/site-config.ts"
+
 /**
  * IG4's one-slot regenerate, the quick lane's `photo` kind. The generated
  * slots of the live site ride the log as a `site.photos` event (the build
@@ -95,8 +97,8 @@ export class PhotoFell extends Error {}
  * the fall-through can read; writes nothing to the site until the picture
  * exists.
  *
- * shortcut: the new file must keep the old one's extension (the site config
- * names the file); a different type falls through. The slot is drawn alone,
+ * A fallback model can answer in another file type; the old file then goes
+ * and the site config's path to it is rewritten. The slot is drawn alone,
  * so a non-hero slot is drawn at 2K. The site's other generated photos ride
  * along as references, so the grade matches the set.
  */
@@ -113,7 +115,7 @@ export async function regenerateSlot(input: {
   assignmentId: string
   goal: string
   fetch?: typeof fetch
-}): Promise<{ summary: string; path: string; photos: PhotosEvent }> {
+}): Promise<{ summary: string; written: string[]; photos: PhotosEvent }> {
   const { env, kit, sandbox, orgId } = input
   if (!env.OPENROUTER_API_KEY) throw new PhotoFell("photo: no image key")
   const sites = env.SITES as PhotoBucket
@@ -147,13 +149,21 @@ export async function regenerateSlot(input: {
   const onDisk = old.stdout.split("\n").filter(Boolean)
   if (onDisk.length === 0)
     throw new PhotoFell("photo: slot has no file on disk")
+  const written = [path]
+  const was = onDisk[0] as string
   if (!onDisk.includes(path.split("/").pop() as string)) {
-    throw new PhotoFell("photo: the new picture has another file type")
+    const from = `src/assets/generated/${was}`
+    const swapped = await sandbox.exec(
+      `cd ${SITE_ROOT} && grep -qF '${from}' ${CONFIG} && sed -i 's#${from.replaceAll(".", "\\.")}#${path}#g' ${CONFIG} && rm ${from}`
+    )
+    if (swapped.exitCode !== 0)
+      throw new PhotoFell("photo: the new picture has another file type")
+    written.push(CONFIG)
   }
   await placeGenerated(sandbox, sites, [result])
   return {
     summary: `Drew a new picture for “${slot.alt}”.`,
-    path,
+    written,
     photos: {
       ...photos,
       slots: photos.slots.map((s) =>

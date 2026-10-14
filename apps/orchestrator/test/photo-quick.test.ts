@@ -56,15 +56,20 @@ const fetcher = (async (url: string) =>
         data: [{ b64_json: btoa("png"), media_type: "image/png" }],
       })) as unknown as typeof fetch
 
-const disk = (files: string[]) => {
+const disk = (files: string[], configNamesIt = true) => {
   const written: string[] = []
+  const commands: string[] = []
   return {
     written,
-    exec: async (command: string) => ({
-      exitCode: 0,
-      stdout: command.startsWith("ls") ? files.join("\n") : "",
-      stderr: "",
-    }),
+    commands,
+    exec: async (command: string) => {
+      commands.push(command)
+      return {
+        exitCode: command.includes("grep -qF") && !configNamesIt ? 1 : 0,
+        stdout: command.startsWith("ls") ? files.join("\n") : "",
+        stderr: "",
+      }
+    },
     writeFile: async (path: string) => void written.push(path),
   }
 }
@@ -73,9 +78,10 @@ const run = (
   goal: string,
   tries: number,
   files: string[],
-  sites = bucket()
+  sites = bucket(),
+  configNamesIt = true
 ) => {
-  const sandbox = disk(files)
+  const sandbox = disk(files, configNamesIt)
   return {
     sandbox,
     sites,
@@ -117,7 +123,7 @@ describe("regenerateSlot", () => {
     expect(sandbox.written).toEqual([
       "/workspace/site/src/assets/generated/kitchen.png",
     ])
-    expect(out.path).toBe("src/assets/generated/kitchen.png")
+    expect(out.written).toEqual(["src/assets/generated/kitchen.png"])
     expect(out.photos.regenerated).toBe("kitchen")
     const next = out.photos.slots.find((s) => s.id === "kitchen")
     expect(next?.asset_id).not.toBe(SLOTS.at(1)?.asset_id)
@@ -169,10 +175,24 @@ describe("regenerateSlot", () => {
     expect(sites.objects.size).toBe(0)
   })
 
-  it("falls through when the file type would change or the slot has no file", async () => {
-    await expect(run("kitchen", 0, ["kitchen.jpg"]).done).rejects.toThrow(
-      "another file type"
+  it("points the site config at the new file when the file type changes", async () => {
+    const { done, sandbox } = run("kitchen", 0, ["kitchen.jpg"])
+    const out = await done
+    expect(out.written).toEqual([
+      "src/assets/generated/kitchen.png",
+      "src/site-config.ts",
+    ])
+    const swap = sandbox.commands.find((c) => c.includes("sed -i")) ?? ""
+    expect(swap).toContain(
+      "s#src/assets/generated/kitchen\\.jpg#src/assets/generated/kitchen.png#g"
     )
+    expect(swap).toContain("rm src/assets/generated/kitchen.jpg")
+  })
+
+  it("falls through when the config does not name the old file or the slot has no file", async () => {
+    await expect(
+      run("kitchen", 0, ["kitchen.jpg"], bucket(), false).done
+    ).rejects.toThrow("another file type")
     await expect(run("kitchen", 0, []).done).rejects.toThrow("no file on disk")
   })
 })

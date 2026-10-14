@@ -18,7 +18,7 @@ import { BUSINESSES, toFacts, toTray } from "./variety/businesses.mjs"
  * Seeds one org for one EV1 business into the local DB (clears it first, so
  * a rerun starts clean) with the starting team, Developer included; puts
  * three stand-in owner photos in local R2 when the business has uploads
- * (drawn once on Nano Banana, kept in DIR/photos); starts a build through the
+ * (drawn once on Gemini 3.1 Flash Lite Image, kept in DIR/photos); starts a build through the
  * orchestrator on ORCHESTRATOR_URL; answers "Build it" if the build waits on
  * its Blueprint; watches to `preview_ready` or a settled state and saves the
  * events. Never approves. With `--edits 1` it then runs the five canned quick
@@ -201,7 +201,7 @@ async function placeUploads() {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-nano-banana-2.1",
+          model: "google/gemini-3.1-flash-lite-image",
           prompt: `Photograph, natural light, no people, no text: ${PHOTO_SUBJECTS[i % 3]}.`,
           resolution: "1K",
           aspect_ratio: "4:3",
