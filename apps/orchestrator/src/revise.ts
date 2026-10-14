@@ -118,8 +118,8 @@ export const photoKey = (orgId: string, assetId: string) =>
   `uploads/${orgId}/${assetId}`
 
 /**
- * Copies the owner's photos from the bucket into the site's `public/`, where
- * the build serves them and the source snapshot keeps them for a revise. The
+ * Copies the owner's photos from the bucket into the site's `src/assets/`,
+ * where `astro:assets` resizes them and the source snapshot keeps them for a revise. The
  * sandbox reaches no network, so the bytes go in through the SDK. Returns
  * the ids it could not find, for the log.
  */
@@ -138,7 +138,7 @@ export async function placePhotos(
 ): Promise<string[]> {
   const photos = ownerPhotos(facts)
   if (photos.length === 0) return []
-  await sandbox.exec(`mkdir -p ${SITE_ROOT}/public/uploads`)
+  await sandbox.exec(`mkdir -p ${SITE_ROOT}/src/assets/uploads`)
   const missing: string[] = []
   for (const photo of photos) {
     const object = await sites.get(photoKey(orgId, photo.id))
@@ -147,7 +147,7 @@ export async function placePhotos(
       continue
     }
     await sandbox.writeFile(
-      `${SITE_ROOT}/public/${photoFile(photo)}`,
+      `${SITE_ROOT}/src/assets/${photoFile(photo)}`,
       new Uint8Array(await object.arrayBuffer())
     )
   }

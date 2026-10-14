@@ -1,4 +1,5 @@
 ---
+import Photo from "../../layouts/Photo.astro"
 import { phoneText } from "../../phone"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
@@ -19,7 +20,7 @@ const image = variant === "photo" ? site.ctaImage : ""
       class:list={["band band-tint cta-band", image && "cta-photo"]}
     >
       {image && (
-        <img class="cta-image" src={image} alt="" loading="lazy" decoding="async" />
+        <Photo class="cta-image" src={image} alt="" sizes="100vw" />
       )}
       <div class="wrap cta-inner">
         <div class="cta-text">

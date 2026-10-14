@@ -2,6 +2,7 @@ import { spawn } from "node:child_process"
 import {
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -12,7 +13,7 @@ import {
 } from "node:fs"
 import { createServer, type Server } from "node:http"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
 import { fields, layout, site } from "../src/site-config"
@@ -38,6 +39,8 @@ export async function build(
     quoteForm?: unknown
     pages?: Record<string, string>
     remove?: string[]
+    /** Files planted beside the site, by path from its root, such as src/assets/uploads/x.jpg. */
+    files?: Record<string, Uint8Array>
   } = {}
 ): Promise<Built> {
   const dir = mkdtempSync(join(tmpdir(), "reme-starter-"))
@@ -63,6 +66,10 @@ export async function build(
     writeFileSync(join(dir, "src/pages", name), source)
   }
   for (const name of options.remove ?? []) rmSync(join(dir, "src/pages", name))
+  for (const [name, bytes] of Object.entries(options.files ?? {})) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true })
+    writeFileSync(join(dir, name), bytes)
+  }
 
   const result = await new Promise<{
     code: number | null

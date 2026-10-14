@@ -123,7 +123,7 @@ describe("the owner's photos in the container", () => {
     },
   ]
 
-  it("copies each from the org's uploads into public/uploads, and names the ones it cannot find", async () => {
+  it("copies each from the org's uploads into src/assets/uploads, and names the ones it cannot find", async () => {
     const commands: string[] = []
     const written: [string, number][] = []
     const sandbox = {
@@ -144,7 +144,7 @@ describe("the owner's photos in the container", () => {
       },
     }
     const missing = await placePhotos(sandbox, sites, "org-1", facts)
-    expect(commands).toEqual(["mkdir -p /workspace/site/public/uploads"])
+    expect(commands).toEqual(["mkdir -p /workspace/site/src/assets/uploads"])
     expect(asked).toEqual([
       photoKey("org-1", "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c"),
       photoKey("org-1", "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d"),
@@ -152,7 +152,7 @@ describe("the owner's photos in the container", () => {
     expect(asked[0]).toBe("uploads/org-1/3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c")
     expect(written).toEqual([
       [
-        "/workspace/site/public/uploads/3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c.jpg",
+        "/workspace/site/src/assets/uploads/3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c.jpg",
         3,
       ],
     ])

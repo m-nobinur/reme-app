@@ -192,7 +192,7 @@ const labelOf = (list: readonly { id: string; label: string }[], id: string) =>
 /** The owner's own words, quoted so they read as data. */
 const quoted = (words: string) => JSON.stringify(words)
 
-/** Where an owner photo sits in the site, under `public/`, and the path it is served at. */
+/** The path the site config names an owner photo by; the file sits under `src/assets/`. */
 export const photoFile = (asset: Asset) =>
   `uploads/${asset.id}.${EXTENSION[asset.content_type]}`
 
@@ -296,7 +296,7 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
       : []),
     ...(photos.length > 0
       ? [
-          `- Photos: the owner's own, in public/ and served at these paths: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)})`).join(", ")}. A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery. Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt; when the names do not tell them apart, the first. The rest go in the gallery through site.photo1Src to site.photo3Src and their alt fields, or in the about section or a service card when the name says it shows that subject, as an img with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Use no other photos. Name any photo you left out, and why, in risks.`,
+          `- Photos: the owner's own, in src/assets/ and named by these paths: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)})`).join(", ")}. A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery. Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt; when the names do not tell them apart, the first. The rest go in the gallery through site.photo1Src to site.photo3Src and their alt fields, or in the about section or a service card when the name says it shows that subject, as a Photo (import Photo from "../layouts/Photo.astro", with src, alt, class and sizes; never a raw img, which the build would not find) styled with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Use no other photos. Name any photo you left out, and why, in risks.`,
         ]
       : []),
   ]

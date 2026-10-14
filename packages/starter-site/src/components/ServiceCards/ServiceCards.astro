@@ -1,4 +1,5 @@
 ---
+import Photo from "../../layouts/Photo.astro"
 import { hasRoute, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import { serviceItems } from "../../structured-data"
@@ -52,12 +53,11 @@ const href = (id: string) => `/services/#${id}`
               <li class:list={["card", linked && "card-linked"]}>
                 {item.photo ? (
                   <div class="card-media">
-                    <img
+                    <Photo
                       class="card-photo"
                       src={item.photo.src}
                       alt={item.photo.alt}
-                      loading="lazy"
-                      decoding="async"
+                      sizes="(min-width: 64rem) 25vw, (min-width: 40rem) 50vw, 100vw"
                     />
                     {variant === "photo_cards" && (
                       <span class="card-tag">
@@ -120,12 +120,11 @@ const href = (id: string) => `/services/#${id}`
           items.map((item) => (
             <article class="service-detail" id={item.id}>
               {item.photo && (
-                <img
+                <Photo
                   class="service-photo"
                   src={item.photo.src}
                   alt={item.photo.alt}
-                  loading="lazy"
-                  decoding="async"
+                  sizes="(min-width: 56rem) 50vw, 100vw"
                 />
               )}
               <div class="service-detail-main">

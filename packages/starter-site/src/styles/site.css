@@ -230,6 +230,12 @@ p {
   text-transform: uppercase;
 }
 
+/* <picture> wraps every optimised photo; it must not change the layout around
+   the <img>. */
+picture {
+  display: block;
+}
+
 /* The owner's logo, at a fixed height whatever its file's size. */
 .site-logo {
   display: block;
@@ -1216,16 +1222,16 @@ p {
 /* A photo takes one side and the text the other, swapping on every second
    service. */
 @media (min-width: 56rem) {
-  .service-detail:has(> .service-photo) {
+  .service-detail:has(> :is(picture, .service-photo)) {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
   }
 
-  .service-detail > .service-photo {
+  .service-detail > :is(picture, .service-photo) {
     grid-row: 1 / span 2;
   }
 
-  .service-detail:nth-of-type(even) > .service-photo {
+  .service-detail:nth-of-type(even) > :is(picture, .service-photo) {
     grid-column: 2;
   }
 }

@@ -1,4 +1,5 @@
 ---
+import Photo from "../../layouts/Photo.astro"
 import { site } from "../../site-config"
 
 // The path names a file a gallery image slot placed and the alt text says what
@@ -19,18 +20,17 @@ const items = ([1, 2, 3] as const)
       )}
       {items.length === 1 ? (
         <figure class="gallery-single">
-          <img
-            src={items[0]?.src}
-            alt={items[0]?.alt}
-            loading="lazy"
-            decoding="async"
+          <Photo
+            src={items[0]?.src ?? ""}
+            alt={items[0]?.alt ?? ""}
+            sizes="(min-width: 64rem) 40rem, 100vw"
           />
         </figure>
       ) : (
         <ul class:list={["gallery-grid", `gallery-${items.length}`]}>
           {items.map((item) => (
             <li>
-              <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
+              <Photo src={item.src} alt={item.alt} sizes="(min-width: 64rem) 33vw, 100vw" />
             </li>
           ))}
         </ul>
