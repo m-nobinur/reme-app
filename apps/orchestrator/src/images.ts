@@ -32,21 +32,21 @@ type PhotoModel = {
 /**
  * The hero sets the grade the rest match, so it gets the best picture. One
  * draw each at 2K 16:9 with a reference, 2026-10-15, cheapest and fastest
- * first. Flux 3 (39.0 s, $0.10) is left out for cost. Nano Banana 2.1 is out:
- * its only provider, Google AI Studio, answers 429.
+ * first. Left out for cost and speed: Flux 3 (39.0 s, $0.10), Gemini 3.1 Flash
+ * Image (22.6 s, $0.10) and, from the fast chain, Hunyuan Image 3.5 (11.1 s,
+ * $0.024). Nano Banana 2.1 is out: its only provider, Google AI Studio,
+ * answers 429.
  */
 export const QUALITY_MODELS: readonly PhotoModel[] = [
   { id: "openai/gpt-image-2.5-flare", refs: true }, // 19.8 s, $0.012, 1536 px wide
   { id: "openai/gpt-image-2.5-sunburst", refs: true }, // 21.6 s, $0.012, 1536 px wide
   { id: "meta/muse-image", refs: true }, // 25.3 s, $0.010; drew 3:2 when asked 16:9
-  { id: "google/gemini-3.1-flash-image", refs: true }, // 22.6 s, $0.10, 2752 px wide
 ]
 /** Every other slot, fastest and cheapest first. One draw each at 1K 4:3, 2026-10-15. */
 export const FAST_MODELS: readonly PhotoModel[] = [
   { id: "recraft/recraft-v4.1-flash", refs: false }, // 5.4 s, $0.007
   { id: "google/gemini-3.1-flash-lite-image", refs: true }, // 4.8 s, $0.034
   { id: "bytedance-seed/seedream-5-0-flash", refs: true }, // 12.3 s, $0.018
-  { id: "tencent/hy-image-v3.5-preview", refs: true }, // 11.1 s, $0.024
 ]
 /** Models a slot tries before it falls back. */
 const TRIES = 3
