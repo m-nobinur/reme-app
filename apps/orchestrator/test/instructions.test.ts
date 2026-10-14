@@ -1,6 +1,7 @@
 import type { FactRecord } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import { blueprintLayout } from "../src/blueprint.ts"
 import type { Brief } from "../src/brief.ts"
 import {
   DESIGN_RULES,
@@ -9,6 +10,12 @@ import {
   packVoice,
 } from "../src/developer-rules.ts"
 import { BUILD_MARK, instructions } from "../src/instructions.ts"
+import { fallbackBlueprint } from "../src/planner.ts"
+
+// The planner's brief.ts names the registry host from sandbox.ts, which loads the container SDK.
+vi.mock("../src/sandbox.ts", () => ({
+  NPM_REGISTRY_HOST: "registry.npmjs.org",
+}))
 
 const fact = (key: string, value: unknown): FactRecord => ({
   fact_id: "10000001-0000-4000-8000-000000000001",
@@ -101,6 +108,21 @@ describe("the instructions' cache order", () => {
       "Budget:",
     ].map((needle) => at(text, needle))
     expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
+  it("puts a planned build's Blueprint after the facts, with its layout, and the directions before the mark", () => {
+    const plan = fallbackBlueprint({ facts: [cleaning], recent: [] })
+    const text = instructions({ ...brief([cleaning]), blueprint: plan }, 20)
+    const order = [
+      "Design directions:",
+      BUILD_MARK,
+      "Canonical facts",
+      "Blueprint, the plan the owner approved",
+      "Site map",
+    ].map((needle) => at(text, needle))
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+    expect(text).toContain(JSON.stringify(blueprintLayout(plan)))
+    expect(instructions(brief([cleaning]), 20)).not.toContain("Blueprint,")
   })
 
   it("shares one prefix across businesses in one industry and between a build and a revise", () => {

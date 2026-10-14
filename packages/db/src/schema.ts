@@ -691,6 +691,13 @@ export const assignments = pgTable(
      * log is the truth and this is the figure frozen at close.
      */
     costUsd: doublePrecision("cost_usd"),
+    /**
+     * The `Blueprint` the planner wrote and the owner reviews (ADR-038), the
+     * latest round's. Null on a build that did not plan: a revise, the quick
+     * lane, or a row from before planning. The contract is the check, in the
+     * planner; the column is its store, as `acceptance_criteria` is.
+     */
+    blueprint: jsonb("blueprint"),
     deadline: timestamp("deadline", { withTimezone: true }),
     priority: assignmentPriority("priority").notNull().default("normal"),
     /** The Workflows instance driving this row, once one exists. */

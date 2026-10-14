@@ -1,3 +1,4 @@
+import { blueprintLines } from "./blueprint.ts"
 import type { Brief } from "./brief.ts"
 import {
   assignmentGoal,
@@ -23,8 +24,8 @@ export const BUILD_MARK = "== This build =="
  * 1. Every build: the role, the rules, the design rules, the directions
  *    library, the starter's components, then the industry pack's voice.
  * 2. After `BUILD_MARK`, one build: whether it is a revise, the owner's
- *    choices, the facts and the site map. The Blueprint (BA3) goes between
- *    the facts and the map.
+ *    choices, the facts, the Blueprint when the build planned one, and the
+ *    site map.
  * 3. Last, the assignment's goal and budget, which a turn may restate.
  *
  * Nothing before the mark reads the brief except the pack, which is chosen by
@@ -71,6 +72,7 @@ export function instructions(brief: Brief, budgetUsd: number): string {
       .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
       .join("\n") || "- (none)",
     "",
+    ...(brief.blueprint ? [...blueprintLines(brief.blueprint), ""] : []),
     "Site map (every file, in path order):",
     // The seed's own map, built from the files the sandbox is seeded with so
     // it cannot drift from them. A restored site (`site.revise`) carries its

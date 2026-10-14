@@ -272,6 +272,28 @@ describe("lane and activity on a build", () => {
     expect(BuildSummary.safeParse(old).success).toBe(true)
   })
 
+  it("carries a plan for the Blueprint card, and refuses one that is not a Blueprint", () => {
+    const blueprint = {
+      plan: sample("Blueprint"),
+      round: 1,
+      previous: null,
+      awaiting: true,
+    }
+    expect(BuildSummary.safeParse({ ...build, blueprint }).success).toBe(true)
+    expect(
+      BuildSummary.safeParse({
+        ...build,
+        blueprint: { ...blueprint, plan: { direction: "x" } },
+      }).success
+    ).toBe(false)
+    expect(
+      BuildSummary.safeParse({
+        ...build,
+        blueprint: { ...blueprint, round: 0 },
+      }).success
+    ).toBe(false)
+  })
+
   it("refuses a lane nobody runs", () => {
     for (const lane of ["slow", "", null]) {
       expect(BuildSummary.safeParse({ ...build, lane }).success).toBe(false)

@@ -17,7 +17,7 @@ import {
 import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
-import DIRECTIONS from "@workspace/starter-site/directions.json"
+import { DIRECTIONS } from "./directions.ts"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
@@ -198,7 +198,7 @@ const STARTER_PAGES = {
 }
 
 /** A fact's value, when the stored one still parses. */
-function factValue<K extends FactValueKey>(
+export function factValue<K extends FactValueKey>(
   facts: readonly FactRecord[],
   key: K
 ): Extract<FactValue, { key: K }>["value"] | undefined {
