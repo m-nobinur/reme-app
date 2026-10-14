@@ -133,15 +133,21 @@ export async function makePhotos(input: {
       "Natural light, real places, calm composition.",
     palette: paletteWords(plan.data),
   }
-  // The "0 of n" row first, then one per slot as it settles.
-  const progress = (item: string | null) =>
+  // The "0 of n" row first, then one per slot as it settles, with its
+  // object key so the panel can show the picture the moment it exists.
+  const progress = (slot: PhotoResult | null) =>
     kit.withOrg({ orgId: ids.orgId }, (db) =>
       appendEvent(db, {
         orgId: ids.orgId,
         assignmentId: ids.assignmentId,
         staffId: null,
         type: "build.progress",
-        payload: { stage: "photos", item, total: wanted.length },
+        payload: {
+          stage: "photos",
+          item: slot?.slot_id ?? null,
+          total: wanted.length,
+          ...(slot ? { status: slot.status, key: slot.key } : {}),
+        },
       })
     )
   await progress(null)
@@ -155,7 +161,7 @@ export async function makePhotos(input: {
         plan: plan.data,
         brief,
         uploads: ownerPhotos(read.facts),
-        onSlot: (r) => progress(r.slot_id),
+        onSlot: progress,
         ...(input.fetch ? { fetch: input.fetch } : {}),
       })
     : wanted.map((s) => ({
