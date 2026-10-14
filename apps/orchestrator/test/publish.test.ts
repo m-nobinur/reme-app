@@ -107,6 +107,14 @@ live("a review", () => {
     expect(hours).toBe(72)
   })
 
+  it("waits for the accessibility gate, which runs after the preview", async () => {
+    const { ids } = await previewed(storage(), GOOD_HTML, 0, false)
+    await expect(requestReview(kit, ids)).rejects.toMatchObject({
+      code: "revision.a11y_unchecked",
+    })
+    expect(await stateOf(ids)).toBe("preview_ready")
+  })
+
   it("refuses from any state but preview_ready, and without a preview revision", async () => {
     const orgId = await freshOrg(kit)
     const ids = await newAssignment(kit, orgId)
@@ -778,6 +786,73 @@ describe("the artifact check and the probe", () => {
 })
 
 live("the publish workflow", () => {
+  /**
+   * A review opened on a revision with no passing accessibility check, which
+   * `requestReview` no longer does: written the way it writes one, so the
+   * approval and the publisher are seen to refuse on their own.
+   */
+  async function uncheckedReview(store = storage()) {
+    const built = await previewed(store, GOOD_HTML, 0, false)
+    const { orgId, ids, revisionId } = built
+    const [request] = await kit.withOrg({ orgId }, async (db) => {
+      const [row] = await db
+        .select()
+        .from(assignments)
+        .where(eq(assignments.id, ids.assignmentId))
+      if (!row) throw new Error("gone")
+      return db
+        .insert(approvals)
+        .values({
+          orgId,
+          assignmentId: row.id,
+          requestedByStaffId: row.staffId,
+          approverStaffId: row.createdByStaffId,
+          actionKind: "site.publish",
+          target: { kind: "revision", revision_id: revisionId },
+          revisionId,
+          rationale: "Publish v1 of the site.",
+          expiresAt: new Date(Date.now() + 3_600_000),
+        })
+        .returning()
+    })
+    if (!request) throw new Error("no request")
+    await advance(kit, ids, "awaiting_review")
+    return { ...built, approvalId: request.id }
+  }
+
+  it("approves nothing and publishes nothing without a passing accessibility check", async () => {
+    const store = storage()
+    const { orgId, ids, revisionId, approvalId } = await uncheckedReview(store)
+    await expect(
+      decideApproval(kit, ids, { revisionId, decidedBy: { kind: "console" } })
+    ).rejects.toMatchObject({ code: "revision.a11y_unchecked" })
+    expect(await stateOf(ids)).toBe("awaiting_review")
+    // Decided anyway, as a row from before the gate moved could be.
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(approvals)
+        .set({
+          decision: "approved",
+          decidedBy: { kind: "console" },
+          decidedAt: new Date(),
+        })
+        .where(eq(approvals.id, approvalId))
+    )
+    await advance(kit, ids, "release_candidate")
+    const { env } = workflowEnv(store)
+    const names: string[] = []
+    const outcome = await new PublishWorkflow({} as never, env).run(
+      { payload: { org_id: orgId, approval_id: approvalId } } as never,
+      fakeStep(names)
+    )
+    expect(outcome).toMatchObject({
+      outcome: "refused",
+      reason: "the revision has no passing accessibility check",
+    })
+    expect(names).toEqual(steps.PublishWorkflow.refused)
+    expect(store.pointers.size).toBe(0)
+  })
+
   async function approved(store = storage(), html = GOOD_HTML) {
     const built = await previewed(store, html)
     await requestReview(kit, built.ids)

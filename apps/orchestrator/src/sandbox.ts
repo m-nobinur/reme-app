@@ -238,6 +238,24 @@ export const holds = async (env: Env, ids: Ids) =>
   ids.assignmentId
 
 /**
+ * `fn`'s result on the site's sandbox, or null when this assignment did not
+ * hold the sandbox throughout: a newer edit that claimed the site may have
+ * changed the disk under `fn`. A claim writes the holder entry before it
+ * touches the disk, so an unchanged etag means an unchanged disk.
+ */
+export async function whileHeld<T>(
+  env: Env,
+  ids: Ids,
+  fn: () => Promise<T>
+): Promise<T | null> {
+  const before = await env.SITES.head(holderKey(ids.orgId))
+  if (before?.customMetadata?.holder !== ids.assignmentId) return null
+  const out = await fn()
+  const after = await env.SITES.head(holderKey(ids.orgId))
+  return after?.etag === before.etag ? out : null
+}
+
+/**
  * The revision a warm sandbox holds, or null for a fresh or reused disk. The
  * marker goes either way: from here on the disk is the caller's to change,
  * and a build that ends without `preview_ready` must not leave it naming a

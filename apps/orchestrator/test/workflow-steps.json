@@ -10,6 +10,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "screenshots",
       "keep warm"
     ],
@@ -22,6 +23,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "screenshots",
       "keep warm"
@@ -44,6 +46,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "screenshots",
       "keep warm"
     ],
@@ -60,6 +63,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "screenshots",
       "keep warm"
     ],
@@ -95,6 +99,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "screenshots",
       "keep warm"
     ],
@@ -133,6 +138,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "screenshots",
       "keep warm"
     ],
@@ -147,6 +153,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "screenshots",
       "keep warm"
     ],
@@ -161,6 +168,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "screenshots",
       "keep warm"
     ],
@@ -266,6 +274,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "screenshots",
       "keep warm"
     ],
@@ -277,6 +286,7 @@
       "quick edit",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "screenshots",
       "keep warm"
@@ -291,6 +301,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "screenshots",
       "keep warm"
@@ -308,6 +319,7 @@
       "developer 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "review",
       "screenshots",
       "keep warm"
@@ -321,6 +333,7 @@
       "developer 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "screenshots",
       "keep warm"
@@ -337,6 +350,7 @@
       "critique 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "keep warm"
     ],
     "owner reviews the plan": [
@@ -355,6 +369,7 @@
       "critique 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "keep warm"
     ],
@@ -375,6 +390,7 @@
       "critique 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "keep warm"
     ],
@@ -390,6 +406,7 @@
       "critique 1",
       "validating 1",
       "gates 1",
+      "a11y 1",
       "review",
       "keep warm"
     ],
@@ -473,7 +490,57 @@
       "critique 2",
       "validating 2",
       "gates 2",
+      "a11y 2",
       "keep warm"
+    ],
+    "accessibility failed after the preview": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "gates 1",
+      "a11y 1",
+      "repair 1",
+      "developer 2",
+      "validating 2",
+      "gates 2",
+      "a11y 2",
+      "screenshots",
+      "keep warm"
+    ],
+    "accessibility failed after a quick edit": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "quick edit",
+      "validating 1",
+      "gates 1",
+      "a11y 1",
+      "quick reset",
+      "developer",
+      "developer 2",
+      "validating 2",
+      "gates 2",
+      "a11y 2",
+      "review",
+      "screenshots",
+      "keep warm"
+    ],
+    "superseded before accessibility": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "gates 1",
+      "a11y 1",
+      "destroy sandbox"
     ]
   },
   "PublishWorkflow": {

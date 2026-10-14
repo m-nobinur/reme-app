@@ -20,10 +20,10 @@ import {
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
-import { runGates } from "@workspace/gates"
+import { checkAxe, parseAxe, runGates } from "@workspace/gates"
 import budget from "@workspace/starter-site/size-budget.json"
-import { lockSite } from "./publish.ts"
-import { type Ids, TransitionError, transition } from "./state.ts"
+import { A11Y_CHECKED, lockSite } from "./publish.ts"
+import { type Ids, lockRow, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
 export type Artifacts = {
@@ -194,18 +194,22 @@ export async function validateRevision(
     const object = await sites.get(key)
     return object ? new Uint8Array(await object.arrayBuffer()) : null
   }
-  const results = await runGates({
-    manifest,
-    read: (file) => bytesOf(`${base}dist/${file}`),
-    evidence: bytesOf,
-    // The starter's line for the home page; its baseline is the starter's own.
-    budget: { limit: budget.limit },
-    report,
-    facts: factsUsed,
-    hosts: [siteHost(slug ?? "", hostSuffix)],
-    timings,
-    ...planned(row.blueprint),
-  })
+  // The accessibility gate waits on axe in the sandbox, so it runs after the
+  // preview exists (`checkA11y`); the review and the publish wait on it.
+  const results = (
+    await runGates({
+      manifest,
+      read: (file) => bytesOf(`${base}dist/${file}`),
+      evidence: bytesOf,
+      // The starter's line for the home page; its baseline is the starter's own.
+      budget: { limit: budget.limit },
+      report,
+      facts: factsUsed,
+      hosts: [siteHost(slug ?? "", hostSuffix)],
+      timings,
+      ...planned(row.blueprint),
+    })
+  ).filter((result) => result.gate !== "a11y")
 
   const gates: GateResult[] = await Promise.all(
     results.map(async (result) => {
@@ -311,6 +315,126 @@ export async function validateRevision(
         report_id: validation.report_id,
         failed,
       } as const
+    }
+  })
+}
+
+/** A sandbox script's run, as `runAxe` reports it. */
+type AxeRun = { exit_code: number; key: string | null }
+
+/** What the `a11y` step decided: a gate verdict, or nothing to do for a build that moved on. */
+export type A11yVerdict = Verdict | { outcome: "stopped" }
+
+/**
+ * The accessibility gate (§8.5), once the preview exists: axe ran in the
+ * sandbox after `preview_ready`, so the owner's preview does not wait on it.
+ * The result is logged against the revision, which the review, the approval
+ * and the publisher refuse without. A failure sends a preview that is still
+ * `preview_ready` back through `repairing`, as a failure in `validating`
+ * does, or to `failed` once the repairs are spent. `axe` is null when the
+ * site's sandbox went to a newer edit first: nothing ran, nothing passed. A
+ * retried step answers with what it logged the first time.
+ */
+export async function checkA11y(
+  kit: Tenancy,
+  sites: Artifacts,
+  ids: Ids,
+  revisionId: string,
+  axe: AxeRun | null
+): Promise<A11yVerdict> {
+  const evidence = axe?.key ? await sites.get(axe.key) : null
+  // The JSON is the sandbox's: unreadable is the same as absent, which fails.
+  const text = evidence
+    ? new TextDecoder().decode(await evidence.arrayBuffer())
+    : null
+  let result: ReturnType<typeof parseAxe> = null
+  try {
+    result = text ? parseAxe(JSON.parse(text)) : null
+  } catch {
+    // Left null: the gate fails on it.
+  }
+  const gate: GateResult = axe
+    ? checkAxe(
+        {
+          checks: [
+            { check: "axe", exit_code: axe.exit_code, output_key: axe.key },
+          ],
+        },
+        result
+      )
+    : {
+        gate: "a11y",
+        passed: false,
+        evidence_key: null,
+        offending_node: null,
+        message: "axe did not run: a newer edit took the site's sandbox first",
+      }
+  const reportId = crypto.randomUUID()
+  await sites.put(
+    `sites/${ids.orgId}/${revisionId}/gates/a11y.json`,
+    JSON.stringify(gate)
+  )
+  return kit.withOrg({ orgId: ids.orgId }, async (db) => {
+    const row = await lockRow(db, ids.assignmentId)
+    const [logged] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = ${A11Y_CHECKED} and ${events.payload}->>'revision_id' = ${revisionId}`
+      )
+      .limit(1)
+    if (logged) {
+      const was = logged.payload as GateResult & { report_id: string }
+      const failed = was.passed ? [] : [was]
+      if (was.passed)
+        return { outcome: "preview_ready", report_id: was.report_id }
+      if (row.state === "implementing")
+        return { outcome: "repairing", report_id: was.report_id, failed }
+      if (row.state === "failed")
+        return { outcome: "failed", report_id: was.report_id, failed }
+      return { outcome: "stopped" }
+    }
+    // `offending_node` quotes model output, so nothing downstream may promote it (§28.3).
+    await appendEvent(db, {
+      orgId: ids.orgId,
+      assignmentId: ids.assignmentId,
+      staffId: null,
+      type: A11Y_CHECKED,
+      payload: { ...gate, report_id: reportId, revision_id: revisionId },
+      taint: gate.passed ? [] : ["inferred"],
+    })
+    if (gate.passed) return { outcome: "preview_ready", report_id: reportId }
+    if (!axe || row.state !== "preview_ready") return { outcome: "stopped" }
+    const payload = { report_id: reportId, revision_id: revisionId }
+    try {
+      const repair = await transition(db, {
+        ...ids,
+        to: "repairing",
+        expectedVersion: row.version,
+        reason: "gates.failed",
+        payload,
+      })
+      await transition(db, {
+        ...ids,
+        to: "implementing",
+        expectedVersion: repair.version,
+        payload,
+      })
+      return { outcome: "repairing", report_id: reportId, failed: [gate] }
+    } catch (error) {
+      if (
+        !(error instanceof TransitionError) ||
+        error.code !== "assignment.repair_budget_exhausted"
+      )
+        throw error
+      await transition(db, {
+        ...ids,
+        to: "failed",
+        expectedVersion: row.version,
+        reason: "gates.repair_budget_exhausted",
+        payload,
+      })
+      return { outcome: "failed", report_id: reportId, failed: [gate] }
     }
   })
 }
