@@ -207,6 +207,11 @@ const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
 
 const noop = async () => undefined
 
+/** A drawn picture, not a real one: a window, a worktop, a bowl. Grey by opacity alone. */
+const KITCHEN = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="150" height="100" viewBox="0 0 150 100"><rect width="150" height="100" fill-opacity=".08"/><rect x="18" y="12" width="54" height="40" fill-opacity=".2"/><rect x="0" y="62" width="150" height="38" fill-opacity=".35"/><circle cx="108" cy="52" r="12" fill-opacity=".5"/></svg>'
+)}`
+
 const ask = (text: string): ThreadMessageLike => ({
   content: [{ text, type: "text" }],
   role: "user",
@@ -1887,6 +1892,7 @@ const assistantCatalog = [
               alt: "A bright kitchen after a clean",
               section: "hero",
               slot_id: "hero",
+              src: KITCHEN,
             },
             {
               alt: "The team at work",

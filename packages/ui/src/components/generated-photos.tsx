@@ -1,15 +1,60 @@
+import { ImageIcon } from "@phosphor-icons/react"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { useId, useRef } from "react"
+import { useId, useRef, useState } from "react"
 
-/** One picture the assistant made rather than the owner supplied. */
-export type GeneratedPhoto = { slot_id: string; section: string; alt: string }
+/**
+ * One picture the assistant made rather than the owner supplied. `src` is a
+ * thumbnail of it when the wire carries one.
+ */
+export type GeneratedPhoto = {
+  slot_id: string
+  section: string
+  alt: string
+  src?: string | undefined
+}
 
 /** What the owner can do with one: swap it, redraw it, or take it out. */
 export type PhotoActions = {
   onUseOwn: (photo: GeneratedPhoto, file: File) => void
   onTryAnother: (photo: GeneratedPhoto) => void
   onRemove: (photo: GeneratedPhoto) => void
+}
+
+/**
+ * The picture, badged where it is shown. A photo with no thumbnail of its own
+ * shows the top of the version's laptop screenshot when it belongs to the
+ * hero, which is the first thing that screenshot holds; any other picture, and
+ * one that does not load, is a quiet tile, never a broken image.
+ */
+function Thumb({ src }: { src: string | undefined }) {
+  const [broken, setBroken] = useState(false)
+  return (
+    <div
+      className="relative aspect-[3/2] w-28 shrink-0 self-start overflow-hidden rounded-lg border border-border bg-muted"
+      data-slot="generated-photo-thumb"
+    >
+      {src && !broken ? (
+        <img
+          alt=""
+          className="size-full object-cover object-top"
+          height={75}
+          loading="lazy"
+          onError={() => setBroken(true)}
+          src={src}
+          width={112}
+        />
+      ) : (
+        <ImageIcon
+          aria-hidden
+          className="absolute top-2 left-2 size-5 text-muted-foreground"
+        />
+      )}
+      <Badge className="absolute bottom-1 left-1" variant="secondary">
+        AI-generated
+      </Badge>
+    </div>
+  )
 }
 
 /**
@@ -21,10 +66,13 @@ export function GeneratedPhotos({
   photos,
   actions,
   disabled = false,
+  heroShot,
 }: {
   photos: readonly GeneratedPhoto[]
   actions: PhotoActions
   disabled?: boolean
+  /** The version's home page on a laptop, for a hero photo with no thumbnail. */
+  heroShot?: string | undefined
 }) {
   const id = useId()
   const input = useRef<HTMLInputElement>(null)
@@ -54,48 +102,49 @@ export function GeneratedPhotos({
       />
       <ul className="flex flex-col gap-2">
         {photos.map((photo) => (
-          <li
-            className="flex flex-col gap-2 rounded-xl border p-3"
-            key={photo.slot_id}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">AI-generated</Badge>
+          <li className="flex gap-3 rounded-xl border p-3" key={photo.slot_id}>
+            <Thumb
+              src={
+                photo.src ?? (photo.section === "hero" ? heroShot : undefined)
+              }
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
               <span className="text-sm">{photo.alt}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                aria-label={`Use my own photo for ${photo.alt}`}
-                disabled={disabled}
-                onClick={() => {
-                  target.current = photo
-                  input.current?.click()
-                }}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Use my own photo
-              </Button>
-              <Button
-                aria-label={`Try another picture for ${photo.alt}`}
-                disabled={disabled}
-                onClick={() => actions.onTryAnother(photo)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Try another
-              </Button>
-              <Button
-                aria-label={`Remove the picture for ${photo.alt}`}
-                disabled={disabled}
-                onClick={() => actions.onRemove(photo)}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Remove
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  aria-label={`Use my own photo for ${photo.alt}`}
+                  disabled={disabled}
+                  onClick={() => {
+                    target.current = photo
+                    input.current?.click()
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Use my own photo
+                </Button>
+                <Button
+                  aria-label={`Try another picture for ${photo.alt}`}
+                  disabled={disabled}
+                  onClick={() => actions.onTryAnother(photo)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Try another
+                </Button>
+                <Button
+                  aria-label={`Remove the picture for ${photo.alt}`}
+                  disabled={disabled}
+                  onClick={() => actions.onRemove(photo)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Remove
+                </Button>
+              </div>
             </div>
           </li>
         ))}

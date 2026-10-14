@@ -893,6 +893,9 @@ function ApprovalItem({
         <GeneratedPhotos
           actions={photoActions}
           disabled={busy !== null}
+          heroShot={
+            typeof preview === "object" ? preview.screenshots[2] : undefined
+          }
           photos={photos}
         />
       ) : null}
