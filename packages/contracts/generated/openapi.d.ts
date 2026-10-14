@@ -3613,6 +3613,8 @@ export interface components {
                 | "paused"
                 | "failed"
                 | "cancelled"
+              /** @enum {string} */
+              lane?: "full" | "quick"
               goal: string
               version: number | null
             }[]
@@ -3654,6 +3656,16 @@ export interface components {
               | "media.uploads"
               | "quote.form"
             )[]
+            expected_seconds?: {
+              full: {
+                p50: number
+                p95: number
+              }
+              quick: {
+                p50: number
+                p95: number
+              }
+            }
           }
         }
       | {
@@ -4227,6 +4239,8 @@ export interface components {
           | "paused"
           | "failed"
           | "cancelled"
+        /** @enum {string} */
+        lane?: "full" | "quick"
         goal: string
         version: number | null
       }[]
@@ -4268,6 +4282,16 @@ export interface components {
         | "media.uploads"
         | "quote.form"
       )[]
+      expected_seconds?: {
+        full: {
+          p50: number
+          p95: number
+        }
+        quick: {
+          p50: number
+          p95: number
+        }
+      }
     }
     CreateOrgRequest: {
       name: string

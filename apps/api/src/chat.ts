@@ -38,7 +38,6 @@ import {
   activeTools,
   contextOf,
   cosPrefix,
-  DEFAULT_MODEL,
   knownZone,
   LIMITS,
   messageTaint,
@@ -47,6 +46,7 @@ import {
   personaOf,
   priceOf,
   reservation,
+  routeOf,
 } from "./cos/agent.ts"
 import {
   CONTEXT_POLICY,
@@ -630,7 +630,7 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
-  const modelId = env.COS_MODEL ?? DEFAULT_MODEL
+  const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
   const price = priceOf(modelId)
   const model =
     deps.model !== undefined

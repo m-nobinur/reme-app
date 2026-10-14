@@ -1,6 +1,7 @@
 import {
+  ChangeKind,
   ChatRequest,
-  type COS_TOOLS,
+  COS_TOOLS,
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
@@ -52,6 +53,7 @@ import {
   contextOf,
   costOf,
   DEFAULT_MODEL,
+  DESCRIPTIONS,
   INSTRUCTIONS,
   knownZone,
   LIMITS,
@@ -59,7 +61,9 @@ import {
   openrouterModel,
   personaOf,
   priceOf,
+  ROUTES,
   reservation,
+  routeOf,
   SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
@@ -67,6 +71,7 @@ import {
 import { retrying } from "../src/cos/retry.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
 import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
+import kinds from "./cos-change-kinds.json" with { type: "json" }
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
 import staging from "./cos-staging-turn.json" with { type: "json" }
 import {
@@ -277,6 +282,70 @@ describe("the CoS's instructions", () => {
     expect(INSTRUCTIONS).toMatch(
       /request_change comes back with outcome "started", the owner already said yes and the build has started[^\n]*Never ask them to approve it again/
     )
+  })
+})
+
+describe("the CoS's change kinds", () => {
+  it("has a recorded request_change call per kind, each of which the schema accepts and the tool description names", () => {
+    const schema = COS_TOOLS.request_change.input
+    expect(kinds.cases.map((c) => c.input.change_kind).sort()).toEqual(
+      [...ChangeKind.options].sort()
+    )
+    for (const c of kinds.cases) {
+      expect(schema.parse(c.input)).toEqual(c.input)
+      expect(DESCRIPTIONS.request_change).toMatch(
+        new RegExp(`${c.input.change_kind} (is|adds|replaces)`)
+      )
+    }
+  })
+
+  it("tells the model to quote the measured wait, not a fixed one", () => {
+    expect(INSTRUCTIONS).toContain("expected_seconds.quick.p50")
+    expect(INSTRUCTIONS).toContain("Never use a fixed time of your own")
+  })
+
+  it("carries expected_seconds and each build's lane in the workspace the model reads", () => {
+    const text = contextOf("act", {
+      site: { host: null, live_version: null },
+      questions: [],
+      approvals: [],
+      missing_facts: [],
+      builds: [
+        {
+          assignment_id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d",
+          kind: "site.revise",
+          state: "implementing",
+          lane: "quick",
+          goal: "Change the headline.",
+          version: null,
+        },
+      ],
+      expected_seconds: {
+        quick: { p50: 15, p95: 45 },
+        full: { p50: 180, p95: 330 },
+      },
+    }).text
+    expect(text).toContain('"expected_seconds":{"quick":{"p50":15')
+    expect(text).toContain('"lane":"quick"')
+  })
+})
+
+describe("the CoS's routing table", () => {
+  it("keeps every owner-waiting turn on the default model at default effort", () => {
+    expect(ROUTES.owner_turn).toMatchObject({
+      model: DEFAULT_MODEL,
+      effort: null,
+      path: "stream",
+      enabled: true,
+    })
+    expect(routeOf("owner_turn")).toBe(ROUTES.owner_turn)
+  })
+
+  it("records the card-click and deferred rows as not enabled, and falls back to the owner-turn route", () => {
+    expect(ROUTES.card_click).toMatchObject({ effort: "low", enabled: false })
+    expect(ROUTES.deferred).toMatchObject({ path: "batch", enabled: false })
+    expect(routeOf("card_click")).toBe(ROUTES.owner_turn)
+    expect(routeOf("deferred")).toBe(ROUTES.owner_turn)
   })
 })
 

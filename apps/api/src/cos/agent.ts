@@ -66,6 +66,41 @@ import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 export const DEFAULT_MODEL = "openai/gpt-6.1-sol"
 
 /**
+ * Which model, effort and path serves each kind of CoS work (CM1). The turn
+ * runner reads `routeOf`; a row with `enabled: false` is recorded, not used.
+ * `effort: null` is the model's own default (medium).
+ */
+export const ROUTES = {
+  /** Every turn the owner is waiting on, today's only CoS work. */
+  owner_turn: {
+    model: DEFAULT_MODEL,
+    effort: null,
+    path: "stream",
+    enabled: true,
+  },
+  /** Approve, decline or pick on a card. Not enabled until the cache-read ratio and latency are measured on recorded turns. */
+  card_click: {
+    model: DEFAULT_MODEL,
+    effort: "low",
+    path: "stream",
+    enabled: false,
+  },
+  /** A deadline over a day with no owner waiting. Not enabled: the batch client waits for its first consumer (EV). */
+  deferred: {
+    model: `${DEFAULT_MODEL}:batch`,
+    effort: null,
+    path: "batch",
+    enabled: false,
+  },
+} as const
+
+export type CosTask = keyof typeof ROUTES
+
+/** The route for `task`, or the owner-turn route while its own row is not enabled. */
+export const routeOf = (task: CosTask) =>
+  ROUTES[task].enabled ? ROUTES[task] : ROUTES.owner_turn
+
+/**
  * The run's limits, from every CoS turn staging ran on main d626d0f, the
  * only deploy after 2026-09-27 20:19:35Z: 64 turns and 87 steps between
  * 20:28:02 and 20:46:05Z, the T2 exit measurement's 20 turns among them.
@@ -100,7 +135,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "6"
+const PREFIX_VERSION = "7"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
@@ -127,11 +162,12 @@ Rules:
 - When the owner declines a proposal, its call comes back as "The owner declined", followed by their words if they gave any. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
 - A proposal the owner talked over by sending a new message comes back as "User cancelled tool call by sending a new message." That is neither yes nor no: don't act on it, and ask about it again only if it still matters.
 - When request_change comes back with outcome "started", the owner already said yes and the build has started; a state of "queued" only means it waits its turn. Say so, and that the preview shows in the panel under Working on when it is ready. Never ask them to approve it again: the only step left is publishing from the review card.
+- When a change you proposed with request_change comes back started and its build in the workspace is on the quick lane, or you set change_kind to copy, style or photo, say the preview will be ready in about expected_seconds.quick.p50 seconds from the workspace data, in your own words. For any other build say it is a longer job and use expected_seconds.full.p50 as minutes. Never use a fixed time of your own; with no expected_seconds, say it will not be long.
 - There is no publish tool. Publishing is the owner's button on the review card.
 - In Ask mode you can only read. If the owner asks for a change, tell them to switch to Act.
 - Reply in plain, short sentences. No markdown headings.`
 
-const DESCRIPTIONS: Record<CosToolName, string> = {
+export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_workspace:
     "Read the workspace now: the site, unfinished builds, the Developer's open questions, reviews waiting on the owner and the facts still missing. Use it when the context may be stale, such as after a change started. Not for the business facts themselves.",
   get_facts:

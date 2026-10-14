@@ -11718,6 +11718,10 @@
                             "cancelled"
                           ]
                         },
+                        "lane": {
+                          "type": "string",
+                          "enum": ["full", "quick"]
+                        },
                         "goal": {
                           "type": "string",
                           "minLength": 1,
@@ -11848,6 +11852,47 @@
                         "quote.form"
                       ]
                     }
+                  },
+                  "expected_seconds": {
+                    "type": "object",
+                    "properties": {
+                      "full": {
+                        "type": "object",
+                        "properties": {
+                          "p50": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "p95": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["p50", "p95"],
+                        "additionalProperties": false
+                      },
+                      "quick": {
+                        "type": "object",
+                        "properties": {
+                          "p50": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "p95": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["p50", "p95"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["full", "quick"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -13664,6 +13709,10 @@
                     "cancelled"
                   ]
                 },
+                "lane": {
+                  "type": "string",
+                  "enum": ["full", "quick"]
+                },
                 "goal": {
                   "type": "string",
                   "minLength": 1,
@@ -13782,6 +13831,47 @@
                 "quote.form"
               ]
             }
+          },
+          "expected_seconds": {
+            "type": "object",
+            "properties": {
+              "full": {
+                "type": "object",
+                "properties": {
+                  "p50": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "p95": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["p50", "p95"],
+                "additionalProperties": false
+              },
+              "quick": {
+                "type": "object",
+                "properties": {
+                  "p50": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "p95": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["p50", "p95"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["full", "quick"],
+            "additionalProperties": false
           }
         },
         "required": [
