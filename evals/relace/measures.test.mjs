@@ -66,7 +66,7 @@ test("parseRecords checks every field and names the line", () => {
 test("parseEditsJson takes a fenced reply and refuses a malformed one", () => {
   const edits = [{ oldText: "a", newText: "b" }]
   assert.deepEqual(
-    parseEditsJson("```json\n" + JSON.stringify({ edits }) + "\n```"),
+    parseEditsJson(`\`\`\`json\n${JSON.stringify({ edits })}\n\`\`\``),
     edits
   )
   assert.throws(() => parseEditsJson('{"edits":[]}'))

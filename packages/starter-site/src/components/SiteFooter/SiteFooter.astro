@@ -59,6 +59,11 @@ const blurb = site.tagline || site.homeIntro
           </div>
         )}
       </div>
+      {site.disclaimer && (
+        <div class="wrap">
+          <p class="footer-disclaimer">{site.disclaimer}</p>
+        </div>
+      )}
     </footer>
   )
 }

@@ -139,6 +139,13 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.disclaimer"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "service_area.text"
                 value: {
                   text: string
@@ -778,6 +785,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -1046,6 +1060,13 @@ export interface components {
             | {
                 /** @constant */
                 key: "business.proof"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.disclaimer"
                 value: {
                   text: string
                 }
@@ -1339,6 +1360,14 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "business.disclaimer"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
           key: "service_area.text"
           skippable: boolean
           prefill: {
@@ -1617,6 +1646,13 @@ export interface components {
             | {
                 /** @constant */
                 key: "business.proof"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.disclaimer"
                 value: {
                   text: string
                 }
@@ -3256,6 +3292,13 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "business.disclaimer"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "service_area.text"
                                   value: {
                                     text: string
@@ -3537,6 +3580,13 @@ export interface components {
                               | {
                                   /** @constant */
                                   key: "business.proof"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.disclaimer"
                                   value: {
                                     text: string
                                   }
@@ -4076,6 +4126,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -4362,6 +4419,7 @@ export interface components {
               | "business.audience"
               | "business.overview"
               | "business.proof"
+              | "business.disclaimer"
               | "service_area.text"
               | "assistant.name"
               | "assistant.pronouns"
@@ -4487,6 +4545,13 @@ export interface components {
               | {
                   /** @constant */
                   key: "business.proof"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.disclaimer"
                   value: {
                     text: string
                   }
@@ -5547,6 +5612,7 @@ export interface components {
         | "business.audience"
         | "business.overview"
         | "business.proof"
+        | "business.disclaimer"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -5667,6 +5733,7 @@ export interface components {
             | "business.audience"
             | "business.overview"
             | "business.proof"
+            | "business.disclaimer"
             | "service_area.text"
             | "assistant.name"
             | "assistant.pronouns"
@@ -5974,6 +6041,13 @@ export interface components {
       | {
           /** @constant */
           key: "business.proof"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.disclaimer"
           value: {
             text: string
           }
@@ -7281,6 +7355,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -8312,6 +8393,7 @@ export interface components {
         | "business.audience"
         | "business.overview"
         | "business.proof"
+        | "business.disclaimer"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -8380,6 +8462,7 @@ export interface components {
                 | "business.audience"
                 | "business.overview"
                 | "business.proof"
+                | "business.disclaimer"
                 | "service_area.text"
                 | "assistant.name"
                 | "assistant.pronouns"

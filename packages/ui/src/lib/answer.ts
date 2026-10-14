@@ -157,6 +157,10 @@ export const FACT_INPUTS = {
     ask: "What sets you apart from others in your trade?",
     fields: line("text", "Years trading, accreditations, guarantees", 600),
   },
+  "business.disclaimer": {
+    ask: "What regulatory notice must your site carry?",
+    fields: line("text", "For example: authorised and regulated by ...", 400),
+  },
   "service_area.text": {
     ask: "Which areas do you cover?",
     fields: line("text", "Your town or city, and the areas nearby", 200),

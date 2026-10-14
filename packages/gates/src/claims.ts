@@ -112,7 +112,7 @@ export const SUPPORTING_FACT_PREFIXES = [
  * Whole keys that support the same words: the owner's own account of what
  * sets the business apart, which may name its insurance, awards or years.
  */
-const SUPPORTING_FACT_KEYS = ["business.proof"] as const
+const SUPPORTING_FACT_KEYS = ["business.proof", "business.disclaimer"] as const
 
 const TESTIMONIAL_PREFIX = "testimonials."
 

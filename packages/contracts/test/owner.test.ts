@@ -73,6 +73,9 @@ const facts = {
   "business.proof": {
     text: "Trading since 2009, fully insured, every driver DBS checked",
   },
+  "business.disclaimer": {
+    text: "Authorised and regulated by the Fairhaven Law Society. Reg. 4471.",
+  },
   "service_area.text": { text: "Greater Fairhaven and the airports" },
   "assistant.name": { name: "Sam" },
   "assistant.pronouns": { id: "she_her" },
@@ -397,6 +400,7 @@ describe("the bridge's building blocks", () => {
       "business.audience",
       "business.overview",
       "business.proof",
+      "business.disclaimer",
       "service_area.text",
       "assistant.name",
       "assistant.pronouns",

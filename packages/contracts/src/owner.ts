@@ -77,6 +77,12 @@ export const FactValue = z.discriminatedUnion("key", [
    * The site states only what this holds.
    */
   fact("business.proof", { text: Text(600) }),
+  /**
+   * The notice a regulated profession must carry, as the owner words it:
+   * "Authorised and regulated by ... Registration no. ...". The only source
+   * for the footer's disclaimer; with no fact the site states none.
+   */
+  fact("business.disclaimer", { text: Text(400) }),
   fact("service_area.text", { text: Text(200) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),

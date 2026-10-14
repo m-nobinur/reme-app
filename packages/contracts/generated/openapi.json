@@ -511,6 +511,35 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.disclaimer"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "service_area.text"
                       },
                       "value": {
@@ -2673,6 +2702,35 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -3634,6 +3692,35 @@
                               "type": "string",
                               "minLength": 1,
                               "maxLength": 600,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.disclaimer"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 400,
                               "pattern": "\\S"
                             }
                           },
@@ -4754,6 +4841,46 @@
             "properties": {
               "key": {
                 "type": "string",
+                "const": "business.disclaimer"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
                 "const": "service_area.text"
               },
               "skippable": {
@@ -5842,6 +5969,35 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 600,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.disclaimer"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
                             "pattern": "\\S"
                           }
                         },
@@ -11685,6 +11841,35 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "business.disclaimer"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 400,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "service_area.text"
                                                 },
                                                 "value": {
@@ -12655,6 +12840,35 @@
                                                         "type": "string",
                                                         "minLength": 1,
                                                         "maxLength": 600,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.disclaimer"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 400,
                                                         "pattern": "\\S"
                                                       }
                                                     },
@@ -14790,6 +15004,35 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -15814,6 +16057,7 @@
                         "business.audience",
                         "business.overview",
                         "business.proof",
+                        "business.disclaimer",
                         "service_area.text",
                         "assistant.name",
                         "assistant.pronouns",
@@ -16262,6 +16506,35 @@
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 600,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.disclaimer"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 400,
                                   "pattern": "\\S"
                                 }
                               },
@@ -19983,6 +20256,7 @@
                 "business.audience",
                 "business.overview",
                 "business.proof",
+                "business.disclaimer",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -20384,6 +20658,7 @@
                     "business.audience",
                     "business.overview",
                     "business.proof",
+                    "business.disclaimer",
                     "service_area.text",
                     "assistant.name",
                     "assistant.pronouns",
@@ -21527,6 +21802,35 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 600,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.disclaimer"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
                     "pattern": "\\S"
                   }
                 },
@@ -25855,7 +26159,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 24,
+            "maxItems": 25,
             "type": "array",
             "items": {
               "oneOf": [
@@ -26200,6 +26504,35 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 600,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
                           "pattern": "\\S"
                         }
                       },
@@ -29987,6 +30320,7 @@
                 "business.audience",
                 "business.overview",
                 "business.proof",
+                "business.disclaimer",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -30206,6 +30540,7 @@
                               "business.audience",
                               "business.overview",
                               "business.proof",
+                              "business.disclaimer",
                               "service_area.text",
                               "assistant.name",
                               "assistant.pronouns",
