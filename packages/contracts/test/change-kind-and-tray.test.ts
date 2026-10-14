@@ -14,6 +14,7 @@ import {
   BuildSummary,
   ChangeKind,
   OwnerChangeRequest,
+  PHOTO_PATH,
   thumbnailOf,
   WorkspaceStatus,
 } from "../src/owner.ts"
@@ -296,7 +297,7 @@ describe("lane and activity on a build", () => {
   })
 
   it("carries the photos as they settle, each thumbnail on the app's own photo door", () => {
-    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d.webp"
+    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
     const photos = [
       {
         slot_id: "hero",
@@ -318,7 +319,8 @@ describe("lane and activity on a build", () => {
     ).toBe(true)
     expect(at(`https://evil.example/${file}`)).toBe(false)
     expect(at(`/api/photos/../${file}`)).toBe(false)
-    expect(at(`/api/photos/${file.replace("webp", "svg")}`)).toBe(false)
+    expect(at(`/api/photos/${file}.svg`)).toBe(false)
+    expect(at(`/api/photos/${file.toUpperCase()}`)).toBe(false)
     expect(BuildSummary.safeParse({ ...build, review_ms: -1 }).success).toBe(
       false
     )
@@ -330,18 +332,21 @@ describe("lane and activity on a build", () => {
     ).toBe(false)
   })
 
-  it("reads a thumbnail from a generated photo's key, and none from any other", () => {
-    const file = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d.png"
-    expect(thumbnailOf(`generated/org-1/${file}`)).toBe(`/api/photos/${file}`)
-    for (const key of [
-      `uploads/org-1/${file}`,
-      `generated/org-1/x/${file}`,
-      "generated/org-1/not-an-id.png",
+  it("names a thumbnail by the photo's asset id, and none without one", () => {
+    const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+    expect(thumbnailOf(id)).toBe(`/api/photos/${id}`)
+    expect(`/photos/${id}`.replace(PHOTO_PATH, "$1")).toBe(id)
+    for (const bad of [
+      `${id}.png`,
+      `../${id}`,
+      "not-an-id",
+      "",
       null,
       undefined,
     ]) {
-      expect(thumbnailOf(key), String(key)).toBeNull()
+      expect(thumbnailOf(bad), String(bad)).toBeNull()
     }
+    expect(PHOTO_PATH.test(`/photos/${id}/x`)).toBe(false)
   })
 
   it("refuses a lane nobody runs", () => {

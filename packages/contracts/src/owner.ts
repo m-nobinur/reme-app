@@ -289,29 +289,27 @@ export const BuildActivity = z.strictObject({
     .optional(),
 })
 
-const PHOTO_FILE =
-  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)"
+/** A generated photo's asset id, the hash-made UUID its object key starts with. */
+const PHOTO_ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
-/** `{asset id}.{ext}`, the last part of a generated photo's object key. */
-export const PhotoFile = z.string().regex(new RegExp(`^${PHOTO_FILE}$`))
+/** The path the api serves a generated photo at: `GET /photos/{asset id}`. */
+export const PHOTO_PATH = new RegExp(`^/photos/(${PHOTO_ID})$`)
 
 /**
  * A generated photo as the app shows it: the app's own door to the api's
- * `GET /photos/{file}`, which reads `generated/{org}/{file}` for the caller's
- * org only. A pattern rather than any URL, so the wire never points an image
- * anywhere else.
+ * `GET /photos/{asset id}`, which reads `generated/{org}/{asset id}.{ext}`
+ * for the caller's org only. A pattern rather than any URL, so the wire never
+ * points an image anywhere else.
  */
 export const PhotoThumbnail = z
   .string()
-  .regex(new RegExp(`^/api/photos/${PHOTO_FILE}$`))
+  .regex(new RegExp(`^/api/photos/${PHOTO_ID}$`))
 
-/** The thumbnail of the photo stored at `generated/{org}/{file}`, or null for any other key. */
-export function thumbnailOf(key: string | null | undefined): string | null {
-  const file = /^generated\/[^/]+\/([^/]+)$/.exec(key ?? "")?.[1]
-  return file && PhotoFile.safeParse(file).success
-    ? `/api/photos/${file}`
+/** The thumbnail of a generated photo by its asset id, or null when there is no id to show. */
+export const thumbnailOf = (assetId: string | null | undefined) =>
+  assetId && new RegExp(`^${PHOTO_ID}$`).test(assetId)
+    ? `/api/photos/${assetId}`
     : null
-}
 
 /**
  * One generated photo of a build while it is made: `drawing` until its slot

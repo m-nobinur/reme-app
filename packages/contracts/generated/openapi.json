@@ -7702,7 +7702,7 @@
                     },
                     "thumbnail": {
                       "type": "string",
-                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                     }
                   },
                   "required": [
@@ -11796,7 +11796,7 @@
                   "anyOf": [
                     {
                       "type": "string",
-                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                     },
                     {
                       "type": "null"
@@ -20203,7 +20203,7 @@
                                   "anyOf": [
                                     {
                                       "type": "string",
-                                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                                     },
                                     {
                                       "type": "null"
@@ -26901,7 +26901,7 @@
                           "anyOf": [
                             {
                               "type": "string",
-                              "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                              "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                             },
                             {
                               "type": "null"
@@ -31269,7 +31269,7 @@
                         "anyOf": [
                           {
                             "type": "string",
-                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                           },
                           {
                             "type": "null"
@@ -31657,7 +31657,7 @@
                           },
                           "thumbnail": {
                             "type": "string",
-                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|webp)$"
+                            "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                           }
                         },
                         "required": [
