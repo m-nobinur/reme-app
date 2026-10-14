@@ -20,17 +20,19 @@
      template. */
   --font-display: ui-serif, Georgia, "Times New Roman", serif;
 
-  /* Type. One scale for the body; the display steps are tokens each
-     template sets for itself below. Steps sit at least 1.25 apart. */
+  /* Type, to the bar the reference sites set: a 16 px body at 1.7, a hero of
+     64 to 82 px, a section heading of 38 to 56 px, all in a display weight of
+     500 that is set large rather than bold. The templates below may still
+     override a step until each becomes a design direction. */
   --text-sm: 0.875rem;
-  --text-base: 1.0625rem;
+  --text-base: 1rem;
   --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
   --text-xl: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
-  --text-2xl: clamp(1.75rem, 1.35rem + 1.7vw, 2.625rem);
-  --text-page: clamp(2.25rem, 1.6rem + 2.8vw, 3.75rem);
-  --text-hero: clamp(2.5rem, 1.6rem + 3.8vw, 4.5rem);
-  --display-weight: 600;
-  --display-tracking: -0.02em;
+  --text-2xl: clamp(2.125rem, 1.2rem + 2.9vw, 3.5rem);
+  --text-page: clamp(2.5rem, 1.5rem + 3.4vw, 4rem);
+  --text-hero: clamp(2.5rem, 1.2rem + 5.6vw, 5.125rem);
+  --display-weight: 500;
+  --display-tracking: -0.03em;
   --display-case: none;
 
   --space-3xs: 0.25rem;
@@ -46,10 +48,10 @@
      one container, and every grid uses one gap, so nothing on a page sits at
      a spacing of its own. */
   --gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
-  --container: 72rem;
+  --container: 75rem;
   --container-narrow: 46rem;
   --measure: 38rem;
-  --section-pad: clamp(3.5rem, 2.25rem + 5vw, 6.5rem);
+  --section-pad: clamp(3.5rem, 1.9rem + 5vw, 6rem);
   --section-head-gap: clamp(1.75rem, 1.25rem + 1.5vw, 2.75rem);
   --grid-gap: clamp(1rem, 0.7rem + 1.2vw, 1.75rem);
   --header-h: 4.5rem;

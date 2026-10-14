@@ -4,8 +4,9 @@
    page with no script has nothing to set it.
 
    One system, three templates. Every section is a band of the same padding
-   holding one container; the templates below change type, shape and surface
-   by data-template, never the spacing. */
+   holding one container, and the bands alternate base, tint, base, dark down
+   the page; the templates below change type, shape and surface by
+   data-template, never the spacing. */
 
 *,
 *::before,
@@ -26,7 +27,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 img {
@@ -62,6 +63,7 @@ h3 {
 
 h1 {
   font-size: var(--text-page);
+  line-height: 1.07;
   margin: 0 0 var(--space-sm);
   text-transform: var(--display-case);
 }
@@ -97,15 +99,18 @@ p {
   color: var(--brand-text);
 }
 
-/* Bands. A band after a plain band drops its top padding, so two plain
-   sections sit one section apart rather than two; a tinted band keeps both. */
+/* Bands. Every band keeps both paddings, and every second band on a page is
+   tinted, so the page reads base, tint, base and ends on the dark closing band
+   (the CTA's brand surface). `of .band` counts bands only, so the hero and the
+   trust strip do not shift the beat. :where() keeps this at zero specificity:
+   a template or a component that sets its own surface wins. */
 
 .band {
   padding-block: var(--section-pad);
 }
 
-.band:not(.band-tint) + .band:not(.band-tint) {
-  padding-block-start: 0;
+:where(main > .band:nth-child(even of .band):not(.cta-band)) {
+  background: var(--brand-soft);
 }
 
 .section-head {
@@ -334,6 +339,7 @@ p {
   padding-inline: var(--space-md);
   border: 1.5px solid transparent;
   border-radius: var(--radius-button);
+  gap: var(--space-2xs);
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -341,7 +347,36 @@ p {
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+/* The arrow is drawn, not typed: a mask in the text colour, so it follows
+   every surface the button sits on and needs no glyph from any font. It is
+   decoration and carries no text, so it is not in the accessible name. */
+.action::after {
+  content: "";
+  flex: none;
+  width: 1.125em;
+  height: 1.125em;
+  background: currentColor;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition: transform 160ms ease;
+}
+
+.action:hover {
+  transform: translateY(-2px);
+}
+
+.action:hover::after {
+  transform: translateX(3px);
+}
+
+/* The header's button is small and shares a row with the menu on a phone. */
+.header-action .action::after {
+  display: none;
 }
 
 .action-primary {
@@ -401,7 +436,7 @@ p {
 
 .hero-home h1 {
   font-size: var(--text-hero);
-  line-height: 1.02;
+  line-height: 1.05;
 }
 
 .hero-page {
@@ -590,10 +625,6 @@ p {
 }
 
 /* Reasons to choose */
-
-.value-props {
-  background: var(--brand-soft);
-}
 
 .value-list {
   display: grid;
@@ -787,6 +818,12 @@ p {
   list-style: none;
 }
 
+/* A photo in a frame zooms a little under the pointer. */
+:is(.gallery-grid li, .gallery-single) {
+  overflow: hidden;
+  border-radius: var(--radius-media);
+}
+
 .gallery-grid img {
   display: block;
   width: 100%;
@@ -794,6 +831,7 @@ p {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
+  transition: transform 200ms ease;
 }
 
 /* Three photos: one large, two stacked beside it. */
@@ -824,6 +862,11 @@ p {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
+  transition: transform 200ms ease;
+}
+
+:is(.gallery-grid li, .gallery-single):hover img {
+  transform: scale(1.035);
 }
 
 /* About: the story beside the owner's photo on a wide screen, stacked on a
@@ -1348,10 +1391,56 @@ p {
 
 @media (prefers-reduced-motion: reduce) {
   .action,
+  .action::after,
   .card-linked,
   .faq summary::after,
-  .menu-toggle::after {
+  .menu-toggle::after,
+  :is(.gallery-grid, .gallery-single) img {
     transition: none;
+  }
+
+  .action:hover,
+  .action:hover::after,
+  :is(.gallery-grid li, .gallery-single):hover img {
+    transform: none;
+  }
+}
+
+/* Fade-up on view. A browser with no scroll-driven animations, or a visitor
+   who asked for less motion, never enters this block and sees the final state
+   at once. Opacity and a translate only, so nothing shifts layout. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .band
+      :is(
+        .section-head,
+        .card,
+        .value-list li,
+        .step-list li,
+        .testimonials figure,
+        .gallery-grid li,
+        .gallery-single
+      ) {
+      /* Longhands on purpose: the minifier folds `animation` plus
+         `animation-timeline` into one shorthand, and Chrome treats the
+         timeline as reset-only there and drops the whole declaration. */
+      animation-name: fade-up;
+      animation-timing-function: linear;
+      /* `forwards`, not `both`: before it nears the viewport an element is
+         plain and visible, so a full-page screenshot, a print and an
+         accessibility scan from the top of the page all see the finished
+         page. The jump to the first frame happens at the viewport's edge. */
+      animation-fill-mode: forwards;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    translate: 0 1.5rem;
   }
 }
 
