@@ -33,7 +33,11 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
     }
     done={(output) => (
       <>
-        <Done>Started. Follow it under Working on.</Done>
+        <Done>
+          {output?.outcome === "started" && output.build.lane === "quick"
+            ? "Updating your preview."
+            : "Started. Follow it under Working on."}
+        </Done>
         {output?.outcome === "started" ? (
           <p className="text-[0.8125rem] text-muted-foreground">
             {builtAs(output)}

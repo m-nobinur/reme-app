@@ -360,6 +360,7 @@ function workspaceOf(
     building: status.builds.some((build) => WORKING.has(build.state)),
     open: status.builds.length > 0,
     builds: status.builds,
+    expectedSeconds: status.expected_seconds,
     host: status.site.host,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,

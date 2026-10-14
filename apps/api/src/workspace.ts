@@ -1,7 +1,10 @@
 import {
   ActivityFeed,
   ApprovalRequest,
+  type AssignmentState,
   type AttentionItem,
+  type BuildActivity,
+  type BuildLane,
   type BuildSummary,
   type DerivedReminder,
   type FactRecord,
@@ -54,6 +57,46 @@ type Alert = Extract<AttentionItem, { kind: "alert" }>
 const iso = (at: Date) => at.toISOString()
 
 /**
+ * shortcut: constants until EV3's rolling p50 and p95 per lane exist; swap
+ * this one object for the measured numbers, nothing else reads them.
+ */
+export const EXPECTED_SECONDS = {
+  quick: { p50: 15, p95: 45 },
+  full: { p50: 180, p95: 330 },
+} as const
+
+/** Stage rows in the order a full build reaches them; fixed strings, never model text. */
+const STAGES: { id: string; label: string; at: AssignmentState[] }[] = [
+  { id: "planning", label: "Planning the layout", at: ["planning"] },
+  {
+    id: "writing",
+    label: "Writing the pages",
+    at: ["implementing", "revising", "repairing"],
+  },
+  { id: "checking", label: "Checking the site", at: ["validating"] },
+]
+
+/**
+ * Rows up to the build's current stage, earlier ones done. Whole-stage
+ * `1 of 1` for now: "3 of 5" pages and photos need per-page events from the
+ * parallel builder (BA4), which do not exist yet. A quick build gets none;
+ * the panel shows one line for it.
+ */
+export function activityFor(
+  lane: BuildLane,
+  state: AssignmentState
+): BuildActivity[] {
+  const now = STAGES.findIndex((stage) => stage.at.includes(state))
+  if (lane === "quick" || now < 0) return []
+  return STAGES.slice(0, now + 1).map(({ id, label }, i) => ({
+    id,
+    label,
+    done: i < now ? 1 : 0,
+    total: 1,
+  }))
+}
+
+/**
  * Site builds that have not finished, newest first, each with its latest
  * numbered revision: none until a report passes the gates, since a refused
  * one never takes a version. The panel caps the list; routing a change reads
@@ -71,6 +114,10 @@ export async function readBuilds(
       goal: assignments.goal,
       createdAt: assignments.createdAt,
       updatedAt: assignments.updatedAt,
+      // QE3 records the lane on the creation event; no row has it as a column.
+      lane: sql<
+        string | null
+      >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
@@ -81,15 +128,31 @@ export async function readBuilds(
     )
     .orderBy(sql`${assignments.createdAt} desc`)
   const rows = await (limit === null ? query : query.limit(limit))
-  return rows.map((row) => ({
-    assignment_id: row.id,
-    kind: row.kind as BuildSummary["kind"],
-    state: row.state,
-    goal: row.goal,
-    revision: row.revision,
-    created_at: iso(row.createdAt),
-    updated_at: iso(row.updatedAt),
-  }))
+  return rows.map((row) => {
+    const lane: BuildLane = row.lane === "quick" ? "quick" : "full"
+    return {
+      assignment_id: row.id,
+      kind: row.kind as BuildSummary["kind"],
+      state: row.state,
+      goal: row.goal,
+      lane,
+      activity: activityFor(lane, row.state),
+      revision: row.revision,
+      created_at: iso(row.createdAt),
+      updated_at: iso(row.updatedAt),
+    }
+  })
+}
+
+/** The lane one assignment was created in; `full` when none was recorded. */
+export async function readLane(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<BuildLane> {
+  const rows = await db.execute(
+    sql`select payload->>'lane' as lane from events where assignment_id = ${assignmentId} and type = 'assignment.created' limit 1`
+  )
+  return (rows[0]?.lane as string | undefined) === "quick" ? "quick" : "full"
 }
 
 /**
@@ -368,6 +431,7 @@ export async function readWorkspace(
     return WorkspaceStatus.parse({
       site,
       builds,
+      expected_seconds: EXPECTED_SECONDS,
       attention: orderAttention(approvalItems, questions, feed),
       missing_facts: missing,
       assistant_name: assistantName(current),
