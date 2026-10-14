@@ -1,5 +1,44 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { CUSTOM_SECTION_RULES, stableRules } from "../src/developer-rules.ts"
 import { checksOf, runCustomSections } from "../src/tail.ts"
+
+describe("the custom section rules the builder is told", () => {
+  const lint = readFileSync(
+    new URL(
+      "../../../packages/starter-site/scripts/custom-sections.mjs",
+      import.meta.url
+    ),
+    "utf8"
+  )
+
+  it("are in every stable prompt, once", () => {
+    expect(
+      stableRules().filter((r) => r === CUSTOM_SECTION_RULES)
+    ).toHaveLength(1)
+  })
+
+  it("give the lint's own limit, and name each thing it fails on", () => {
+    const max = /MAX_SECTIONS = (\d+)/.exec(lint)?.[1]
+    expect(CUSTOM_SECTION_RULES).toContain(`never more than ${max}`)
+    for (const word of [
+      "src/components/custom/<Name>.astro",
+      "no raw colour of any kind (a hex code, a colour function or a colour name)",
+      "var(--…)",
+      "script element",
+      "event handler",
+      "client:",
+      "set:html",
+      "iframe",
+      "src/site-config.ts",
+      "renders nothing",
+    ])
+      expect(CUSTOM_SECTION_RULES).toContain(word)
+    // Each of those is a rule the lint really has.
+    for (const word of ["set:html", "client:", "iframe"])
+      expect(lint).toContain(word)
+  })
+})
 
 const enc = (s: string) => new TextEncoder().encode(s)
 

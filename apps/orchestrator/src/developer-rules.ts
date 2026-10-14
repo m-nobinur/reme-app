@@ -1,5 +1,6 @@
 import {
   type Asset,
+  CUSTOM_SECTIONS_MAX,
   type FactRecord,
   FactValue,
   type FactValueKey,
@@ -52,6 +53,14 @@ export const DESIGN_RULES = [
   "11. Headlines 3 to 7 words. Paragraphs 1 to 2 sentences. One CTA wording, repeated.",
   "12. No social proof the facts do not hold. An empty testimonials section is left out.",
 ]
+
+/**
+ * The custom-section rules (ADR-038, VS8), written once. They state what
+ * `packages/starter-site/scripts/custom-sections.mjs` checks in every build,
+ * rule for rule, so the builder is told what the gate fails on. Whether to
+ * write one at all is the Blueprint's `custom_sections`, not a rule here.
+ */
+export const CUSTOM_SECTION_RULES = `- A custom section is written only when the Blueprint's custom_sections lists it, after the pages, and never more than ${CUSTOM_SECTIONS_MAX}. It is one PascalCase file, src/components/custom/<Name>.astro, and nothing else goes in that folder. It uses only the tokens and the shared classes: no raw colour of any kind (a hex code, a colour function or a colour name), and font-family only as a var(--…) token. It has no script element, event handler, client: directive, set:html or iframe. Every word, link and image in it comes from src/site-config.ts and none is written in the file. Its markup is one { content && ( … ) }, so with no content it renders nothing. Every build runs a check on the folder and fails with the file and the rule; read it and fix that file.`
 
 /** A palette as `site.palette` takes it: the six roles, by name. */
 const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
@@ -141,6 +150,7 @@ export function stableRules(): string[] {
     "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
     ...COPY_RULES,
     ...CONTENT_RULES,
+    CUSTOM_SECTION_RULES,
     "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
     "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact field empty when its fact is missing or when the owner has asked for that fact not to appear: an empty field renders nothing, which is how the site leaves something out. A composed field is text you may write or keep. It may say why the business is worth calling. Every checkable thing in it traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A sentence about the care taken over the work is not checkable and needs no fact. Never add, remove or re-key fields, and never change a field's kind, fact_key or required flag: the platform reads its own copy of fields, so an edit here changes nothing it believes.",
   ]
