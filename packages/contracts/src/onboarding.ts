@@ -143,14 +143,26 @@ export const FONTS = [
 ] as const satisfies readonly (Preset<string> & { family: string })[]
 export const FontId = z.enum(ids(FONTS))
 
-/** `home` and `quote` are always built; the rest are the owner's pick. */
+/**
+ * `home` and `quote` are always built; the rest are the owner's pick. The
+ * starter has no page of its own for gallery, testimonials or faq: each
+ * becomes a section on the home page, so the hint says so.
+ */
 export const PAGES = [
   { id: "home", label: "Home", hint: "Always included" },
   { id: "services", label: "Services", hint: "What you offer" },
   { id: "about", label: "About", hint: "Who is behind the business" },
-  { id: "gallery", label: "Gallery", hint: "Photos of your work" },
-  { id: "testimonials", label: "Reviews", hint: "What customers say" },
-  { id: "faq", label: "FAQ", hint: "Answers to common questions" },
+  {
+    id: "gallery",
+    label: "Gallery",
+    hint: "Photos of your work, as a home page section",
+  },
+  {
+    id: "testimonials",
+    label: "Reviews",
+    hint: "What customers say, as a home page section",
+  },
+  { id: "faq", label: "FAQ", hint: "Common questions, as a home page section" },
   {
     id: "service_area",
     label: "Areas we cover",
