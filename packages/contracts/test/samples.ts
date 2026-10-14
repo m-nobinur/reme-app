@@ -847,6 +847,14 @@ export const samples: Record<ContractName, unknown> = {
     updated_at: NOW,
   },
   ReminderPatch: { done: true },
+  RecordReviewInput: {
+    slot: 1,
+    quote:
+      "They worked around my hours and the kitchen has never looked so clean.",
+    name: "Marta L.",
+    permission: true,
+  },
+  RecordReviewOutput: { outcome: "recorded", slot: 1 },
   RequestChangeOutput: {
     outcome: "started",
     build: {

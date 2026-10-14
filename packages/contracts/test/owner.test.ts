@@ -114,6 +114,16 @@ const facts = {
       },
     ],
   },
+  "testimonials.review_1": {
+    quote: "Never late, and the car was spotless.",
+    name: "Priya S.",
+    permission: true,
+  },
+  "testimonials.review_2": {
+    quote: "They waited forty minutes for a delayed flight without a word.",
+    name: "Tom",
+    permission: true,
+  },
 }
 
 describe("AttentionItem", () => {
@@ -159,6 +169,13 @@ describe("FactValue", () => {
 
   const refused: [string, unknown][] = [
     ["an unknown key", { key: "business.fax", value: { e164: "+15550142" } }],
+    [
+      "a review the customer did not agree to",
+      {
+        key: "testimonials.review_1",
+        value: { ...facts["testimonials.review_1"], permission: false },
+      },
+    ],
     [
       "another key's value",
       { key: "business.name", value: facts["business.phone"] },
@@ -410,6 +427,8 @@ describe("the bridge's building blocks", () => {
       "site.pages",
       "media.uploads",
       "quote.form",
+      "testimonials.review_1",
+      "testimonials.review_2",
     ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })

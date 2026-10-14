@@ -308,6 +308,26 @@ export interface components {
                   }[]
                 }
               }
+            | {
+                /** @constant */
+                key: "testimonials.review_1"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "testimonials.review_2"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
+                }
+              }
           )
         | string
     }
@@ -942,6 +962,26 @@ export interface components {
               }[]
             }
           }
+        | {
+            /** @constant */
+            key: "testimonials.review_1"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
+        | {
+            /** @constant */
+            key: "testimonials.review_2"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
       )[]
       skippable: boolean
     }
@@ -1215,6 +1255,26 @@ export interface components {
                     hint: string | null
                     options: string[] | null
                   }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "testimonials.review_1"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "testimonials.review_2"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
                 }
               }
           )[]
@@ -1512,6 +1572,28 @@ export interface components {
             }[]
           } | null
         }
+      | {
+          /** @constant */
+          key: "testimonials.review_1"
+          skippable: boolean
+          prefill: {
+            quote: string
+            name: string
+            /** @constant */
+            permission: true
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "testimonials.review_2"
+          skippable: boolean
+          prefill: {
+            quote: string
+            name: string
+            /** @constant */
+            permission: true
+          } | null
+        }
     AskFactOutput:
       | {
           /** @constant */
@@ -1782,6 +1864,26 @@ export interface components {
                     hint: string | null
                     options: string[] | null
                   }[]
+                }
+              }
+            | {
+                /** @constant */
+                key: "testimonials.review_1"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "testimonials.review_2"
+                value: {
+                  quote: string
+                  name: string
+                  /** @constant */
+                  permission: true
                 }
               }
         }
@@ -3414,6 +3516,26 @@ export interface components {
                                     }[]
                                   }
                                 }
+                              | {
+                                  /** @constant */
+                                  key: "testimonials.review_1"
+                                  value: {
+                                    quote: string
+                                    name: string
+                                    /** @constant */
+                                    permission: true
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "testimonials.review_2"
+                                  value: {
+                                    quote: string
+                                    name: string
+                                    /** @constant */
+                                    permission: true
+                                  }
+                                }
                           }
                         | {
                             /** @constant */
@@ -3699,6 +3821,26 @@ export interface components {
                                     }[]
                                   }
                                 }
+                              | {
+                                  /** @constant */
+                                  key: "testimonials.review_1"
+                                  value: {
+                                    quote: string
+                                    name: string
+                                    /** @constant */
+                                    permission: true
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "testimonials.review_2"
+                                  value: {
+                                    quote: string
+                                    name: string
+                                    /** @constant */
+                                    permission: true
+                                  }
+                                }
                             )[]
                           }
                         | {
@@ -3950,6 +4092,7 @@ export interface components {
         | "request_change"
         | "answer_question"
         | "create_reminder"
+        | "record_review"
       )[]
       text: string
       reserved_usd: number
@@ -4220,6 +4363,26 @@ export interface components {
               }[]
             }
           }
+        | {
+            /** @constant */
+            key: "testimonials.review_1"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
+        | {
+            /** @constant */
+            key: "testimonials.review_2"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
       )[]
     }
     CosFeedback: {
@@ -4255,6 +4418,7 @@ export interface components {
           | "request_change"
           | "answer_question"
           | "create_reminder"
+          | "record_review"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -4351,6 +4515,8 @@ export interface components {
               | "site.pages"
               | "media.uploads"
               | "quote.form"
+              | "testimonials.review_1"
+              | "testimonials.review_2"
             )[]
             expected_seconds?: {
               full: {
@@ -4636,6 +4802,26 @@ export interface components {
                       hint: string | null
                       options: string[] | null
                     }[]
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "testimonials.review_1"
+                  value: {
+                    quote: string
+                    name: string
+                    /** @constant */
+                    permission: true
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "testimonials.review_2"
+                  value: {
+                    quote: string
+                    name: string
+                    /** @constant */
+                    permission: true
                   }
                 }
             )[]
@@ -5339,6 +5525,37 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "record_review"
+          output:
+            | {
+                /** @constant */
+                outcome: "recorded"
+                /** @enum {number} */
+                slot: 1 | 2
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -5358,6 +5575,7 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "record_review"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5382,6 +5600,7 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "record_review"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5404,6 +5623,7 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "record_review"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5426,6 +5646,7 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "record_review"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5448,6 +5669,7 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "record_review"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5530,6 +5752,8 @@ export interface components {
         | "site.pages"
         | "media.uploads"
         | "quote.form"
+        | "testimonials.review_1"
+        | "testimonials.review_2"
       )[]
       expected_seconds?: {
         full: {
@@ -5650,6 +5874,8 @@ export interface components {
             | "site.pages"
             | "media.uploads"
             | "quote.form"
+            | "testimonials.review_1"
+            | "testimonials.review_2"
           )[]
         }
     DesignDirection: {
@@ -6114,6 +6340,26 @@ export interface components {
             }[]
           }
         }
+      | {
+          /** @constant */
+          key: "testimonials.review_1"
+          value: {
+            quote: string
+            name: string
+            /** @constant */
+            permission: true
+          }
+        }
+      | {
+          /** @constant */
+          key: "testimonials.review_2"
+          value: {
+            quote: string
+            name: string
+            /** @constant */
+            permission: true
+          }
+        }
     FailureReport: {
       failure_id: string
       /** Format: uuid */
@@ -6422,6 +6668,39 @@ export interface components {
       hint: string | null
       options: string[] | null
     }
+    RecordReviewInput: {
+      /** @enum {number} */
+      slot: 1 | 2
+      quote: string
+      name: string
+      /** @constant */
+      permission: true
+    }
+    RecordReviewOutput:
+      | {
+          /** @constant */
+          outcome: "recorded"
+          /** @enum {number} */
+          slot: 1 | 2
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Reminder: {
       /** Format: uuid */
       id: string
@@ -7407,6 +7686,26 @@ export interface components {
               }[]
             }
           }
+        | {
+            /** @constant */
+            key: "testimonials.review_1"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
+        | {
+            /** @constant */
+            key: "testimonials.review_2"
+            value: {
+              quote: string
+              name: string
+              /** @constant */
+              permission: true
+            }
+          }
       )[]
     }
     SiteFields: {
@@ -8279,6 +8578,8 @@ export interface components {
         | "site.pages"
         | "media.uploads"
         | "quote.form"
+        | "testimonials.review_1"
+        | "testimonials.review_2"
       )[]
       assistant_name: string | null
       reminders: {
@@ -8347,6 +8648,8 @@ export interface components {
                 | "site.pages"
                 | "media.uploads"
                 | "quote.form"
+                | "testimonials.review_1"
+                | "testimonials.review_2"
               )[]
             }
         )[]

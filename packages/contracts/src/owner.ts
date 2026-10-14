@@ -30,6 +30,18 @@ export const OWNER_BRIDGE_HEADERS = {
 } as const
 
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+
+/**
+ * A customer's review the site may quote: their words, unedited; their name
+ * as they agreed it may be shown, such as "Marta L."; and the owner's word
+ * that the customer agreed to be quoted, which must be true. Stored only
+ * through the CoS's `record_review`, after the owner says yes on its card.
+ */
+export const ReviewValue = z.strictObject({
+  quote: Text(500),
+  name: Text(80),
+  permission: z.literal(true),
+})
 const fact = <K extends string, V extends z.ZodRawShape>(
   key: K,
   value: V,
@@ -107,6 +119,9 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("site.pages", choiceFacts.pages),
   fact("media.uploads", choiceFacts.uploads),
   fact("quote.form", choiceFacts.quoteForm),
+  /** One per review the starter can show; the claims gate quotes nothing else. */
+  fact("testimonials.review_1", ReviewValue.shape),
+  fact("testimonials.review_2", ReviewValue.shape),
 ])
 
 export type FactValueKey = FactValue["key"]
@@ -136,8 +151,22 @@ export const CHOICE_FACT_KEYS = [
 ] as const satisfies readonly FactValueKey[]
 export type ChoiceFactKey = (typeof CHOICE_FACT_KEYS)[number]
 
+/**
+ * The reviews, by the slot `record_review` names. Never asked for on a form
+ * and never stated by the onboarding planner: a review is stored only with
+ * the owner's word that the customer agreed to be quoted.
+ */
+export const REVIEW_FACT_KEYS = [
+  "testimonials.review_1",
+  "testimonials.review_2",
+] as const satisfies readonly FactValueKey[]
+export type ReviewFactKey = (typeof REVIEW_FACT_KEYS)[number]
+
 /** The keys an owner types an answer for, which the web gives inputs to. */
-export type AskableFactKey = Exclude<FactValueKey, ChoiceFactKey>
+export type AskableFactKey = Exclude<
+  FactValueKey,
+  ChoiceFactKey | ReviewFactKey
+>
 
 /** The longest text answer an owner can give, in characters. */
 export const ANSWER_TEXT_MAX = 500

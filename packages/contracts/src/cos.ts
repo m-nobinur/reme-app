@@ -11,6 +11,7 @@ import {
   FactValueKey,
   OwnerAnswerText,
   OwnerChangeRequest,
+  ReviewValue,
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
@@ -120,6 +121,22 @@ export const CreateReminderOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/**
+ * `record_review`'s input: a customer's review for the site, in the slot it
+ * fills (`testimonials.review_<slot>`, replacing the one there), and the
+ * owner's word that the customer agreed to be quoted, which must be true.
+ */
+export const RecordReviewInput = z.strictObject({
+  slot: z.literal([1, 2]),
+  ...ReviewValue.shape,
+})
+
+/** `record_review`'s output once the owner said yes. A no is `output-denied`. */
+export const RecordReviewOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("recorded"), slot: z.literal([1, 2]) }),
+  Refused,
+])
+
 const Empty = z.strictObject({})
 
 /**
@@ -137,6 +154,7 @@ export const COS_TOOLS = {
     input: CreateReminderRequest,
     output: CreateReminderOutput,
   },
+  record_review: { input: RecordReviewInput, output: RecordReviewOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -263,6 +281,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("create_reminder"),
     output: COS_TOOLS.create_reminder.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("record_review"),
+    output: COS_TOOLS.record_review.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -300,6 +323,8 @@ export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>
 export type AnswerQuestionOutput = z.infer<typeof AnswerQuestionOutput>
 export type CreateReminderOutput = z.infer<typeof CreateReminderOutput>
+export type RecordReviewInput = z.infer<typeof RecordReviewInput>
+export type RecordReviewOutput = z.infer<typeof RecordReviewOutput>
 export type CosTurn = z.infer<typeof CosTurn>
 export type CosPrefix = z.infer<typeof CosPrefix>
 export type CosContext = z.infer<typeof CosContext>

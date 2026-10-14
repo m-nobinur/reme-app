@@ -1098,6 +1098,88 @@
                       "value"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "testimonials.review_1"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "pattern": "\\S"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "permission": {
+                            "type": "boolean",
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "quote",
+                          "name",
+                          "permission"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "testimonials.review_2"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "pattern": "\\S"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "permission": {
+                            "type": "boolean",
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "quote",
+                          "name",
+                          "permission"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -3258,6 +3340,88 @@
                     "value"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_1"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_2"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -4228,6 +4392,88 @@
                           },
                           "required": [
                             "fields"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "testimonials.review_1"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "pattern": "\\S"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "permission": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "name",
+                            "permission"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "testimonials.review_2"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "pattern": "\\S"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "permission": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "name",
+                            "permission"
                           ],
                           "additionalProperties": false
                         }
@@ -5478,6 +5724,110 @@
               "prefill"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "testimonials.review_1"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "\\S"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "\\S"
+                      },
+                      "permission": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "quote",
+                      "name",
+                      "permission"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "testimonials.review_2"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "\\S"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "pattern": "\\S"
+                      },
+                      "permission": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "quote",
+                      "name",
+                      "permission"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -6432,6 +6782,88 @@
                         },
                         "required": [
                           "fields"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "testimonials.review_1"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "pattern": "\\S"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "permission": {
+                            "type": "boolean",
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "quote",
+                          "name",
+                          "permission"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "testimonials.review_2"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "pattern": "\\S"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "permission": {
+                            "type": "boolean",
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "quote",
+                          "name",
+                          "permission"
                         ],
                         "additionalProperties": false
                       }
@@ -12254,6 +12686,88 @@
                                                 "value"
                                               ],
                                               "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "testimonials.review_1"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "quote": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 500,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "name": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 80,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "permission": {
+                                                      "type": "boolean",
+                                                      "const": true
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "quote",
+                                                    "name",
+                                                    "permission"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "testimonials.review_2"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "quote": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 500,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "name": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 80,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "permission": {
+                                                      "type": "boolean",
+                                                      "const": true
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "quote",
+                                                    "name",
+                                                    "permission"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
                                             }
                                           ]
                                         }
@@ -13233,6 +13747,88 @@
                                                     },
                                                     "required": [
                                                       "fields"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "testimonials.review_1"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "quote": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 500,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 80,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "permission": {
+                                                        "type": "boolean",
+                                                        "const": true
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "quote",
+                                                      "name",
+                                                      "permission"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "testimonials.review_2"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "quote": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 500,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "name": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 80,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "permission": {
+                                                        "type": "boolean",
+                                                        "const": true
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "quote",
+                                                      "name",
+                                                      "permission"
                                                     ],
                                                     "additionalProperties": false
                                                   }
@@ -14375,7 +14971,8 @@
                 "get_preview",
                 "request_change",
                 "answer_question",
-                "create_reminder"
+                "create_reminder",
+                "record_review"
               ]
             }
           },
@@ -15355,6 +15952,88 @@
                     "value"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_1"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_2"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -15476,7 +16155,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 },
                 "description": {
@@ -15802,7 +16482,9 @@
                         "site.direction",
                         "site.pages",
                         "media.uploads",
-                        "quote.form"
+                        "quote.form",
+                        "testimonials.review_1",
+                        "testimonials.review_2"
                       ]
                     }
                   },
@@ -16836,6 +17518,88 @@
                               },
                               "required": [
                                 "fields"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "testimonials.review_1"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500,
+                                  "pattern": "\\S"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "permission": {
+                                  "type": "boolean",
+                                  "const": true
+                                }
+                              },
+                              "required": [
+                                "quote",
+                                "name",
+                                "permission"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "testimonials.review_2"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500,
+                                  "pattern": "\\S"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "permission": {
+                                  "type": "boolean",
+                                  "const": true
+                                }
+                              },
+                              "required": [
+                                "quote",
+                                "name",
+                                "permission"
                               ],
                               "additionalProperties": false
                             }
@@ -19261,6 +20025,102 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "record_review"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "recorded"
+                      },
+                      "slot": {
+                        "type": "number",
+                        "enum": [
+                          1,
+                          2
+                        ]
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "slot"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -19322,7 +20182,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 }
               },
@@ -19419,7 +20280,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 }
               },
@@ -19509,7 +20371,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 }
               },
@@ -19598,7 +20461,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 }
               },
@@ -19687,7 +20551,8 @@
                     "get_preview",
                     "request_change",
                     "answer_question",
-                    "create_reminder"
+                    "create_reminder",
+                    "record_review"
                   ]
                 }
               },
@@ -19965,7 +20830,9 @@
                 "site.direction",
                 "site.pages",
                 "media.uploads",
-                "quote.form"
+                "quote.form",
+                "testimonials.review_1",
+                "testimonials.review_2"
               ]
             }
           },
@@ -20366,7 +21233,9 @@
                     "site.direction",
                     "site.pages",
                     "media.uploads",
-                    "quote.form"
+                    "quote.form",
+                    "testimonials.review_1",
+                    "testimonials.review_2"
                   ]
                 }
               }
@@ -22102,6 +22971,88 @@
               "value"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "testimonials.review_1"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "\\S"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "\\S"
+                  },
+                  "permission": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "quote",
+                  "name",
+                  "permission"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "testimonials.review_2"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "\\S"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "\\S"
+                  },
+                  "permission": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "quote",
+                  "name",
+                  "permission"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -23169,6 +24120,115 @@
           "options"
         ],
         "additionalProperties": false
+      },
+      "RecordReviewInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "number",
+            "enum": [
+              1,
+              2
+            ]
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "permission": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "slot",
+          "quote",
+          "name",
+          "permission"
+        ],
+        "additionalProperties": false
+      },
+      "RecordReviewOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "recorded"
+              },
+              "slot": {
+                "type": "number",
+                "enum": [
+                  1,
+                  2
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "slot"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "Reminder": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -25815,7 +26875,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 24,
+            "maxItems": 26,
             "type": "array",
             "items": {
               "oneOf": [
@@ -26758,6 +27818,88 @@
                       },
                       "required": [
                         "fields"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_1"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "testimonials.review_2"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "\\S"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "permission": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "quote",
+                        "name",
+                        "permission"
                       ],
                       "additionalProperties": false
                     }
@@ -29953,7 +31095,9 @@
                 "site.direction",
                 "site.pages",
                 "media.uploads",
-                "quote.form"
+                "quote.form",
+                "testimonials.review_1",
+                "testimonials.review_2"
               ]
             }
           },
@@ -30172,7 +31316,9 @@
                               "site.direction",
                               "site.pages",
                               "media.uploads",
-                              "quote.form"
+                              "quote.form",
+                              "testimonials.review_1",
+                              "testimonials.review_2"
                             ]
                           }
                         }
