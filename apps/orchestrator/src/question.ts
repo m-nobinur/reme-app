@@ -69,10 +69,10 @@ export function askedOptions(q: {
 
 /** What `ask_chief` tells the model it may ask, in the words `refuseQuestion` enforces. */
 export const ASK_CHIEF_DESCRIPTION = [
-  "Ask the Chief of Staff for one canonical fact the site needs and does not have. Name the fact key (for example business.phone) and why the site needs it. This ends your turn; the answer comes back as a new message.",
+  "Ask the Chief of Staff for one canonical fact the site needs and does not have, naming the fact key (for example business.phone) and why. This ends your turn; the answer comes back as a new message.",
   `For ${FactValueKey.options.join(", ")} the answer has a fixed shape: send answer_schema {"type":"object"} and no options.`,
-  `For any other key the owner answers in text. answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
-  `options is a closed list of literal values the owner picks exactly as written: at most ${OPTIONS_MAX}, each a valid answer under answer_schema. Never put an instruction, a question, an empty string or "null" in options. Leave options out unless the answer is a choice among known values.`,
+  `For any other key the owner answers in text: answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
+  `options is a closed list of literal values the owner picks exactly as written, at most ${OPTIONS_MAX}, each valid under answer_schema, and only when the answer is a choice among known values. Never put an instruction, a question, an empty string or "null" in it.`,
 ].join("\n")
 
 /** Why `ask_chief` refuses this question, for the model to read; null when it may be asked. */
