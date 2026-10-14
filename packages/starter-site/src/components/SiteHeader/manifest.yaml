@@ -2,7 +2,12 @@ component: SiteHeader
 path: src/components/SiteHeader/SiteHeader.astro
 summary: The sticky header with the business name, navigation, a phone menu and
   one call to action.
-props: []
+props:
+  - name: variant
+    type: '"split" | "centered" | "minimal"'
+    required: false
+    description: "split, centered on the name, or minimal: a two-line wordmark and
+      the menu."
 constraints:
   - The Base layout renders it on every page.
   - Navigation and the action come from src/routes.ts, so a link shows only when
@@ -11,8 +16,14 @@ constraints:
     a fixed height; with no logo the name shows as text.
   - On a phone the links sit behind a native details menu labelled navMenu,
     which needs no script.
+  - split puts the name left and the action right; centered puts the name
+    between the links and the action; minimal shows the name over site.industry
+    and keeps the links behind the menu at every width.
 examples:
   - "<SiteHeader />"
+  - '<SiteHeader variant="split" />'
+  - '<SiteHeader variant="centered" />'
+  - '<SiteHeader variant="minimal" />'
 forbidden:
   - using it in a page
   - a hard-coded navigation link

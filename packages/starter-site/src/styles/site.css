@@ -126,7 +126,11 @@ p {
   margin: var(--space-lg) 0 0;
 }
 
+/* Every secondary link carries the arrow, and it moves under the pointer. */
 .more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
   font-weight: 600;
   text-decoration-thickness: 1px;
 }
@@ -138,7 +142,7 @@ p {
 /* A titled block with its heading beside the text on a wide screen. The FAQ,
    the reasons and the area use the same split, so the page has one rhythm. */
 .section-inner,
-.faq-inner,
+.faq-split .faq-inner,
 .value-inner,
 .area-inner {
   display: grid;
@@ -147,10 +151,14 @@ p {
 
 @media (min-width: 56rem) {
   .section-inner,
-  .faq-inner,
   .value-inner,
   .area-inner {
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  .faq-split .faq-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     align-items: start;
   }
 
@@ -202,6 +210,23 @@ p {
   letter-spacing: var(--display-tracking);
   color: var(--foreground);
   text-decoration: none;
+}
+
+/* minimal's wordmark: the name over the trade, set small and tracked. */
+.header-minimal .site-name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.site-line {
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
 }
 
 /* The owner's logo, at a fixed height whatever its file's size. */
@@ -320,6 +345,35 @@ p {
   .nav-narrow {
     display: none;
   }
+
+  /* minimal keeps the menu behind its button at every width. */
+  .header-minimal .nav-wide {
+    display: none;
+  }
+
+  .header-minimal .nav-narrow {
+    display: block;
+  }
+
+  /* centered: the links, the name in the middle, the action. */
+  .header-centered .header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .header-centered .site-name {
+    grid-area: 1 / 2;
+    margin: 0;
+  }
+
+  .header-centered .nav-wide {
+    grid-area: 1 / 1;
+  }
+
+  .header-centered .header-action {
+    grid-area: 1 / 3;
+    justify-self: end;
+  }
 }
 
 /* Actions */
@@ -354,7 +408,10 @@ p {
 /* The arrow is drawn, not typed: a mask in the text colour, so it follows
    every surface the button sits on and needs no glyph from any font. It is
    decoration and carries no text, so it is not in the accessible name. */
-.action::after {
+.action::after,
+.more-link::after,
+.card-arrow::after,
+.row-arrow::after {
   content: "";
   flex: none;
   width: 1.125em;
@@ -370,7 +427,10 @@ p {
   transform: translateY(-2px);
 }
 
-.action:hover::after {
+.action:hover::after,
+.more-link:hover::after,
+.card-linked:hover .card-arrow::after,
+.rows-linked li:hover .row-arrow::after {
   transform: translateX(3px);
 }
 
@@ -426,12 +486,34 @@ p {
   max-width: 44rem;
 }
 
+/* The label above a heading: small, tracked, uppercase, led by a dot in the
+   brand colour. One look for the hero and every section. */
 .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   margin: 0 0 var(--space-sm);
   color: var(--brand-text);
-  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  content: "";
+  flex: none;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* The last word of a headline, never the whole line. */
+.accent {
+  color: var(--brand-text);
 }
 
 .hero-home h1 {
@@ -481,62 +563,357 @@ p {
   line-height: 1.25;
 }
 
-/* Trust strip */
+.hero-list .mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Home heroes. The variant sets the composition; the template sets only type,
+   shape and surface. A photo variant with no photo lists the services in the
+   photo's place, never an empty frame. */
+
+.hero-home {
+  padding-block: clamp(3rem, 2rem + 5vw, 6.5rem);
+  overflow-x: clip;
+}
+
+.hero-home .hero-inner {
+  display: grid;
+  width: 100%;
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+.hero-media {
+  position: relative;
+}
+
+.hero-plain .hero-list {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.hero-plain .hero-list li {
+  padding-block: var(--space-sm);
+}
+
+.hero-plain .hero-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* The one overlay on the photo that carries copy: a pill by default, a stamp
+   card on the split heroes. */
+.hero-caption {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: var(--space-md);
+  inset-inline-end: var(--space-md);
+  max-width: 16rem;
+  margin: 0;
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+@media (min-width: 56rem) {
+  .hero-home:not(.hero-dark_center) .hero-inner {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+}
+
+/* split_frame: the photo in a plain frame, a stamp card over its corner. */
+:is(.hero-split_frame, .hero-wash.hero-plain) {
+  border-bottom: 1px solid var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.hero-split_frame .hero-image {
+  padding: var(--space-2xs);
+  border: 1px solid var(--brand-line);
+  background: var(--card);
+}
+
+:is(.hero-split_frame, .hero-split_arch) .hero-caption {
+  inset-block-end: calc(var(--space-md) * -1);
+  inset-inline: var(--space-sm) auto;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  color: var(--card-foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+}
+
+@media (min-width: 56rem) {
+  :is(.hero-split_frame, .hero-split_arch) .hero-caption {
+    inset-inline-start: calc(var(--space-xl) * -1);
+  }
+}
+
+/* split_arch: the photo under an arch, a hairline arch offset behind it. */
+.hero-split_arch .hero-media {
+  isolation: isolate;
+  width: 100%;
+  max-width: 30rem;
+  justify-self: center;
+}
+
+.hero-split_arch .hero-image {
+  aspect-ratio: 4 / 5;
+  border-radius: 999px 999px 0 0;
+}
+
+.hero-split_arch .hero-media::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--space-md) * -1) var(--space-md) var(--space-md)
+    calc(var(--space-md) * -1);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px 999px 0 0;
+}
+
+/* wash and dark_center: the photo full-bleed behind the copy. wash keeps it
+   under the copy on a phone, where a wash would sit behind every line. */
+.hero-wash .hero-text,
+.hero-dark_center .hero-text {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-dark_center.hero-photo .hero-media,
+.hero-dark_center.hero-photo .hero-media::after {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-dark_center.hero-photo .hero-image {
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+@media (min-width: 56rem) {
+  .hero-wash.hero-photo {
+    display: grid;
+    align-items: center;
+    min-height: clamp(34rem, 80vh, 48rem);
+  }
+
+  .hero-wash.hero-photo .hero-media,
+  .hero-wash.hero-photo .hero-media::after {
+    position: absolute;
+    inset: 0;
+  }
+
+  .hero-wash.hero-photo .hero-media::after {
+    content: "";
+    background: linear-gradient(
+      to right,
+      color-mix(in oklch, var(--paper) 96%, transparent) 0%,
+      color-mix(in oklch, var(--paper) 90%, transparent) 45%,
+      transparent 78%
+    );
+  }
+
+  .hero-wash.hero-photo .hero-image {
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: 0;
+  }
+
+  .hero-wash .hero-text {
+    max-width: 36rem;
+  }
+}
+
+.hero-dark_center {
+  text-align: center;
+}
+
+.hero-dark_center :is(.hero-text, .lede) {
+  margin-inline: auto;
+}
+
+.hero-dark_center :is(.eyebrow, .actions, .hero-list) {
+  justify-content: center;
+}
+
+.hero-dark_center.hero-photo {
+  --foreground: var(--paper);
+  --muted-foreground: color-mix(in oklch, var(--paper) 86%, var(--ink));
+  --brand-text: var(--paper);
+  --brand-line: color-mix(in oklch, var(--paper) 55%, transparent);
+  display: grid;
+  align-items: end;
+  min-height: clamp(32rem, 80vh, 50rem);
+  color: var(--foreground);
+}
+
+.hero-dark_center.hero-photo .hero-media::after {
+  content: "";
+  background: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--ink) 90%, transparent) 0%,
+    color-mix(in oklch, var(--ink) 74%, transparent) 55%,
+    color-mix(in oklch, var(--ink) 35%, transparent) 100%
+  );
+}
+
+.hero-dark_center.hero-plain {
+  --foreground: var(--brand-foreground);
+  --muted-foreground: var(--brand-foreground);
+  --brand-text: var(--brand-foreground);
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+.hero-dark_center.hero-plain .hero-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.hero-dark_center.hero-plain .hero-list li {
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid
+    color-mix(in oklch, var(--brand-foreground) 40%, transparent);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.hero-dark_center.hero-plain .hero-list .mark {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: inherit;
+}
+
+/* text_led: the type leads, the photo a portrait inset beside it. */
+.hero-text_led h1 {
+  max-width: 15ch;
+}
+
+.hero-text_led .hero-media {
+  max-width: 17rem;
+}
+
+.hero-text_led .hero-image {
+  aspect-ratio: 3 / 4;
+}
+
+.hero-text_led .hero-caption {
+  inset-inline: var(--space-sm);
+  inset-block-end: var(--space-sm);
+  max-width: none;
+  text-align: center;
+}
+
+@media (min-width: 56rem) {
+  .hero-home.hero-text_led .hero-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
+    align-items: end;
+  }
+}
+
+/* Trust strip. icons: the figures and points in columns split by hairlines.
+   phrases: one tracked line, the items between dots. */
 
 .trust-strip {
   border-bottom: 1px solid var(--border);
   background: var(--background);
 }
 
-.trust-inner {
+.trust-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-md) 0;
+  margin: 0;
+  padding: var(--space-lg) 0;
+  list-style: none;
+}
+
+.trust-list li {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md) var(--space-xl);
-  padding-block: var(--space-lg);
+  gap: var(--space-2xs);
+  padding-inline: var(--space-md);
+  font-weight: 600;
+  line-height: 1.35;
 }
 
-.trust-figures {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md) var(--space-xl);
-  margin: 0;
+.trust-icons .trust-list li:has(.trust-value) {
+  flex-direction: column;
+  align-items: start;
+  gap: var(--space-3xs);
 }
 
-.trust-figures div {
-  display: flex;
-  flex-direction: column-reverse;
+@media (min-width: 48rem) {
+  .trust-icons .trust-list {
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  }
+
+  .trust-icons .trust-list li + li {
+    border-inline-start: 1px solid var(--border);
+  }
 }
 
-.trust-figures dt {
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-}
-
-.trust-figures dd {
-  margin: 0;
+.trust-value {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: var(--display-weight);
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
 
-.trust-points {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs) var(--space-lg);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.trust-label {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
 }
 
-.trust-points li {
+.trust-phrases .trust-list {
   display: flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  font-weight: 600;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.trust-phrases .trust-list li {
+  gap: 0.4em;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.trust-phrases :is(.trust-value, .trust-label) {
+  color: inherit;
+  font: inherit;
+}
+
+.trust-phrases .trust-list li + li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -0.1875rem;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--brand);
 }
 
 /* Cards */
@@ -588,23 +965,27 @@ p {
 
 /* A linked card: the name is the link, stretched over the card, and the
    card answers the pointer and shows the focus ring. */
-.card-linked h3 a {
+.card-linked h3 a,
+.rows-linked h3 a {
   color: inherit;
   text-decoration: none;
 }
 
-.card-linked h3 a::after {
+.card-linked h3 a::after,
+.rows-linked h3 a::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
 }
 
-.card-linked h3 a:focus-visible {
+.card-linked h3 a:focus-visible,
+.rows-linked h3 a:focus-visible {
   outline: none;
 }
 
-.card-linked:has(a:focus-visible) {
+.card-linked:has(a:focus-visible),
+.rows-linked li:has(a:focus-visible) {
   outline: 2px solid var(--brand-text);
   outline-offset: 3px;
 }
@@ -620,8 +1001,148 @@ p {
   box-shadow: var(--shadow-card);
 }
 
-.card-linked:hover h3 {
+.card-linked:hover h3,
+.rows-linked li:hover h3 {
   color: var(--brand-text);
+}
+
+/* Service patterns. photo_cards and fleet put a photo across the card's top,
+   numbered_rows and practice_list are hairline rows, alternating is the
+   services page. */
+
+.card-media {
+  position: relative;
+  overflow: hidden;
+  margin: calc(var(--space-lg) * -1) calc(var(--space-md) * -1) var(--space-xs);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+
+.card-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--brand-soft);
+  transition: transform 200ms ease;
+}
+
+.services-fleet .card-photo {
+  aspect-ratio: 16 / 9;
+}
+
+.card-linked:hover .card-photo {
+  transform: scale(1.035);
+}
+
+.card-tag {
+  position: absolute;
+  inset-block-start: var(--space-sm);
+  inset-inline-start: var(--space-sm);
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--brand-text);
+}
+
+.card-arrow {
+  display: inline-flex;
+  margin-block-start: var(--space-2xs);
+  color: var(--brand-text);
+}
+
+.spec-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin: var(--space-2xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spec-pills li {
+  padding: var(--space-3xs) var(--space-xs);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.service-rows {
+  counter-reset: row;
+  margin: 0;
+  padding: 0;
+  border-block-start: 1px solid var(--brand-line);
+  list-style: none;
+}
+
+.service-rows li {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+  padding-block: var(--space-md);
+  border-block-end: 1px solid var(--brand-line);
+  counter-increment: row;
+}
+
+.services-numbered_rows .service-rows li {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.service-rows li::before {
+  content: counter(row, decimal-leading-zero);
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.service-rows .card-icon {
+  border-radius: 50%;
+}
+
+.row-text :is(h3, p) {
+  margin: 0;
+}
+
+.row-text p {
+  color: var(--muted-foreground);
+}
+
+.services-practice_list .row-text h3 {
+  font-size: var(--text-xl);
+}
+
+@media (min-width: 56rem) {
+  .services-practice_list .row-text {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-xl);
+    align-items: baseline;
+  }
+}
+
+.row-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 50%;
+  color: var(--brand-text);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.rows-linked li:hover .row-arrow {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-foreground);
 }
 
 /* Reasons to choose */
@@ -659,18 +1180,44 @@ p {
   border-top: 1px solid var(--border);
 }
 
-.service-detail:first-child {
+.service-detail:first-of-type {
   padding-block-start: 0;
   border-top: 0;
 }
 
-.service-detail:last-child {
+.service-detail:last-of-type {
   padding-block-end: 0;
 }
 
 @media (min-width: 56rem) {
   .service-detail {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+.service-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-media);
+  background: var(--brand-soft);
+}
+
+/* A photo takes one side and the text the other, swapping on every second
+   service. */
+@media (min-width: 56rem) {
+  .service-detail:has(> .service-photo) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .service-detail > .service-photo {
+    grid-row: 1 / span 2;
+  }
+
+  .service-detail:nth-of-type(even) > .service-photo {
+    grid-column: 2;
   }
 }
 
@@ -757,7 +1304,7 @@ p {
 
 /* The number is a badge sitting on the rule, so the steps read as one line. */
 .step-list li::before {
-  content: counter(step);
+  content: counter(step, decimal-leading-zero);
   display: grid;
   place-items: center;
   width: 2.5rem;
@@ -776,6 +1323,110 @@ p {
 .step-list p {
   margin: 0;
   color: var(--muted-foreground);
+}
+
+/* timeline: the badges on one line across, a line down the side on a phone. */
+@media (max-width: 47.99rem) {
+  .steps-timeline .step-list {
+    gap: var(--space-lg);
+    padding: 0;
+  }
+
+  .steps-timeline .step-list li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    column-gap: var(--space-md);
+    border: 0;
+  }
+
+  .steps-timeline .step-list li::before {
+    grid-row: span 2;
+    margin: 0;
+  }
+
+  .steps-timeline .step-list li > * {
+    grid-column: 2;
+  }
+
+  .steps-timeline .step-list li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    inset-block: 2.5rem calc(var(--space-lg) * -1);
+    inset-inline-start: 1.25rem;
+    border-inline-start: 1px solid var(--brand-line);
+  }
+}
+
+/* circles: outlined numbers centred over each step, on the tint. */
+.steps-circles {
+  background: var(--brand-soft);
+}
+
+.steps-circles :is(.section-head, .step-list) {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.steps-circles .eyebrow {
+  justify-content: center;
+}
+
+.steps-circles .step-list {
+  padding: 0;
+}
+
+.steps-circles .step-list li {
+  border: 0;
+}
+
+.steps-circles .step-list li::before {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto var(--space-md);
+  border-color: var(--brand-text);
+  background: transparent;
+}
+
+.steps-circles .step-list p {
+  margin-inline: auto;
+}
+
+/* dark_band: the heading beside the steps, one to a row, on the ink. */
+.steps-dark_band .step-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+}
+
+.steps-dark_band .step-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-md);
+  padding-block: var(--space-md);
+  border-block-start: 1px solid var(--border);
+}
+
+.steps-dark_band .step-list li::before {
+  grid-row: span 2;
+  margin: 0;
+}
+
+.steps-dark_band .step-list li > * {
+  grid-column: 2;
+}
+
+@media (min-width: 56rem) {
+  .steps-dark_band .steps-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-2xl);
+    align-items: start;
+  }
+
+  .steps-dark_band .section-head {
+    margin: 0;
+  }
 }
 
 /* Testimonials */
@@ -797,6 +1448,27 @@ p {
   font-family: var(--font-display);
   font-size: var(--text-xl);
   line-height: 1.35;
+}
+
+/* featured: the first review larger, on the tint. */
+@media (min-width: 48rem) {
+  .testimonials-featured .quote-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+
+.testimonials-featured figure:first-child {
+  border-color: transparent;
+  background: var(--brand-soft);
+}
+
+.testimonials-featured figure:first-child blockquote {
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+}
+
+.testimonials-featured figure:only-child {
+  grid-column: 1 / -1;
 }
 
 .testimonials figcaption {
@@ -1119,7 +1791,20 @@ p {
   font-size: var(--text-sm);
 }
 
-/* Frequently asked questions */
+/* Frequently asked questions. split: the heading beside the questions;
+   stacked: the heading centred above a narrow column of them. */
+
+.faq-stacked .faq-inner {
+  max-width: calc(var(--container-narrow) + var(--gutter) * 2);
+}
+
+.faq-stacked .section-head {
+  text-align: center;
+}
+
+.faq-stacked .eyebrow {
+  justify-content: center;
+}
 
 .faq-list {
   border: 1px solid var(--border);
@@ -1256,6 +1941,30 @@ p {
   color: var(--brand-foreground);
 }
 
+/* photo: the picture under the brand colour, which still carries the copy. */
+.cta-photo {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.cta-image {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cta-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in oklch, var(--brand) 86%, transparent);
+}
+
 .cta-inner {
   display: flex;
   flex-wrap: wrap;
@@ -1282,26 +1991,26 @@ p {
 }
 
 /* On a brand surface the actions turn over: the page colour on the brand. */
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-primary {
   background: var(--brand-foreground);
   color: var(--brand);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary:hover {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-primary:hover {
   background: color-mix(in oklch, var(--brand-foreground) 88%, var(--brand));
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-secondary {
   border-color: color-mix(in oklch, var(--brand-foreground) 50%, transparent);
   color: var(--brand-foreground);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary:hover {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-secondary:hover {
   border-color: var(--brand-foreground);
   background: color-mix(in oklch, var(--brand-foreground) 12%, transparent);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) a:focus-visible {
+:is(.cta-band, .hero-dark_center.hero-plain) a:focus-visible {
   outline-color: var(--brand-foreground);
 }
 
@@ -1392,6 +2101,11 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .action,
   .action::after,
+  .more-link::after,
+  .card-arrow::after,
+  .row-arrow,
+  .row-arrow::after,
+  .card-photo,
   .card-linked,
   .faq summary::after,
   .menu-toggle::after,
@@ -1401,6 +2115,10 @@ p {
 
   .action:hover,
   .action:hover::after,
+  .more-link:hover::after,
+  .card-linked:hover .card-photo,
+  .card-linked:hover .card-arrow::after,
+  .rows-linked li:hover .row-arrow::after,
   :is(.gallery-grid li, .gallery-single):hover img {
     transform: none;
   }
@@ -1415,6 +2133,7 @@ p {
       :is(
         .section-head,
         .card,
+        .service-rows li,
         .value-list li,
         .step-list li,
         .testimonials figure,
@@ -1445,8 +2164,10 @@ p {
 }
 
 /* An ink surface: the page's pair turned over, so every rule above reads on
-   it unchanged. Bold's header, hero and footer wear it. */
-[data-template="bold"] :is(.site-header, .hero, .site-footer) {
+   it unchanged. Bold's header, hero and footer wear it, and so does a dark
+   band of steps. */
+[data-template="bold"] :is(.site-header, .hero, .site-footer),
+.steps-dark_band {
   --background: var(--ink);
   --foreground: var(--paper);
   --card: color-mix(in oklch, var(--paper) 8%, var(--ink));
@@ -1462,45 +2183,6 @@ p {
 
 /* Classic: a steady, warm layout. A light header, the copy beside the
    photo on a tinted field, bordered cards with the icon beside the name. */
-
-[data-template="classic"] .hero-home {
-  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
-}
-
-[data-template="classic"] .hero-home .hero-inner {
-  display: grid;
-  gap: var(--space-xl);
-  align-items: center;
-}
-
-@media (min-width: 56rem) {
-  [data-template="classic"] .hero-home .hero-inner {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  }
-}
-
-[data-template="classic"] .hero-home .hero-image {
-  box-shadow: 1rem 1rem 0 var(--brand-line);
-}
-
-[data-template="classic"] .hero-list {
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--brand-line);
-  border-radius: var(--radius-card);
-  background: var(--card);
-  box-shadow: var(--shadow-card);
-}
-
-[data-template="classic"] .hero-list li {
-  padding-block: var(--space-sm);
-}
-
-[data-template="classic"] .hero-list .mark {
-  width: 1.75rem;
-  height: 1.75rem;
-}
 
 [data-template="classic"] .card {
   column-gap: var(--space-sm);
@@ -1534,67 +2216,9 @@ p {
   box-shadow: 0 1px 0 var(--border);
 }
 
-[data-template="modern"] .hero-home {
-  display: grid;
-  align-items: end;
-  min-height: clamp(30rem, 72vh, 46rem);
-  padding-block: var(--section-pad);
-}
-
-[data-template="modern"] .hero-home .hero-inner {
-  width: 100%;
-}
-
-[data-template="modern"] .hero-home .hero-text {
-  position: relative;
-  z-index: 2;
-}
-
-[data-template="modern"] .hero-photo .hero-image {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  height: 100%;
-  aspect-ratio: auto;
-  border-radius: 0;
-}
-
-[data-template="modern"] .hero-photo::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(
-    to top,
-    color-mix(in oklch, var(--ink) 88%, transparent) 0%,
-    color-mix(in oklch, var(--ink) 70%, transparent) 55%,
-    color-mix(in oklch, var(--ink) 25%, transparent) 100%
-  );
-}
-
-[data-template="modern"] .hero-photo {
-  --foreground: var(--paper);
-  --muted-foreground: color-mix(in oklch, var(--paper) 86%, var(--ink));
-  --brand-text: var(--paper);
-  --brand-line: color-mix(in oklch, var(--paper) 55%, transparent);
-  color: var(--foreground);
-}
-
-[data-template="modern"] .hero-plain {
-  --foreground: var(--brand-foreground);
-  --muted-foreground: var(--brand-foreground);
-  --brand-text: var(--brand-foreground);
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
 [data-template="modern"] .hero-page {
   border-bottom: 0;
   background: var(--background);
-}
-
-[data-template="modern"] .trust-inner {
-  justify-content: center;
 }
 
 [data-template="modern"]
@@ -1687,86 +2311,8 @@ p {
   background: var(--paper);
 }
 
-[data-template="bold"] .hero-home {
-  padding-block: clamp(2.5rem, 1.5rem + 4vw, 5rem) 0;
-}
-
-[data-template="bold"] .hero-home .hero-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-/* The text's parts join the hero's grid, so the lede and the actions can
-   share a brand block while the heading spans the page above them. */
-[data-template="bold"] .hero-home .hero-text {
-  display: contents;
-}
-
 [data-template="bold"] .hero-home h1 {
-  margin-block-end: var(--space-xl);
-  max-width: 14ch;
   line-height: 0.92;
-}
-
-[data-template="bold"] .hero-home :is(.lede, .actions) {
-  max-width: none;
-  margin: 0;
-  padding-inline: var(--space-lg);
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .lede {
-  padding-block-start: var(--space-lg);
-  font-weight: 500;
-}
-
-[data-template="bold"] .hero-home .actions {
-  padding-block: var(--space-lg);
-}
-
-[data-template="bold"] .hero-home .action-primary {
-  background: var(--brand-foreground);
-  color: var(--brand);
-}
-
-[data-template="bold"] .hero-home .action-secondary {
-  border-color: var(--brand-foreground);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .actions a:focus-visible {
-  outline-color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .actions {
-  align-items: center;
-  align-content: start;
-}
-
-@media (min-width: 56rem) {
-  [data-template="bold"] .hero-home .hero-inner {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  [data-template="bold"] .hero-home :is(.eyebrow, h1) {
-    grid-column: 1 / -1;
-  }
-
-  [data-template="bold"] .hero-home :is(.lede, .actions) {
-    grid-column: 1;
-  }
-
-  [data-template="bold"] .hero-home :is(.hero-image, .hero-list) {
-    grid-column: 2;
-    grid-row: 3 / span 2;
-  }
-}
-
-[data-template="bold"] .hero-home .hero-image {
-  height: 100%;
-  min-height: 18rem;
-  aspect-ratio: auto;
 }
 
 [data-template="bold"] .hero-list {
@@ -1815,8 +2361,8 @@ p {
   border-bottom: 2px solid var(--foreground);
 }
 
-[data-template="bold"] .trust-figures dd {
-  font-size: var(--text-page);
+[data-template="bold"] .trust-icons .trust-value {
+  font-size: var(--text-2xl);
 }
 
 [data-template="bold"] :is(.card, .faq-list, .area-places, .contact-cards div) {
@@ -1883,33 +2429,4 @@ p {
 [data-template="bold"] .site-footer .site-logo {
   padding: var(--space-3xs);
   background: var(--paper);
-}
-
-[data-template="modern"] .hero-plain .hero-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-  margin-block-start: var(--space-xl);
-}
-
-[data-template="modern"] .hero-plain .hero-list li {
-  gap: var(--space-2xs);
-  padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid
-    color-mix(in oklch, var(--brand-foreground) 40%, transparent);
-  border-radius: 999px;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-[data-template="modern"] .hero-plain .hero-list .mark {
-  width: 1.125rem;
-  height: 1.125rem;
-  color: inherit;
-}
-
-[data-template="classic"] .hero-home .hero-list li + li {
-  border-top: 1px solid var(--border);
 }

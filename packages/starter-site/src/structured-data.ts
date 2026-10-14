@@ -66,6 +66,10 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     icon: site[`service${n}Icon`],
     includes: lines(site[`service${n}Includes`]),
     for: site[`service${n}For`],
+    image: {
+      src: site[`service${n}Image`],
+      alt: site[`service${n}ImageAlt`],
+    },
   }))
   .filter((item) => item.name || item.body)
 

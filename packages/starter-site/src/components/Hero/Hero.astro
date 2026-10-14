@@ -8,10 +8,12 @@ interface Props {
   lede?: string
   /** A short line above it, as site.industry. */
   eyebrow?: string
-  /** home on the home page, page elsewhere. */
-  variant?: "home" | "page"
+  /** The home page's composition. Empty is the plain hero of every other page. */
+  variant?: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
   /** The home photo, shown with both halves. */
   image?: { src: string; alt: string }
+  /** A few words on the photo, as site.heroCaption. */
+  caption?: string
   /** Services shown when there is no photo. */
   highlights?: { name: string; icon: string }[]
 }
@@ -20,13 +22,17 @@ const {
   heading,
   lede = "",
   eyebrow = "",
-  variant = "page",
+  variant,
   image,
+  caption = "",
   highlights = [],
 } = Astro.props
-const photo = variant === "home" && image?.src && image.alt ? image : null
-const listed =
-  variant === "home" && !photo ? highlights.filter((h) => h.name) : []
+const photo = variant && image?.src && image.alt ? image : null
+const listed = variant && !photo ? highlights.filter((h) => h.name) : []
+// A home hero sets its last word in the accent, never the whole line.
+const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
+const lead = cut > 0 ? heading.slice(0, cut + 1) : heading
+const accent = cut > 0 ? heading.trimEnd().slice(cut + 1) : ""
 // Rendered rather than slotted, so a hero whose actions all resolve to
 // nothing is a hero with no actions and not an empty row.
 const actions = Astro.slots.has("default")
@@ -39,25 +45,34 @@ const actions = Astro.slots.has("default")
     <section
       class:list={[
         "hero",
-        `hero-${variant}`,
-        variant === "home" && (photo ? "hero-photo" : "hero-plain"),
+        variant
+          ? ["hero-home", `hero-${variant}`, photo ? "hero-photo" : "hero-plain"]
+          : "hero-page",
       ]}
     >
       <div class="wrap hero-inner">
         <div class="hero-text">
           {eyebrow && <p class="eyebrow">{eyebrow}</p>}
-          {heading && <h1>{heading}</h1>}
+          {heading && (
+            <h1>
+              {lead}
+              {accent && <span class="accent">{accent}</span>}
+            </h1>
+          )}
           {lede && <p class="lede">{lede}</p>}
           {actions && <div class="actions" set:html={actions} />}
         </div>
         {photo && (
-          <img
-            class="hero-image"
-            src={photo.src}
-            alt={photo.alt}
-            fetchpriority="high"
-            decoding="async"
-          />
+          <div class="hero-media">
+            <img
+              class="hero-image"
+              src={photo.src}
+              alt={photo.alt}
+              fetchpriority="high"
+              decoding="async"
+            />
+            {caption && <p class="hero-caption">{caption}</p>}
+          </div>
         )}
         {listed.length > 0 && (
           <ul class="hero-list">

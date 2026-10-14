@@ -1,6 +1,12 @@
 ---
 import { site } from "../../site-config"
 
+interface Props {
+  /** circles on a tint band, dark_band beside its heading, timeline on a line. */
+  variant?: "circles" | "dark_band" | "timeline"
+}
+
+const { variant = "timeline" } = Astro.props
 const items = ([1, 2, 3] as const)
   .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
   .filter((item) => item.title || item.body)
@@ -8,10 +14,17 @@ const items = ([1, 2, 3] as const)
 
 {
   items.length > 0 && (
-    <section class="band steps">
-      <div class="wrap">
+    <section
+      class:list={[
+        "band steps",
+        `steps-${variant}`,
+        variant !== "timeline" && "band-tint",
+      ]}
+    >
+      <div class="wrap steps-inner">
         {site.stepsHeading && (
           <div class="section-head">
+            {site.stepsEyebrow && <p class="eyebrow">{site.stepsEyebrow}</p>}
             <h2>{site.stepsHeading}</h2>
           </div>
         )}

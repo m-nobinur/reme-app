@@ -13,6 +13,7 @@ import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
 import Base from "../layouts/Base.astro"
 import { phoneText } from "../phone"
+import { HERO_OF, templateOf } from "../presets"
 import { hasRoute, primaryAction } from "../routes"
 import { site } from "../site-config"
 import {
@@ -22,10 +23,10 @@ import {
   webSite,
 } from "../structured-data"
 
-// One order for every template; styles/site.css gives each its own hero,
-// header, type and surfaces by data-template. A section with no facts
-// behind it renders nothing, so a business with little to say gets a short
-// page rather than a padded one. Without an about page, the home page's
+// One order for every template. The template picks the hero's variant and
+// styles/site.css gives it type and surfaces by data-template. A section with
+// no facts behind it renders nothing, so a business with little to say gets a
+// short page rather than a padded one. Without an about page, the home page's
 // about section says who the business serves too.
 const about = site.aboutIntro || site.overviewBody || site.overview
 const audience = !hasRoute("/about/") && (site.audienceBody || site.audience)
@@ -41,11 +42,12 @@ const audience = !hasRoute("/about/") && (site.audienceBody || site.audience)
   ]}
 >
   <Hero
-    variant="home"
+    variant={HERO_OF[templateOf(site.template)]}
     eyebrow={site.industry}
     heading={site.heroHeading || site.businessName}
     lede={site.tagline || site.homeIntro}
     image={{ src: site.heroImage, alt: site.heroImageAlt }}
+    caption={site.heroCaption}
     highlights={serviceItems.slice(0, 3)}
   >
     {

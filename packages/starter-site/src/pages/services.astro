@@ -21,7 +21,7 @@ const offerings = site.offerings
   jsonLd={[...services(Astro.site), ...faqPage()]}
 >
   <Hero heading={site.servicesHeading} lede={site.servicesIntro} />
-  <ServiceCards variant="sections" />
+  <ServiceCards variant="alternating" />
   {
     offerings.length > 0 && (
       <Section heading={site.offeringsHeading}>
