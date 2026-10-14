@@ -12,6 +12,27 @@ describe("build activity rows", () => {
     for (const row of rows) BuildActivity.parse(row)
   })
 
+  it("counts a planned build's photos and pages, and fills a stage it passed", () => {
+    const progress = {
+      photos: { done: 4, total: 7 },
+      pages: { done: 3, total: 5 },
+    }
+    const writing = activityFor("full", "implementing", progress)
+    expect(writing.map((r) => [r.id, r.done, r.total])).toEqual([
+      ["planning", 1, 1],
+      ["photos", 4, 7],
+      ["writing", 3, 5],
+    ])
+    for (const row of writing) BuildActivity.parse(row)
+    const checking = activityFor("full", "validating", progress)
+    expect(checking.map((r) => [r.id, r.done, r.total])).toEqual([
+      ["planning", 1, 1],
+      ["photos", 7, 7],
+      ["writing", 5, 5],
+      ["checking", 0, 1],
+    ])
+  })
+
   it("shows none for a quick build or a state outside the stages", () => {
     expect(activityFor("quick", "implementing")).toEqual([])
     expect(activityFor("full", "blocked_on_information")).toEqual([])

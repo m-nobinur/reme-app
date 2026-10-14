@@ -77,24 +77,51 @@ const STAGES: { id: string; label: string; at: AssignmentState[] }[] = [
   { id: "checking", label: "Checking the site", at: ["validating"] },
 ]
 
+/** Counts from the parallel builder's `build.progress` events (BA4), by stage. */
+export type Progress = Partial<
+  Record<"pages" | "photos", { done: number; total: number }>
+>
+
+/** The most a row counts to (the contract's bound). */
+const COUNT_MAX = 999
+
 /**
- * Rows up to the build's current stage, earlier ones done. Whole-stage
- * `1 of 1` for now: "3 of 5" pages and photos need per-page events from the
- * parallel builder (BA4), which do not exist yet. A quick build gets none;
- * the panel shows one line for it.
+ * Rows up to the build's current stage, earlier ones done. A planned build
+ * counts its pages ("Writing the pages, 3 of 5") and, when it makes any, its
+ * photos in a row before them; any other stage is whole, `1 of 1`. A quick
+ * build gets none; the panel shows one line for it.
  */
 export function activityFor(
   lane: BuildLane,
-  state: AssignmentState
+  state: AssignmentState,
+  progress: Progress = {}
 ): BuildActivity[] {
   const now = STAGES.findIndex((stage) => stage.at.includes(state))
   if (lane === "quick" || now < 0) return []
-  return STAGES.slice(0, now + 1).map(({ id, label }, i) => ({
-    id,
-    label,
-    done: i < now ? 1 : 0,
-    total: 1,
-  }))
+  const row = (
+    id: string,
+    label: string,
+    passed: boolean,
+    count?: { done: number; total: number }
+  ): BuildActivity => {
+    const total = Math.min(Math.max(count?.total ?? 1, 1), COUNT_MAX)
+    return {
+      id,
+      label,
+      done: passed ? total : Math.min(count?.done ?? 0, total),
+      total,
+    }
+  }
+  return STAGES.slice(0, now + 1).flatMap(({ id, label }, i) => {
+    const passed = i < now
+    if (id !== "writing") return [row(id, label, passed)]
+    return [
+      ...(progress.photos
+        ? [row("photos", "Making photos", passed, progress.photos)]
+        : []),
+      row(id, label, passed, progress.pages),
+    ]
+  })
 }
 
 /**
@@ -133,6 +160,9 @@ export async function readBuilds(
       decidedRound: sql<
         number | null
       >`(select max((e.payload->>'round')::int) from events e where e.assignment_id = assignments.id and e.type = 'blueprint.decided')`,
+      // BA4's counts: distinct pages or photos finished per stage, and the
+      // stage's total, so a repeated event never counts twice.
+      progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, count(distinct e.payload->>'item')::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
     })
     .from(assignments)
     .where(
@@ -148,7 +178,7 @@ export async function readBuilds(
       state: row.state,
       goal: row.goal,
       lane,
-      activity: activityFor(lane, row.state),
+      activity: activityFor(lane, row.state, row.progress ?? {}),
       revision: row.revision,
       ...planOf(row),
       created_at: iso(row.createdAt),
