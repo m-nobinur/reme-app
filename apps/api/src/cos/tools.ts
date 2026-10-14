@@ -242,7 +242,14 @@ export async function requestChange(
   input: OwnerChangeRequest,
   approvalId: string
 ): Promise<RequestChangeOutput> {
-  const response = await startChange(env, kit, owner, input.text, approvalId)
+  const response = await startChange(
+    env,
+    kit,
+    owner,
+    input.text,
+    approvalId,
+    input.change_kind
+  )
   if (!response.ok) return refused(response)
   return RequestChangeOutput.parse({
     outcome: "started",

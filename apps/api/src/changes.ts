@@ -2,6 +2,7 @@ import {
   Assignment,
   type AssignmentState,
   type BuildSummary,
+  type ChangeKind,
   ErrorEnvelope,
   envelope,
   type FactRecord,
@@ -401,7 +402,9 @@ export async function startChange(
   kit: Tenancy,
   owner: Owner,
   text: string,
-  key: string
+  key: string,
+  /** The CoS's read of the change's size; the orchestrator picks the lane from it. */
+  changeKind?: ChangeKind
 ): Promise<Response> {
   // One deadline for the whole change: its reads and every call it makes
   // share it, so a replace's three calls end within it too.
@@ -543,8 +546,14 @@ export async function startChange(
     }
     return Response.json(summary(made))
   }
+  // A steer ignores the kind: a working build takes the change whatever its size.
+  const createBody = (kind: "site.build" | "site.revise") => ({
+    kind,
+    goal: text,
+    ...(changeKind ? { change_kind: changeKind } : {}),
+  })
   const create = async (kind: "site.build" | "site.revise") =>
-    relay(await call("/", { kind, goal: text }), summary)
+    relay(await call("/", createBody(kind)), summary)
   switch (route.route) {
     case "refuse":
       return failure(409, {
@@ -571,7 +580,7 @@ export async function startChange(
       // The new build first: while the old one holds the site it queues
       // behind the lock and claims it once the old one ends. A refused or
       // unknown create leaves the review standing.
-      const created = await call("/", { kind: route.rebuild, goal: text })
+      const created = await call("/", createBody(route.rebuild))
       const build = Assignment.safeParse(created.body)
       if (created.status >= 300 || !build.success) {
         return relay(created, summary)
