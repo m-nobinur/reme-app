@@ -4,7 +4,12 @@ import {
   REQUEST_FAILED,
 } from "@workspace/contracts"
 import { logFailure, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
-import { type Accounts, deleteAccount, type Takedown } from "./account.ts"
+import {
+  type Accounts,
+  deleteAccount,
+  removeObjects,
+  type Takedown,
+} from "./account.ts"
 import { bridge, type Owner } from "./changes.ts"
 import { checkTenantPath } from "./health.ts"
 import {
@@ -170,6 +175,8 @@ async function removeAccount(
         code: "site.takedown_failed",
       })
     }
+    // After the takedown, so no build is left to write an object back.
+    await removeObjects(env.SITES, orgId)
   }
   const client = workos(env)
   const accounts: Accounts = {

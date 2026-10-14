@@ -15,7 +15,7 @@ import type { Session } from "./session.ts"
  * Deleting an owner's account (ADR-035): the site goes offline, the email is
  * freed and the WorkOS identity removed, and the org's rows stay behind as an
  * org nobody can resolve until the §10.5 erasure job exists. Nothing here
- * deletes a row.
+ * deletes a row; the org's R2 objects are deleted.
  */
 
 /** The three WorkOS calls deletion makes, as a parameter so tests stand in. */
@@ -34,9 +34,41 @@ export { tombstone }
 
 /**
  * Takes the org's site offline and cancels its open builds, over the
- * orchestrator bridge. Throws when that did not happen; safe to repeat.
+ * orchestrator bridge, then deletes the org's R2 objects (`removeObjects`).
+ * Throws when that did not happen; safe to repeat.
  */
 export type Takedown = (orgId: string) => Promise<void>
+
+/** The part of the sites bucket `removeObjects` uses, so a test can stand in. */
+export type Objects = {
+  list: (options: { prefix: string; cursor?: string }) => Promise<{
+    objects: { key: string }[]
+    truncated: boolean
+    cursor?: string
+  }>
+  delete: (keys: string | string[]) => Promise<void>
+}
+
+/**
+ * Deletes every R2 object the org owns in the sites bucket: owner uploads,
+ * generated photos, built revisions and checkpoints, and the sandbox holder
+ * record. Each prefix ends in a slash so no other org's keys can match, and
+ * the holder is one exact key. Deleting a missing key is not an error, so a
+ * retry after a partial run finishes it.
+ */
+export async function removeObjects(sites: Objects, orgId: string) {
+  for (const area of ["uploads", "generated", "sites"]) {
+    let cursor: string | undefined
+    do {
+      // A page holds at most 1,000 keys, which is also delete's limit.
+      const page = await sites.list({ prefix: `${area}/${orgId}/`, cursor })
+      if (page.objects.length > 0)
+        await sites.delete(page.objects.map((o) => o.key))
+      cursor = page.truncated ? page.cursor : undefined
+    } while (cursor)
+  }
+  await sites.delete(`sandboxes/${orgId}`)
+}
 
 type Signed = NonNullable<Session>
 
@@ -47,9 +79,10 @@ type Signed = NonNullable<Session>
  *    then tombstone their row. From this commit `orgOpen` reads the org as
  *    closed, so the router refills no pointer and the publisher writes none,
  *    and the membership is still active, so the org still resolves.
- * 2. Take the site down. A failure fails the route, and a retry resolves the
- *    org and takes it down again. Doing this after step 1 is what means no
- *    pointer can come back once it is gone.
+ * 2. Take the site down and delete its R2 objects. A failure fails the
+ *    route, and a retry resolves the org and does both again. Doing this
+ *    after step 1 is what means no pointer can come back once it is gone, and
+ *    before step 3 is what means a retry still knows the org's id.
  * 3. End the membership and log `account.deleted`. The org stops resolving.
  * 4. WorkOS last. A retry finds the org unresolvable and the caller's row
  *    already a tombstone, and goes straight here, where "already gone" counts
