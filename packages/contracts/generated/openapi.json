@@ -511,6 +511,35 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.disclaimer"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "service_area.text"
                       },
                       "value": {
@@ -756,7 +785,9 @@
                                   "mint",
                                   "royal",
                                   "meadow",
-                                  "pebble"
+                                  "pebble",
+                                  "counsel",
+                                  "after_dark"
                                 ]
                               },
                               {
@@ -1801,6 +1832,12 @@
           "skippable": {
             "type": "boolean"
           },
+          "own": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
           "initial": {
             "minItems": 3,
             "maxItems": 4,
@@ -2185,6 +2222,12 @@
                     },
                     "skippable": {
                       "type": "boolean"
+                    },
+                    "own": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "\\S"
                     },
                     "initial": {
                       "minItems": 3,
@@ -2671,6 +2714,35 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -2916,7 +2988,9 @@
                                 "mint",
                                 "royal",
                                 "meadow",
-                                "pebble"
+                                "pebble",
+                                "counsel",
+                                "after_dark"
                               ]
                             },
                             {
@@ -3650,6 +3724,35 @@
                       "properties": {
                         "key": {
                           "type": "string",
+                          "const": "business.disclaimer"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 400,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
                           "const": "service_area.text"
                         },
                         "value": {
@@ -3895,7 +3998,9 @@
                                     "mint",
                                     "royal",
                                     "meadow",
-                                    "pebble"
+                                    "pebble",
+                                    "counsel",
+                                    "after_dark"
                                   ]
                                 },
                                 {
@@ -4748,6 +4853,46 @@
             "properties": {
               "key": {
                 "type": "string",
+                "const": "business.disclaimer"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
                 "const": "service_area.text"
               },
               "skippable": {
@@ -5075,7 +5220,9 @@
                               "mint",
                               "royal",
                               "meadow",
-                              "pebble"
+                              "pebble",
+                              "counsel",
+                              "after_dark"
                             ]
                           },
                           {
@@ -5854,6 +6001,35 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.disclaimer"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "service_area.text"
                       },
                       "value": {
@@ -6099,7 +6275,9 @@
                                   "mint",
                                   "royal",
                                   "meadow",
-                                  "pebble"
+                                  "pebble",
+                                  "counsel",
+                                  "after_dark"
                                 ]
                               },
                               {
@@ -7272,7 +7450,9 @@
                       "mint",
                       "royal",
                       "meadow",
-                      "pebble"
+                      "pebble",
+                      "counsel",
+                      "after_dark"
                     ]
                   }
                 },
@@ -8200,7 +8380,9 @@
                           "mint",
                           "royal",
                           "meadow",
-                          "pebble"
+                          "pebble",
+                          "counsel",
+                          "after_dark"
                         ]
                       }
                     },
@@ -9294,7 +9476,9 @@
                               "mint",
                               "royal",
                               "meadow",
-                              "pebble"
+                              "pebble",
+                              "counsel",
+                              "after_dark"
                             ]
                           }
                         },
@@ -10225,7 +10409,9 @@
                                   "mint",
                                   "royal",
                                   "meadow",
-                                  "pebble"
+                                  "pebble",
+                                  "counsel",
+                                  "after_dark"
                                 ]
                               }
                             },
@@ -11667,6 +11853,35 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "business.disclaimer"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 400,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "service_area.text"
                                                 },
                                                 "value": {
@@ -11912,7 +12127,9 @@
                                                             "mint",
                                                             "royal",
                                                             "meadow",
-                                                            "pebble"
+                                                            "pebble",
+                                                            "counsel",
+                                                            "after_dark"
                                                           ]
                                                         },
                                                         {
@@ -12655,6 +12872,35 @@
                                                 "properties": {
                                                   "key": {
                                                     "type": "string",
+                                                    "const": "business.disclaimer"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 400,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
                                                     "const": "service_area.text"
                                                   },
                                                   "value": {
@@ -12900,7 +13146,9 @@
                                                               "mint",
                                                               "royal",
                                                               "meadow",
-                                                              "pebble"
+                                                              "pebble",
+                                                              "counsel",
+                                                              "after_dark"
                                                             ]
                                                           },
                                                           {
@@ -14768,6 +15016,35 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -15013,7 +15290,9 @@
                                 "mint",
                                 "royal",
                                 "meadow",
-                                "pebble"
+                                "pebble",
+                                "counsel",
+                                "after_dark"
                               ]
                             },
                             {
@@ -15790,6 +16069,7 @@
                         "business.audience",
                         "business.overview",
                         "business.proof",
+                        "business.disclaimer",
                         "service_area.text",
                         "assistant.name",
                         "assistant.pronouns",
@@ -16258,6 +16538,35 @@
                           "properties": {
                             "key": {
                               "type": "string",
+                              "const": "business.disclaimer"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 400,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
                               "const": "service_area.text"
                             },
                             "value": {
@@ -16503,7 +16812,9 @@
                                         "mint",
                                         "royal",
                                         "meadow",
-                                        "pebble"
+                                        "pebble",
+                                        "counsel",
+                                        "after_dark"
                                       ]
                                     },
                                     {
@@ -17159,7 +17470,9 @@
                                               "mint",
                                               "royal",
                                               "meadow",
-                                              "pebble"
+                                              "pebble",
+                                              "counsel",
+                                              "after_dark"
                                             ]
                                           }
                                         },
@@ -18090,7 +18403,9 @@
                                                   "mint",
                                                   "royal",
                                                   "meadow",
-                                                  "pebble"
+                                                  "pebble",
+                                                  "counsel",
+                                                  "after_dark"
                                                 ]
                                               }
                                             },
@@ -19953,6 +20268,7 @@
                 "business.audience",
                 "business.overview",
                 "business.proof",
+                "business.disclaimer",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -20354,6 +20670,7 @@
                     "business.audience",
                     "business.overview",
                     "business.proof",
+                    "business.disclaimer",
                     "service_area.text",
                     "assistant.name",
                     "assistant.pronouns",
@@ -20454,7 +20771,9 @@
                 "mint",
                 "royal",
                 "meadow",
-                "pebble"
+                "pebble",
+                "counsel",
+                "after_dark"
               ]
             }
           },
@@ -21515,6 +21834,35 @@
             "properties": {
               "key": {
                 "type": "string",
+                "const": "business.disclaimer"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
                 "const": "service_area.text"
               },
               "value": {
@@ -21760,7 +22108,9 @@
                           "mint",
                           "royal",
                           "meadow",
-                          "pebble"
+                          "pebble",
+                          "counsel",
+                          "after_dark"
                         ]
                       },
                       {
@@ -22921,7 +23271,9 @@
               "mint",
               "royal",
               "meadow",
-              "pebble"
+              "pebble",
+              "counsel",
+              "after_dark"
             ]
           },
           "label": {
@@ -23439,7 +23791,9 @@
                                       "mint",
                                       "royal",
                                       "meadow",
-                                      "pebble"
+                                      "pebble",
+                                      "counsel",
+                                      "after_dark"
                                     ]
                                   }
                                 },
@@ -24370,7 +24724,9 @@
                                           "mint",
                                           "royal",
                                           "meadow",
-                                          "pebble"
+                                          "pebble",
+                                          "counsel",
+                                          "after_dark"
                                         ]
                                       }
                                     },
@@ -25815,7 +26171,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 24,
+            "maxItems": 25,
             "type": "array",
             "items": {
               "oneOf": [
@@ -26180,6 +26536,35 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.disclaimer"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "service_area.text"
                     },
                     "value": {
@@ -26425,7 +26810,9 @@
                                 "mint",
                                 "royal",
                                 "meadow",
-                                "pebble"
+                                "pebble",
+                                "counsel",
+                                "after_dark"
                               ]
                             },
                             {
@@ -27609,7 +27996,9 @@
                                     "mint",
                                     "royal",
                                     "meadow",
-                                    "pebble"
+                                    "pebble",
+                                    "counsel",
+                                    "after_dark"
                                   ]
                                 }
                               },
@@ -28540,7 +28929,9 @@
                                         "mint",
                                         "royal",
                                         "meadow",
-                                        "pebble"
+                                        "pebble",
+                                        "counsel",
+                                        "after_dark"
                                       ]
                                     }
                                   },
@@ -29941,6 +30332,7 @@
                 "business.audience",
                 "business.overview",
                 "business.proof",
+                "business.disclaimer",
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
@@ -30160,6 +30552,7 @@
                               "business.audience",
                               "business.overview",
                               "business.proof",
+                              "business.disclaimer",
                               "service_area.text",
                               "assistant.name",
                               "assistant.pronouns",

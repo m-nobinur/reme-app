@@ -89,7 +89,7 @@ const PACK_VOICE: Partial<Record<IndustryId, readonly string[]>> = {
   legal: [
     '- Voice: a calm, plain-spoken solicitor. No jargon where a plain word works, no hype, no promise about an outcome, no "we will win". CTA wording "Book a consultation", used everywhere a button asks. Section headings come from the pack\'s `headings` in src/recipes.json (legal), reworded to name this practice\'s areas.',
     '- Never state a price, fee, rate or "no win, no fee" unless a fact states it in those words. The credentials strip (trust1 to trust3) holds only what business.proof says: regulator, years, memberships. Never invent one, and leave it empty without the fact.',
-    '- A regulated-profession disclaimer (regulator name, registration number, "authorised and regulated by") appears only when a fact states it. Without that fact, write none and say nothing about regulation.',
+    '- A regulated-profession disclaimer (regulator name, registration number, "authorised and regulated by") appears only when business.disclaimer states it: put it in the `disclaimer` field word for word and the footer shows it. Without that fact, leave `disclaimer` empty, write none and say nothing about regulation.',
     "- Practice areas are named as clients would search for them (a house purchase, a will, a dismissal), one line each on what the lawyer does. Steps run from the first call to instruction. FAQs answer how a consultation works, never what the law says about a case.",
   ],
   chauffeur: [

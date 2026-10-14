@@ -139,6 +139,13 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.disclaimer"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "service_area.text"
                 value: {
                   text: string
@@ -217,6 +224,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -532,6 +541,7 @@ export interface components {
         placeholder: string
       } | null
       skippable: boolean
+      own?: string
       initial?: string[]
       color?: boolean
     }
@@ -653,6 +663,7 @@ export interface components {
             placeholder: string
           } | null
           skippable: boolean
+          own?: string
           initial?: string[]
           color?: boolean
         }
@@ -776,6 +787,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -854,6 +872,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -1048,6 +1068,13 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.disclaimer"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "service_area.text"
                 value: {
                   text: string
@@ -1126,6 +1153,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -1333,6 +1362,14 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "business.disclaimer"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
           key: "service_area.text"
           skippable: boolean
           prefill: {
@@ -1419,6 +1456,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
                 )
               | "custom"
             custom?: string
@@ -1615,6 +1654,13 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.disclaimer"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "service_area.text"
                 value: {
                   text: string
@@ -1693,6 +1739,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -2011,6 +2059,8 @@ export interface components {
               | "royal"
               | "meadow"
               | "pebble"
+              | "counsel"
+              | "after_dark"
           }
         | {
             /** @constant */
@@ -2276,6 +2326,8 @@ export interface components {
                 | "royal"
                 | "meadow"
                 | "pebble"
+                | "counsel"
+                | "after_dark"
             }
           | {
               /** @constant */
@@ -2592,6 +2644,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
               }
             | {
                 /** @constant */
@@ -2857,6 +2911,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
               }
             | {
                 /** @constant */
@@ -3238,6 +3294,13 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "business.disclaimer"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "service_area.text"
                                   value: {
                                     text: string
@@ -3316,6 +3379,8 @@ export interface components {
                                           | "royal"
                                           | "meadow"
                                           | "pebble"
+                                          | "counsel"
+                                          | "after_dark"
                                         )
                                       | "custom"
                                     custom?: string
@@ -3523,6 +3588,13 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "business.disclaimer"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "service_area.text"
                                   value: {
                                     text: string
@@ -3601,6 +3673,8 @@ export interface components {
                                           | "royal"
                                           | "meadow"
                                           | "pebble"
+                                          | "counsel"
+                                          | "after_dark"
                                         )
                                       | "custom"
                                     custom?: string
@@ -4054,6 +4128,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -4132,6 +4213,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -4338,6 +4421,7 @@ export interface components {
               | "business.audience"
               | "business.overview"
               | "business.proof"
+              | "business.disclaimer"
               | "service_area.text"
               | "assistant.name"
               | "assistant.pronouns"
@@ -4469,6 +4553,13 @@ export interface components {
                 }
               | {
                   /** @constant */
+                  key: "business.disclaimer"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
                   key: "service_area.text"
                   value: {
                     text: string
@@ -4547,6 +4638,8 @@ export interface components {
                           | "royal"
                           | "meadow"
                           | "pebble"
+                          | "counsel"
+                          | "after_dark"
                         )
                       | "custom"
                     custom?: string
@@ -4760,6 +4853,8 @@ export interface components {
                               | "royal"
                               | "meadow"
                               | "pebble"
+                              | "counsel"
+                              | "after_dark"
                           }
                         | {
                             /** @constant */
@@ -5025,6 +5120,8 @@ export interface components {
                               | "royal"
                               | "meadow"
                               | "pebble"
+                              | "counsel"
+                              | "after_dark"
                           }
                         | {
                             /** @constant */
@@ -5517,6 +5614,7 @@ export interface components {
         | "business.audience"
         | "business.overview"
         | "business.proof"
+        | "business.disclaimer"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -5637,6 +5735,7 @@ export interface components {
             | "business.audience"
             | "business.overview"
             | "business.proof"
+            | "business.disclaimer"
             | "service_area.text"
             | "assistant.name"
             | "assistant.pronouns"
@@ -5700,6 +5799,8 @@ export interface components {
         | "royal"
         | "meadow"
         | "pebble"
+        | "counsel"
+        | "after_dark"
       )[]
       /** @enum {string} */
       hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
@@ -5948,6 +6049,13 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "business.disclaimer"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
           key: "service_area.text"
           value: {
             text: string
@@ -6026,6 +6134,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
                 )
               | "custom"
             custom?: string
@@ -6360,6 +6470,8 @@ export interface components {
         | "royal"
         | "meadow"
         | "pebble"
+        | "counsel"
+        | "after_dark"
       label: string
       paper: string
       ink: string
@@ -6519,6 +6631,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                     }
                   | {
                       /** @constant */
@@ -6784,6 +6898,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                     }
                   | {
                       /** @constant */
@@ -7241,6 +7357,13 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.disclaimer"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "service_area.text"
             value: {
               text: string
@@ -7319,6 +7442,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -7642,6 +7767,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                 }
               | {
                   /** @constant */
@@ -7907,6 +8034,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                 }
               | {
                   /** @constant */
@@ -8266,6 +8395,7 @@ export interface components {
         | "business.audience"
         | "business.overview"
         | "business.proof"
+        | "business.disclaimer"
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
@@ -8334,6 +8464,7 @@ export interface components {
                 | "business.audience"
                 | "business.overview"
                 | "business.proof"
+                | "business.disclaimer"
                 | "service_area.text"
                 | "assistant.name"
                 | "assistant.pronouns"

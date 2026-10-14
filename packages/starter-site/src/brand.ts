@@ -12,7 +12,8 @@
  *     One of them always reaches 4.58:1 or better, whatever the colour.
  *   --brand-text on the page, which is the colour darkened in steps until it
  *     reaches the ratio. Darkening only, because the starter renders light and
- *     the page under this text is white.
+ *     the page under this text is white. A preset's primary already holds it
+ *     on the page and on its tint, so `brandTheme` passes it through.
  *
  * `paletteFromBrand` goes further for the "your own colour" path: it derives
  * all six palette roles (paper, ink, primary, tint, accent, line) from the one
@@ -219,11 +220,13 @@ export function brandTheme(value: string, palette = ""): string {
     : brandRamp(value)
   const p = roles ?? paletteFromBrand(value)
   if (!ramp || !p) return ""
-  // --brand-text is the primary, darkened only where a preset's primary falls
-  // short on its own tint (sage, sunset, mocha): eyebrows and links sit on the
-  // tinted bands too. The role properties are the ones theme.css falls back from.
-  const text = toHex(
-    readable(parse(p.primary) as Rgb, parse(p.tint) as Rgb, AA)
-  )
-  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${text};--background:${p.paper};--foreground:${p.ink};--muted-foreground:${mutedOf(p)};--role-tint:${p.tint};--role-line:${p.line};--role-accent:${p.accent}}`
+  // A palette whose paper is darker than its ink (After dark) is a dark page:
+  // the stylesheet reads --ink as the dark surface and --paper as the light
+  // text and pills on it, so the two swap names and the page keeps its logic.
+  const paper = parse(p.paper) as Rgb
+  const dark =
+    ratio(paper, WHITE) > ratio(paper, BLACK)
+      ? `;--ink:${p.paper};--paper:${p.ink};color-scheme:dark`
+      : ""
+  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${p.primary};--background:${p.paper};--foreground:${p.ink};--muted-foreground:${mutedOf(p)};--role-tint:${p.tint};--role-line:${p.line};--role-accent:${p.accent}${dark}}`
 }

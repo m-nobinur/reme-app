@@ -46,11 +46,6 @@ describe("a theme derived from the owner's colour", () => {
           contrast(palette[text] as string, palette[on] as string),
           `${text} on ${on}`
         ).toBeGreaterThanOrEqual(AA)
-      // Eyebrows and links in the primary also sit on the tinted bands.
-      expect(
-        contrast(palette.primary as string, palette.tint as string),
-        "primary on tint"
-      ).toBeGreaterThanOrEqual(AA)
     })
   }
 
@@ -87,12 +82,15 @@ describe("a theme from a preset's six roles", () => {
     for (const each of PALETTES) {
       const css = brandTheme(red, roles(each))
       const text = /--brand-text:(#[0-9a-f]{6})/.exec(css)?.[1] ?? ""
-      // The text shade is the primary itself unless that fails on the tint.
-      expect(contrast(text, each.tint), each.id).toBeGreaterThanOrEqual(AA)
-      if (contrast(each.primary, each.tint) >= AA)
-        expect(text, each.id).toBe(each.primary)
+      // The text shade is the primary itself: every preset holds it on the tint.
+      expect(text, each.id).toBe(each.primary)
+      // A dark paper swaps the names the stylesheet reads as surface and text.
+      const swap =
+        each.id === "after_dark"
+          ? `;--ink:${each.paper};--paper:${each.ink};color-scheme:dark`
+          : ""
       expect(css, each.id).toBe(
-        `html:root{--brand:${each.primary};--brand-foreground:${each.paper};--brand-text:${text};--background:${each.paper};--foreground:${each.ink};--muted-foreground:${mutedOf(each)};--role-tint:${each.tint};--role-line:${each.line};--role-accent:${each.accent}}`
+        `html:root{--brand:${each.primary};--brand-foreground:${each.paper};--brand-text:${text};--background:${each.paper};--foreground:${each.ink};--muted-foreground:${mutedOf(each)};--role-tint:${each.tint};--role-line:${each.line};--role-accent:${each.accent}${swap}}`
       )
       // Secondary text eases off the ink and still reads on paper and tint.
       const muted = mutedOf(each)

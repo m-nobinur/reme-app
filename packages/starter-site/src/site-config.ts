@@ -55,6 +55,12 @@ const values = {
    * proofBody and trust1 to trust3, which may rephrase it and never add to it.
    */
   proof: "",
+  /**
+   * business.disclaimer, the regulatory notice a regulated profession carries
+   * ("Authorised and regulated by ..."), word for word as the owner gave it.
+   * It shows in the footer. Empty without that fact: never write one.
+   */
+  disclaimer: "",
   /** hours.weekday for structured data, as "Mo-Fr 08:00-17:00". */
   openingHours: "",
   /** service_area.radius for structured data: the centre, as "Fairhaven". */
@@ -403,6 +409,7 @@ const FACTS: Partial<Record<keyof typeof site, Field>> = {
   audience: fact("business.audience"),
   overview: fact("business.overview"),
   proof: fact("business.proof"),
+  disclaimer: fact("business.disclaimer"),
   openingHours: fact("hours.weekday"),
   areaServed: fact("service_area.radius"),
   testimonial1Quote: fact("testimonials.quote_1"),

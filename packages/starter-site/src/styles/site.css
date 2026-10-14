@@ -2067,6 +2067,15 @@ picture {
   color: var(--muted-foreground);
 }
 
+.footer-disclaimer {
+  margin: var(--space-lg) 0 0;
+  padding-block-start: var(--space-sm);
+  border-block-start: 1px solid var(--border);
+  max-width: 72ch;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
 .footer-heading {
   margin: 0 0 var(--space-sm);
   font-family: var(--font-sans);

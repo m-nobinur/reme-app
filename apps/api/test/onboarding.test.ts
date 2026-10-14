@@ -604,6 +604,26 @@ describe("an answer on a card", () => {
     )
   })
 
+  it("words the quote-form step from what the owner picked, never from a template that is not there", () => {
+    const none = { template: null, palette: null }
+    const said = (over: Partial<Voice>) =>
+      question("quote_form", voice({ ...none, ...over }))
+    expect(said({ direction: "Counsel", palette: "Ocean" })).toContain(
+      "the Counsel look in Ocean"
+    )
+    expect(said({ direction: "Counsel" })).toContain("the Counsel look")
+    expect(said({ palette: "Ocean" })).toContain("the Ocean colours")
+    expect(said({ ownLook: "airy and plain" })).toContain(
+      "the look you described"
+    )
+    expect(said({ ownColour: "Navy and gold" })).toContain(
+      "the look you described"
+    )
+    expect(said({})).toContain(`the look I'll choose for ${BUSINESS}`)
+    for (const over of [{}, { direction: "Counsel" }, { ownLook: "airy" }])
+      expect(said(over)).not.toContain("you've chosen")
+  })
+
   it("always adds the fixed pages, in the list's order", () => {
     expect(
       cardAnswer(
@@ -1046,6 +1066,8 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   offering: "Regular cleaning",
   template: "Classic",
   palette: "Ocean",
+  direction: null,
+  ownLook: null,
   ownColour: null,
   services: null,
   photoQuestion: null,
@@ -1309,6 +1331,44 @@ describe("the design tray", () => {
     })
     expect(input.questions[0]?.card.preselected).toEqual([palette])
     expect(input.questions[1]?.card.preselected).toEqual([])
+  })
+
+  it("opens on the owner's own words where the org wrote its own", () => {
+    // Pages are left unanswered: with all four held the tray is done.
+    const input = tray({
+      facts: [
+        ...heldBefore(),
+        {
+          key: "site.palette",
+          value: { id: "custom", custom: "warm greys and brass" },
+        },
+        { key: "site.font", value: { id: "custom", custom: "a quiet serif" } },
+        { key: "site.direction", value: { id: "custom", custom: "airy" } },
+      ],
+    })
+    expect(input.questions.map((q) => q.card.own)).toEqual([
+      "warm greys and brass",
+      "a quiet serif",
+      "airy",
+      undefined,
+    ])
+    for (const q of input.questions) expect(q.card.preselected).toEqual([])
+    // A hex code is held as the brand colour and comes back as the words;
+    // pages' own words ride beside the ids they came with.
+    const code = PALETTES[0]?.brand as string
+    const rest = tray({
+      facts: [
+        ...heldBefore(),
+        { key: "site.palette", value: { id: "custom", brand: code } },
+        { key: "site.pages", value: { ids: ["home"], custom: "home, fees" } },
+      ],
+    })
+    expect(rest.questions.map((q) => q.card.own)).toEqual([
+      code,
+      undefined,
+      undefined,
+      "home, fees",
+    ])
   })
 
   const card = () =>

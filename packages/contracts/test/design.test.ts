@@ -87,7 +87,7 @@ describe("Palette", () => {
     expect(Palette.parse(palette)).toEqual(palette)
   })
 
-  it("names four swatch roles and four AA pairs, all of them roles", () => {
+  it("names four swatch roles and five AA pairs, all of them roles", () => {
     expect(PALETTE_SWATCH).toHaveLength(4)
     for (const role of [
       ...PALETTE_SWATCH,

@@ -346,11 +346,13 @@ function QuestionTray({
 }: QuestionTrayProps) {
   const { questions } = input
   const id = useId()
-  // Options the api opened ticked are answers already given, so a reload
-  // resumes on the first question without one.
+  // Options the api opened ticked, and own words it holds, are answers
+  // already given, so a reload resumes on the first question without one.
   const ticked: Record<string, Answer> = Object.fromEntries(
-    questions.flatMap((each) => {
+    questions.flatMap((each): [string, Answer][] => {
       const [first] = each.card.preselected
+      const own = each.card.own
+      if (own) return [[each.id, { own }]]
       return first ? [[each.id, { choice: first }]] : []
     })
   )

@@ -79,6 +79,14 @@ const SHAPES: [FactValue, string, string][] = [
     "Trading since 2009",
   ],
   [
+    {
+      key: "business.disclaimer",
+      value: { text: "Regulated by the Law Society" },
+    },
+    "Regulatory notice",
+    "Regulated by the Law Society",
+  ],
+  [
     { key: "service_area.text", value: { text: "Greater Fairhaven" } },
     "Area you cover",
     "Greater Fairhaven",
