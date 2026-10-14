@@ -135,6 +135,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
         body = {
           site: {
             host: null,
+            url: null,
             live: {
               revision_id: live,
               version: 1000,
