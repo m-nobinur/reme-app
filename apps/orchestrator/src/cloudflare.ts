@@ -56,7 +56,13 @@ import {
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
-import { mapSite, publishedSource, restoreAndMap, SITE_ROOT } from "./revise.ts"
+import {
+  latestBlueprint,
+  mapSite,
+  publishedSource,
+  restoreAndMap,
+  SITE_ROOT,
+} from "./revise.ts"
 import {
   checkpoint,
   endSandbox,
@@ -411,6 +417,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             ...(role ? { role } : {}),
             blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
             ...(photos?.files.length ? { photos: photos.files } : {}),
+            // The section lane's short prompt reads the site's last plan.
+            ...(role === "quick_section"
+              ? { site_plan: await latestBlueprint(db) }
+              : {}),
           }
           return {
             brief: built,

@@ -146,6 +146,10 @@ export async function readBuilds(
       lane: sql<
         string | null
       >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      // QE4: the quick lane handed the change on, to the Developer or on to
+      // the build model. The orchestrator logs each, and the row's lane is
+      // only where it started.
+      fell: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and (e.type = 'quick.fell_through' or (e.type = 'model.switched' and e.payload->>'reason' = 'quick.fell_through')))`,
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
@@ -171,13 +175,16 @@ export async function readBuilds(
     .orderBy(sql`${assignments.createdAt} desc`)
   const rows = await (limit === null ? query : query.limit(limit))
   return rows.map((row) => {
-    const lane: BuildLane = row.lane === "quick" ? "quick" : "full"
+    const fellThrough = row.fell && row.lane === "quick"
+    const lane: BuildLane =
+      row.lane === "quick" && !fellThrough ? "quick" : "full"
     return {
       assignment_id: row.id,
       kind: row.kind as BuildSummary["kind"],
       state: row.state,
       goal: row.goal,
       lane,
+      ...(fellThrough ? { fell_through: true } : {}),
       activity: activityFor(lane, row.state, row.progress ?? {}),
       revision: row.revision,
       ...planOf(row),

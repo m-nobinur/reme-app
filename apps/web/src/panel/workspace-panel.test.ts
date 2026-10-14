@@ -364,3 +364,38 @@ it("announces a new line on the same page, and not a build's next stage", async 
   await say("Version 4 is ready", "for your review")
   expect(status()).toBe("Version 4 is ready for your review")
 })
+
+it("says once that a quick edit moved to a longer build, and says nothing for any other", async () => {
+  const now = new Date().toISOString()
+  const build = (extra: Record<string, unknown>) => ({
+    ...EMPTY_WORKSPACE,
+    building: true,
+    open: true,
+    builds: [
+      {
+        assignment_id: "00000000-0000-4000-8000-0000000000b1",
+        kind: "site.revise",
+        state: "implementing",
+        goal: "Move the FAQ above the steps",
+        lane: "full",
+        revision: null,
+        created_at: now,
+        updated_at: now,
+        ...extra,
+      },
+    ],
+  })
+  const line = () => container.querySelectorAll('[data-slot="fell-through"]')
+  live.workspace = build({ fell_through: true }) as Workspace
+  await render()
+  expect(line()).toHaveLength(1)
+  expect(line()[0]?.textContent).toContain("needs more than a quick edit")
+  // The lane it runs in now is the full one, so the stepper is back.
+  expect(
+    container.querySelector('[aria-label="Build progress"]')
+  ).not.toBeNull()
+
+  live.workspace = build({}) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(line()).toHaveLength(0)
+})

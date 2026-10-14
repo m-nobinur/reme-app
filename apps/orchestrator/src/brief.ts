@@ -50,6 +50,8 @@ export type Brief = {
   role?: "quick_section"
   /** The plan this build follows (ADR-038); absent when the build did not plan. */
   blueprint?: Blueprint | null
+  /** The site's latest approved plan, for a section change's short prompt; never a plan to build from. */
+  site_plan?: Blueprint | null
   /** The plan's generated photos the Workflow made, which the Developer copies into the site (BA4). */
   photos?: PhotoFile[]
 }

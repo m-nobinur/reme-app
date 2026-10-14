@@ -100,7 +100,9 @@ export function roleOf(
 
 /**
  * The largest cap any role gives each model, keyed by the id OpenRouter is
- * sent. The transport applies it to a call that sets none of its own.
+ * sent. The transport applies it to a call that sets none of its own and
+ * whose role did not register its instructions (`withOutputCap`), which is
+ * how a page builder gets 16k on the model whose lead gets 32k.
  */
 export function outputCaps(
   ...tables: Record<string, ModelRoute>[]

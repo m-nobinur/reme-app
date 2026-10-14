@@ -352,6 +352,7 @@ function Stoppable({
         version: build.revision?.version ?? null,
         startedAt: build.created_at,
         lane: build.lane ?? "full",
+        fellThrough: build.fell_through,
         activity: build.activity ?? [],
       }}
       error={stop.error}

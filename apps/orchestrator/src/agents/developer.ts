@@ -39,6 +39,7 @@ import {
   useSandbox,
   useSubagent,
   useTool,
+  withOutputCap,
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
@@ -50,7 +51,7 @@ import {
   pageOfPrompt,
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
-import { instructions } from "../instructions.ts"
+import { instructions, sectionInstructions } from "../instructions.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
@@ -364,11 +365,22 @@ export function Developer({ id }: AgentProps) {
   )
   const askedForBuildRole =
     delivery.kind === "signal" && delivery.attributes?.role === "build"
-  const route =
+  // The section lane's short prompt lasts as long as its role does.
+  const sectionRole =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
-    brief.role && !(onBuildRole || askedForBuildRole)
-      ? roleOf(runtime.spec, brief.role)
-      : runtime
+    brief.role && !(onBuildRole || askedForBuildRole) ? brief.role : null
+  const route = sectionRole ? roleOf(runtime.spec, sectionRole) : runtime
+  // The wire cap is the role's, found by these instructions (withOutputCap).
+  const shown = () =>
+    withOutputCap(
+      (sectionRole ? sectionInstructions : instructions)(
+        brief,
+        runtime.budget.model_usd_cap
+      ),
+      sectionRole
+        ? roleOf(runtime.spec, sectionRole).maxTokens
+        : runtime.maxOutputTokens
+    )
   const model =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     (onFallback || askedForFallback) && runtime.fallback
@@ -429,7 +441,7 @@ export function Developer({ id }: AgentProps) {
       // §10.6: what the model was shown is in the log before it is shown.
       current.tee.emit("runtime.context_segment", {
         snapshot_id: brief.snapshot.snapshot_id,
-        instructions: instructions(brief, runtime.budget.model_usd_cap),
+        instructions: shown(),
       })
       setSegmentLogged(true)
     }
@@ -515,14 +527,14 @@ export function Developer({ id }: AgentProps) {
   useSubagent({
     name: "page",
     description: PAGE_AGENT,
-    agent: () => pageInstructions(brief),
+    agent: () => withOutputCap(pageInstructions(brief), page.maxTokens),
     model: page.model,
     thinkingLevel: page.effort,
   })
   useSubagent({
     name: "copy",
     description: COPY_AGENT,
-    agent: () => copyInstructions(brief),
+    agent: () => withOutputCap(copyInstructions(brief), copy.maxTokens),
     model: copy.model,
     thinkingLevel: copy.effort,
   })
@@ -534,7 +546,7 @@ export function Developer({ id }: AgentProps) {
     current.tee.flush().catch(() => undefined)
   })
 
-  return instructions(brief, runtime.budget.model_usd_cap)
+  return shown()
 }
 
 Developer.agentName = "developer"
