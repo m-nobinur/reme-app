@@ -13,6 +13,72 @@ const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
 const CONVERSATION = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
 const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 
+const BLUEPRINT = {
+  direction: "calm_daylight",
+  fonts: "outfit_figtree",
+  palette: { kind: "preset", id: "forest" },
+  pages: [
+    {
+      page: "home",
+      sections: [
+        {
+          kind: "hero",
+          variant: "wash",
+          purpose: "Say what Fictional Fox Cleaning does and where",
+          content_notes:
+            "Lead with the weekly clean; phone number beside the button",
+        },
+        {
+          kind: "service_cards",
+          variant: "photo_cards",
+          purpose: "Three services, each with a photo and a link",
+          content_notes: null,
+        },
+        {
+          kind: "cta_band",
+          variant: "solid",
+          purpose: "Ask for a quote",
+          content_notes: null,
+        },
+      ],
+    },
+    {
+      page: "quote",
+      sections: [
+        {
+          kind: "quote_form",
+          variant: "default",
+          purpose: "Collect what a quote needs",
+          content_notes: null,
+        },
+      ],
+    },
+  ],
+  images: [
+    {
+      id: "home_hero",
+      page: "home",
+      section: "hero",
+      aspect: "16:9",
+      resolution: "2K",
+      subject: "An empty sunlit living room, one green plant on the sill",
+      text_side: "left",
+      source: "generated",
+      alt: "A bright, tidy living room",
+    },
+  ],
+  voice: "Plain and warm, first person plural, no exclamation marks",
+  features: [
+    "A home page that leads with the weekly clean",
+    "Three service cards with photos",
+    "A quote form that asks for rooms and access",
+    "Your phone number on every page",
+  ],
+  custom_sections: [
+    { name: "SeasonalOffer", purpose: "A strip for the spring clean offer" },
+  ],
+}
+
 /**
  * One valid instance per contract. The round-trip suite mutates these, so they
  * double as the worked example of each shape. All content is fictional (R8).
@@ -282,71 +348,12 @@ export const samples: Record<ContractName, unknown> = {
       expires_at: null,
     },
   },
-  Blueprint: {
-    direction: "calm_daylight",
-    fonts: "outfit_figtree",
-    palette: { kind: "preset", id: "forest" },
-    pages: [
-      {
-        page: "home",
-        sections: [
-          {
-            kind: "hero",
-            variant: "wash",
-            purpose: "Say what Fictional Fox Cleaning does and where",
-            content_notes:
-              "Lead with the weekly clean; phone number beside the button",
-          },
-          {
-            kind: "service_cards",
-            variant: "photo_cards",
-            purpose: "Three services, each with a photo and a link",
-            content_notes: null,
-          },
-          {
-            kind: "cta_band",
-            variant: "solid",
-            purpose: "Ask for a quote",
-            content_notes: null,
-          },
-        ],
-      },
-      {
-        page: "quote",
-        sections: [
-          {
-            kind: "quote_form",
-            variant: "default",
-            purpose: "Collect what a quote needs",
-            content_notes: null,
-          },
-        ],
-      },
-    ],
-    images: [
-      {
-        id: "home_hero",
-        page: "home",
-        section: "hero",
-        aspect: "16:9",
-        resolution: "2K",
-        subject: "An empty sunlit living room, one green plant on the sill",
-        text_side: "left",
-        source: "generated",
-        alt: "A bright, tidy living room",
-      },
-    ],
-    voice: "Plain and warm, first person plural, no exclamation marks",
-    features: [
-      "A home page that leads with the weekly clean",
-      "Three service cards with photos",
-      "A quote form that asks for rooms and access",
-      "Your phone number on every page",
-    ],
-    custom_sections: [
-      { name: "SeasonalOffer", purpose: "A strip for the spring clean offer" },
-    ],
+  Blueprint: BLUEPRINT,
+  BlueprintReviewInput: {
+    blueprint: BLUEPRINT,
+    revision_of: ASSIGNMENT,
   },
+  BlueprintReviewOutput: { decision: "change", note: "Add a gallery page" },
   BuildSummary: {
     assignment_id: ASSIGNMENT,
     kind: "site.revise",

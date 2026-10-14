@@ -440,6 +440,64 @@ export interface components {
                   kind: "template"
                   id: string
                 }
+              | {
+                  /** @constant */
+                  kind: "font_pair"
+                  display: string
+                  body: string
+                }
+              | {
+                  /** @constant */
+                  kind: "layout"
+                  /** @enum {string} */
+                  hero:
+                    | "wash"
+                    | "split_arch"
+                    | "split_frame"
+                    | "dark_center"
+                    | "text_led"
+                    | "icons"
+                    | "phrases"
+                    | "photo_cards"
+                    | "numbered_rows"
+                    | "alternating"
+                    | "fleet"
+                    | "practice_list"
+                    | "default"
+                    | "circles"
+                    | "dark_band"
+                    | "timeline"
+                    | "featured"
+                    | "wall"
+                    | "split"
+                    | "stacked"
+                    | "solid"
+                    | "photo"
+                  /** @enum {string} */
+                  services:
+                    | "wash"
+                    | "split_arch"
+                    | "split_frame"
+                    | "dark_center"
+                    | "text_led"
+                    | "icons"
+                    | "phrases"
+                    | "photo_cards"
+                    | "numbered_rows"
+                    | "alternating"
+                    | "fleet"
+                    | "practice_list"
+                    | "default"
+                    | "circles"
+                    | "dark_band"
+                    | "timeline"
+                    | "featured"
+                    | "wall"
+                    | "split"
+                    | "stacked"
+                    | "solid"
+                    | "photo"
+                }
             )
           | null
       }[]
@@ -467,6 +525,7 @@ export interface components {
     AskDesignInput: {
       questions: {
         id: string
+        question?: string
         /** @enum {string} */
         visual: "palette" | "font_pair" | "layout" | "text"
         card: {
@@ -501,6 +560,64 @@ export interface components {
                       /** @constant */
                       kind: "template"
                       id: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "font_pair"
+                      display: string
+                      body: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "layout"
+                      /** @enum {string} */
+                      hero:
+                        | "wash"
+                        | "split_arch"
+                        | "split_frame"
+                        | "dark_center"
+                        | "text_led"
+                        | "icons"
+                        | "phrases"
+                        | "photo_cards"
+                        | "numbered_rows"
+                        | "alternating"
+                        | "fleet"
+                        | "practice_list"
+                        | "default"
+                        | "circles"
+                        | "dark_band"
+                        | "timeline"
+                        | "featured"
+                        | "wall"
+                        | "split"
+                        | "stacked"
+                        | "solid"
+                        | "photo"
+                      /** @enum {string} */
+                      services:
+                        | "wash"
+                        | "split_arch"
+                        | "split_frame"
+                        | "dark_center"
+                        | "text_led"
+                        | "icons"
+                        | "phrases"
+                        | "photo_cards"
+                        | "numbered_rows"
+                        | "alternating"
+                        | "fleet"
+                        | "practice_list"
+                        | "default"
+                        | "circles"
+                        | "dark_band"
+                        | "timeline"
+                        | "featured"
+                        | "wall"
+                        | "split"
+                        | "stacked"
+                        | "solid"
+                        | "photo"
                     }
                 )
               | null
@@ -1992,6 +2109,281 @@ export interface components {
         purpose: string
       }[]
     }
+    BlueprintReviewInput: {
+      blueprint: {
+        direction: string
+        /** @enum {string} */
+        fonts:
+          | "outfit_figtree"
+          | "dmsans_fraunces"
+          | "instrument_worksans"
+          | "sora_manrope"
+          | "syne_jakarta"
+          | "newsreader_inter"
+          | "cormorant_manrope"
+          | "fraunces_figtree"
+        palette:
+          | {
+              /** @constant */
+              kind: "preset"
+              /** @enum {string} */
+              id:
+                | "ocean"
+                | "classic_blue"
+                | "harbour"
+                | "lagoon"
+                | "forest"
+                | "sage"
+                | "sunset"
+                | "mocha"
+                | "cardinal"
+                | "berry"
+                | "burgundy"
+                | "midnight"
+                | "damson"
+                | "ultra_violet"
+                | "graphite"
+                | "onyx"
+            }
+          | {
+              /** @constant */
+              kind: "brand"
+              brand: string
+            }
+        pages: {
+          /** @enum {string} */
+          page:
+            | "home"
+            | "services"
+            | "about"
+            | "gallery"
+            | "testimonials"
+            | "faq"
+            | "service_area"
+            | "contact"
+            | "quote"
+          sections: (
+            | {
+                /** @constant */
+                kind: "hero"
+                /** @enum {string} */
+                variant:
+                  | "wash"
+                  | "split_arch"
+                  | "split_frame"
+                  | "dark_center"
+                  | "text_led"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "trust_strip"
+                /** @enum {string} */
+                variant: "icons" | "phrases"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "service_cards"
+                /** @enum {string} */
+                variant:
+                  | "photo_cards"
+                  | "numbered_rows"
+                  | "alternating"
+                  | "fleet"
+                  | "practice_list"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "value_props"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "steps"
+                /** @enum {string} */
+                variant: "circles" | "dark_band" | "timeline"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "about"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "testimonials"
+                /** @enum {string} */
+                variant: "featured" | "wall"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "gallery"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "service_area"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "faq"
+                /** @enum {string} */
+                variant: "split" | "stacked"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "cta_band"
+                /** @enum {string} */
+                variant: "solid" | "photo"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "contact"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+            | {
+                /** @constant */
+                kind: "quote_form"
+                /** @enum {string} */
+                variant: "default"
+                purpose: string
+                content_notes: string | null
+              }
+          )[]
+        }[]
+        images: (
+          | {
+              id: string
+              /** @enum {string} */
+              page:
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+              /** @enum {string} */
+              section:
+                | "hero"
+                | "trust_strip"
+                | "service_cards"
+                | "value_props"
+                | "steps"
+                | "about"
+                | "testimonials"
+                | "gallery"
+                | "service_area"
+                | "faq"
+                | "cta_band"
+                | "contact"
+                | "quote_form"
+              /** @enum {string} */
+              aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+              /** @enum {string} */
+              resolution: "1K" | "2K"
+              subject: string
+              /** @enum {string} */
+              text_side?: "left" | "right" | "none"
+              alt: string
+              /** @constant */
+              source: "upload"
+              /** Format: uuid */
+              asset_id: string
+            }
+          | {
+              id: string
+              /** @enum {string} */
+              page:
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+              /** @enum {string} */
+              section:
+                | "hero"
+                | "trust_strip"
+                | "service_cards"
+                | "value_props"
+                | "steps"
+                | "about"
+                | "testimonials"
+                | "gallery"
+                | "service_area"
+                | "faq"
+                | "cta_band"
+                | "contact"
+                | "quote_form"
+              /** @enum {string} */
+              aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
+              /** @enum {string} */
+              resolution: "1K" | "2K"
+              subject: string
+              /** @enum {string} */
+              text_side?: "left" | "right" | "none"
+              alt: string
+              /** @constant */
+              source: "generated"
+              /** Format: uuid */
+              asset_id?: string
+            }
+        )[]
+        voice: string
+        features: string[]
+        custom_sections?: {
+          name: string
+          purpose: string
+        }[]
+      }
+      /** Format: uuid */
+      revision_of?: string
+    }
+    BlueprintReviewOutput:
+      | {
+          /** @constant */
+          decision: "build"
+          note?: string
+        }
+      | {
+          /** @constant */
+          decision: "change"
+          note: string
+        }
     BuildSummary: {
       /** Format: uuid */
       assignment_id: string
@@ -2630,6 +3022,18 @@ export interface components {
                         }
                         skip_all: boolean
                       }
+                    | (
+                        | {
+                            /** @constant */
+                            decision: "build"
+                            note?: string
+                          }
+                        | {
+                            /** @constant */
+                            decision: "change"
+                            note: string
+                          }
+                      )
                     | (
                         | {
                             /** @constant */
@@ -4811,6 +5215,8 @@ export interface components {
         [key: string]: {
           model: string
           max_output_tokens: number
+          /** @enum {string} */
+          effort?: "low" | "medium" | "high" | "xhigh" | "max"
         }
       }
       tool_manifest: string[]
