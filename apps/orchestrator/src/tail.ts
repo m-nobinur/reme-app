@@ -10,7 +10,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { limit } from "@workspace/gates"
+import { CUSTOM_CHECK, limit } from "@workspace/gates"
 import { SITE_ROOT } from "./revise.ts"
 import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
 import { since } from "./timing.ts"
@@ -26,6 +26,16 @@ const UPLOADS = 8
 
 /** Where the sandbox's axe script leaves its JSON. */
 const AXE_OUT = "/tmp/axe.json"
+
+/** The starter's custom-section lint, run from /tmp so the site cannot edit it. */
+const CUSTOM_SCRIPT = "/tmp/custom-sections.mjs"
+const CUSTOM_OUT = "/tmp/custom-sections.json"
+const CUSTOM_LINT = Object.values(
+  import.meta.glob(
+    "../../../packages/starter-site/scripts/custom-sections.mjs",
+    { query: "?raw", import: "default", eager: true }
+  ) as Record<string, string>
+)[0] as string
 
 /** How many earlier revisions are tried for a manifest to reuse. */
 const LOOKBACK = 3
@@ -193,8 +203,15 @@ export type TailSandbox = {
 
 type Check = { exit_code: number; output: string; ms: number }
 
-/** The axe run: its exit code, where its JSON went, and how long it took. */
-type Axe = { exit_code: number; key: string | null; ms: number }
+/** A sandbox script's run: its exit code, where its JSON went, and how long it took. */
+type Run = { exit_code: number; key: string | null; ms: number }
+
+/**
+ * The axe run, which also carries the custom-section check's. `finishRevision`'s
+ * callers hand `axe` to `checksOf` untouched, so riding on it puts the check in
+ * both lanes' reports without a second field in each caller.
+ */
+type Axe = Run & { custom?: Run }
 
 /**
  * The end of every build, both lanes (§8.2 "Verify before claiming done"):
@@ -321,6 +338,18 @@ export async function finishRevision(input: {
     )
   )
 
+  const custom = await steps.do("custom sections", () =>
+    runCustomSections(
+      {
+        exec: run,
+        readFileBuffer: (path) => sandbox.readFileBuffer(path),
+        writeFile: (path, content) => sandbox.writeFile(path, content),
+      },
+      sites,
+      prefix
+    )
+  )
+
   const source = await steps.do("upload source", async () => {
     const started = Date.now()
     const r = await run(
@@ -334,7 +363,7 @@ export async function finishRevision(input: {
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 
-  return { revisionId, check, build, manifest, axe, source }
+  return { revisionId, check, build, manifest, axe: { ...axe, custom }, source }
 }
 
 /**
@@ -364,9 +393,42 @@ export async function runAxe(
   return { exit_code: r.exitCode, key, ms: since(started) }
 }
 
+/**
+ * The custom-section rules over `src/components/custom/` (VS8). The script is
+ * the starter's, written into the sandbox just before it runs, so what runs is
+ * not what the Developer could have edited. No custom folder is a pass. A run
+ * that left no JSON is reported as exit 2, which the gate fails closed on.
+ */
+export async function runCustomSections(
+  sandbox: DistSandbox & Pick<TailSandbox, "writeFile">,
+  sites: Pick<DistBucket, "put">,
+  prefix: string
+): Promise<Run> {
+  const started = Date.now()
+  await sandbox.writeFile(CUSTOM_SCRIPT, CUSTOM_LINT)
+  const r = await sandbox.exec(
+    `rm -f ${CUSTOM_OUT}; node ${CUSTOM_SCRIPT} . ${CUSTOM_OUT}`
+  )
+  const json = await sandbox.readFileBuffer(CUSTOM_OUT).catch(() => null)
+  if (!json)
+    return { exit_code: r.exitCode || 2, key: null, ms: since(started) }
+  const key = `${prefix}custom-sections.json`
+  await sites.put(key, json)
+  return { exit_code: r.exitCode, key, ms: since(started) }
+}
+
 /** The report's checks, from what `finishRevision` ran. */
 export const checksOf = (tail: { check: Check; build: Check; axe: Axe }) => [
   { check: "astro check", exit_code: tail.check.exit_code, output_key: null },
   { check: "astro build", exit_code: tail.build.exit_code, output_key: null },
   { check: "axe", exit_code: tail.axe.exit_code, output_key: tail.axe.key },
+  ...(tail.axe.custom
+    ? [
+        {
+          check: CUSTOM_CHECK,
+          exit_code: tail.axe.custom.exit_code,
+          output_key: tail.axe.custom.key,
+        },
+      ]
+    : []),
 ]

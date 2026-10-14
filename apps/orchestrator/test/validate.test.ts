@@ -136,6 +136,7 @@ async function built(html: string, withhold: string[] = [], org?: string) {
             { check: "astro check", exit_code: 0, output_key: null },
             { check: "astro build", exit_code: 0, output_key: null },
             { check: "axe", exit_code: 0, output_key: null },
+            { check: "custom sections", exit_code: 0, output_key: null },
           ],
           risks: [],
           decisions_needed: [],

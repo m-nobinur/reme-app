@@ -6,6 +6,12 @@ import {
 } from "@workspace/contracts"
 import { checkAxe, parseAxe } from "./axe.ts"
 import { claimFindings, generatedImageFindings } from "./claims.ts"
+import {
+  CUSTOM_CHECK,
+  checkCustomSections,
+  parseCustom,
+  withCustomSections,
+} from "./custom.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
 import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
@@ -28,6 +34,13 @@ export {
   generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
+export {
+  CUSTOM_CHECK,
+  type CustomFinding,
+  checkCustomSections,
+  parseCustom,
+  withCustomSections,
+} from "./custom.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage } from "./page.ts"
 export { limit } from "./pool.ts"
@@ -443,7 +456,20 @@ export async function runGates(input: {
     }
     return once
   }
-  const types = checkTypes(input.report)
+  const customKey = input.report.checks.find(
+    (c) => c.check === CUSTOM_CHECK
+  )?.output_key
+  const customBytes =
+    customKey && input.evidence ? await input.evidence(customKey) : null
+  const types = withCustomSections(
+    checkTypes(input.report),
+    checkCustomSections(
+      input.report,
+      customBytes
+        ? parseCustom(safeJson(new TextDecoder().decode(customBytes)))
+        : null
+    )
+  )
   const axeKey = input.report.checks.find((c) => c.check === "axe")?.output_key
   const axeBytes =
     axeKey && input.evidence ? await input.evidence(axeKey) : null
