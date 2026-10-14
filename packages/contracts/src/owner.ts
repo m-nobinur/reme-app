@@ -532,6 +532,7 @@ export type ChangeKind = z.infer<typeof ChangeKind>
 export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
 export type BuildLane = z.infer<typeof BuildLane>
 export type BuildActivity = z.infer<typeof BuildActivity>
+export type BuildPhoto = z.infer<typeof BuildPhoto>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>

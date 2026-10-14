@@ -151,8 +151,8 @@ const PLAN = {
   ...BLUEPRINT,
   pages: [
     ...BLUEPRINT.pages,
-    ...(["gallery", "contact"] as const).map((page) => ({
-      page,
+    ...(["gallery", "contact"] as const).map((id) => ({
+      page: id,
       sections: BLUEPRINT.pages[0]?.sections.slice(0, 2) ?? [],
     })),
   ],
