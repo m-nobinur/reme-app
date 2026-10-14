@@ -73,10 +73,21 @@ it("offers the preview link when only the screenshots fail to load", async () =>
       screenshots: ["a.png", "b.png", "c.png"],
     },
   })
-  const shot = container.querySelector("img")
-  await act(async () => {
-    shot?.dispatchEvent(new Event("error"))
-  })
+  // Screenshots land after the preview, so a failed one is looked at again
+  // every 5 s; only after every look fails does the card give up on them.
+  vi.useFakeTimers()
+  try {
+    for (let look = 0; look < 6 && container.querySelector("img"); look++) {
+      await act(async () => {
+        container.querySelector("img")?.dispatchEvent(new Event("error"))
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(5000)
+      })
+    }
+  } finally {
+    vi.useRealTimers()
+  }
   expect(container.querySelector("img")).toBeNull()
   expect(container.textContent).toContain(
     "The screenshots did not load. Open the preview to see version 4."
