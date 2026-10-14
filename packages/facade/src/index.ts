@@ -36,6 +36,7 @@ export {
   TOOL_RESULT_MAX_CHARS,
 } from "./hooks.ts"
 export { OPENROUTER_IDS, openrouterModels } from "./models/index.ts"
+export { completeOnce } from "./once.ts"
 export type { ToolInput } from "./schema.ts"
 export { toolInput } from "./schema.ts"
 export type {

@@ -115,6 +115,7 @@ vi.mock("../src/brief.ts", () => ({
     withhold: [],
     model: "A",
     origin: script.origin,
+    ...script.lane,
   }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
@@ -131,6 +132,10 @@ const script = {
   reviewRefusal: null as string | null,
   /** The revision a warm sandbox names, if any. */
   held: null as string | null,
+  /** The lane the created event recorded; none is an instance from before lanes. */
+  lane: {} as { lane?: string; change_kind?: string | null },
+  /** Whether the one-call quick edit gets to a report. */
+  quickDone: true as boolean,
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -162,6 +167,7 @@ vi.mock("../src/sandbox.ts", () => ({
     },
   }),
   endSandbox: async () => undefined,
+  tailSandbox: (sandbox: unknown) => sandbox,
   keepWarm: async () => undefined,
   takeScreenshots: async () => ({ taken: 3, ms: 1 }),
   takeWarm: async () => script.held,
@@ -214,6 +220,19 @@ vi.mock("../src/revise.ts", () => ({
     prepared.push("warm")
     return ""
   },
+}))
+vi.mock("../src/quick.ts", () => ({
+  quickEdit: async () =>
+    script.quickDone
+      ? {
+          done: true,
+          base: "abc123",
+          report_id: "r",
+          revision_id: "v",
+          model_ms: 1,
+          attempts: 1,
+        }
+      : { done: false, reason: "apply: no match", model_ms: 1 },
 }))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
@@ -316,7 +335,10 @@ type Setup = {
   answers?: Answer[]
   looks?: typeof script.looks
   origin?: "owner"
+  lane?: typeof script.lane
+  quickDone?: boolean
 }
+const copy = { lane: "quick", change_kind: "copy" }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
   // An owner's build opens its own review once the sandbox is gone.
@@ -353,6 +375,33 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { outcome: "failed" },
   ],
   ["budget park", [budget], {}, { outcome: "blocked_on_approval" }],
+  // QE4: one model call and one build, reported without a Developer.
+  [
+    "quick edit",
+    [],
+    { origin: "owner", lane: copy },
+    { outcome: "preview_ready" },
+  ],
+  // The edit did not apply twice: the Developer takes it at the section role.
+  [
+    "quick edit handed on",
+    [completion],
+    { origin: "owner", lane: copy, quickDone: false },
+    { outcome: "preview_ready" },
+  ],
+  // The edit built but failed a gate: its files go back, then the same.
+  [
+    "quick edit failed a gate",
+    [completion],
+    { origin: "owner", lane: copy, verdicts: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "section change",
+    [completion],
+    { origin: "owner", lane: { lane: "quick", change_kind: "section" } },
+    { outcome: "preview_ready" },
+  ],
   [
     "interrupted then resumed",
     [interrupted, completion],
@@ -425,6 +474,8 @@ describe("the assignment Workflow's step names", () => {
     script.verdicts = [...(setup.verdicts ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
     script.origin = setup.origin ?? "console"
+    script.lane = setup.lane ?? {}
+    script.quickDone = setup.quickDone ?? true
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
@@ -475,6 +526,23 @@ describe("the assignment Workflow's step names", () => {
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
     expect(waits).toEqual([6 * HOUR])
     expect(names).toContain("resume 1")
+  })
+
+  it("starts a section change on the section role and steps up to build once", async () => {
+    script.lane = { lane: "quick", change_kind: "section" }
+    script.verdicts = ["repairing", "repairing", "preview_ready"]
+    dispatched.length = 0
+    await drive([completion, completion, completion]).run()
+    script.lane = {}
+    const [first, ...repairs] = dispatched as {
+      message: { attributes?: Record<string, string> }
+      initialData?: { role?: string }
+    }[]
+    expect(first?.initialData?.role).toBe("quick_section")
+    expect(repairs.map((r) => r.message.attributes?.role)).toEqual([
+      "build",
+      undefined,
+    ])
   })
 
   it("opens a review for an owner's preview only", async () => {
@@ -549,6 +617,10 @@ describe("the assignment Workflow's step names", () => {
         "checkpoint found the site gone",
         "nobody answered",
         "a stale nudge, then the answer",
+        "quick edit",
+        "quick edit handed on",
+        "quick edit failed a gate",
+        "section change",
       ].sort()
     )
   })

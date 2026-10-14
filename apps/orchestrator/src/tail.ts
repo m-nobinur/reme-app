@@ -1,7 +1,18 @@
-import { DeploymentManifest } from "@workspace/contracts"
-import { type OrgScopedDb, siteRevisions, sql } from "@workspace/db"
+import {
+  DeploymentManifest,
+  type FactRecord,
+  siteHost,
+} from "@workspace/contracts"
+import {
+  type OrgScopedDb,
+  orgs,
+  siteRevisions,
+  sql,
+  type Tenancy,
+} from "@workspace/db"
 import { limit } from "@workspace/gates"
 import { SITE_ROOT } from "./revise.ts"
+import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
 import { since } from "./timing.ts"
 
 /**
@@ -151,3 +162,169 @@ const sha256 = async (bytes: Uint8Array) =>
     new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
     (b) => b.toString(16).padStart(2, "0")
   ).join("")
+
+export const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
+
+const SECURITY_HEADERS = {
+  "content-security-policy":
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-frame-options": "DENY",
+}
+
+/** A durable step runner: flue's inside a tool, or a plain call inside one Workflow step. */
+export type Steps = {
+  do: <T>(name: string, fn: () => Promise<T>) => Promise<T>
+}
+
+/** The slice of the sandbox the tail uses. */
+export type TailSandbox = {
+  exec: (
+    command: string,
+    options?: { timeoutMs?: number }
+  ) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+  readFileBuffer: (path: string) => Promise<Uint8Array>
+  writeFile: (path: string, content: string) => Promise<unknown>
+}
+
+type Check = { exit_code: number; output: string; ms: number }
+
+/**
+ * The end of every build, both lanes (§8.2 "Verify before claiming done"):
+ * one `astro check` and one `astro build`, the revision row, the changed
+ * files uploaded and the source snapshot. Throws when the build fails, with
+ * its output, so the caller can hand it back to whoever wrote the code.
+ * Check and build run one after the other: the sandbox has one vCPU and both
+ * write `.astro`.
+ */
+export async function finishRevision(input: {
+  steps: Steps
+  sandbox: TailSandbox
+  kit: Tenancy
+  sites: R2Bucket
+  hostSuffix: string
+  orgId: string
+  assignmentId: string
+  facts: readonly FactRecord[]
+}) {
+  const { steps, sandbox, kit, sites, orgId, assignmentId } = input
+  const run = (command: string) =>
+    sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
+
+  // The quote questions are the owner's, never the Developer's: the
+  // build renders the facts' list whatever happened to the file.
+  await sandbox.writeFile(
+    `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
+    quoteFormFile(input.facts)
+  )
+  const check = await steps.do("astro check", async (): Promise<Check> => {
+    const started = Date.now()
+    const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
+    return {
+      exit_code: r.exitCode,
+      output: r.stdout.slice(-2000),
+      ms: since(started),
+    }
+  })
+  // Canonical URLs, the sitemap and robots name the tenant host; without
+  // --site the starter leaves them out rather than invent one.
+  const host = await steps.do("site host", async () =>
+    kit.withOrg({ orgId }, async (db) => {
+      const [org] = await db
+        .select({ slug: orgs.slug })
+        .from(orgs)
+        .where(sql`${orgs.id} = ${orgId}`)
+      if (!org) throw new Error(`no org row for ${orgId}`)
+      return siteHost(org.slug, input.hostSuffix)
+    })
+  )
+  const build = await steps.do("astro build", async (): Promise<Check> => {
+    const started = Date.now()
+    const r = await run(
+      `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
+    )
+    return {
+      exit_code: r.exitCode,
+      output: r.stdout.slice(-2000),
+      ms: since(started),
+    }
+  })
+  if (build.exit_code !== 0) {
+    throw new Error(
+      `astro build failed, fix it before reporting:\n${build.output}`
+    )
+  }
+
+  const revisionId = await steps.do("revision", async () =>
+    kit.withOrg({ orgId }, async (db) => {
+      // No version yet: the gates step numbers the revision if it passes.
+      const id = crypto.randomUUID()
+      const prefix = `sites/${orgId}/${id}/`
+      await db.insert(siteRevisions).values({
+        id,
+        orgId,
+        siteId: orgId,
+        assignmentId,
+        sourceKey: `${prefix}source.tar.zst`,
+        artifactPrefix: `${prefix}dist/`,
+        manifestKey: `${prefix}manifest.json`,
+      })
+      return id
+    })
+  )
+  const prefix = `sites/${orgId}/${revisionId}/`
+
+  const manifest = await steps.do("upload dist", async () => {
+    const started = Date.now()
+    const previous = await kit.withOrg({ orgId }, (db) =>
+      previousArtifact(db, sites, orgId, revisionId)
+    )
+    const uploaded = await uploadDist({
+      sandbox: {
+        exec: run,
+        readFileBuffer: (p) => sandbox.readFileBuffer(p),
+      },
+      sites,
+      prefix,
+      previous,
+    })
+    const parsed = DeploymentManifest.parse({
+      revision_id: revisionId,
+      site_id: orgId,
+      org_id: orgId,
+      routes: uploaded.routes,
+      headers: SECURITY_HEADERS,
+      files: uploaded.files,
+      built_at: new Date().toISOString(),
+    })
+    await sites.put(`${prefix}manifest.json`, JSON.stringify(parsed))
+    return {
+      files: Object.keys(uploaded.files).length,
+      reused: uploaded.reused,
+      bytes: uploaded.bytes,
+      ms: since(started),
+    }
+  })
+
+  const source = await steps.do("upload source", async () => {
+    const started = Date.now()
+    const r = await run(
+      `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`
+    )
+    if (r.exitCode !== 0) throw new Error(`source snapshot failed: ${r.stderr}`)
+    await sites.put(
+      `${prefix}source.tar.zst`,
+      await sandbox.readFileBuffer("/tmp/source.tar.zst")
+    )
+    return { key: `${prefix}source.tar.zst`, ms: since(started) }
+  })
+
+  return { revisionId, check, build, manifest, source }
+}
+
+/** The report's two checks, from what `finishRevision` ran. */
+export const checksOf = (tail: { check: Check; build: Check }) => [
+  { check: "astro check", exit_code: tail.check.exit_code, output_key: null },
+  { check: "astro build", exit_code: tail.build.exit_code, output_key: null },
+]

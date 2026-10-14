@@ -268,6 +268,62 @@
       "gates 2",
       "screenshots",
       "keep warm"
+    ],
+    "quick edit": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "quick edit",
+      "validating 1",
+      "gates 1",
+      "review",
+      "screenshots",
+      "keep warm"
+    ],
+    "quick edit handed on": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "quick edit",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "gates 1",
+      "review",
+      "screenshots",
+      "keep warm"
+    ],
+    "quick edit failed a gate": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "quick edit",
+      "validating 1",
+      "gates 1",
+      "quick reset",
+      "developer",
+      "developer 2",
+      "validating 2",
+      "gates 2",
+      "review",
+      "screenshots",
+      "keep warm"
+    ],
+    "section change": [
+      "claim 1",
+      "sandbox 1",
+      "planning",
+      "implementing",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "gates 1",
+      "review",
+      "screenshots",
+      "keep warm"
     ]
   },
   "PublishWorkflow": {

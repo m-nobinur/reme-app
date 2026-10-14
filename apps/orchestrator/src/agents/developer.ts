@@ -3,13 +3,11 @@ import { env } from "cloudflare:workers"
 import { getSandbox, OperationInterruptedError } from "@cloudflare/sandbox"
 import {
   CompletionReport,
-  DeploymentManifest,
   FactSnapshot,
   InformationRequest,
   RuntimeSpec,
-  siteHost,
 } from "@workspace/contracts"
-import { orgs, siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
+import { type Tenancy, tenancy } from "@workspace/db"
 import {
   type AgentProps,
   type BudgetGuard,
@@ -25,6 +23,7 @@ import {
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
+  roleOf,
   SANDBOX_UPDATING,
   type Tee,
   type TurnGate,
@@ -52,7 +51,7 @@ import { checkpoint, recover } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
-import { previousArtifact, uploadDist } from "../tail.ts"
+import { checksOf, finishRevision, GIT } from "../tail.ts"
 import { since } from "../timing.ts"
 
 /**
@@ -64,7 +63,6 @@ import { since } from "../timing.ts"
  */
 
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
-const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
 
 // The transport, once per isolate; a missing key fails here, before a model.
 registerProviders(env)
@@ -302,14 +300,28 @@ export function Developer({ id }: AgentProps) {
   )
   const askedForFallback =
     delivery.kind === "signal" && delivery.attributes?.model === "fallback"
+  // QE4: a section change starts on the quick section role (Sonnet, low) and
+  // moves to the build role, for good, when the Workflow's resume or repair
+  // signal asks for it: the quick lane's last step up.
+  const [onBuildRole, setOnBuildRole] = usePersistentState<boolean>(
+    "build_role",
+    false
+  )
+  const askedForBuildRole =
+    delivery.kind === "signal" && delivery.attributes?.role === "build"
+  const route =
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
+    brief.role && !(onBuildRole || askedForBuildRole)
+      ? roleOf(runtime.spec, brief.role)
+      : runtime
   const model =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     (onFallback || askedForFallback) && runtime.fallback
       ? runtime.fallback
-      : runtime.model
-  // pi-ai sends effort "none" when no level is given, so the build role's
-  // effort (medium: the Blueprint is the specification) is named here.
-  useModel(model, { thinkingLevel: runtime.effort })
+      : route.model
+  // pi-ai sends effort "none" when no level is given, so the role's effort
+  // (build: medium, the Blueprint is the specification) is named here.
+  useModel(model, { thinkingLevel: route.effort })
   // QE2: the site's sandbox, the one the Workflow provisioned and may have
   // found warm. One per site is safe because the site lock
   // (`assignments_site_writer_key`) lets one assignment at a time write it.
@@ -338,10 +350,18 @@ export function Developer({ id }: AgentProps) {
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
     current.interruptions.clear()
-    if (model !== runtime.model && !onFallback) {
+    if (askedForBuildRole && brief.role && !onBuildRole) {
+      setOnBuildRole(true)
+      current.tee.emit("model.switched", {
+        from: roleOf(runtime.spec, brief.role).model,
+        to: runtime.model,
+        reason: "quick.fell_through",
+      })
+    }
+    if (model !== route.model && !onFallback) {
       setOnFallback(true)
       current.tee.emit("model.switched", {
-        from: runtime.model,
+        from: route.model,
         to: model,
         reason:
           (delivery.kind === "signal" ? delivery.attributes?.reason : null) ??
@@ -475,14 +495,6 @@ export const askChief = (current: Session) =>
     },
   })
 
-const SECURITY_HEADERS = {
-  "content-security-policy":
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "strict-origin-when-cross-origin",
-  "x-frame-options": "DENY",
-}
-
 /**
  * The end of a build (§8.2 "Verify before claiming done"): the tool itself
  * runs the checks, uploads the artifact and the source snapshot as durable
@@ -510,118 +522,18 @@ const reportComplete = (current: Session) =>
       const orgId = spec.org_id
       const assignmentId = current.brief.snapshot.assignment_id
       const sandbox = harness.sandbox
-      const run = (command: string) =>
-        sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
       const toolStarted = Date.now()
-
-      // The quote questions are the owner's, never the Developer's: the
-      // build renders the facts' list whatever happened to the file.
-      await sandbox.writeFile(
-        `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
-        quoteFormFile(current.brief.snapshot.facts)
-      )
-      const check = await step.do("astro check", async () => {
-        const started = Date.now()
-        const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
-        return {
-          exit_code: r.exitCode,
-          output: r.stdout.slice(-2000),
-          ms: since(started),
-        }
-      })
-      // Canonical URLs, the sitemap and robots name the tenant host; without
-      // --site the starter leaves them out rather than invent one.
-      const host = await step.do("site host", async () =>
-        current.kit.withOrg({ orgId }, async (db) => {
-          const [org] = await db
-            .select({ slug: orgs.slug })
-            .from(orgs)
-            .where(sql`${orgs.id} = ${orgId}`)
-          if (!org) throw new Error(`no org row for ${orgId}`)
-          return siteHost(org.slug, env.SITE_HOST_SUFFIX)
-        })
-      )
-      const build = await step.do("astro build", async () => {
-        const started = Date.now()
-        const r = await run(
-          `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
-        )
-        return {
-          exit_code: r.exitCode,
-          output: r.stdout.slice(-2000),
-          ms: since(started),
-        }
-      })
-      if (build.exit_code !== 0) {
-        throw new Error(
-          `astro build failed, fix it before reporting:\n${build.output}`
-        )
-      }
-
-      const revisionId = await step.do("revision", async () =>
-        current.kit.withOrg({ orgId }, async (db) => {
-          // No version yet: the gates step numbers the revision if it passes.
-          const id = crypto.randomUUID()
-          const prefix = `sites/${orgId}/${id}/`
-          await db.insert(siteRevisions).values({
-            id,
-            orgId,
-            siteId: orgId,
-            assignmentId,
-            sourceKey: `${prefix}source.tar.zst`,
-            artifactPrefix: `${prefix}dist/`,
-            manifestKey: `${prefix}manifest.json`,
-          })
-          return id
-        })
-      )
-      const prefix = `sites/${orgId}/${revisionId}/`
-
-      const manifest = await step.do("upload dist", async () => {
-        const started = Date.now()
-        const previous = await current.kit.withOrg({ orgId }, (db) =>
-          previousArtifact(db, env.SITES, orgId, revisionId)
-        )
-        const uploaded = await uploadDist({
-          sandbox: {
-            exec: run,
-            readFileBuffer: (p) => sandbox.readFileBuffer(p),
-          },
+      const { revisionId, check, build, manifest, source } =
+        await finishRevision({
+          steps: step,
+          sandbox,
+          kit: current.kit,
           sites: env.SITES,
-          prefix,
-          previous,
+          hostSuffix: env.SITE_HOST_SUFFIX,
+          orgId,
+          assignmentId,
+          facts: current.brief.snapshot.facts,
         })
-        const parsed = DeploymentManifest.parse({
-          revision_id: revisionId,
-          site_id: orgId,
-          org_id: orgId,
-          routes: uploaded.routes,
-          headers: SECURITY_HEADERS,
-          files: uploaded.files,
-          built_at: new Date().toISOString(),
-        })
-        await env.SITES.put(`${prefix}manifest.json`, JSON.stringify(parsed))
-        return {
-          files: Object.keys(uploaded.files).length,
-          reused: uploaded.reused,
-          bytes: uploaded.bytes,
-          ms: since(started),
-        }
-      })
-
-      const source = await step.do("upload source", async () => {
-        const started = Date.now()
-        const r = await run(
-          `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`
-        )
-        if (r.exitCode !== 0)
-          throw new Error(`source snapshot failed: ${r.stderr}`)
-        await env.SITES.put(
-          `${prefix}source.tar.zst`,
-          await sandbox.readFileBuffer("/tmp/source.tar.zst")
-        )
-        return { key: `${prefix}source.tar.zst`, ms: since(started) }
-      })
 
       const report = CompletionReport.parse({
         report_id: crypto.randomUUID(),
@@ -634,18 +546,7 @@ const reportComplete = (current: Session) =>
         // Taken after the preview is ready, by the Workflow; the router serves
         // them by name from this revision's prefix.
         screenshots: [],
-        checks: [
-          {
-            check: "astro check",
-            exit_code: check.exit_code,
-            output_key: null,
-          },
-          {
-            check: "astro build",
-            exit_code: build.exit_code,
-            output_key: null,
-          },
-        ],
+        checks: checksOf({ check, build }),
         risks: data.risks,
         decisions_needed: data.decisions_needed,
         reported_at: new Date().toISOString(),

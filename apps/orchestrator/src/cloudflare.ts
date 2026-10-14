@@ -6,6 +6,7 @@ import {
 } from "cloudflare:workers"
 import { NonRetryableError } from "cloudflare:workflows"
 import { Sandbox } from "@cloudflare/sandbox"
+import type { BuildLane, ChangeKind } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -46,6 +47,7 @@ import {
   verifyArtifact,
   writePointer,
 } from "./publish.ts"
+import { quickEdit } from "./quick.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import { mapSite, publishedSource, restoreAndMap, SITE_ROOT } from "./revise.ts"
 import {
@@ -58,10 +60,12 @@ import {
   rehydrate,
   SLEEP_AFTER,
   sandboxFor,
+  tailSandbox,
   takeScreenshots,
   takeWarm,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
+import { GIT } from "./tail.ts"
 import { logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, validateRevision } from "./validate.ts"
@@ -247,16 +251,32 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     if (!ready) return { outcome: "pool_exhausted" }
 
-    await step.do("planning", () => run((kit) => advance(kit, ids, "planning")))
+    // The lane rides the planning step's return rather than a step of its
+    // own, so a full build keeps its step list. An instance replayed from
+    // before lanes existed gets the old return, with no lane: full.
+    const route: { lane?: BuildLane; change_kind?: ChangeKind | null } =
+      await step.do("planning", () =>
+        run(async (kit) => {
+          await advance(kit, ids, "planning")
+          const { lane, change_kind } = await kit.withOrg(
+            { orgId: ids.orgId },
+            (db) => creationChoices(db, ids)
+          )
+          return { lane, change_kind }
+        })
+      )
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
 
-    // The brief and the admission in one step, create-only, so a retried
-    // step cannot admit the Developer twice: the second attempt finds the
-    // instance and returns. The spec and the snapshot are bodies, so they
-    // travel inside the step and never cross its boundary (R8).
-    const admitted = await step.do("developer", async () => {
+    /**
+     * The brief and the site's disk, inside whichever step runs the change.
+     * The spec and the snapshot are bodies, so they never cross a step
+     * boundary (R8). `handedOn` says a quick attempt before this one left
+     * the disk at the revision the change starts from, so it is mapped as
+     * it is.
+     */
+    const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
       const briefStarted = Date.now()
       const { brief, origin, kind, from } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
@@ -285,6 +305,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             acceptance_criteria: row.acceptanceCriteria,
             restore_key: source?.source_key ?? null,
             map: null,
+            ...(role ? { role } : {}),
           }
           return {
             brief: built,
@@ -302,7 +323,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       // Developer's first turn.
       const sandbox = sandboxFor(this.env, ids.orgId)
       // Always taken, so a first build clears the marker too.
-      const held = await takeWarm(sandbox)
+      const held = handedOn ? from : await takeWarm(sandbox)
       const warm = from !== null && held === from
       if (brief.restore_key) {
         brief.map = warm
@@ -312,41 +333,112 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // A first build seeds an empty site; a warm disk's site would linger.
         await sandbox.exec(`rm -rf ${SITE_ROOT}`)
       }
-      const restoreMs = since(restoreStarted)
-      const dispatchedAt = Date.now()
-      const timing = {
+      return {
+        brief,
+        origin,
         kind,
         warm,
         brief_ms: briefMs,
-        restore_ms: restoreMs,
-        dispatched_at: dispatchedAt,
+        restore_ms: since(restoreStarted),
+        dispatched_at: Date.now(),
       }
-      try {
-        const receipt = await init(Developer, {
-          id: ids.assignmentId,
-          uid: null,
-        }).dispatch({
-          // An owner's words are data, not an instruction: a revise's change
-          // request and an owner's build goal travel as a signal, tainted on
-          // the log (§28.3). A console goal keeps its plain message.
-          message: brief.goal_tainted
-            ? {
-                kind: "signal",
-                type: "site.change_requested",
-                body: brief.goal,
-                attributes: { taint: "untrusted_input" },
-              }
-            : `Build the site from the canonical facts. ${brief.goal}`,
-          initialData: brief,
-        })
-        return { submission_id: receipt.submissionId, origin, ...timing }
-      } catch (error) {
-        if (error instanceof AgentInstanceExistsError) {
-          return { submission_id: null, origin, ...timing }
+    }
+
+    // The admission in one step, create-only, so a retried step cannot admit
+    // the Developer twice: the second attempt finds the instance and returns.
+    const admit = (role: "quick_section" | null, handedOn: boolean) =>
+      step.do("developer", async () => {
+        const { brief, ...timing } = await prepare(role, handedOn)
+        const origin = timing.origin
+        try {
+          const receipt = await init(Developer, {
+            id: ids.assignmentId,
+            uid: null,
+          }).dispatch({
+            // An owner's words are data, not an instruction: a revise's change
+            // request and an owner's build goal travel as a signal, tainted on
+            // the log (§28.3). A console goal keeps its plain message.
+            message: brief.goal_tainted
+              ? {
+                  kind: "signal",
+                  type: "site.change_requested",
+                  body: brief.goal,
+                  attributes: { taint: "untrusted_input" },
+                }
+              : `Build the site from the canonical facts. ${brief.goal}`,
+            initialData: brief,
+          })
+          return { submission_id: receipt.submissionId, ...timing, origin }
+        } catch (error) {
+          if (error instanceof AgentInstanceExistsError) {
+            return { submission_id: null, ...timing, origin }
+          }
+          throw error
         }
-        throw error
+      })
+
+    // QE4, the quick lane. A copy or style change is one model call and one
+    // build, with no Developer; a section change is the Developer at low
+    // effort. Whatever fails moves one lane up: copy and style to section,
+    // section to the full build role. The owner sees no failure for a lane.
+    const oneCall =
+      route.lane === "quick" &&
+      (route.change_kind === "copy" || route.change_kind === "style")
+        ? route.change_kind
+        : null
+    /** The Developer runs at the section role and moves to the build role on trouble. */
+    let section = route.lane === "quick" && route.change_kind === "section"
+    let pending: DeveloperEvent | null = null
+    let quickBase: string | null = null
+    let quick: "done" | "fell" | null = null
+    let admitted: Awaited<ReturnType<typeof admit>>
+    if (oneCall) {
+      const tried = await step.do("quick edit", async () => {
+        const { brief, ...timing } = await prepare(null, false)
+        const result = await run((kit) =>
+          quickEdit({
+            env: this.env,
+            kit,
+            sandbox: tailSandbox(sandboxFor(this.env, ids.orgId)),
+            brief,
+            kind: oneCall,
+          })
+        )
+        if (!result.done) {
+          await run((kit) =>
+            appendAudit(kit, ids, "quick.fell_through", {
+              from: oneCall,
+              to: "section",
+              reason: result.reason,
+            })
+          )
+        }
+        return { submission_id: null, ...timing, result }
+      })
+      admitted = tried
+      if (tried.result.done) {
+        quick = "done"
+        quickBase = tried.result.base
+        pending = {
+          kind: "completion",
+          report_id: tried.result.report_id,
+          revision_id: tried.result.revision_id,
+          timings: tried.result.timings,
+        }
+      } else {
+        quick = "fell"
+        section = true
+        admitted = await admit("quick_section", true)
       }
-    })
+    } else {
+      admitted = await admit(section ? "quick_section" : null, false)
+    }
+    /** The resume and repair signals' attributes that move a section run to the build role, once. */
+    const escalate = (): Record<string, string> => {
+      if (!section) return {}
+      section = false
+      return { role: "build" }
+    }
 
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
@@ -366,13 +458,19 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     let resumes = 0
     for (let round = 1; round <= ROUNDS; round++) {
       let woke: { payload: DeveloperEvent }
-      try {
-        woke = await step.waitForEvent<DeveloperEvent>(`developer ${round}`, {
-          type: "developer",
-          timeout: "2 hours",
-        })
-      } catch {
-        return fail(`timed out ${round}`, "developer.timed_out")
+      if (pending) {
+        // The quick edit's own completion, already reported: no wait.
+        woke = { payload: pending }
+        pending = null
+      } else {
+        try {
+          woke = await step.waitForEvent<DeveloperEvent>(`developer ${round}`, {
+            type: "developer",
+            timeout: "2 hours",
+          })
+        } catch {
+          return fail(`timed out ${round}`, "developer.timed_out")
+        }
       }
       const payload = woke.payload
       if (payload.kind === "interrupted") {
@@ -386,6 +484,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // failure is not the model's fault (open item 50, architect ruling).
         const fallback =
           resumes === RESUMES && reason === "provider.unavailable"
+        // Outside the step, so a replay flips `section` the same way.
+        const lift = escalate()
         await step.sleep(`resume wait ${round}`, "30 seconds")
         await step.do(`resume run ${round}`, async () => {
           await init(Developer, { id: ids.assignmentId }).dispatch({
@@ -395,6 +495,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               body: JSON.stringify({ reason: payload.reason }),
               attributes: {
                 attempt: String(resumes),
+                ...lift,
                 ...(fallback
                   ? { model: "fallback", reason: payload.reason }
                   : {}),
@@ -438,9 +539,35 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             at: Date.now(),
           }
         })
+        if (verdict.outcome === "repairing" && quickBase) {
+          // The quick edit failed a gate: its files go back to where it
+          // started and the Developer takes the change at the section role.
+          const base = quickBase
+          quickBase = null
+          await step.do("quick reset", async () => {
+            const reset = await sandboxFor(this.env, ids.orgId).exec(
+              `cd ${SITE_ROOT} && ${GIT} reset -q --hard ${base}`
+            )
+            if (reset.exitCode !== 0) throw new Error(reset.stderr)
+            await run((kit) =>
+              appendAudit(kit, ids, "quick.fell_through", {
+                from: oneCall,
+                to: "section",
+                reason: "gates",
+                failed: verdict.failed,
+              })
+            )
+            return { base }
+          })
+          quick = "fell"
+          section = true
+          admitted = await admit("quick_section", true)
+          continue
+        }
         if (verdict.outcome === "repairing") {
           // The failed rows go back to the same conversation, the way an
           // answer does; the Developer fixes them and reports again.
+          const lift = escalate()
           await step.do(`repair ${round}`, async () => {
             await init(Developer, { id: ids.assignmentId }).dispatch({
               message: {
@@ -450,7 +577,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   report_id: verdict.report_id,
                   failed: verdict.failed,
                 }),
-                attributes: { report_id: verdict.report_id },
+                attributes: { report_id: verdict.report_id, ...lift },
               },
             })
             return { report_id: verdict.report_id }
@@ -510,6 +637,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           assignment_id: ids.assignmentId,
           org_id: ids.orgId,
           kind: admitted.kind,
+          lane: route.lane ?? "full",
+          change_kind: route.change_kind ?? null,
+          quick,
           outcome: verdict.outcome,
           rounds: round,
           warm: admitted.warm,
