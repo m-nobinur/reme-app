@@ -5,9 +5,9 @@
     "paper": "#f7f9fa",
     "ink": "#131b20",
     "primary": "#0369a1",
-    "tint": "#e1eaef",
+    "tint": "#dbebf5",
     "accent": "#3745be",
-    "line": "#cdd9df"
+    "line": "#c6dbe5"
   },
   "classic_blue": {
     "label": "Classic blue",
@@ -15,9 +15,9 @@
     "paper": "#f7f9fa",
     "ink": "#131a20",
     "primary": "#0f4c81",
-    "tint": "#e1e9ef",
+    "tint": "#dbeaf5",
     "accent": "#3837be",
-    "line": "#cdd7df"
+    "line": "#c7d8e5"
   },
   "harbour": {
     "label": "Harbour",
@@ -25,9 +25,9 @@
     "paper": "#f7f8fa",
     "ink": "#131720",
     "primary": "#1b2a4a",
-    "tint": "#e1e5ef",
+    "tint": "#dfe5f4",
     "accent": "#5537be",
-    "line": "#cdd3df"
+    "line": "#cad3e5"
   },
   "lagoon": {
     "label": "Lagoon",
@@ -35,9 +35,9 @@
     "paper": "#f7fafa",
     "ink": "#13201f",
     "primary": "#0f766e",
-    "tint": "#e1efee",
+    "tint": "#dcf1ef",
     "accent": "#377fbe",
-    "line": "#cddfde"
+    "line": "#c8e1df"
   },
   "forest": {
     "label": "Forest",
@@ -45,19 +45,19 @@
     "paper": "#f7faf9",
     "ink": "#13201a",
     "primary": "#1b4332",
-    "tint": "#e1efe9",
+    "tint": "#def0e8",
     "accent": "#37aebe",
-    "line": "#cedfd8"
+    "line": "#cbe0d7"
   },
   "sage": {
     "label": "Sage",
     "hint": "Soft, quiet green",
-    "paper": "#f8f9f8",
+    "paper": "#f7f9f7",
     "ink": "#171c19",
     "primary": "#54705c",
-    "tint": "#e8ece9",
+    "tint": "#e0f0e4",
     "accent": "#37bea6",
-    "line": "#d3d9d5"
+    "line": "#caddd1"
   },
   "sunset": {
     "label": "Sunset",
@@ -65,19 +65,19 @@
     "paper": "#faf8f7",
     "ink": "#201713",
     "primary": "#c2410c",
-    "tint": "#f5efed",
+    "tint": "#ffece6",
     "accent": "#bea737",
-    "line": "#dfd2cd"
+    "line": "#e5d0c8"
   },
   "mocha": {
     "label": "Mocha",
     "hint": "Warm coffee brown",
-    "paper": "#f9f8f8",
+    "paper": "#faf8f8",
     "ink": "#1d1816",
     "primary": "#8b6452",
-    "tint": "#f2f0ee",
+    "tint": "#fbeee1",
     "accent": "#beaa37",
-    "line": "#dbd4d1"
+    "line": "#e5d1c8"
   },
   "cardinal": {
     "label": "Cardinal",
@@ -85,9 +85,9 @@
     "paper": "#faf7f7",
     "ink": "#201314",
     "primary": "#b3262d",
-    "tint": "#efe1e2",
+    "tint": "#f3dfe1",
     "accent": "#be7937",
-    "line": "#dfcdce"
+    "line": "#e3cccd"
   },
   "berry": {
     "label": "Berry",
@@ -95,9 +95,9 @@
     "paper": "#faf7f8",
     "ink": "#201316",
     "primary": "#bb2649",
-    "tint": "#efe1e4",
+    "tint": "#f3dfe4",
     "accent": "#be6037",
-    "line": "#dfcdd1"
+    "line": "#e2ccd1"
   },
   "burgundy": {
     "label": "Burgundy",
@@ -105,9 +105,9 @@
     "paper": "#faf7f8",
     "ink": "#201315",
     "primary": "#722f37",
-    "tint": "#efe1e3",
+    "tint": "#f3dfe2",
     "accent": "#be7037",
-    "line": "#dfced0"
+    "line": "#e3cccf"
   },
   "midnight": {
     "label": "Midnight",
@@ -115,9 +115,9 @@
     "paper": "#f7f7fa",
     "ink": "#141320",
     "primary": "#3730a3",
-    "tint": "#e2e1ef",
+    "tint": "#e2e1f1",
     "accent": "#8837be",
-    "line": "#cecddf"
+    "line": "#cecde0"
   },
   "damson": {
     "label": "Damson",
@@ -135,29 +135,29 @@
     "paper": "#f8f8fa",
     "ink": "#18151e",
     "primary": "#5f4b8b",
-    "tint": "#e6e3ed",
+    "tint": "#e7e2f2",
     "accent": "#aa37be",
-    "line": "#d4d0dc"
+    "line": "#d5cfe1"
   },
   "graphite": {
     "label": "Graphite",
     "hint": "Cool slate grey",
-    "paper": "#f8f9f9",
+    "paper": "#f8f9fb",
     "ink": "#17191c",
     "primary": "#475569",
-    "tint": "#e5e8eb",
+    "tint": "#dde9f6",
     "accent": "#4837be",
-    "line": "#d2d6da"
+    "line": "#c9d8e6"
   },
   "onyx": {
     "label": "Onyx",
     "hint": "Near black, understated",
-    "paper": "#f9f9f8",
+    "paper": "#f9f9f7",
     "ink": "#1b1918",
     "primary": "#1c1917",
-    "tint": "#eae8e6",
+    "tint": "#f3e6d9",
     "accent": "#beb637",
-    "line": "#d8d6d4"
+    "line": "#e3d4c5"
   },
   "mint": {
     "label": "Mint",
@@ -192,12 +192,12 @@
   "pebble": {
     "label": "Pebble",
     "hint": "Warm stone, charcoal and sage",
-    "paper": "#fbfbf9",
+    "paper": "#f9fbfa",
     "ink": "#262a28",
     "primary": "#4f6b58",
-    "tint": "#e9e7e1",
+    "tint": "#dcece1",
     "accent": "#9bb09f",
-    "line": "#d6d3cb"
+    "line": "#c7d9cc"
   },
   "counsel": {
     "label": "Counsel",

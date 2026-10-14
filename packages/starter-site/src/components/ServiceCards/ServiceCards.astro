@@ -8,7 +8,7 @@ import ActionLink from "../ActionLink/ActionLink.astro"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
-  /** The pattern. alternating is the services page's own. */
+  /** The pattern. alternating is the services page's own. photo_cards shows numbered_rows unless every service has a photo, and alternating off the services page unless one has. */
   variant?:
     | "photo_cards"
     | "numbered_rows"
@@ -17,16 +17,25 @@ interface Props {
     | "practice_list"
 }
 
-const { variant = "photo_cards" } = Astro.props
+const { variant: asked = "photo_cards" } = Astro.props
 const items = serviceItems.map((item) => ({
   ...item,
   photo: item.image.src && item.image.alt ? item.image : null,
 }))
+const onServices = Astro.url.pathname === "/services/"
+// A pattern built on pictures, with none to show, is one icon card three times
+// over: numbered rows carry the same services as a list. Cards need a photo
+// each; the services page keeps its detail rows either way, as the one place
+// the full lists live.
+const variant =
+  (asked === "photo_cards" && !items.every((item) => item.photo)) ||
+  (asked === "alternating" && !onServices && !items.some((item) => item.photo))
+    ? "numbered_rows"
+    : asked
 // Alternating rows are the services page itself, the place every other
 // pattern links to, so they link nowhere and the page's hero is their head.
 const detail = variant === "alternating"
 const linked = !detail && hasRoute("/services/")
-const onServices = Astro.url.pathname === "/services/"
 const href = (id: string) => `/services/#${id}`
 ---
 

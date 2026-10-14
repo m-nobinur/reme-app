@@ -348,7 +348,7 @@
         "name": "variant",
         "type": "\"photo_cards\" | \"numbered_rows\" | \"alternating\" | \"fleet\" | \"practice_list\"",
         "required": false,
-        "description": "The pattern. alternating is the services page's own."
+        "description": "The pattern. alternating is the services page's own. photo_cards shows numbered_rows unless every service has a photo, and alternating off the services page unless one has."
       }
     ],
     "constraints": [

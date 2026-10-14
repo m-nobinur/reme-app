@@ -531,6 +531,7 @@ export function plannerPrompt(input: {
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof.",
     "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work, streets. Never generate one for about, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene; the alt says what it shows.",
+    "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",
     "- features: four to ten lines the owner reads, each a plain sentence about what their site will have, under 140 characters, no jargon, no section or variant ids.",
     "- voice: one or two sentences on how the copy sounds, from the direction's voice and the pack's.",

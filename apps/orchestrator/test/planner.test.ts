@@ -456,6 +456,7 @@ describe("the prompt", () => {
     })
     expect(a.system).toBe(b.system)
     expect(a.system).toContain("- after_dark (After dark")
+    expect(a.system).toContain("a photo slot for every service")
     expect(a.user).toContain(
       "- calm_daylight + hero wash + services photo_cards (2)"
     )

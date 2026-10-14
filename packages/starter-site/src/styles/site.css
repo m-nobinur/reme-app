@@ -1165,6 +1165,7 @@ picture {
   gap: var(--space-lg);
   margin: 0;
   padding: 0;
+  counter-reset: reason;
   list-style: none;
 }
 
@@ -1173,6 +1174,18 @@ picture {
   grid-template-columns: auto 1fr;
   gap: var(--space-sm) var(--space-md);
   align-items: start;
+  counter-increment: reason;
+}
+
+/* Design rule 7: a list of reasons is numbered 01, 02, 03. */
+.value-list li > div::before {
+  content: counter(reason, decimal-leading-zero);
+  display: block;
+  margin-block-end: var(--space-3xs);
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .value-list .card-icon {
@@ -1309,11 +1322,21 @@ picture {
   gap: var(--space-2xs) var(--space-md);
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
   margin: 0;
-  padding-inline-start: 1.1em;
+  padding: 0;
+  counter-reset: offering;
+  list-style: none;
 }
 
-.offerings li::marker {
+.offerings li {
+  display: flex;
+  gap: var(--space-xs);
+  counter-increment: offering;
+}
+
+.offerings li::before {
+  content: counter(offering, decimal-leading-zero);
   color: var(--brand-text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Steps */
@@ -1725,7 +1748,7 @@ picture {
 }
 
 .next-list li::before {
-  content: counter(next);
+  content: counter(next, decimal-leading-zero);
   display: grid;
   place-items: center;
   width: 2rem;

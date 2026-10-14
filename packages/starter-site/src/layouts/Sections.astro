@@ -104,11 +104,11 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
                 eyebrow={site.offeringsEyebrow}
                 heading={site.offeringsHeading}
               >
-                <ul class="offerings">
+                <ol class="offerings">
                   {offerings.map((item) => (
                     <li>{item}</li>
                   ))}
-                </ul>
+                </ol>
               </Section>
             )}
           </>
