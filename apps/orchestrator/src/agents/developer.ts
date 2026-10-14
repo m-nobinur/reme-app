@@ -14,11 +14,13 @@ import {
   type AgentProps,
   type BudgetGuard,
   createBudgetGuard,
+  createMutationQueue,
   createTee,
   createTurnGate,
   defineTool,
   guardedTools,
   instrument,
+  type MutationQueue,
   observe,
   type ResolvedRuntime,
   registerProviders,
@@ -79,6 +81,8 @@ type Session = {
   kit: Tenancy
   brief: Brief
   gate: TurnGate
+  /** One per assignment, so the lead's and every subagent's writes to one file take turns. */
+  mutations: MutationQueue
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
   budgetExhausted: boolean
@@ -101,15 +105,19 @@ observe((observation, ctx) => {
  * this the assignment waits on an event that never comes and holds the site
  * lock. The log is flushed first, then the Workflow is told once per failed
  * operation; it retries and, failing that, releases the lock (§13). A budget
- * refusal is left to the budget path, which already wakes it.
+ * refusal is left to the budget path, which already wakes it. A subagent's
+ * failed run is not one: it returns to the lead as its `task` result, and
+ * the lead's turn goes on.
  */
 function interrupted(found: Session, observation: unknown) {
   const o = observation as {
     type?: string
     operationId?: string
+    taskId?: string
     error?: { meta?: { reason?: unknown }; name?: unknown }
   }
-  if (o.type !== "operation" || !o.error || found.budgetExhausted) return
+  if (o.type !== "operation" || !o.error || o.taskId || found.budgetExhausted)
+    return
   const reason = String(
     o.error.meta?.reason ?? o.error.name ?? "operation failed"
   ).slice(0, 300)
@@ -224,6 +232,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     kit,
     brief,
     gate: undefined as unknown as TurnGate,
+    mutations: createMutationQueue(),
     interruptions: new Set(),
     budgetExhausted: false,
   }
@@ -231,6 +240,10 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     onInterrupt: (reason) => wake(created, `gate:${reason}`, reason),
     interruptNow: platformInterrupted,
     onToolDone: (name) => (name === "checkpoint" ? save(created) : undefined),
+    // Which subagents the lead's interrupted turn cut short, so its resume
+    // knows what to send again.
+    onCancel: (taskId, reason) =>
+      tee.emit("developer.task_cancelled", { task_id: taskId, reason }),
   })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
@@ -357,7 +370,11 @@ export function Developer({ id }: AgentProps) {
   useSandbox(
     {
       createSandbox: base.createSandbox,
-      tools: guardedTools(POLICY, { git: GIT }),
+      tools: guardedTools(POLICY, {
+        git: GIT,
+        mutations: current.mutations,
+        fromChild: current.gate.fromChild,
+      }),
     },
     { cwd: SITE_ROOT }
   )

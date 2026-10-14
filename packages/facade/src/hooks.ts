@@ -200,14 +200,22 @@ export function boundResult<T extends ToolResult>(
 const TERMINAL = new Set(["ask_chief", "report_complete"])
 /** Tools that change nothing, so they may run after a turn has ended. */
 const READS = new Set(["read", "grep", "glob"])
-/** flue mounts `task` whether asked or not; no story has needed a subagent yet. */
-const REFUSED = new Set(["task"])
+/**
+ * Tools only the lead may call. A subagent never ends the lead's turn, never
+ * delegates (depth stays one) and never commits: `checkpoint` runs
+ * `git add -A`, which would sweep in a sibling's half-done edits. flue mounts
+ * `task` on every session and the sandbox tools on every child, and the
+ * sandbox factory cannot tell a child from the lead, so they come off here.
+ */
+const LEAD_ONLY = new Set([...TERMINAL, "task", "checkpoint"])
 
 export type TurnGate = {
   /** Install with flue's `instrument()`; it sees every tool call by name before it runs. */
   interceptor: FlueExecutionInterceptor
   /** Call at every delivery (`useAgentStart`): the next message is a new turn. */
   open: () => void
+  /** Whether a running tool call is a subagent's: for checks that see the call's id but not its session. */
+  fromChild: (toolCallId: string) => boolean
 }
 
 export type TurnGateOptions = {
@@ -225,6 +233,8 @@ export type TurnGateOptions = {
    * not throw, or the gate counts a failure the tool did not have.
    */
   onToolDone?: (name: string) => void | Promise<void>
+  /** Runs once per subagent the gate stopped because the lead's turn ended under it. */
+  onCancel?: (taskId: string, reason: string) => void
 }
 
 /** Consecutive thrown tool errors with the same text before the gate ends the turn. */
@@ -243,12 +253,29 @@ const failureText = (error: unknown) =>
     .replace(/\s+/g, " ")
     .slice(0, 200)
 
+/** A result that ends its caller's turn: the lead's, or one subagent's. */
+const terminating = (code: string, text: string) =>
+  ({
+    content: [{ type: "text", text }],
+    details: { code },
+    terminate: true,
+    // The interceptor is generic over the operation's own result; a tool
+    // result is what every tool operation resolves to.
+  }) as never
+
 /**
  * One terminal call per turn and nothing that writes after it (architect
  * ruling, parallelism). The first `ask_chief` or `report_complete` closes the
  * turn before it awaits anything, so a second terminal call in the same batch
  * is refused even when the batch runs in parallel; a terminal call that throws
  * (a build that fails) reopens it so the model can fix what it reported.
+ *
+ * Subagents run inside the lead's `task` calls and reach this same gate with
+ * `ctx.taskId` set. A terminal call is refused while any `task` runs, so a
+ * report never builds under a child's edit. Each session counts its own
+ * repeated failures, so a child that loops ends itself and not the lead.
+ * When the lead's turn ends under running children, each stops at its next
+ * call and is reported once through `onCancel`.
  */
 export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
   // ponytail: in memory, so an isolate restart mid-response forgets a closed
@@ -259,36 +286,45 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
   // asked for it alternated bash and report_complete. Only a thrown error
   // counts: a command that ran and exited non-zero is the model doing its
   // job. Any result that returns resets it, and so does every delivery.
-  let lastFailure: string | null = null
-  let repeats = 0
+  // One counter per session: "" is the lead, a task id is a child.
+  const failures = new Map<string, { text: string; repeats: number }>()
+  let tasksRunning = 0
+  const childCalls = new Set<string>()
+  const cancelled = new Set<string>()
+  const cancel = (taskId: string, reason: string) => {
+    if (cancelled.has(taskId)) return
+    cancelled.add(taskId)
+    options.onCancel?.(taskId, reason)
+  }
   const ended = (reason: string, text: string) => {
     closedBy = reason
-    repeats = 0
-    lastFailure = null
+    failures.clear()
     options.onInterrupt?.(reason)
     // A terminating result, the way ask_chief and report_complete end a
     // turn; a throw would go back to the model as one more tool error.
-    return {
-      content: [{ type: "text", text }],
-      details: { code: reason },
-      terminate: true,
-      // The interceptor is generic over the operation's own result; a tool
-      // result is what every tool operation resolves to.
-    } as never
+    return terminating(reason, text)
   }
   const interceptor: FlueExecutionInterceptor = async (
     operation,
-    _ctx,
+    ctx,
     next
   ) => {
     if (operation.type !== "tool") return next()
     const name = operation.toolName
-    if (REFUSED.has(name)) {
+    const child = ctx.taskId
+    if (child && LEAD_ONLY.has(name)) {
       throw new FacadeError(
         "tool.refused",
         "permission",
-        `${name} is not available to this agent. Do the work with the tools you have.`,
-        { tool: name }
+        `${name} is the lead's, not a subagent's. Do your part with the file tools and end with a short summary.`,
+        { tool: name, task_id: child }
+      )
+    }
+    if (child && closedBy !== null) {
+      cancel(child, closedBy)
+      return terminating(
+        "task.cancelled",
+        `The lead's turn ended (${closedBy}), so your task stops here. Reply with one line saying what you finished and what you did not.`
       )
     }
     if (closedBy !== null && !READS.has(name)) {
@@ -299,44 +335,90 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
         { tool: name, closed_by: closedBy }
       )
     }
+    if (TERMINAL.has(name) && tasksRunning > 0) {
+      throw new FacadeError(
+        "tasks.running",
+        "validation",
+        `${name} did not run: ${tasksRunning} task(s) are still running. Call it on its own once they return.`,
+        { tool: name, tasks_running: tasksRunning }
+      )
+    }
     if (TERMINAL.has(name)) closedBy = name
+    const lane = child ?? ""
+    if (child) childCalls.add(operation.toolCallId)
+    if (name === "task") tasksRunning += 1
     try {
       const result = await next()
-      repeats = 0
-      lastFailure = null
+      failures.delete(lane)
       await options.onToolDone?.(name)
       return result
     } catch (error) {
       if (TERMINAL.has(name)) closedBy = null
       const now = options.interruptNow?.(error)
       if (now) {
+        if (child) cancel(child, now)
         return ended(
           now,
           `The platform interrupted your environment (${now}). This turn is over; the work resumes shortly. Stop here.`
         )
       }
       const text = failureText(error)
-      if (text === lastFailure) repeats += 1
-      else {
-        lastFailure = text
-        repeats = 1
-      }
+      const seen = failures.get(lane)
+      const repeats = seen?.text === text ? seen.repeats + 1 : 1
+      failures.set(lane, { text, repeats })
       if (repeats >= REPEATED_FAILURES) {
+        const said = `The same failure has come back ${repeats} times: "${text}".`
+        if (child) {
+          failures.delete(lane)
+          return terminating(
+            REPEATING_FAILURE,
+            `${said} Your task stops here. Reply with one line saying what you finished and what failed.`
+          )
+        }
         return ended(
           REPEATING_FAILURE,
-          `The same failure has come back ${repeats} times: "${text}". This turn is over; the work resumes with a fresh look. Stop here.`
+          `${said} This turn is over; the work resumes with a fresh look. Stop here.`
         )
       }
       throw error
+    } finally {
+      if (name === "task") tasksRunning -= 1
+      childCalls.delete(operation.toolCallId)
     }
   }
   return {
     interceptor,
     open: () => {
       closedBy = null
-      repeats = 0
-      lastFailure = null
+      failures.clear()
+      cancelled.clear()
     },
+    fromChild: (toolCallId) => childCalls.has(toolCallId),
+  }
+}
+
+/** The build a subagent may not start: the lead runs one for the whole site. */
+const CHILD_BUILD = /\bastro\s+build\b/
+
+/** Runs `fn` after every earlier call with the same key has settled; other keys do not wait. */
+export type MutationQueue = <T>(key: string, fn: () => Promise<T>) => Promise<T>
+
+/**
+ * Pi's `withFileMutationQueue` (pi-agent-core 0.87.1,
+ * `harness/tools/file-mutation-queue.js`), keyed by the caller rather than
+ * by the env object, which flue rewraps for every tool build.
+ */
+export function createMutationQueue(): MutationQueue {
+  const tails = new Map<string, Promise<unknown>>()
+  return async (key, fn) => {
+    const run = (tails.get(key) ?? Promise.resolve()).then(fn)
+    const tail = run.catch(() => undefined)
+    tails.set(key, tail)
+    try {
+      return await run
+    } finally {
+      if (tails.get(key) === tail) tails.delete(key)
+    }
   }
 }
 
@@ -354,16 +436,25 @@ type ToolLike = {
 function wrap<T extends ToolLike>(
   tool: T,
   options: {
-    check?: (params: Record<string, unknown>) => string | null
+    check?: (
+      params: Record<string, unknown>,
+      toolCallId: string
+    ) => string | null
     sequential?: boolean
+    /** Runs the tool inside it, for writes that must not interleave. */
+    around?: (
+      params: Record<string, unknown>,
+      run: () => Promise<unknown>
+    ) => Promise<unknown>
   } = {}
 ): T {
   const original = tool.execute as (...args: unknown[]) => Promise<unknown>
   const execute = async (id: string, params: unknown, ...rest: unknown[]) => {
-    const { check } = options
+    const { check, around } = options
+    const args = (params ?? {}) as Record<string, unknown>
     if (check) {
       await guard("pre_tool_call", async () => {
-        const refusal = check((params ?? {}) as Record<string, unknown>)
+        const refusal = check(args, id)
         if (refusal) {
           throw new FacadeError(
             "tool.refused",
@@ -374,7 +465,8 @@ function wrap<T extends ToolLike>(
         }
       })
     }
-    const result = await original(id, params, ...rest)
+    const run = () => original(id, params, ...rest)
+    const result = await (around ? around(args, run) : run())
     return boundResult(tool.name, result as ToolResult)
   }
   return {
@@ -450,15 +542,16 @@ function createBatchEditTool(sandbox: Sandbox) {
     prepareArguments: prepareEditArguments,
     async execute(_toolCallId: string, params: EditInput) {
       const content = await sandbox.readFile(params.path)
-      await sandbox.writeFile(
-        params.path,
-        applyEdits(content, params.edits, params.path)
-      )
+      const next = applyEdits(content, params.edits, params.path)
+      if (next !== content) await sandbox.writeFile(params.path, next)
       return {
         content: [
           {
             type: "text" as const,
-            text: `Successfully replaced ${params.edits.length} block(s) in ${params.path}.`,
+            text:
+              next === content
+                ? `Already applied: every edit's newText is in ${params.path} and its oldText is gone. Nothing changed.`
+                : `Successfully replaced ${params.edits.length} block(s) in ${params.path}.`,
           },
         ],
         details: { path: params.path, edits: params.edits.length },
@@ -500,24 +593,54 @@ function createCheckpointTool(sandbox: Sandbox, root: string, git: string) {
  * `checkpoint`. Every result is bounded, and every tool that changes the site
  * runs in model order. Passed as a sandbox factory's `tools`, so no
  * unguarded original reaches the model.
+ *
+ * Model order holds inside one session only. Subagents share the sandbox and
+ * run at once, so writes and edits also wait their turn per resolved path:
+ * one file's edits serialise, different files run in parallel. flue builds
+ * the tools afresh for every session, so the caller passes one `mutations`
+ * queue per assignment. `fromChild` is the turn gate's, for the one bash
+ * command a subagent may not run.
  */
 export function guardedTools(
   policy: ToolPolicy,
-  options: { git: string }
+  options: {
+    git: string
+    mutations?: MutationQueue
+    fromChild?: (toolCallId: string) => boolean
+  }
 ): SandboxToolFactory {
+  const mutations = options.mutations ?? createMutationQueue()
   return (sandbox: Sandbox) => {
     const path = (params: Record<string, unknown>) =>
       pathRefusal(String(params.path ?? ""), policy, (p) =>
         sandbox.resolvePath(p)
       )
+    // shortcut: keyed on resolvePath, not realpath, so a symlink and its
+    // target are two keys; the site has none the model writes through.
+    const onePerFile = (
+      params: Record<string, unknown>,
+      run: () => Promise<unknown>
+    ) => mutations(sandbox.resolvePath(String(params.path ?? "")), run)
+    const bash = (params: Record<string, unknown>, toolCallId: string) => {
+      const command = String(params.command ?? "")
+      if (options.fromChild?.(toolCallId) && CHILD_BUILD.test(command)) {
+        return "a subagent never runs astro build; the lead builds once after every task returns"
+      }
+      return bashRefusal(command, policy)
+    }
     return [
       wrap(createReadTool(sandbox)),
-      wrap(createWriteTool(sandbox), { check: path, sequential: true }),
-      wrap(createBatchEditTool(sandbox), { check: path, sequential: true }),
-      wrap(createBashTool(sandbox), {
-        check: (params) => bashRefusal(String(params.command ?? ""), policy),
+      wrap(createWriteTool(sandbox), {
+        check: path,
         sequential: true,
+        around: onePerFile,
       }),
+      wrap(createBatchEditTool(sandbox), {
+        check: path,
+        sequential: true,
+        around: onePerFile,
+      }),
+      wrap(createBashTool(sandbox), { check: bash, sequential: true }),
       wrap(createGrepTool(sandbox)),
       wrap(createGlobTool(sandbox)),
       wrap(createCheckpointTool(sandbox, policy.siteRoot, options.git), {

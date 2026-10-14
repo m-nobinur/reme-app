@@ -100,7 +100,9 @@ function preservingUntouchedLines(
  * is matched against the file as it is, exactly first and then in Pi's
  * forgiving view; each must match once, no two may overlap, and a refusal
  * writes nothing, so a retry starts from the file the model last read. BOM
- * and CRLF are stripped for matching and put back.
+ * and CRLF are stripped for matching and put back. An edit whose `oldText`
+ * is gone but whose `newText` is already there once is skipped; when every
+ * edit is, the content comes back unchanged.
  */
 export function applyEdits(
   content: string,
@@ -137,10 +139,18 @@ export function applyEdits(
 
   const forgiving = wanted.some((e) => !lf.includes(e.oldText))
   const base = forgiving ? normalizeForMatch(lf) : lf
-  const matches: Match[] = wanted.map((e, i) => {
-    const needle = forgiving ? normalizeForMatch(e.oldText) : e.oldText
+  const view = (t: string) => (forgiving ? normalizeForMatch(t) : t)
+  const matches: Match[] = []
+  wanted.forEach((e, i) => {
+    const needle = view(e.oldText)
     const start = base.indexOf(needle)
     if (start === -1) {
+      // Hermes's `is_already_applied`: an edit re-sent after an interrupted
+      // turn finds its own result in place and is skipped, not refused. Only
+      // when that result appears exactly once, so a short newText that
+      // happens to occur elsewhere still reports the missing anchor.
+      const result = view(e.newText)
+      if (result.trim() !== "" && base.split(result).length === 2) return
       throw refuse(
         "edit.not_found",
         single
@@ -160,8 +170,10 @@ export function applyEdits(
         { index: i, occurrences }
       )
     }
-    return { index: i, start, length: needle.length, newText: e.newText }
+    matches.push({ index: i, start, length: needle.length, newText: e.newText })
   })
+  // Every edit was already applied: the file is as the model wants it.
+  if (matches.length === 0) return content
 
   const ordered = [...matches].sort((a, b) => a.start - b.start)
   for (let i = 1; i < ordered.length; i++) {
