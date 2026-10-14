@@ -509,7 +509,7 @@ p {
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--brand-accent);
 }
 
 /* The last word of a headline, never the whole line. */

@@ -14,10 +14,12 @@ import { Text } from "./text.ts"
 type Preset<Id extends string> = { id: Id; label: string; hint?: string }
 
 type PaletteSpec = Omit<Preset<string>, "id"> & {
-  brand: string
-  swatches: string[]
-  /** Where the colours come from, for whoever edits the list next. */
-  source: string
+  paper: string
+  ink: string
+  primary: string
+  tint: string
+  accent: string
+  line: string
 }
 
 const ids = <T extends readonly { id: string }[]>(list: T) =>
@@ -76,9 +78,9 @@ export const TemplateId = z.enum(ids(TEMPLATES))
 export const HexColour = z.string().regex(/^#[0-9a-f]{6}$/)
 
 /**
- * `brand` is the colour the site derives the rest from; `swatches` is what
- * the owner sees, the brand, a tint and a surface. Every brand carries white
- * text at WCAG AA and reads at AA as text on white. The values are in
+ * Each palette is the six roles of `Palette` (design.ts); `brand` is its
+ * `primary` and `swatches` the four the owner sees. The AA pairs
+ * `PALETTE_AA_PAIRS` names hold for every palette. The values are in
  * `palettes.json`: colour literals are data here, and the lint rule that
  * keeps them out of code reads only code.
  */
@@ -99,11 +101,22 @@ export const PaletteId = z.enum([
   "ultra_violet",
   "graphite",
   "onyx",
+  "mint",
+  "royal",
+  "meadow",
+  "pebble",
 ])
-export const PALETTES = PaletteId.options.map((id) => ({
-  id,
-  ...(palettes as Record<PaletteId, PaletteSpec>)[id],
-}))
+export const PALETTES = PaletteId.options.map((id) => {
+  const spec = (palettes as Record<PaletteId, PaletteSpec>)[id]
+  return {
+    id,
+    ...spec,
+    /** The colour the site derives the rest from: the role `primary`. */
+    brand: spec.primary,
+    /** What the owner sees, in `PALETTE_SWATCH` order. */
+    swatches: [spec.paper, spec.tint, spec.primary, spec.ink],
+  }
+})
 
 /** System stacks only: the starter site ships no font files and no script. */
 export const FONTS = [

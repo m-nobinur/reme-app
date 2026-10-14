@@ -14,6 +14,12 @@
  *     reaches the ratio. Darkening only, because the starter renders light and
  *     the page under this text is white.
  *
+ * `paletteFromBrand` goes further for the "your own colour" path: it derives
+ * all six palette roles (paper, ink, primary, tint, accent, line) from the one
+ * hex, neutrals leaning toward its hue, and darkens `primary` and `ink` until
+ * the four pairs `PALETTE_AA_PAIRS` names in the contracts hold at 4.5:1. The
+ * brand test reads that list from the contract; this file cannot import it.
+ *
  * A colour that is not a hex string returns nothing and the site keeps the
  * default theme. The file imports nothing, so it builds in the sandbox.
  */
@@ -80,6 +86,65 @@ function readable(rgb: Rgb, on: Rgb, target: number): Rgb {
   return out
 }
 
+// Hue and saturation of an sRGB colour, 0 to 1 (HSL).
+function hueSat(rgb: Rgb): [number, number] {
+  const [r, g, b] = rgb.map((v) => v / 255) as Rgb
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  if (d === 0) return [0, 0]
+  const l = (max + min) / 2
+  const s = d / (1 - Math.abs(2 * l - 1))
+  const h =
+    max === r
+      ? ((g - b) / d) % 6
+      : max === g
+        ? (b - r) / d + 2
+        : (r - g) / d + 4
+  return [(h / 6 + 1) % 1, s]
+}
+
+function hsl(h: number, s: number, l: number): Rgb {
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h * 12) % 12
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))))
+  }
+  return [f(0), f(8), f(4)]
+}
+
+export type BrandPalette = {
+  paper: string
+  ink: string
+  primary: string
+  tint: string
+  accent: string
+  line: string
+}
+
+/**
+ * The six roles from one brand colour, or nothing when it is not a hex colour.
+ * `accent` is the owner's colour as chosen, for marks and underlines, which
+ * carry no contrast rule.
+ */
+export function paletteFromBrand(value: string): BrandPalette | undefined {
+  const brand = parse(value)
+  if (!brand) return undefined
+  const [h, s] = hueSat(brand)
+  const paper = hsl(h, Math.min(s, 0.5) * 0.5, 0.975)
+  const tint = hsl(h, Math.min(s, 0.45) * 0.7, 0.91)
+  const line = hsl(h, Math.min(s, 0.45) * 0.5, 0.84)
+  const ink = readable(hsl(h, Math.min(s, 0.4) * 0.6, 0.1), tint, AA)
+  return {
+    paper: toHex(paper),
+    ink: toHex(ink),
+    primary: toHex(readable(brand, paper, AA)),
+    tint: toHex(tint),
+    accent: toHex(brand),
+    line: toHex(line),
+  }
+}
+
 export type BrandRamp = { brand: string; foreground: string; text: string }
 
 /** The three derived colours, or nothing when the value is not a hex colour. */
@@ -102,6 +167,9 @@ export function brandRamp(value: string): BrandRamp | undefined {
  */
 export function brandTheme(value: string): string {
   const ramp = brandRamp(value)
-  if (!ramp) return ""
-  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${ramp.text}}`
+  const palette = paletteFromBrand(value)
+  if (!ramp || !palette) return ""
+  // --brand-text is the palette's primary: it reads on the tinted paper, not
+  // only on white. The role properties are the ones theme.css falls back from.
+  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${palette.primary};--background:${palette.paper};--foreground:${palette.ink};--role-tint:${palette.tint};--role-line:${palette.line};--role-accent:${palette.accent}}`
 }

@@ -201,12 +201,12 @@ const other = (placeholder: string) => ({
  * The four shown first take one from each of four, so never four blues.
  */
 const FAMILIES: readonly (readonly PaletteId[])[] = [
-  ["ocean", "classic_blue", "harbour"],
-  ["lagoon", "forest", "sage"],
+  ["ocean", "classic_blue", "harbour", "royal"],
+  ["lagoon", "forest", "sage", "mint", "meadow"],
   ["sunset", "mocha"],
   ["cardinal", "berry", "burgundy"],
   ["midnight", "damson", "ultra_violet"],
-  ["graphite", "onyx"],
+  ["graphite", "onyx", "pebble"],
 ]
 const family = (id: PaletteId) => FAMILIES.findIndex((f) => f.includes(id))
 
