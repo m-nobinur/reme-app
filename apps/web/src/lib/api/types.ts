@@ -93,8 +93,8 @@ export type AttentionItem =
       request: ApprovalRequest
       /** The version number of the revision the approval is bound to. */
       version: number
-      /** The pictures the assistant generated for this version (IG4). */
-      photos?: { slot_id: string; section: string; alt: string }[]
+      /** The pictures the assistant generated for this version (IG4), each with its thumbnail when the api has one. */
+      photos?: { slot_id: string; section: string; alt: string; src?: string }[]
     })
 
 /** The frame's one read of `/workspace`: what needs the owner, and where the site is. */
@@ -320,4 +320,9 @@ export type OwnerDataSource = {
     length: number
     key: string
   }) => Promise<Response | null>
+  /**
+   * One generated photo of the owner's org, answered as `apps/api`'s
+   * `GET /photos/:id` answers. Null when there is no session.
+   */
+  photo: (assetId: string) => Promise<Response | null>
 }

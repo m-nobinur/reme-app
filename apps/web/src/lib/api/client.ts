@@ -307,7 +307,13 @@ function toAttention(
         kind: "approval",
         request: item.request,
         version: item.version,
-        ...(item.photos ? { photos: item.photos } : {}),
+        ...(item.photos
+          ? {
+              photos: item.photos.map(({ thumbnail, ...photo }) =>
+                thumbnail ? { ...photo, src: thumbnail } : photo
+              ),
+            }
+          : {}),
         id: item.request.approval_id,
         title: approvalTitle(item.version),
         detail: item.request.rationale,
@@ -681,6 +687,7 @@ export const apiSource: OwnerDataSource = {
       UPLOAD_TIMEOUT_MS
     )
   },
+  photo: (assetId) => call(`/photos/${segment(assetId)}`),
   decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

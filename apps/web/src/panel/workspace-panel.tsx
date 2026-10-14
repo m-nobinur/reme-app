@@ -354,6 +354,11 @@ function Stoppable({
         lane: build.lane ?? "full",
         fellThrough: build.fell_through,
         activity: build.activity ?? [],
+        plan: build.blueprint?.plan,
+        awaitingReview: build.blueprint?.awaiting ?? false,
+        photos: build.photos,
+        reviewMs: build.review_ms,
+        endedAt: build.updated_at,
       }}
       error={stop.error}
       expectedSeconds={expected?.[build.lane ?? "full"]}

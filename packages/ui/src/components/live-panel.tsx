@@ -1,9 +1,11 @@
 import {
   ArrowSquareOutIcon,
   CheckCircleIcon,
+  CheckIcon,
   CircleIcon,
   CircleNotchIcon,
   ClockIcon,
+  ImageIcon,
 } from "@phosphor-icons/react"
 import {
   type ApprovalTarget,
@@ -11,11 +13,13 @@ import {
   type Blueprint,
   type BuildActivity,
   type BuildLane,
+  type BuildPhoto,
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
+import { Badge } from "@workspace/ui/components/badge"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -30,7 +34,13 @@ import {
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
-import { WORKING } from "@workspace/ui/lib/build-state"
+import {
+  directionLabel,
+  pairOfBlueprint,
+  paletteName,
+  paletteStops,
+} from "@workspace/ui/lib/blueprint"
+import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
@@ -167,6 +177,295 @@ function useElapsed(startedAt: string, now?: number): number | null {
   return at === null ? null : at - Date.parse(startedAt)
 }
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
+
+/**
+ * What the plan settled, as it lands: the look, the site's own colours, its
+ * lettering and how much there is to write. Fixed labels around the plan's
+ * ids, never the planner's prose.
+ */
+function Decided({ plan }: { plan: Blueprint }) {
+  const pair = pairOfBlueprint(plan.fonts)
+  const sections = plan.pages.reduce((n, p) => n + p.sections.length, 0)
+  return (
+    <dl
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-[0.8125rem]"
+      data-slot="build-decided"
+    >
+      <dt className="text-muted-foreground">Look</dt>
+      <dd className="truncate">{directionLabel(plan.direction)}</dd>
+      <dt className="text-muted-foreground">Colours</dt>
+      <dd className="flex min-w-0 items-center gap-2">
+        {/* The site's own colours, whatever the app's theme, with a hairline so a white stop shows. */}
+        <span
+          aria-hidden
+          className="flex h-4 w-16 shrink-0 overflow-hidden rounded-sm ring-1 ring-foreground/15"
+        >
+          {paletteStops(plan.palette).map((color) => (
+            <span
+              className="h-full flex-1"
+              key={color}
+              style={{ backgroundColor: color }}
+            />
+          ))}
+        </span>
+        <span className="truncate">{paletteName(plan.palette)}</span>
+      </dd>
+      <dt className="text-muted-foreground">Lettering</dt>
+      <dd className="truncate">
+        {pair.display} and {pair.body}
+      </dd>
+      <dt className="text-muted-foreground">Pages</dt>
+      <dd className="truncate">
+        {plural(plan.pages.length, "page")}, {plural(sections, "section")}
+      </dd>
+    </dl>
+  )
+}
+
+/**
+ * One generated photo as the build makes it: a quiet shimmer while it is
+ * drawn, the picture badged once it exists, and a plain note when no model
+ * drew it. A picture that does not load is a quiet tile, never a broken image.
+ */
+function PhotoTile({ photo }: { photo: BuildPhoto }) {
+  const [loaded, setLoaded] = useState(false)
+  const [broken, setBroken] = useState(false)
+  const tile =
+    "relative aspect-[4/3] overflow-hidden rounded-lg border border-border"
+  if (photo.state === "drawing") {
+    return (
+      <div className={tile} data-state="drawing">
+        <Skeleton className="size-full rounded-none motion-reduce:animate-none" />
+        <span className="sr-only">Still drawing</span>
+      </div>
+    )
+  }
+  if (photo.state === "fallback") {
+    return (
+      <div
+        className={cn(
+          tile,
+          "flex items-end border-dashed p-1.5 text-[0.6875rem] text-muted-foreground leading-tight"
+        )}
+        data-state="fallback"
+      >
+        No photo, using a text layout
+      </div>
+    )
+  }
+  return (
+    <div className={cn(tile, "bg-muted")} data-state="made">
+      {photo.thumbnail && !broken ? (
+        <img
+          alt={photo.alt ?? ""}
+          className={cn(
+            "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+          decoding="async"
+          height={72}
+          onError={() => setBroken(true)}
+          onLoad={() => setLoaded(true)}
+          src={photo.thumbnail}
+          width={96}
+        />
+      ) : (
+        <ImageIcon
+          aria-hidden
+          className="absolute top-1.5 left-1.5 size-4 text-muted-foreground"
+        />
+      )}
+      <Badge
+        className="absolute bottom-1 left-1 h-4 px-1.5 text-[0.625rem]"
+        variant="secondary"
+      >
+        AI-generated
+      </Badge>
+    </div>
+  )
+}
+
+/** The detail under a step: what it decided, made or is checking. */
+function StepDetail({
+  row,
+  at,
+  plan,
+  photos,
+  awaiting,
+}: {
+  row: BuildActivity
+  at: "done" | "now" | "next"
+  plan?: Blueprint | undefined
+  photos?: readonly BuildPhoto[] | undefined
+  awaiting: boolean
+}) {
+  switch (row.id) {
+    case "planning":
+      return (
+        <>
+          {at === "now" ? (
+            <p className={META}>
+              {awaiting
+                ? "Waiting for your review. The plan is in the chat."
+                : "Choosing a look, colours and pages."}
+            </p>
+          ) : null}
+          {plan ? <Decided plan={plan} /> : null}
+        </>
+      )
+    case "photos": {
+      if (at === "next" || !photos?.length) return null
+      const fell = photos.filter((p) => p.state === "fallback").length
+      return (
+        <>
+          <ul aria-label="Photos" className="grid grid-cols-3 gap-2">
+            {photos.map((photo) => (
+              <li key={photo.slot_id}>
+                <PhotoTile photo={photo} />
+              </li>
+            ))}
+          </ul>
+          {fell ? (
+            <p className={META}>
+              {fell === 1
+                ? "One section uses its text layout instead."
+                : `${fell} sections use their text layout instead.`}
+            </p>
+          ) : null}
+        </>
+      )
+    }
+    case "writing":
+      return row.items?.length ? (
+        <ul aria-label="Pages" className="flex flex-wrap gap-1.5">
+          {row.items.map((item) => (
+            <li
+              className={cn(
+                "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs",
+                item.done
+                  ? "border-border text-foreground"
+                  : "border-dashed text-muted-foreground"
+              )}
+              data-state={item.done ? "done" : "next"}
+              key={item.label}
+            >
+              {item.done ? (
+                <CheckIcon aria-hidden className="size-3 text-primary" />
+              ) : null}
+              {item.label}
+              {item.done ? <span className="sr-only"> (written)</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null
+    case "checking":
+      return at === "now" ? (
+        <p className={META}>Links, facts, accessibility and page weight.</p>
+      ) : null
+    default:
+      return null
+  }
+}
+
+/**
+ * Every step of a full build, in order: done ones ticked, the one it is on
+ * marked and moving, the rest quiet. Each says what it settled or made as it
+ * lands. A screen reader hears the step change, never the counts ticking.
+ */
+function BuildSteps({
+  rows,
+  plan,
+  photos,
+  awaiting,
+}: {
+  rows: readonly BuildActivity[]
+  plan?: Blueprint | undefined
+  photos?: readonly BuildPhoto[] | undefined
+  awaiting: boolean
+}) {
+  const now = currentRow(rows)
+  const current = rows[now]
+  const waiting = awaiting && current?.id === "planning"
+  return (
+    <>
+      <p aria-live="polite" className="sr-only">
+        {current
+          ? `Now: ${waiting ? "waiting for your review" : current.label.toLowerCase()}.`
+          : ""}
+      </p>
+      <ol aria-label="Build steps" className="flex flex-col">
+        {rows.map((row, index) => {
+          const at =
+            index === now ? "now" : row.done >= row.total ? "done" : "next"
+          return (
+            <li
+              className="group relative flex gap-2.5 pb-3 last:pb-0"
+              data-state={at}
+              key={row.id}
+            >
+              {/* The rail between markers, quiet, ticked off as steps finish. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
+                  at === "done" ? "bg-primary/45" : "bg-border"
+                )}
+              />
+              <span aria-hidden className="mt-px flex size-4 shrink-0">
+                {at === "done" ? (
+                  <CheckCircleIcon
+                    className="size-4 text-primary"
+                    weight="fill"
+                  />
+                ) : at === "next" ? (
+                  <CircleIcon className="size-4 text-muted-foreground/60" />
+                ) : waiting ? (
+                  <ClockIcon className="size-4 text-primary" />
+                ) : (
+                  <CircleNotchIcon className="size-4 animate-spin text-primary motion-reduce:animate-none" />
+                )}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
+                  <span
+                    className={cn(
+                      at === "now" && "font-medium text-foreground",
+                      at === "done" && "text-foreground",
+                      at === "next" && "text-muted-foreground"
+                    )}
+                  >
+                    {row.label}
+                    <span className="sr-only">
+                      {at === "done"
+                        ? " (done)"
+                        : at === "now"
+                          ? " (now)"
+                          : " (next)"}
+                    </span>
+                  </span>
+                  {row.total > 1 && at !== "next" ? (
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {row.done} of {row.total}
+                    </span>
+                  ) : null}
+                </p>
+                <StepDetail
+                  at={at}
+                  awaiting={awaiting}
+                  photos={photos}
+                  plan={plan}
+                  row={row}
+                />
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </>
+  )
+}
+
 /**
  * The live stepper: the build the team is on, tied to its real state, with
  * the time it has taken against the measured typical, a Stop, and what is
@@ -193,6 +492,16 @@ function WorkingOn({
     fellThrough?: boolean
     /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
     activity?: BuildActivity[]
+    /** The plan, once one is made: what it decided shows under its step. */
+    plan?: Blueprint | undefined
+    /** The plan waits on the owner's review, which the clock leaves out. */
+    awaitingReview?: boolean
+    /** The photos it is making, as each settles. */
+    photos?: readonly BuildPhoto[] | undefined
+    /** Time spent on decided plan reviews, left out of the clock. */
+    reviewMs?: number | undefined
+    /** When the build last changed state: the clock stops there once it is ready. */
+    endedAt?: string | undefined
   }
   /** What the owner asked for in each build waiting behind this one. */
   queued?: string[]
@@ -206,7 +515,11 @@ function WorkingOn({
   defaultConfirming?: boolean
 }) {
   const stage = BUILD_STAGES[build.state]
-  const elapsed = useElapsed(build.startedAt, now)
+  // A ready build's clock stops where it got ready.
+  const ended =
+    stage.step === 3 && build.endedAt ? Date.parse(build.endedAt) : undefined
+  const ran = useElapsed(build.startedAt, ended ?? now)
+  const elapsed = ran === null ? null : ran - (build.reviewMs ?? 0)
   // "asking" once Stop is pressed, "kept" once the owner keeps building.
   // A Stop in flight keeps the question on screen, with its buttons
   // disabled, until the build is read again.
@@ -236,6 +549,11 @@ function WorkingOn({
   // A quick edit has no stages to walk: one line while it works, the usual note when it waits.
   const note =
     quick && WORKING.has(build.state) ? "Updating your preview." : stage.note
+  // A full build walks its steps; one with none, or waiting, shows the stepper and its note.
+  const rows = quick ? [] : (build.activity ?? [])
+  const steps = rows.length > 0
+  const awaiting = build.awaitingReview === true && build.state === "planning"
+  const waiting = awaiting && steps
 
   return (
     <PanelSection title="Working on">
@@ -244,7 +562,7 @@ function WorkingOn({
           {build.version ? `Version ${build.version}: ` : null}
           {build.goal}
         </p>
-        {quick ? null : (
+        {quick || steps ? null : (
           <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
             {STEPS.map((label, index) => (
               <li
@@ -279,62 +597,37 @@ function WorkingOn({
             ))}
           </ol>
         )}
-        <p aria-live="polite" className="text-sm">
-          {note}
-        </p>
+        {steps ? (
+          <BuildSteps
+            awaiting={awaiting}
+            photos={build.photos}
+            plan={build.plan}
+            rows={rows}
+          />
+        ) : (
+          <p aria-live="polite" className="text-sm">
+            {note}
+          </p>
+        )}
         {build.fellThrough ? (
           <p className="text-sm" data-slot="fell-through">
             This change needs more than a quick edit, so it will take a few
             minutes.
           </p>
         ) : null}
-        {!quick && build.activity?.length ? (
-          <ul aria-label="What it is doing" className="flex flex-col gap-1">
-            {build.activity.map((row, index, rows) => {
-              const done = row.done >= row.total
-              // Rows run in order: the first one not done is what it is on
-              // now, the rest are next.
-              const active =
-                !done &&
-                rows.findIndex((each) => each.done < each.total) === index
-              return (
-                <li
-                  className={cn(
-                    "flex items-center gap-2 text-[0.8125rem]",
-                    active && "font-medium text-foreground",
-                    done && "text-muted-foreground",
-                    !(active || done) && "text-muted-foreground/70"
-                  )}
-                  data-state={done ? "done" : active ? "active" : "queued"}
-                  key={row.id}
-                >
-                  {done ? (
-                    <CheckCircleIcon aria-hidden className="size-4" />
-                  ) : active ? (
-                    <CircleNotchIcon
-                      aria-hidden
-                      className="size-4 animate-spin text-primary motion-reduce:animate-none"
-                    />
-                  ) : (
-                    <CircleIcon aria-hidden className="size-4" />
-                  )}
-                  <span>
-                    {row.label}
-                    {row.total > 1 ? `, ${row.done} of ${row.total}` : null}
-                    {done ? <span className="sr-only"> (done)</span> : null}
-                    {active ? <span className="sr-only"> (now)</span> : null}
-                    {done || active ? null : (
-                      <span className="sr-only"> (next)</span>
-                    )}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
         <p className={cn(META, "tabular-nums")}>
-          {elapsed === null ? null : `${duration(elapsed)} so far. `}
-          {long ? "This one is taking longer than usual." : usually}
+          {waiting
+            ? "The clock waits while you review the plan."
+            : ended !== undefined
+              ? elapsed === null
+                ? null
+                : `Built in ${duration(elapsed)}.`
+              : [
+                  elapsed === null ? null : `${duration(elapsed)} so far.`,
+                  long ? "This one is taking longer than usual." : usually,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
         </p>
         {onStop && STOPPABLE(build.state) ? (
           confirming ? (
@@ -1252,10 +1545,13 @@ function LiveLine({
   tone,
   lead,
   detail = null,
+  progress = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
+  /** How far a build is through its steps, kept in view when the words truncate. */
+  progress?: { done: number; total: number } | null
 }) {
   return (
     <span
@@ -1277,6 +1573,19 @@ function LiveLine({
           <span className="text-muted-foreground"> {detail}</span>
         ) : null}
       </span>
+      {progress ? (
+        <span
+          className="shrink-0 text-muted-foreground tabular-nums"
+          data-slot="live-line-progress"
+        >
+          <span aria-hidden>
+            {progress.done}/{progress.total}
+          </span>
+          <span className="sr-only">
+            , step {progress.done} of {progress.total}
+          </span>
+        </span>
+      ) : null}
     </span>
   )
 }

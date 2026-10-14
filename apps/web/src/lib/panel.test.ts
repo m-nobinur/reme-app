@@ -532,6 +532,45 @@ describe("the one line", () => {
       detail: "reading your brief",
     })
   })
+
+  it("names a full build's step and how far through its steps it is", () => {
+    const row = (id: string, label: string, done: number, total = 1) => ({
+      id,
+      label,
+      done,
+      total,
+    })
+    const activity = [
+      row("planning", "Planning the layout", 1),
+      row("photos", "Making photos", 4, 4),
+      row("writing", "Writing the pages", 3, 6),
+      row("design", "Looking over the design", 0),
+      row("checking", "Checking the site", 0),
+    ]
+    expect(line({ builds: [{ ...build("implementing"), activity }] })).toEqual({
+      tone: "working",
+      lead: "Building your first version,",
+      detail: "writing the pages",
+      progress: { done: 3, total: 5 },
+    })
+    // The plan waiting on the owner is not the team planning.
+    const waiting = {
+      ...build("planning"),
+      activity: [
+        row("planning", "Planning the layout", 0),
+        ...activity.slice(2),
+      ],
+      blueprint: { awaiting: true },
+    } as unknown as Workspace["builds"][number]
+    expect(line({ builds: [waiting] })).toMatchObject({
+      detail: "waiting for your review",
+      progress: { done: 1, total: 4 },
+    })
+    // A quick edit has no steps to count.
+    expect(
+      line({ builds: [{ ...build("revising"), lane: "quick", activity }] })
+    ).not.toHaveProperty("progress")
+  })
 })
 
 describe("suggestions", () => {
