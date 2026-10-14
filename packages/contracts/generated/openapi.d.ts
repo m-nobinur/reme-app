@@ -228,8 +228,28 @@ export interface components {
                 key: "site.font"
                 value: {
                   id:
-                    | ("clean_sans" | "classic_serif" | "soft_rounded")
-                    | "custom"
+                    | (
+                        | ("clean_sans" | "classic_serif" | "soft_rounded")
+                        | "custom"
+                      )
+                    | (
+                        | "outfit_figtree"
+                        | "dmsans_fraunces"
+                        | "instrument_worksans"
+                        | "sora_manrope"
+                        | "syne_jakarta"
+                        | "newsreader_inter"
+                        | "cormorant_manrope"
+                        | "fraunces_figtree"
+                      )
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.direction"
+                value: {
+                  id: string
                   custom?: string
                 }
               }
@@ -844,7 +864,26 @@ export interface components {
             /** @constant */
             key: "site.font"
             value: {
-              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              id:
+                | (("clean_sans" | "classic_serif" | "soft_rounded") | "custom")
+                | (
+                    | "outfit_figtree"
+                    | "dmsans_fraunces"
+                    | "instrument_worksans"
+                    | "sora_manrope"
+                    | "syne_jakarta"
+                    | "newsreader_inter"
+                    | "cormorant_manrope"
+                    | "fraunces_figtree"
+                  )
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.direction"
+            value: {
+              id: string
               custom?: string
             }
           }
@@ -1098,8 +1137,28 @@ export interface components {
                 key: "site.font"
                 value: {
                   id:
-                    | ("clean_sans" | "classic_serif" | "soft_rounded")
-                    | "custom"
+                    | (
+                        | ("clean_sans" | "classic_serif" | "soft_rounded")
+                        | "custom"
+                      )
+                    | (
+                        | "outfit_figtree"
+                        | "dmsans_fraunces"
+                        | "instrument_worksans"
+                        | "sora_manrope"
+                        | "syne_jakarta"
+                        | "newsreader_inter"
+                        | "cormorant_manrope"
+                        | "fraunces_figtree"
+                      )
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.direction"
+                value: {
+                  id: string
                   custom?: string
                 }
               }
@@ -1371,7 +1430,27 @@ export interface components {
           key: "site.font"
           skippable: boolean
           prefill: {
-            id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+            id:
+              | (("clean_sans" | "classic_serif" | "soft_rounded") | "custom")
+              | (
+                  | "outfit_figtree"
+                  | "dmsans_fraunces"
+                  | "instrument_worksans"
+                  | "sora_manrope"
+                  | "syne_jakarta"
+                  | "newsreader_inter"
+                  | "cormorant_manrope"
+                  | "fraunces_figtree"
+                )
+            custom?: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "site.direction"
+          skippable: boolean
+          prefill: {
+            id: string
             custom?: string
           } | null
         }
@@ -1625,8 +1704,28 @@ export interface components {
                 key: "site.font"
                 value: {
                   id:
-                    | ("clean_sans" | "classic_serif" | "soft_rounded")
-                    | "custom"
+                    | (
+                        | ("clean_sans" | "classic_serif" | "soft_rounded")
+                        | "custom"
+                      )
+                    | (
+                        | "outfit_figtree"
+                        | "dmsans_fraunces"
+                        | "instrument_worksans"
+                        | "sora_manrope"
+                        | "syne_jakarta"
+                        | "newsreader_inter"
+                        | "cormorant_manrope"
+                        | "fraunces_figtree"
+                      )
+                  custom?: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.direction"
+                value: {
+                  id: string
                   custom?: string
                 }
               }
@@ -3229,11 +3328,31 @@ export interface components {
                                   value: {
                                     id:
                                       | (
-                                          | "clean_sans"
-                                          | "classic_serif"
-                                          | "soft_rounded"
+                                          | (
+                                              | "clean_sans"
+                                              | "classic_serif"
+                                              | "soft_rounded"
+                                            )
+                                          | "custom"
                                         )
-                                      | "custom"
+                                      | (
+                                          | "outfit_figtree"
+                                          | "dmsans_fraunces"
+                                          | "instrument_worksans"
+                                          | "sora_manrope"
+                                          | "syne_jakarta"
+                                          | "newsreader_inter"
+                                          | "cormorant_manrope"
+                                          | "fraunces_figtree"
+                                        )
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.direction"
+                                  value: {
+                                    id: string
                                     custom?: string
                                   }
                                 }
@@ -3494,11 +3613,31 @@ export interface components {
                                   value: {
                                     id:
                                       | (
-                                          | "clean_sans"
-                                          | "classic_serif"
-                                          | "soft_rounded"
+                                          | (
+                                              | "clean_sans"
+                                              | "classic_serif"
+                                              | "soft_rounded"
+                                            )
+                                          | "custom"
                                         )
-                                      | "custom"
+                                      | (
+                                          | "outfit_figtree"
+                                          | "dmsans_fraunces"
+                                          | "instrument_worksans"
+                                          | "sora_manrope"
+                                          | "syne_jakarta"
+                                          | "newsreader_inter"
+                                          | "cormorant_manrope"
+                                          | "fraunces_figtree"
+                                        )
+                                    custom?: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.direction"
+                                  value: {
+                                    id: string
                                     custom?: string
                                   }
                                 }
@@ -4003,7 +4142,26 @@ export interface components {
             /** @constant */
             key: "site.font"
             value: {
-              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              id:
+                | (("clean_sans" | "classic_serif" | "soft_rounded") | "custom")
+                | (
+                    | "outfit_figtree"
+                    | "dmsans_fraunces"
+                    | "instrument_worksans"
+                    | "sora_manrope"
+                    | "syne_jakarta"
+                    | "newsreader_inter"
+                    | "cormorant_manrope"
+                    | "fraunces_figtree"
+                  )
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.direction"
+            value: {
+              id: string
               custom?: string
             }
           }
@@ -4189,6 +4347,7 @@ export interface components {
               | "site.template"
               | "site.palette"
               | "site.font"
+              | "site.direction"
               | "site.pages"
               | "media.uploads"
               | "quote.form"
@@ -4399,8 +4558,28 @@ export interface components {
                   key: "site.font"
                   value: {
                     id:
-                      | ("clean_sans" | "classic_serif" | "soft_rounded")
-                      | "custom"
+                      | (
+                          | ("clean_sans" | "classic_serif" | "soft_rounded")
+                          | "custom"
+                        )
+                      | (
+                          | "outfit_figtree"
+                          | "dmsans_fraunces"
+                          | "instrument_worksans"
+                          | "sora_manrope"
+                          | "syne_jakarta"
+                          | "newsreader_inter"
+                          | "cormorant_manrope"
+                          | "fraunces_figtree"
+                        )
+                    custom?: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.direction"
+                  value: {
+                    id: string
                     custom?: string
                   }
                 }
@@ -5347,6 +5526,7 @@ export interface components {
         | "site.template"
         | "site.palette"
         | "site.font"
+        | "site.direction"
         | "site.pages"
         | "media.uploads"
         | "quote.form"
@@ -5466,6 +5646,7 @@ export interface components {
             | "site.template"
             | "site.palette"
             | "site.font"
+            | "site.direction"
             | "site.pages"
             | "media.uploads"
             | "quote.form"
@@ -5855,7 +6036,26 @@ export interface components {
           /** @constant */
           key: "site.font"
           value: {
-            id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+            id:
+              | (("clean_sans" | "classic_serif" | "soft_rounded") | "custom")
+              | (
+                  | "outfit_figtree"
+                  | "dmsans_fraunces"
+                  | "instrument_worksans"
+                  | "sora_manrope"
+                  | "syne_jakarta"
+                  | "newsreader_inter"
+                  | "cormorant_manrope"
+                  | "fraunces_figtree"
+                )
+            custom?: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.direction"
+          value: {
+            id: string
             custom?: string
           }
         }
@@ -7129,7 +7329,26 @@ export interface components {
             /** @constant */
             key: "site.font"
             value: {
-              id: ("clean_sans" | "classic_serif" | "soft_rounded") | "custom"
+              id:
+                | (("clean_sans" | "classic_serif" | "soft_rounded") | "custom")
+                | (
+                    | "outfit_figtree"
+                    | "dmsans_fraunces"
+                    | "instrument_worksans"
+                    | "sora_manrope"
+                    | "syne_jakarta"
+                    | "newsreader_inter"
+                    | "cormorant_manrope"
+                    | "fraunces_figtree"
+                  )
+              custom?: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "site.direction"
+            value: {
+              id: string
               custom?: string
             }
           }
@@ -8056,6 +8275,7 @@ export interface components {
         | "site.template"
         | "site.palette"
         | "site.font"
+        | "site.direction"
         | "site.pages"
         | "media.uploads"
         | "quote.form"
@@ -8123,6 +8343,7 @@ export interface components {
                 | "site.template"
                 | "site.palette"
                 | "site.font"
+                | "site.direction"
                 | "site.pages"
                 | "media.uploads"
                 | "quote.form"

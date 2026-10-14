@@ -32,10 +32,15 @@ const card = (
 })
 
 const PAIRS = [
-  ["outfit_figtree", "Outfit · Figtree"],
-  ["sora_manrope", "Sora · Manrope"],
-  ["instrument_worksans", "Instrument Serif · Work Sans"],
-  ["syne_jakarta", "Syne · Plus Jakarta Sans"],
+  ["outfit_figtree", "Outfit and Figtree", "Outfit", "Figtree"],
+  ["sora_manrope", "Sora and Manrope", "Sora", "Manrope"],
+  [
+    "instrument_worksans",
+    "Instrument Serif and Work Sans",
+    "Instrument Serif",
+    "Work Sans",
+  ],
+  ["syne_jakarta", "Syne and Plus Jakarta Sans", "Syne", "Plus Jakarta Sans"],
 ] as const
 
 const LAYOUTS = [
@@ -56,6 +61,7 @@ const INPUT: AskDesignInput = {
   questions: [
     {
       id: "palette",
+      question: "Which colour palette feels right for Mop & Pail Cleaning?",
       visual: "palette",
       card: card(
         "palette",
@@ -69,33 +75,36 @@ const INPUT: AskDesignInput = {
     },
     {
       id: "lettering",
+      question: "Which lettering do you prefer?",
       visual: "font_pair",
       card: card(
         "font",
-        PAIRS.map(([id, label]) => ({
+        PAIRS.map(([id, label, display, body]) => ({
           id,
           label,
           hint: null,
-          visual: { kind: "font", family: label.split(" · ")[0] ?? label },
+          visual: { kind: "font_pair", display, body },
         })),
         { skippable: true }
       ),
     },
     {
       id: "arrangement",
+      question: "Which page arrangement do you prefer?",
       visual: "layout",
       card: card(
         "template",
-        LAYOUTS.map(([id, label]) => ({
+        LAYOUTS.map(([id, label, hero, services]) => ({
           id,
           label,
           hint: null,
-          visual: { kind: "template", id: "split_arch" },
+          visual: { kind: "layout", hero, services },
         }))
       ),
     },
     {
       id: "tone",
+      question: "How should Mop & Pail Cleaning sound?",
       visual: "text",
       card: card(
         "pages",
@@ -104,17 +113,6 @@ const INPUT: AskDesignInput = {
     },
   ],
 }
-
-const PROMPTS = {
-  palette: "Which colour palette feels right for Mop & Pail Cleaning?",
-  lettering: "Which lettering do you prefer?",
-  arrangement: "Which page arrangement do you prefer?",
-  tone: "How should Mop & Pail Cleaning sound?",
-}
-
-const LAYOUT_MAP = Object.fromEntries(
-  LAYOUTS.map(([id, , hero, services]) => [id, { hero, services }])
-)
 
 const STATES: [string, QuestionTrayStart | undefined, string?][] = [
   ["Palette, nothing picked", undefined],
@@ -152,10 +150,8 @@ const trayCatalog: CatalogEntry[] = [
             <div>
               <QuestionTray
                 input={INPUT}
-                layouts={LAYOUT_MAP}
                 onAnswer={noop}
                 onFinish={noop}
-                prompts={PROMPTS}
                 start={start}
               />
               <div className="rounded-b-3xl border border-border bg-background px-4 py-3 text-muted-foreground text-sm">

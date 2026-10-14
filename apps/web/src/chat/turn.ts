@@ -12,6 +12,7 @@ import { factText } from "@workspace/ui/lib/facts"
 import { quoteSummary } from "@workspace/ui/lib/quote-form"
 import {
   choiceText,
+  designText,
   detailsText,
   SESSION_ENDED,
 } from "@workspace/ui/lib/tool-state"
@@ -88,7 +89,7 @@ export function chatTurn(
 
 /**
  * What the owner resolved in the last step: an answer to an onboarding card
- * (`ask_fact`, `ask_details`, `ask_choice`, `ask_upload`,
+ * (`ask_fact`, `ask_details`, `ask_choice`, `ask_design`, `ask_upload`,
  * `review_quote_form`), and a yes
  * or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
@@ -106,6 +107,7 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
       (part.type === "tool-ask_fact" ||
         part.type === "tool-ask_details" ||
         part.type === "tool-ask_choice" ||
+        part.type === "tool-ask_design" ||
         part.type === "tool-ask_upload" ||
         part.type === "tool-review_quote_form" ||
         part.type === "tool-review_blueprint") &&
@@ -270,6 +272,7 @@ const CARDS = [
   "tool-ask_fact",
   "tool-ask_details",
   "tool-ask_choice",
+  "tool-ask_design",
   "tool-ask_upload",
   "tool-review_quote_form",
   "tool-review_blueprint",
@@ -295,6 +298,9 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
     return part.output.answer === "chosen"
       ? choiceText(part.input, part.output)
       : SKIPPED
+  }
+  if (part.type === "tool-ask_design") {
+    return designText(part.input, part.output)
   }
   if (part.type === "tool-ask_upload") {
     if (part.output.answer === "skipped") return SKIPPED

@@ -23,6 +23,7 @@ const LABEL: Record<FactValueKey, string> = {
   "site.template": "Website template",
   "site.palette": "Website colours",
   "site.font": "Website font",
+  "site.direction": "Website look",
   "site.pages": "Website pages",
   "media.uploads": "Your photos",
   "quote.form": "Quote request questions",

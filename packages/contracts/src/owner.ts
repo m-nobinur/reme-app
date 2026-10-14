@@ -6,7 +6,7 @@ import {
   InformationRequest,
 } from "./assignment.ts"
 import { Timestamp, Ulid, Uuid } from "./common.ts"
-import { Blueprint } from "./design.ts"
+import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { choiceFacts } from "./onboarding.ts"
 import { Text } from "./text.ts"
@@ -93,7 +93,17 @@ export const FactValue = z.discriminatedUnion("key", [
       "a preset stands alone; custom needs the owner's words or a brand colour"
     )
   ),
-  fact("site.font", choiceFacts.font),
+  // A preset face, a pair id from the design tray, or `custom` with the owner's words.
+  fact("site.font", {
+    ...choiceFacts.font,
+    id: z.union([choiceFacts.font.id, FontPairId]),
+  }),
+  /**
+   * The page arrangement from the design tray: a direction id, `custom` with
+   * the owner's words in `custom`, or `builder` when the owner left the
+   * design to the builder. Neither `custom` nor `builder` is a direction.
+   */
+  fact("site.direction", { id: DirectionId, custom: Text(200).optional() }),
   fact("site.pages", choiceFacts.pages),
   fact("media.uploads", choiceFacts.uploads),
   fact("quote.form", choiceFacts.quoteForm),
@@ -119,6 +129,7 @@ export const CHOICE_FACT_KEYS = [
   "site.template",
   "site.palette",
   "site.font",
+  "site.direction",
   "site.pages",
   "media.uploads",
   "quote.form",

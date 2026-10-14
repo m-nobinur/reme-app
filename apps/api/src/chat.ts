@@ -93,6 +93,7 @@ import {
   built,
   cardAnswer,
   decided as decidedAnswer,
+  designCard,
   factValue,
   isCard,
   ONBOARDING_GOAL,
@@ -106,6 +107,7 @@ import {
   type ScriptRow,
   ended as scriptEnded,
   text as textPart,
+  trayOption,
   typedAnswer,
   voiceOf,
   applied as withAnswer,
@@ -179,6 +181,7 @@ export type ToolPart = {
     | "tool-ask_fact"
     | "tool-ask_details"
     | "tool-ask_choice"
+    | "tool-ask_design"
     | "tool-ask_upload"
     | "tool-review_quote_form"
     | "tool-request_change"
@@ -664,12 +667,23 @@ export async function chat(
         )
       : null
   const racing = planner && planPrice ? jevGate : null
+  // A reply that is one option's label on the design tray is that question's
+  // answer, read by code; every other reply to the tray is the planner's.
+  const trayHit =
+    turn.kind === "message" && ahead.card?.type === "tool-ask_design"
+      ? trayOption(ahead.card, turn.text)
+      : null
   const gate: Gate | null =
-    toCard && exact
-      ? { callId: toCard.card.toolCallId, decision: exact }
-      : racing
-        ? null
-        : await jevGate
+    trayHit && ahead.card
+      ? {
+          callId: ahead.card.toolCallId,
+          decision: { kind: "answer", option: trayHit },
+        }
+      : toCard && exact
+        ? { callId: toCard.card.toolCallId, decision: exact }
+        : racing
+          ? null
+          : await jevGate
   let onboardingTurn = false
   const preparer =
     deps.prepare !== undefined
@@ -1469,13 +1483,13 @@ async function advance(
   reply: Answer | undefined,
   newId: () => string
 ): Promise<Part[]> {
-  if (reply?.kind === "facts") {
+  if (reply?.kind === "facts" || reply?.kind === "design") {
     await stateFacts(
       db,
       owner,
       reply.facts,
       onboarding.facts as FactRecord[],
-      reply.chose ? "inferred" : "owner_stated"
+      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
     )
   }
   const next = reply ? withAnswer(onboarding, reply) : onboarding
@@ -1570,8 +1584,27 @@ async function answer(
   const onboarding = await onboardingOf(db, held, id, owner)
   if (!onboarding) return stale()
   const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
-  const meant = output.success ? cardAnswer(call, output.data, uploads) : null
+  const meant = output.success
+    ? cardAnswer(call, output.data, uploads, onboarding.facts)
+    : null
   if (!meant || meant.kind === "retry") return answerInvalid()
+  // A tray answer sent as the owner leaves its question: stated now, so a
+  // reload resumes after it, and the tray stays open for the rest.
+  if (meant.kind === "design" && !meant.settled) {
+    await stateFacts(db, owner, meant.facts, onboarding.facts as FactRecord[])
+    // The stored tray opens ticked where the owner has answered, so a reload
+    // resumes after it. Losing a race to another save only loses the ticks:
+    // the facts are stated, and the next save rebuilds them all.
+    const ticked = designCard(
+      withAnswer(onboarding, meant),
+      () => call.toolCallId
+    )
+    await swapTail(db, id, tail, {
+      ...tail.content,
+      parts: shown(tail.content.parts.map((p) => (p === call ? ticked : p))),
+    })
+    return new Response(null, { status: 204 })
+  }
   const done: ToolPart = {
     ...call,
     state: "output-available",
@@ -1860,7 +1893,7 @@ function answerOf(
   )
   if (!output.success) return null
   const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
-  const meant = cardAnswer(found.call, output.data, uploads)
+  const meant = cardAnswer(found.call, output.data, uploads, onboarding.facts)
   if (!meant || meant.kind === "retry") return null
   return { ...found, output: output.data, meant }
 }
