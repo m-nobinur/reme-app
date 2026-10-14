@@ -119,13 +119,20 @@ export async function provision(
  * return its site, or null when none is warm. An entry older than the TTL is
  * a container that already slept: it holds no slot, so it is pruned, never
  * chosen. A sandbox mid-build has no revision and is never a candidate.
+ *
+ * Every act re-reads the entry first and skips it when its etag moved: the
+ * site's own next build may have taken the sandbox since the listing. The
+ * window left is that read to the destroy; a build caught in it finds a
+ * fresh container and restores, as after any replacement.
  */
 export async function evictWarm(
   env: Env,
   siteId: string,
   now = Date.now()
 ): Promise<string | null> {
-  const warm: { site: string; at: number }[] = []
+  const warm: { site: string; at: number; etag: string }[] = []
+  const unchanged = async (site: string, etag: string) =>
+    (await env.SITES.head(holderKey(site)))?.etag === etag
   let cursor: string | undefined
   do {
     const page = await env.SITES.list({
@@ -137,16 +144,30 @@ export async function evictWarm(
       if (!entry.customMetadata?.revision) continue
       const site = entry.key.slice("sandboxes/".length)
       const at = entry.uploaded.getTime()
-      if (now - at >= SLEEP_AFTER * 1000) await env.SITES.delete(entry.key)
-      else if (site !== siteId) warm.push({ site, at })
+      if (now - at < SLEEP_AFTER * 1000) {
+        if (site !== siteId) warm.push({ site, at, etag: entry.etag })
+      } else if (await unchanged(site, entry.etag)) {
+        await env.SITES.delete(entry.key)
+      }
     }
     cursor = page.truncated ? page.cursor : undefined
   } while (cursor)
-  const oldest = warm.sort((a, b) => a.at - b.at)[0]
-  if (!oldest) return null
-  await sandboxFor(env, oldest.site).destroy()
-  await env.SITES.delete(holderKey(oldest.site))
-  return oldest.site
+  for (const candidate of warm.sort((a, b) => a.at - b.at)) {
+    if (!(await unchanged(candidate.site, candidate.etag))) continue
+    await endSite(env, candidate.site)
+    return candidate.site
+  }
+  return null
+}
+
+/**
+ * The site's sandbox and its holder entry, whoever holds it: eviction, and
+ * the owner deleting their account while a published site is still warm.
+ * Idempotent.
+ */
+export async function endSite(env: Env, siteId: string): Promise<void> {
+  await sandboxFor(env, siteId).destroy()
+  await env.SITES.delete(holderKey(siteId))
 }
 
 /**

@@ -366,7 +366,10 @@ export function Developer({ id }: AgentProps) {
   // Sonnet 5.5's own default is adaptive thinking at effort high. pi-ai sends
   // effort "none" when no level is given, so the default is named here.
   useModel(model, { thinkingLevel: "high" })
-  const stub = getSandbox(env.SANDBOX as never, id)
+  // QE2: the site's sandbox, the one the Workflow provisioned and may have
+  // found warm. One per site is safe because the site lock
+  // (`assignments_site_writer_key`) lets one assignment at a time write it.
+  const stub = getSandbox(env.SANDBOX as never, runtime.spec.org_id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(
     {
@@ -427,17 +430,27 @@ export function Developer({ id }: AgentProps) {
     }
     await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
     if (brief.restore_key) {
-      const object = await env.SITES.get(brief.restore_key)
-      if (!object) throw new Error(`no source snapshot at ${brief.restore_key}`)
-      await sandbox.writeFile(
-        "/tmp/source.tar.zst",
-        new Uint8Array(await object.arrayBuffer())
-      )
-      const restore = await sandbox.exec(
-        `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
-      )
-      if (restore.exitCode !== 0)
-        throw new Error(`restore failed: ${restore.stderr}`)
+      // QE2, one restore and not two: `brief.map` is set only when the
+      // Workflow restored this revision or found it warm before admitting
+      // us. A container replaced since has no `.git`, and restores here.
+      const prepared =
+        brief.map !== null &&
+        (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
+      if (!prepared) {
+        const object = await env.SITES.get(brief.restore_key)
+        if (!object) {
+          throw new Error(`no source snapshot at ${brief.restore_key}`)
+        }
+        await sandbox.writeFile(
+          "/tmp/source.tar.zst",
+          new Uint8Array(await object.arrayBuffer())
+        )
+        const restore = await sandbox.exec(
+          `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
+        )
+        if (restore.exitCode !== 0)
+          throw new Error(`restore failed: ${restore.stderr}`)
+      }
       // The owner's quote questions as the facts hold them now: a newer
       // `quote.form` replaces the restored file, the same one keeps it.
       await sandbox.writeFile(

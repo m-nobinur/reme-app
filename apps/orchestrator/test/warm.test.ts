@@ -50,8 +50,15 @@ const { endSandbox, keepWarm, PoolExhaustedError, provision, takeWarm } =
   await import("../src/sandbox.ts")
 const { getSandbox } = await import("@cloudflare/sandbox")
 
-type Entry = { uploaded: Date; customMetadata: Record<string, string> }
+type Entry = {
+  uploaded: Date
+  etag: string
+  customMetadata: Record<string, string>
+}
 const bucket = new Map<string, Entry>()
+let writes = 0
+/** Runs before a `head`, to land a write between the listing and the act. */
+let beforeHead: ((key: string) => Promise<void>) | null = null
 let now = Date.parse("2026-10-14T09:00:00Z")
 const env = {
   SANDBOX: {},
@@ -63,10 +70,14 @@ const env = {
     ) => {
       bucket.set(key, {
         uploaded: new Date(now),
+        etag: `e${++writes}`,
         customMetadata: options?.customMetadata ?? {},
       })
     },
-    head: async (key: string) => bucket.get(key) ?? null,
+    head: async (key: string) => {
+      await beforeHead?.(key)
+      return bucket.get(key) ?? null
+    },
     delete: async (key: string) => {
       bucket.delete(key)
     },
@@ -87,6 +98,7 @@ beforeEach(() => {
   destroyed.length = 0
   refuse.clear()
   lost.clear()
+  beforeHead = null
   now = Date.parse("2026-10-14T09:00:00Z")
   vi.setSystemTime(now)
 })
@@ -142,6 +154,24 @@ describe("a full pool", () => {
     expect(bucket.has("sandboxes/site-old")).toBe(false)
     expect(bucket.has("sandboxes/site-c")).toBe(true)
     expect(bucket.has("sandboxes/site-busy")).toBe(true)
+  })
+
+  it("passes over a warm sandbox its own site's build took since the listing", async () => {
+    await keepWarm(env, { orgId: "site-b", assignmentId: "b1" }, "r")
+    now += minutes(5)
+    await keepWarm(env, { orgId: "site-c", assignmentId: "c1" }, "r")
+    beforeHead = async (key) => {
+      if (key !== "sandboxes/site-b") return
+      beforeHead = null
+      await provision(env, { orgId: "site-b", assignmentId: "b2" })
+    }
+    refuse.add("site-new")
+    const got = await provision(env, { orgId: "site-new", assignmentId: "n1" })
+    expect(got.evicted).toBe("site-c")
+    expect(destroyed).toEqual(["site-c"])
+    expect(bucket.get("sandboxes/site-b")?.customMetadata).toEqual({
+      holder: "b2",
+    })
   })
 
   it("waits, as before, when nothing is warm", async () => {
