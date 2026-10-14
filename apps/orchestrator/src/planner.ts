@@ -484,6 +484,14 @@ export function outputSchema(): Record<string, unknown> {
       if (key === "minItems" && typeof value === "number" && value > 1) continue
       out[key === "oneOf" ? "anyOf" : key] = clean(value)
     }
+    // A dropped pattern stays a hint: plans whose ids broke it failed their
+    // first attempt and doubled the plan's time and cost (2026-10-14).
+    const pattern = (node as { pattern?: unknown }).pattern
+    if (typeof pattern === "string") {
+      out.description = [out.description, `Must match ${pattern}.`]
+        .filter(Boolean)
+        .join(" ")
+    }
     const merged = Array.isArray(out.anyOf) ? mergeKinds(out.anyOf) : null
     return merged ?? out
   }

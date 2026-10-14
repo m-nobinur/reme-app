@@ -130,6 +130,18 @@ describe("the structured output schema", () => {
     expect(text).toContain('"additionalProperties":false')
   })
 
+  it("keeps each dropped id pattern as a description the model reads", () => {
+    const schema = outputSchema().properties as Record<string, any>
+    expect(schema.direction.pattern).toBeUndefined()
+    expect(schema.direction.description).toMatch(/Must match \^\[a-z\]/)
+    // An upload slot and a generated one differ, so the slot stays a union.
+    for (const slot of schema.images.items.anyOf) {
+      expect(slot.properties.id.description).toMatch(
+        /Must match \^\[a-z\]\[a-z0-9_\]/
+      )
+    }
+  })
+
   // Anthropic refused the per-kind union as "compiled grammar is too large".
   it("sends a section as one object with every kind and variant pooled", () => {
     // biome-ignore lint/suspicious/noExplicitAny: walks a JSON Schema
