@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { defineConfig } from "astro/config"
+import { defineConfig, fontProviders } from "astro/config"
 import { copyFindings } from "./src/copy-check.ts"
+import { familiesOf, pairOf } from "./src/fonts.ts"
+import { site } from "./src/site-config.ts"
 
 /** Prints the copy check over the built pages. It warns; it never fails a build. */
 const copyCheck = {
@@ -28,7 +30,17 @@ const copyCheck = {
 // node_modules is a read-only link to the sandbox image's toolchain when the
 // Developer builds this site, so Vite's cache lives beside the site. See
 // infra/sandbox/astro/README.md.
+//
+// The fonts are the chosen pair's @fontsource files and nothing else, read
+// from the image's node_modules: two to four woff2 files, or none when the
+// site has no pair.
+const provider = fontProviders.local()
+
 export default defineConfig({
   vite: { cacheDir: ".vite" },
+  fonts: familiesOf(pairOf(site.font)).map((family) => ({
+    provider,
+    ...family,
+  })),
   integrations: [copyCheck],
 })

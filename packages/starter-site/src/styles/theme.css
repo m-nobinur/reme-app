@@ -13,12 +13,29 @@
    the page head, which overrides the three below and leaves the rest to follow. */
 
 :root {
-  --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* The chosen pair, when there is one: Astro writes --face-body and
+     --face-display from src/fonts.ts, each with a metric-matched fallback so
+     the swap does not move the layout. With no pair the page keeps these system
+     stacks and downloads no font. */
+  --font-sans: var(
+    --face-body,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif
+  );
   /* A system serif for headings. It ships with every desktop and phone, costs
      no download, and is what keeps the page from reading as another sans-serif
      template. */
-  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: var(
+    --face-display,
+    ui-serif,
+    Georgia,
+    "Times New Roman",
+    serif
+  );
 
   /* Type, to the bar the reference sites set: a 16 px body at 1.7, a hero of
      64 to 82 px, a section heading of 38 to 56 px, all in a display weight of
@@ -80,10 +97,17 @@
   --paper: var(--background);
 }
 
+/* A pair ships the weights it is drawn at, two to four files, so a 600 label
+   in a body set in 400 and 500 takes the 500 face rather than a smeared
+   fake bold. A system font has real weights and is unaffected. */
+html {
+  font-synthesis-weight: none;
+}
+
 /* The templates' own type and shape. Plain attribute selectors, so the
    owner's font, written as html:root in the page head, still wins. */
 [data-template="modern"] {
-  --font-display: var(--font-sans);
+  --font-display: var(--face-display, var(--font-sans));
   --text-hero: clamp(2.75rem, 1.4rem + 5.2vw, 5.75rem);
   --text-page: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
   --display-weight: 500;
@@ -95,7 +119,7 @@
 }
 
 [data-template="bold"] {
-  --font-display: var(--font-sans);
+  --font-display: var(--face-display, var(--font-sans));
   --text-2xl: clamp(2rem, 1.4rem + 2.4vw, 3.25rem);
   --text-page: clamp(2.75rem, 1.5rem + 5vw, 5.5rem);
   --text-hero: clamp(3rem, 0.9rem + 8.6vw, 8.5rem);
