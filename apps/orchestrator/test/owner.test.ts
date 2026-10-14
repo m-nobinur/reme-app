@@ -36,6 +36,7 @@ vi.mock("../src/sandbox.ts", () => ({
   SLEEP_AFTER: "5m",
   PoolExhaustedError: class PoolExhaustedError extends Error {},
   endSandbox: async () => undefined,
+  endSite: async () => undefined,
   sandboxFor: () => ({ destroy: async () => undefined }),
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))

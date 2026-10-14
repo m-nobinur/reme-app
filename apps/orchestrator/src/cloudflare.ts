@@ -47,16 +47,18 @@ import {
   writePointer,
 } from "./publish.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
-import { publishedSource, restoreAndMap } from "./revise.ts"
+import { mapSite, publishedSource, restoreAndMap, SITE_ROOT } from "./revise.ts"
 import {
   checkpoint,
   endSandbox,
+  keepWarm,
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
   rehydrate,
   SLEEP_AFTER,
   sandboxFor,
+  takeWarm,
 } from "./sandbox.ts"
 import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
 import { logTiming, since, type ToolTimings } from "./timing.ts"
@@ -68,8 +70,8 @@ import { assignmentFacts, validateRevision } from "./validate.ts"
 export { ContainerProxy } from "@cloudflare/sandbox"
 
 /**
- * The container behind every assignment (ADR-031): egress denied by default
- * with the registry as the one exception, asleep after a short idle, and
+ * The container behind every site (ADR-031): egress denied by default
+ * with the registry as the one exception, asleep after `SLEEP_AFTER`, and
  * holding nothing the Worker holds. The image is infra/sandbox/Dockerfile;
  * the instance type and the pool size are in wrangler.jsonc.
  */
@@ -202,17 +204,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       }))
       claimed = result.claimed
       claimedAt = result.at
-      const superseded = result.superseded
-      if (superseded) {
-        // §13 rule 3: a cancelled assignment's container does not outlive it.
-        await step.do(`destroy ${superseded}`, async () => {
-          await endSandbox(this.env, {
-            orgId: ids.orgId,
-            assignmentId: superseded,
-          })
-          return { destroyed: superseded }
-        })
-      }
+      // A superseded preview's container is the site's warm one, which this
+      // assignment takes over below, so it is not destroyed here.
       if (!claimed) await step.sleep(`site busy ${attempt}`, "30 seconds")
     }
     if (!claimed) return { outcome: "queued" }
@@ -228,9 +221,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !ready; attempt++) {
       const got = await step.do(`sandbox ${attempt}`, async () => {
         try {
-          const { cold_start_ms } = await provision(this.env, ids.assignmentId)
+          const { cold_start_ms, evicted } = await provision(this.env, ids)
           await run((kit) =>
-            appendAudit(kit, ids, "sandbox.provisioned", { cold_start_ms })
+            appendAudit(kit, ids, "sandbox.provisioned", {
+              cold_start_ms,
+              evicted,
+            })
           )
           return { ready: true, cold_start_ms, at: Date.now() }
         } catch (error) {
@@ -261,7 +257,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // travel inside the step and never cross its boundary (R8).
     const admitted = await step.do("developer", async () => {
       const briefStarted = Date.now()
-      const { brief, origin, kind } = await run((kit) =>
+      const { brief, origin, kind, from } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -289,25 +285,37 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             restore_key: source?.source_key ?? null,
             map: null,
           }
-          return { brief: built, origin: choices.origin, kind: row.kind }
+          return {
+            brief: built,
+            origin: choices.origin,
+            kind: row.kind,
+            from: source?.revision_id ?? null,
+          }
         })
       )
       const briefMs = since(briefStarted)
-      let restoreMs = 0
+      const restoreStarted = Date.now()
+      // The container is provisioned. A warm one that holds the revision this
+      // assignment starts from is mapped as it is; anything else on the disk
+      // is replaced. The site's map goes into the stable segment before the
+      // Developer's first turn.
+      const sandbox = sandboxFor(this.env, ids.orgId)
+      // Always taken, so a first build clears the marker too.
+      const held = await takeWarm(sandbox)
+      const warm = from !== null && held === from
       if (brief.restore_key) {
-        const restoreStarted = Date.now()
-        // The container is provisioned; the restored site's map goes into the
-        // stable segment before the Developer's first turn.
-        brief.map = await restoreAndMap(
-          sandboxFor(this.env, ids.assignmentId),
-          this.env.SITES,
-          brief.restore_key
-        )
-        restoreMs = since(restoreStarted)
+        brief.map = warm
+          ? await mapSite(sandbox)
+          : await restoreAndMap(sandbox, this.env.SITES, brief.restore_key)
+      } else {
+        // A first build seeds an empty site; a warm disk's site would linger.
+        await sandbox.exec(`rm -rf ${SITE_ROOT}`)
       }
+      const restoreMs = since(restoreStarted)
       const dispatchedAt = Date.now()
       const timing = {
         kind,
+        warm,
         brief_ms: briefMs,
         restore_ms: restoreMs,
         dispatched_at: dispatchedAt,
@@ -448,12 +456,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           })
           continue
         }
-        // ADR-032: the sandbox ends with the build, not at publish.
-        const destroyMs = await step.do("destroy sandbox", async () => {
-          const started = Date.now()
-          await endSandbox(this.env, ids)
-          return since(started)
-        })
+        // ADR-032: the build's work ends here, not at publish. A preview
+        // leaves the site's sandbox warm for the next edit; anything else
+        // destroys it.
+        const warmAfter = verdict.outcome === "preview_ready"
+        const endMs = await step.do(
+          warmAfter ? "keep warm" : "destroy sandbox",
+          async () => {
+            const started = Date.now()
+            if (warmAfter) {
+              await keepWarm(this.env, ids, payload.revision_id)
+            } else await endSandbox(this.env, ids)
+            return since(started)
+          }
+        )
         const done = Date.now()
         const t = payload.timings
         logTiming({
@@ -462,6 +478,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           kind: admitted.kind,
           outcome: verdict.outcome,
           rounds: round,
+          warm: admitted.warm,
           lock_ms: claimedAt - t0,
           provision_ms: readyAt - claimedAt,
           cold_start_ms: coldStartMs,
@@ -487,7 +504,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               .filter(([k]) => k !== "total")
               .map(([k, v]) => [`gate_${k}_ms`, v])
           ),
-          destroy_ms: destroyMs,
+          [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
           end_to_end_ms: done - t0,
         })
         // An owner's build goes in front of the owner as soon as the preview

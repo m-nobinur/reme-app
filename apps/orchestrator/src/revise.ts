@@ -10,7 +10,8 @@ import { repoMap } from "./repo-map.ts"
  * preview, with the change request delivered to the Developer as a signal
  * rather than baked into its instructions. The Workflow restores the
  * snapshot into the container before it admits the Developer so the map in
- * the stable segment is the restored site's from the first turn; the agent
+ * the stable segment is the restored site's from the first turn, or maps the
+ * warm sandbox's disk when it already holds that revision; the agent
  * restores again at its own start, which is idempotent and guards against
  * a container that slept in between.
  */
@@ -67,7 +68,8 @@ type Sites = {
 /**
  * Restore a snapshot into the container. The tarball carries `.git` and no
  * `node_modules`; the toolchain is linked in, as the seed does for a fresh
- * site.
+ * site. Whatever the disk held goes first: a warm sandbox's other revision
+ * would otherwise leave its files behind.
  */
 export async function restore(
   sandbox: Restorable,
@@ -78,7 +80,7 @@ export async function restore(
   if (!object) throw new Error(`no source snapshot at ${sourceKey}`)
   await sandbox.writeFile("/tmp/source.tar.zst", object.body)
   const restored = await sandbox.exec(
-    `mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
+    `rm -rf ${SITE_ROOT} && mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
     { timeout: 120_000 }
   )
   if (restored.exitCode !== 0)
@@ -92,6 +94,11 @@ export async function restoreAndMap(
   sourceKey: string
 ): Promise<string> {
   await restore(sandbox, sites, sourceKey)
+  return mapSite(sandbox)
+}
+
+/** The map of the site on the container's disk, restored or warm. */
+export async function mapSite(sandbox: Restorable): Promise<string> {
   const listing = await sandbox.exec(`cd ${SITE_ROOT} && ${MAPPED}`)
   const files: Record<string, string> = {}
   for (const line of listing.stdout.split("\n").filter(Boolean)) {

@@ -66,7 +66,7 @@ import {
 } from "./publish.ts"
 import { answers } from "./question.ts"
 import { publishedSource } from "./revise.ts"
-import { endSandbox, probe } from "./sandbox.ts"
+import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
@@ -748,6 +748,9 @@ ownerOnly.post("/site/takedown", async (c) => {
     )
     await halt(c.env, orgId, id)
   }
+  // QE2: a published site's sandbox can still be warm with no build open.
+  // One per site, which the site lock makes safe, keyed by the org.
+  await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
   return c.body(null, 204)
 })
