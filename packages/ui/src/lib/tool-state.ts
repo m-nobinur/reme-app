@@ -460,3 +460,20 @@ export function isHeld(parts: readonly object[], toolCallId: string): boolean {
 /** What a held answer says, on every card that can be held. */
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`
+
+/** Whether these parts, a message's, hold design questions still waiting on the owner. */
+export const waitsOnDesign = (parts: readonly object[] | undefined) =>
+  (parts ?? []).some((part) => {
+    const p = part as {
+      type?: string
+      toolName?: string
+      result?: unknown
+      isError?: boolean
+    }
+    return (
+      p.type === "tool-call" &&
+      p.toolName === "ask_design" &&
+      p.result === undefined &&
+      !p.isError
+    )
+  })
