@@ -143,6 +143,13 @@ const script = {
   /** The owner chose "Skip all": the plan is built without the card's wait. */
   skipReview: false as boolean,
   planned: [] as number[],
+  /** The fixes each look of the design critic finds; none left is none. */
+  critic: [] as {
+    page: string
+    section: string
+    problem: string
+    change: string
+  }[][],
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -266,6 +273,15 @@ vi.mock("../src/photo-step.ts", () => ({
     ],
   }),
 }))
+// BA5: the critic's rounds are driven in critic.test.ts; here each look finds
+// what the path scripts, none by default.
+vi.mock("../src/critic.ts", () => ({
+  critiqueRound: async ({ round }: { round: number }) => ({
+    round,
+    fixes: script.critic.shift() ?? [],
+  }),
+  repairMessage: (fixes: unknown[]) => JSON.stringify({ fixes }),
+}))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
   retireOthers: async () => [],
@@ -371,9 +387,16 @@ type Setup = {
   quickDone?: boolean
   decisions?: typeof script.decisions
   skipReview?: boolean
+  critic?: typeof script.critic
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
+const FIX = {
+  page: "home",
+  section: "Hero",
+  problem: "The headline runs to nine words.",
+  change: "Cut it to five.",
+}
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
   // An owner's build opens its own review once the sandbox is gone.
@@ -479,6 +502,14 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ],
   // ADR-038: a first build plans; the console's builds from the plan at once.
   ["planned build", [completion], { lane: full }, { outcome: "preview_ready" }],
+  // BA5: the critic finds two things, the lead is sent back once and the
+  // second look finds them fixed.
+  [
+    "design critique repaired",
+    [completion, completion],
+    { lane: full, critic: [[FIX, FIX], []] },
+    { outcome: "preview_ready" },
+  ],
   // An owner's waits on the card: the first look finds no decision, the
   // nudge sends it to look again and finds "Build it".
   [
@@ -547,6 +578,7 @@ describe("the assignment Workflow's step names", () => {
     script.decisions = [...(setup.decisions ?? [])]
     script.skipReview = setup.skipReview ?? false
     script.planned = []
+    script.critic = [...(setup.critic ?? [])]
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
@@ -672,6 +704,24 @@ describe("the assignment Workflow's step names", () => {
     expect(await photosOf({})).toBeUndefined()
   })
 
+  it("sends the lead back once with the critic's fixes, and not at all for a build that did not plan", async () => {
+    const signals = () =>
+      dispatched
+        .map((d) => d.message as { type?: string; body?: string })
+        .filter((m) => m.type === "design.critique")
+    script.lane = full
+    // The second look still sees the fix: no second repair, the gates decide.
+    script.critic = [[FIX], [FIX]]
+    await drive([completion, completion]).run()
+    expect(signals()).toHaveLength(1)
+    expect(JSON.parse(signals()[0]?.body ?? "")).toEqual({ fixes: [FIX] })
+    script.lane = {}
+    script.critic = [[FIX]]
+    const unplanned = drive([completion])
+    await unplanned.run()
+    expect(unplanned.names.some((n) => n.startsWith("critique"))).toBe(false)
+  })
+
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
     script.verdicts = ["preview_ready"]
     script.origin = "owner"
@@ -709,6 +759,7 @@ describe("the assignment Workflow's step names", () => {
         "quick edit failed a gate",
         "section change",
         "planned build",
+        "design critique repaired",
         "owner reviews the plan",
         "owner changes the plan",
         "owner skipped the review",

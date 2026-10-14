@@ -334,9 +334,9 @@
       "photos",
       "developer",
       "developer 1",
+      "critique 1",
       "validating 1",
       "gates 1",
-      "screenshots",
       "keep warm"
     ],
     "owner reviews the plan": [
@@ -352,10 +352,10 @@
       "photos",
       "developer",
       "developer 1",
+      "critique 1",
       "validating 1",
       "gates 1",
       "review",
-      "screenshots",
       "keep warm"
     ],
     "owner changes the plan": [
@@ -372,10 +372,10 @@
       "photos",
       "developer",
       "developer 1",
+      "critique 1",
       "validating 1",
       "gates 1",
       "review",
-      "screenshots",
       "keep warm"
     ],
     "owner skipped the review": [
@@ -387,10 +387,10 @@
       "photos",
       "developer",
       "developer 1",
+      "critique 1",
       "validating 1",
       "gates 1",
       "review",
-      "screenshots",
       "keep warm"
     ],
     "nobody decided on the plan": [
@@ -457,6 +457,23 @@
       "plan look 1.29",
       "fail undecided 1",
       "destroy sandbox"
+    ],
+    "design critique repaired": [
+      "claim 1",
+      "planning",
+      "plan 1",
+      "sandbox 1",
+      "implementing",
+      "photos",
+      "developer",
+      "developer 1",
+      "critique 1",
+      "design repair 1",
+      "developer 2",
+      "critique 2",
+      "validating 2",
+      "gates 2",
+      "keep warm"
     ]
   },
   "PublishWorkflow": {
