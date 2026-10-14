@@ -2,6 +2,7 @@ import {
   ComponentManifest,
   type FactRecord,
   FactValue,
+  INDUSTRY_PACK,
   SiteFields,
 } from "@workspace/contracts"
 import manifests from "@workspace/starter-site/manifests.json"
@@ -44,7 +45,7 @@ export const QUOTE_FORM_FILE = "src/quote-form.json"
 
 /**
  * `src/quote-form.json` for these facts: the questions the owner approved as
- * `quote.form`, or the starter's own set when they approved none. Written by
+ * `quote.form`, or else the industry pack's set, or the starter's own. Written by
  * the platform at the seed, after a restore and before every build, so the
  * site asks exactly what the owner confirmed with no model in between. A
  * stored value the contract no longer takes counts as none.
@@ -53,8 +54,29 @@ export function quoteFormFile(facts: readonly FactRecord[]): string {
   const held = facts.find((fact) => fact.key === "quote.form")
   const parsed =
     held && FactValue.safeParse({ key: "quote.form", value: held.value })
-  if (!parsed?.success) return STARTER_FILES[QUOTE_FORM_FILE] as string
-  return `${JSON.stringify(parsed.data.value, null, 2)}\n`
+  if (parsed?.success) return `${JSON.stringify(parsed.data.value, null, 2)}\n`
+  // None approved: the industry pack's own questions (recipes.json, VS5).
+  const pack = FactValue.safeParse({
+    key: "quote.form",
+    value: { fields: packQuestions(facts) },
+  })
+  return pack.success
+    ? `${JSON.stringify(pack.data.value, null, 2)}\n`
+    : (STARTER_FILES[QUOTE_FORM_FILE] as string)
+}
+
+/** The quote questions of this business's industry pack, if it has any. */
+function packQuestions(facts: readonly FactRecord[]): unknown {
+  const industry = facts.find((f) => f.key === "business.industry")?.value as
+    | { category?: string }
+    | undefined
+  const pack = (INDUSTRY_PACK as Record<string, string>)[
+    industry?.category ?? ""
+  ]
+  const recipes = JSON.parse(STARTER_FILES["src/recipes.json"] as string) as {
+    packs: Record<string, { quoteForm?: unknown } | undefined>
+  }
+  return pack ? recipes.packs[pack]?.quoteForm : undefined
 }
 
 /** The seed for one org: the starter, with the owner's quote questions. */

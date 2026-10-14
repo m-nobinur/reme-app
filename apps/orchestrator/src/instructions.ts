@@ -10,6 +10,7 @@ import {
   packVoice,
   stableRules,
 } from "./developer-rules.ts"
+import { fansOut, leadLines } from "./fanout.ts"
 import { repoMap } from "./repo-map.ts"
 import { SEED_DIGEST, seedFiles } from "./seed.ts"
 
@@ -75,6 +76,7 @@ export function instructions(brief: Brief, budgetUsd: number): string {
     ...(brief.blueprint
       ? [...blueprintLines(brief.blueprint, brief.photos), ""]
       : []),
+    ...(fansOut(brief) ? [...leadLines(brief, brief.blueprint), ""] : []),
     "Site map (every file, in path order):",
     // The seed's own map, built from the files the sandbox is seeded with so
     // it cannot drift from them. A restored site (`site.revise`) carries its

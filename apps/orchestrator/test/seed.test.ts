@@ -133,6 +133,21 @@ describe("the quote form a site asks", () => {
   })
 })
 
+describe("the quote form with no approved list", () => {
+  it("is the industry pack's own questions", () => {
+    const industry: FactRecord = {
+      ...quoteForm([]),
+      key: "business.industry",
+      fact_type: "business",
+      value: { name: "Bright Clean", category: "cleaning" },
+    }
+    const file = JSON.parse(quoteFormFile([industry]))
+    expect(file.fields.map((f: { label: string }) => f.label)).toContain(
+      "Type of clean"
+    )
+  })
+})
+
 describe("the site host", () => {
   it("joins the org's slug to the environment's suffix", () => {
     expect(siteHost("brightclean", "-stg.remeai.co.uk")).toBe(

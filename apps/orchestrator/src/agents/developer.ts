@@ -13,6 +13,7 @@ import {
   type BudgetGuard,
   createBudgetGuard,
   createMutationQueue,
+  createPrefixWarmer,
   createTee,
   createTurnGate,
   defineTool,
@@ -20,6 +21,7 @@ import {
   instrument,
   type MutationQueue,
   observe,
+  type PrefixWarmer,
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
@@ -35,10 +37,18 @@ import {
   usePersistentState,
   useResponseFinish,
   useSandbox,
+  useSubagent,
   useTool,
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
+import {
+  COPY_AGENT,
+  copyInstructions,
+  PAGE_AGENT,
+  pageInstructions,
+  pageOfPrompt,
+} from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
 import { instructions } from "../instructions.ts"
 import {
@@ -80,6 +90,10 @@ type Session = {
   mutations: MutationQueue
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
+  /** One cache write per fan-out (BA4). */
+  warm: PrefixWarmer
+  /** Page builders' tasks by id, and the pages they finished, for the panel's "3 of 5". */
+  pages: { byTask: Map<string, string>; done: Set<string>; started: boolean }
   budgetExhausted: boolean
 }
 const sessions = new Map<string, Session>()
@@ -91,8 +105,42 @@ observe((observation, ctx) => {
   if (!found) return
   found.tee.subscriber(observation)
   found.budget.instrumentation.observe(observation, ctx)
+  found.warm.observe(observation as { type?: string; taskId?: string })
+  pageProgress(found, observation)
   interrupted(found, observation)
 })
+
+/**
+ * BA4: one `build.progress` row when the first page builder starts and one
+ * per page it finishes, which the workspace counts as "Writing the pages,
+ * 3 of 5". A page is named by its task prompt's first words, which the
+ * lead copies from the instructions. A page sent again counts once.
+ */
+function pageProgress(found: Session, observation: unknown) {
+  const o = observation as {
+    type?: string
+    taskId?: string
+    agent?: string
+    prompt?: string
+    isError?: boolean
+  }
+  const total = found.brief.blueprint?.pages.length ?? 0
+  if (o.agent !== "page" || !o.taskId || total === 0) return
+  if (o.type === "task_start") {
+    const page = pageOfPrompt(o.prompt)
+    if (page) found.pages.byTask.set(o.taskId, page)
+    if (!found.pages.started) {
+      found.pages.started = true
+      found.tee.emit("build.progress", { stage: "pages", item: null, total })
+    }
+    return
+  }
+  const page = found.pages.byTask.get(o.taskId)
+  if (o.type !== "task" || o.isError || !page || found.pages.done.has(page))
+    return
+  found.pages.done.add(page)
+  found.tee.emit("build.progress", { stage: "pages", item: page, total })
+}
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
@@ -158,9 +206,13 @@ instrument({
   interceptor: (operation, ctx, next) => {
     const found = ctx.instanceId ? sessions.get(ctx.instanceId) : undefined
     if (!found) return next()
-    // The turn gate first: a refused tool call never reaches the budget.
+    // The turn gate first: a refused tool call never reaches the budget. A
+    // subagent's first model call may wait on a sibling's warm-up before the
+    // budget reads the spend.
     return found.gate.interceptor(operation, ctx, () =>
-      found.budget.instrumentation.interceptor(operation, ctx, next)
+      found.warm.interceptor(operation, ctx, () =>
+        found.budget.instrumentation.interceptor(operation, ctx, next)
+      )
     )
   },
   dispose() {
@@ -229,6 +281,8 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     gate: undefined as unknown as TurnGate,
     mutations: createMutationQueue(),
     interruptions: new Set(),
+    warm: createPrefixWarmer(),
+    pages: { byTask: new Map(), done: new Set(), started: false },
     budgetExhausted: false,
   }
   created.gate = createTurnGate({
@@ -350,6 +404,7 @@ export function Developer({ id }: AgentProps) {
     // Every delivery is a new turn, so a turn a terminal tool ended reopens
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
+    current.warm.reset()
     current.interruptions.clear()
     if (askedForBuildRole && brief.role && !onBuildRole) {
       setOnBuildRole(true)
@@ -449,6 +504,27 @@ export function Developer({ id }: AgentProps) {
         throw new Error(`seed failed: ${seeded.stderr}`)
     }
     setRestored(true)
+  })
+
+  // BA4: the lead's subagents, on their own roles. Registered on every run
+  // so the lead's catalog is the same for every build; only a planned first
+  // build's instructions send them work. Each renders the same instructions
+  // for every task, so siblings share one cached prefix.
+  const page = roleOf(runtime.spec, "page")
+  const copy = roleOf(runtime.spec, "copy")
+  useSubagent({
+    name: "page",
+    description: PAGE_AGENT,
+    agent: () => pageInstructions(brief),
+    model: page.model,
+    thinkingLevel: page.effort,
+  })
+  useSubagent({
+    name: "copy",
+    description: COPY_AGENT,
+    agent: () => copyInstructions(brief),
+    model: copy.model,
+    thinkingLevel: copy.effort,
   })
 
   useTool(askChief(current))

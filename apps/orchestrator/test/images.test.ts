@@ -143,7 +143,7 @@ describe("the photo director", () => {
       // The build's per-photo progress: one call per settled slot.
       onSlot: (r) => told.push(r.slot_id),
     })
-    expect(told.toSorted((a, b) => a.localeCompare(b))).toEqual([
+    expect([...told].sort((a, b) => a.localeCompare(b))).toEqual([
       "hero",
       "kitchen",
     ])
