@@ -1,4 +1,4 @@
-import { blueprintLines } from "./blueprint.ts"
+import { blueprintLines, layoutLines } from "./blueprint.ts"
 import type { Brief } from "./brief.ts"
 import {
   assignmentGoal,
@@ -13,6 +13,20 @@ import {
 import { fansOut, leadLines } from "./fanout.ts"
 import { repoMap } from "./repo-map.ts"
 import { SEED_DIGEST, seedFiles } from "./seed.ts"
+
+const ROLE =
+  "You are the Developer at Reme, building and revising a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else."
+
+/** The tool rules, the same for every lane. */
+const WORK_RULES = [
+  "- Read every file you need in one turn; reads run together.",
+  "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
+  "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
+  "- Call checkpoint after a coherent set of edits.",
+  "- A run.interrupted message means your turn ended before you finished it. Your work up to your last checkpoint is there; anything after it may not be. Look at git log and git status, then continue from what you find.",
+  "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
+  "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
+]
 
 /** Marks where what this one build adds begins; the prefix before it is the same for every build. */
 export const BUILD_MARK = "== This build =="
@@ -37,17 +51,11 @@ export function instructions(brief: Brief, budgetUsd: number): string {
   const revising = brief.restore_key !== null
   const pack = packVoice(facts)
   return [
-    "You are the Developer at Reme, building and revising a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
+    ROLE,
     "",
     "Rules:",
     "- Build pages from the components listed below, as their manifests say, and never in a way a manifest forbids.",
-    "- Read every file you need in one turn; reads run together.",
-    "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
-    "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
-    "- Call checkpoint after a coherent set of edits.",
-    "- A run.interrupted message means your turn ended before you finished it. Your work up to your last checkpoint is there; anything after it may not be. Look at git log and git status, then continue from what you find.",
-    "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
-    "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
+    ...WORK_RULES,
     ...stableRules(),
     "",
     "Design rules, applied through the components' own fields and variants. Where a manifest has no way to do one, leave it; never work around the manifest:",
@@ -84,6 +92,46 @@ export function instructions(brief: Brief, budgetUsd: number): string {
     brief.map ?? repoMap(seedFiles(facts)),
     "",
     assignmentGoal(brief, revising),
+    "Acceptance criteria:",
+    ...brief.acceptance_criteria.map((c) => `- ${c}`),
+    "",
+    `Budget: ${budgetUsd} USD of model spend for this assignment. Be brief.`,
+  ].join("\n")
+}
+
+/**
+ * The section lane's instructions (QE4): a change to one section on a site
+ * that is already built needs the rules, the facts, the site map and the
+ * layout lists, not the design rules, the directions library or the
+ * component digest the first build designs from. A change the lane cannot
+ * make moves to the full instructions (the Developer re-renders them).
+ */
+export function sectionInstructions(brief: Brief, budgetUsd: number): string {
+  const { facts } = brief.snapshot
+  return [
+    ROLE,
+    "",
+    "Rules:",
+    "- This is one change to a site that is already built. Keep its design direction, palette, fonts and every section you are not asked about exactly as they are.",
+    "- Each component has a manifest.yaml beside it with its props and what it forbids. Read the manifest of a component before you change how a section uses it, and never use it in a way it forbids.",
+    ...WORK_RULES,
+    ...stableRules(),
+    "",
+    BUILD_MARK,
+    "This is a revision. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is.",
+    ...buildRules(true, facts, true),
+    "",
+    `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
+    facts
+      .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
+      .join("\n") || "- (none)",
+    "",
+    ...layoutLines(brief.site_plan ?? null),
+    "",
+    "Site map (every file, in path order):",
+    brief.map ?? "",
+    "",
+    assignmentGoal(brief, true),
     "Acceptance criteria:",
     ...brief.acceptance_criteria.map((c) => `- ${c}`),
     "",

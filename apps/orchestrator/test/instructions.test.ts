@@ -18,7 +18,11 @@ import {
   pageTasks,
   taskGroups,
 } from "../src/fanout.ts"
-import { BUILD_MARK, instructions } from "../src/instructions.ts"
+import {
+  BUILD_MARK,
+  instructions,
+  sectionInstructions,
+} from "../src/instructions.ts"
 import { fallbackBlueprint } from "../src/planner.ts"
 
 // The planner's brief.ts names the registry host from sandbox.ts, which loads the container SDK.
@@ -226,5 +230,54 @@ describe("the parallel first build", () => {
     expect(text).toContain("Blueprint, the plan the owner approved")
     expect(text).toContain("Canonical facts")
     expect(text).not.toContain("ask_chief for the first missing")
+  })
+})
+
+describe("the section lane's short prompt", () => {
+  const revise = {
+    ...brief([cleaning], "sites/x/source.tar.zst"),
+    role: "quick_section" as const,
+  }
+  const withPlan = { ...revise, site_plan: fanPlan }
+
+  it("is a third smaller than the full instructions, which it measures against", () => {
+    const full = instructions(withPlan, 20).length
+    const short = sectionInstructions(withPlan, 20).length
+    console.info(`section prompt: ${full} chars before, ${short} after`)
+    // The claim rules (about 7k chars) stay by design; the directions, components and design rules go.
+    expect(short).toBeLessThan(full * 0.7)
+  })
+
+  it("drops the design material and keeps every rule that guards a claim", () => {
+    const text = sectionInstructions(withPlan, 20)
+    expect(text).not.toContain("Design rules")
+    expect(text).not.toContain("Design directions:")
+    expect(text).not.toContain("Components (name, file, props, never):")
+    expect(text).not.toContain("Industry pack")
+    expect(text).toContain("The site never shows a price")
+    expect(text).toContain("business.proof is the only source")
+    expect(text).toContain("Canonical facts")
+    expect(text).toContain("Site map")
+    expect(text).toContain("This is a revision")
+  })
+
+  it("lists the variants, then the latest plan's page order and each section's purpose", () => {
+    const text = sectionInstructions(withPlan, 20)
+    expect(text).toContain("  - hero: wash, split_arch")
+    const [first] = fanPlan.pages
+    const section = first?.sections[0]
+    expect(text).toContain(
+      `  - ${first?.page}: ${first?.sections.map((s) => `${s.kind} (${s.variant})`).join(", ")}`
+    )
+    expect(text).toContain(
+      `  - ${first?.page} ${section?.kind}: ${section?.purpose}`
+    )
+    expect(text).not.toContain("Blueprint, the plan the owner approved")
+  })
+
+  it("lists the variants alone for a site built before planning", () => {
+    const text = sectionInstructions(revise, 20)
+    expect(text).toContain("  - faq: split, stacked")
+    expect(text).not.toContain("The site as last planned")
   })
 })

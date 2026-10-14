@@ -50,7 +50,7 @@ import {
   pageOfPrompt,
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
-import { instructions } from "../instructions.ts"
+import { instructions, sectionInstructions } from "../instructions.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
@@ -364,11 +364,16 @@ export function Developer({ id }: AgentProps) {
   )
   const askedForBuildRole =
     delivery.kind === "signal" && delivery.attributes?.role === "build"
-  const route =
+  // The section lane's short prompt lasts as long as its role does.
+  const sectionRole =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
-    brief.role && !(onBuildRole || askedForBuildRole)
-      ? roleOf(runtime.spec, brief.role)
-      : runtime
+    brief.role && !(onBuildRole || askedForBuildRole) ? brief.role : null
+  const route = sectionRole ? roleOf(runtime.spec, sectionRole) : runtime
+  const shown = () =>
+    (sectionRole ? sectionInstructions : instructions)(
+      brief,
+      runtime.budget.model_usd_cap
+    )
   const model =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     (onFallback || askedForFallback) && runtime.fallback
@@ -429,7 +434,7 @@ export function Developer({ id }: AgentProps) {
       // §10.6: what the model was shown is in the log before it is shown.
       current.tee.emit("runtime.context_segment", {
         snapshot_id: brief.snapshot.snapshot_id,
-        instructions: instructions(brief, runtime.budget.model_usd_cap),
+        instructions: shown(),
       })
       setSegmentLogged(true)
     }
@@ -534,7 +539,7 @@ export function Developer({ id }: AgentProps) {
     current.tee.flush().catch(() => undefined)
   })
 
-  return instructions(brief, runtime.budget.model_usd_cap)
+  return shown()
 }
 
 Developer.agentName = "developer"

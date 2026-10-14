@@ -1,5 +1,11 @@
-import type { FactRecord } from "@workspace/contracts"
-import { eq, type OrgScopedDb, siteRevisions } from "@workspace/db"
+import { Blueprint, type FactRecord } from "@workspace/contracts"
+import {
+  assignments,
+  eq,
+  type OrgScopedDb,
+  siteRevisions,
+  sql,
+} from "@workspace/db"
 import { ownerPhotos, photoFile } from "./developer-rules.ts"
 import { activeDeployment } from "./publish.ts"
 import { repoMap } from "./repo-map.ts"
@@ -43,6 +49,24 @@ export async function publishedSource(
     assignment_id: row.assignmentId,
     source_key: row.sourceKey,
   }
+}
+
+/**
+ * The latest plan that built a revision (ADR-038), for a section change's
+ * short prompt. A plan the owner never built, or a revise that did not plan,
+ * is not the site's plan; null for a site built before planning.
+ */
+export async function latestBlueprint(
+  db: OrgScopedDb
+): Promise<Blueprint | null> {
+  const [row] = await db
+    .select({ blueprint: assignments.blueprint })
+    .from(assignments)
+    .innerJoin(siteRevisions, eq(siteRevisions.assignmentId, assignments.id))
+    .where(sql`${assignments.blueprint} is not null`)
+    .orderBy(sql`${assignments.createdAt} desc`)
+    .limit(1)
+  return Blueprint.safeParse(row?.blueprint).data ?? null
 }
 
 /** The slice of the Sandbox SDK the restore uses. */

@@ -3,6 +3,7 @@ import {
   type ImageSlot,
   PALETTES,
   type PageId,
+  SECTION_VARIANTS,
   type SectionKind,
 } from "@workspace/contracts"
 
@@ -82,5 +83,36 @@ export function blueprintLines(
       : []),
     "- What the owner was promised:",
     ...plan.features.map((f) => `  - ${f}`),
+  ]
+}
+
+/**
+ * What a section change needs of the plan (QE4's short prompt): the variants
+ * each section kind takes, and, when the site was planned, each page's
+ * sections in order with what each is for. A site built before planning has
+ * only the first list, and the `layout` export in its site-config is the rest.
+ * The owner's words never reach the instructions (§28.3), so the target page
+ * cannot be picked here: every page's order and every purpose is listed, one
+ * short line each, and the model finds its own.
+ */
+export function layoutLines(plan: Blueprint | null): string[] {
+  return [
+    "Layout. The `layout` export in src/site-config.ts lists each page's sections in order. Reorder, add, drop or change a variant by editing that data, and nothing else. The variants each section kind takes:",
+    ...Object.entries(SECTION_VARIANTS).map(
+      ([kind, variants]) => `  - ${kind}: ${variants.join(", ")}`
+    ),
+    ...(plan
+      ? [
+          "The site as last planned and approved. The `layout` export may have moved since, so read it before you edit:",
+          ...plan.pages.map(
+            ({ page, sections }) =>
+              `  - ${page}: ${sections.map((s) => `${s.kind} (${s.variant})`).join(", ")}`
+          ),
+          "What each section is for:",
+          ...plan.pages.flatMap(({ page, sections }) =>
+            sections.map((s) => `  - ${page} ${s.kind}: ${s.purpose}`)
+          ),
+        ]
+      : []),
   ]
 }
