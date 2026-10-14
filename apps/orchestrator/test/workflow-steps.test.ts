@@ -33,6 +33,8 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 vi.mock("../src/publish.ts", () => ({
   PROBE_MINUTES: [0, 2, 5, 10],
   activate: async () => ({}),
+  // The superseded preview's revision: the one the served site now names.
+  latestRevision: async () => ({ id: "rev-live", status: "preview" }),
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
   redriveQueued: async () => [],
@@ -940,6 +942,21 @@ describe("the disk a build starts on", () => {
     } finally {
       ROW.kind = "site.build"
       script.held = null
+    }
+  })
+
+  // Back to back: the preview this edit superseded is still taking its
+  // screenshots, so it has not marked the disk, but the disk is its revision.
+  it("maps the disk a superseded preview left, before that preview marks it", async () => {
+    ROW.kind = "site.revise"
+    script.claims = [{ claimed: true, superseded: SUPERSEDED }]
+    script.verdicts = ["preview_ready"]
+    prepared.length = 0
+    try {
+      await drive([completion]).run()
+      expect(prepared).toEqual(["warm"])
+    } finally {
+      ROW.kind = "site.build"
     }
   })
 })
