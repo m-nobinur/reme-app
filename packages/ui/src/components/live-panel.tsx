@@ -319,7 +319,7 @@ function StepDetail({
       const fell = photos.filter((p) => p.state === "fallback").length
       return (
         <>
-          <ul aria-label="Photos" className="grid grid-cols-3 gap-2">
+          <ul aria-label="Photos" className="grid max-w-sm grid-cols-3 gap-2">
             {photos.map((photo) => (
               <li key={photo.slot_id}>
                 <PhotoTile photo={photo} />
@@ -1567,25 +1567,31 @@ function LiveLine({
           tone === "working" && "animate-pulse motion-reduce:animate-none"
         )}
       />
-      <span className="min-w-0 truncate">
-        <span className="font-medium">{lead}</span>
-        {detail ? (
-          <span className="text-muted-foreground"> {detail}</span>
-        ) : null}
-      </span>
       {progress ? (
-        <span
-          className="shrink-0 text-muted-foreground tabular-nums"
-          data-slot="live-line-progress"
-        >
-          <span aria-hidden>
-            {progress.done}/{progress.total}
-          </span>
-          <span className="sr-only">
-            , step {progress.done} of {progress.total}
+        // A build's step is the news, so the lead gives way first.
+        <span className="flex min-w-0 items-baseline gap-1">
+          <span className="min-w-0 truncate font-medium">{lead}</span>
+          <span className="shrink-0 text-muted-foreground">{detail}</span>
+          <span
+            className="shrink-0 text-muted-foreground tabular-nums"
+            data-slot="live-line-progress"
+          >
+            <span aria-hidden>
+              {progress.done}/{progress.total}
+            </span>
+            <span className="sr-only">
+              , step {progress.done} of {progress.total}
+            </span>
           </span>
         </span>
-      ) : null}
+      ) : (
+        <span className="min-w-0 truncate">
+          <span className="font-medium">{lead}</span>
+          {detail ? (
+            <span className="text-muted-foreground"> {detail}</span>
+          ) : null}
+        </span>
+      )}
     </span>
   )
 }
