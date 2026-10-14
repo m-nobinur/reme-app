@@ -5,11 +5,16 @@ import {
   CaretUpIcon,
   CheckCircleIcon,
 } from "@phosphor-icons/react"
-import type { AskDesignInput, AskDesignOutput } from "@workspace/contracts"
+import {
+  type AskDesignInput,
+  type AskDesignOutput,
+  FONT_PAIRS,
+} from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
+import { previewFaces } from "@workspace/ui/lib/font-faces"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -54,17 +59,47 @@ const FALLBACK_PROMPT: Record<Question["visual"], string> = {
   text: "Your answer",
 }
 
-/** Names the pair's two faces from a label like "Outfit · Figtree" or "Outfit / Figtree". */
-function pairOf(option: Option): { display: string; body: string } {
+/**
+ * The two faces an option sets. A pair id the contract knows gives its real
+ * display weight; otherwise the families come from a label like "Outfit · Figtree".
+ */
+function pairOf(option: Option): {
+  display: string
+  body: string
+  weight: number
+} {
+  const pair = FONT_PAIRS.find((each) => each.id === option.id)
+  if (pair) {
+    return {
+      display: pair.display.family,
+      body: pair.body.family,
+      weight: pair.display.weights[0] ?? 400,
+    }
+  }
   const [display, body] = option.label.split(/\s+[·/]\s+/)
   const family = option.visual?.kind === "font" ? option.visual.family : ""
   return {
     display: display || family || option.label,
     body: body || display || family || option.label,
+    weight: 400,
   }
 }
 
-/** Until the app serves the pairs' files, a face the browser lacks reads as the system's. */
+/**
+ * The preview's @font-face rules. Rendered only while a font_pair question is
+ * open, so a page that never shows the tray fetches none of these files.
+ */
+function PreviewFaces() {
+  const css = previewFaces()
+    .map(
+      ({ family, weight, url }) =>
+        `@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};font-display:swap;src:url(${url}) format("woff2")}`
+    )
+    .join("")
+  return <style>{css}</style>
+}
+
+/** The family list a face falls back through when the preview's file has not loaded. */
 const face = (name: string) => `"${name}", ui-sans-serif, system-ui, sans-serif`
 
 function Box({
@@ -299,12 +334,12 @@ function Picture({
     )
   }
   if (question.visual === "font_pair") {
-    const { display, body } = pairOf(option)
+    const { display, body, weight } = pairOf(option)
     return (
       <span aria-hidden className="flex w-full flex-col gap-0.5">
         <span
           className="truncate text-lg leading-tight"
-          style={{ fontFamily: face(display) }}
+          style={{ fontFamily: face(display), fontWeight: weight }}
         >
           Title · {display}
         </span>
@@ -513,6 +548,7 @@ function QuestionTray({
             className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pb-3"
             id={`${id}-body`}
           >
+            {question.visual === "font_pair" && <PreviewFaces />}
             <div
               aria-labelledby={`${id}-question`}
               className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2"
