@@ -252,7 +252,7 @@ describe("the owner's onboarding choices in the rules", () => {
       'set font in src/site-config.ts to "newsreader_inter"'
     )
     expect(rules).toContain(
-      "Home and Request a quote, plus About, Gallery. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
+      "Home and Request a quote, plus About. Gallery is a section on the home page, not a page: build no page file for it, and the Blueprint says which the home page holds. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
     )
     expect(rules).toContain(
       "Build any other extra page from the existing components"

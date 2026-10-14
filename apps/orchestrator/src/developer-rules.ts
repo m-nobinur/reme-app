@@ -13,6 +13,8 @@ import {
   LEGACY_TEMPLATE_DIRECTION,
   PAGES,
   PALETTES,
+  type PageId,
+  type SectionKind,
   TEMPLATES,
   TONES,
 } from "@workspace/contracts"
@@ -210,6 +212,16 @@ const STARTER_PAGES = {
   contact: "src/pages/contact.astro",
 }
 
+/**
+ * Pages an owner can pick that the starter has no file for: each is the
+ * section of that kind on the home page.
+ */
+export const SECTION_PICKS = {
+  testimonials: "testimonials",
+  gallery: "gallery",
+  faq: "faq",
+} as const satisfies Partial<Record<PageId, SectionKind>>
+
 /** A fact's value, when the stored one still parses. */
 export function factValue<K extends FactValueKey>(
   facts: readonly FactRecord[],
@@ -297,6 +309,8 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const extra = pages?.ids.filter(
     (id) => !(FIXED_PAGES as readonly string[]).includes(id)
   )
+  const sections = extra?.filter((id) => id in SECTION_PICKS) ?? []
+  const pagePicks = extra?.filter((id) => !(id in SECTION_PICKS))
   const drop = Object.entries(STARTER_PAGES)
     .filter(([id]) => !pages?.ids.includes(id as never))
     .map(([, file]) => file)
@@ -343,7 +357,7 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
           : []),
     ...(pages
       ? [
-          `- Pages: Home and Request a quote, plus ${extra?.length ? extra.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}${drop.includes(STARTER_PAGES.about) ? "" : "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience. "}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
+          `- Pages: Home and Request a quote, plus ${pagePicks?.length ? pagePicks.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${sections.length > 0 ? `${sections.map((id) => labelOf(PAGES, id)).join(", ")} ${sections.length > 1 ? "are sections" : "is a section"} on the home page, not ${sections.length > 1 ? "pages" : "a page"}: build no page file for ${sections.length > 1 ? "them" : "it"}, and the Blueprint says which the home page holds. ` : ""}${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}${drop.includes(STARTER_PAGES.about) ? "" : "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience. "}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
         ]
       : []),
     ...(tone
