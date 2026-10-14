@@ -411,7 +411,7 @@ describe("all the gates", () => {
     const contactBody = new TextEncoder().encode(contact)
     const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex")
     const timings: Record<string, number> = {}
-    const results = await runGates({
+    const input = {
       manifest: {
         revision_id: ORG,
         site_id: ORG,
@@ -424,7 +424,7 @@ describe("all the gates", () => {
         },
         built_at: AT,
       },
-      read: async (file) =>
+      read: async (file: string) =>
         file === "index.html"
           ? body
           : file === "contact/index.html"
@@ -438,8 +438,8 @@ describe("all the gates", () => {
       } as CompletionReport,
       budget: { limit: 102_400 },
       facts: FACTS,
-      timings,
-    })
+    }
+    const results = await runGates({ ...input, timings })
     expect(Object.keys(timings).sort()).toEqual([
       "build",
       "claims",
@@ -461,6 +461,40 @@ describe("all the gates", () => {
     ])
     for (const r of results) expect(GateResult.parse(r)).toEqual(r)
     expect(results.every((r) => r.passed)).toBe(true)
+    // The Blueprint reaches the claims gate: a generated team photo fails it.
+    const planned = await runGates({
+      ...input,
+      plan: {
+        images: [
+          {
+            id: "team",
+            page: "home",
+            section: "about",
+            aspect: "4:3",
+            resolution: "1K",
+            subject: "a cleaner",
+            alt: "A cleaner",
+            source: "generated",
+          },
+        ],
+        pages: [
+          {
+            page: "home",
+            sections: [
+              {
+                kind: "about",
+                variant: "default",
+                purpose: "x",
+                content_notes: null,
+              },
+            ],
+          },
+        ],
+      } as never,
+    })
+    expect(planned.find((r) => r.gate === "claims")?.offending_node).toContain(
+      "images.team"
+    )
   })
   it("reads every file once, a page the build gate hashes and the pages share included, a few at a time", async () => {
     const bodies: Record<string, Uint8Array> = {
