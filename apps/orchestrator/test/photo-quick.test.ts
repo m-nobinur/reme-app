@@ -123,6 +123,46 @@ describe("regenerateSlot", () => {
     expect(next?.asset_id).not.toBe(SLOTS.at(1)?.asset_id)
   })
 
+  it("passes the site's other generated photos as references, and none when they are gone", async () => {
+    const refs: unknown[] = []
+    const capture = (async (url: string, init: { body: string }) => {
+      if (!url.endsWith("/images")) return new Response("down", { status: 503 })
+      refs.push(JSON.parse(init.body).input_references)
+      return Response.json({
+        data: [{ b64_json: btoa("png"), media_type: "image/png" }],
+      })
+    }) as unknown as typeof fetch
+    const redraw = (store: ReturnType<typeof bucket>) =>
+      regenerateSlot({
+        env: { OPENROUTER_API_KEY: "k", SITES: store },
+        kit: kit(
+          {
+            slots: [
+              { ...SLOTS[0], asset_id: "20000002-0000-4000-8000-000000000000" },
+              SLOTS[1],
+            ],
+            brief: BRIEF,
+            regenerated: null,
+          },
+          0
+        ),
+        sandbox: disk(["kitchen.png"]),
+        orgId: ORG,
+        assignmentId: "30000001-0000-4000-8000-000000000000",
+        goal: "kitchen",
+        fetch: capture,
+      })
+    const sites = bucket()
+    sites.objects.set(
+      `generated/${ORG}/20000002-0000-4000-8000-000000000000.png`,
+      new Uint8Array([1])
+    )
+    await redraw(sites)
+    expect(refs[0]).toHaveLength(1)
+    await redraw(bucket())
+    expect(refs[1]).toBeUndefined()
+  })
+
   it("stops at the daily cap without drawing", async () => {
     const { done, sites } = run("kitchen", SLOT_DAILY_CAP, ["kitchen.png"])
     await expect(done).rejects.toThrow("slot cap")

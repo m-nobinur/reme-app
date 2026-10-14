@@ -28,6 +28,8 @@ export const MAX_PER_DAY = 30
 const PARALLEL = 4
 /** Owner photos passed as references beside the hero: the grade matches theirs. */
 const OWNER_REFERENCES = 2
+/** The site's other generated photos a lone redraw is graded against. */
+const SIBLING_REFERENCES = 4
 const GENERATE_TIMEOUT_MS = 120_000
 const PROMPT_TIMEOUT_MS = 30_000
 /** Dollars, for a result whose response carried no cost. Verified 2026-10-14. */
@@ -304,6 +306,8 @@ export async function directPhotos(input: {
   plan: Pick<Blueprint, "images" | "pages">
   brief: PhotoBrief
   uploads?: { id: string; content_type: string }[]
+  /** Asset ids of the site's other generated photos, passed as references after the owner's (a lone redraw). */
+  siblings?: string[]
   /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
   variation?: string
   fetch?: typeof fetch
@@ -398,6 +402,21 @@ export async function directPhotos(input: {
           content_type: upload.content_type,
           b64: base64(new Uint8Array(await object.arrayBuffer())),
         })
+    }
+
+    for (const id of (input.siblings ?? []).slice(0, SIBLING_REFERENCES)) {
+      const prefix = generatedKey(orgId, id)
+      const found = (await env.SITES.list({ prefix: `${prefix}.` })).objects[0]
+      const object = found && (await env.SITES.get(found.key))
+      if (found && object) {
+        const ext = found.key.slice(prefix.length + 1)
+        owner.push({
+          content_type:
+            Object.entries(EXTENSION).find(([, e]) => e === ext)?.[0] ??
+            "image/png",
+          b64: base64(new Uint8Array(await object.arrayBuffer())),
+        })
+      }
     }
 
     const one = async (p: Planned, references: Reference[]) => {
