@@ -1,23 +1,26 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { expect, it } from "vitest"
 
 /**
- * pnpm installs a package once per peer set, so @assistant-ui/react exists
- * twice (the `ai` peer is zod 3 for packages/ui, zod 4 for the app), each
- * with its own core. Left alone, Vite bundles both: a history adapter given
- * to one copy is invisible to the runtime built from the other, and a
- * reloaded conversation opens empty. Every package installed more than once
- * must be deduped in the web config.
+ * pnpm installs a package once per peer set, so @assistant-ui/react once
+ * existed twice (the `ai` peer resolved zod 3 for packages/ui, zod 4 for the
+ * app), each with its own core. Vite bundled both: a history adapter given to
+ * one copy was invisible to the runtime built from the other, and a reloaded
+ * conversation opened empty. The lockfile is what installs, so its snapshots
+ * are counted: every package with more than one must be deduped in the web
+ * config.
  */
-it("dedupes every @assistant-ui package pnpm installed more than once", () => {
-  const store = fileURLToPath(
-    new URL("../../../../node_modules/.pnpm", import.meta.url)
+it("dedupes every @assistant-ui package pnpm installs more than once", () => {
+  const lock = readFileSync(
+    fileURLToPath(new URL("../../../../pnpm-lock.yaml", import.meta.url)),
+    "utf8"
   )
   const installs = new Map<string, number>()
-  for (const dir of readdirSync(store)) {
-    const found = /^@assistant-ui\+([a-z-]+)@\d/.exec(dir)
-    if (found?.[1]) installs.set(found[1], (installs.get(found[1]) ?? 0) + 1)
+  for (const [, name] of lock.matchAll(
+    /^ {2}'@assistant-ui\/([a-z-]+)@[\d.]+\(/gm
+  )) {
+    if (name) installs.set(name, (installs.get(name) ?? 0) + 1)
   }
   const config = readFileSync(
     fileURLToPath(new URL("../../vite.config.ts", import.meta.url)),
