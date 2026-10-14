@@ -4,6 +4,7 @@ import {
   type Sandbox,
 } from "@cloudflare/sandbox"
 import { restore, SITE_ROOT } from "./revise.ts"
+import { CROPS_MAX, cropKey, SHOTS_SCRIPT, VIEWPORTS } from "./shots.ts"
 
 /**
  * The sandbox as the orchestrator uses it (ADR-031): one container per site,
@@ -400,12 +401,10 @@ export async function probe(env: Env, label: string): Promise<ProbeResult> {
   }
 }
 
-/** The widths the preview's screenshots are taken at; the router serves them by these names. */
-const VIEWPORTS = [390, 768, 1440] as const
-
 /**
  * The home page at three widths, from the build the sandbox still holds,
- * stored under the revision's prefix. Taken after the preview is ready: the
+ * stored under the revision's prefix, and for the design critic its first
+ * viewport-height pieces per width (a full page is too tall for it). Taken after the preview is ready: the
  * owner's preview does not wait for them, and the review card shows them as
  * they land. Never throws; a screenshot that was not taken is a 404 the card
  * handles, and the count says how many there were.
@@ -425,25 +424,38 @@ export async function takeScreenshots(
       "pkill -f '[a]stro preview' || true",
       "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
       "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
-      ...VIEWPORTS.map(
-        (w) =>
-          `playwright screenshot --browser chromium --viewport-size=${w},900 --full-page http://127.0.0.1:4321/ /tmp/home-${w}.png`
-      ),
+      `node /tmp/shots.mjs http://127.0.0.1:4321/ /tmp ${CROPS_MAX}`,
       "pkill -f '[a]stro preview' || true",
     ].join("; ")
-    await sandbox.exec(`cd ${SITE_ROOT} && rm -f /tmp/home-*.png; ${script}`, {
-      timeout: 120_000,
-    })
-    for (const w of VIEWPORTS) {
+    await sandbox.writeFile("/tmp/shots.mjs", SHOTS_SCRIPT)
+    await sandbox.exec(
+      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png; ${script}`,
+      { timeout: 120_000 }
+    )
+    const bytes = async (path: string) => {
       const file = await sandbox
-        .readFile(`/tmp/home-${w}.png`, { encoding: "base64" })
+        .readFile(path, { encoding: "base64" })
         .catch(() => null)
-      if (!file) continue
-      await env.SITES.put(
-        `${prefix}screenshots/home-${w}.png`,
-        Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+      return file
+        ? Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+        : null
+    }
+    for (const w of VIEWPORTS) {
+      const full = await bytes(`/tmp/home-${w}.png`)
+      if (full) {
+        await env.SITES.put(`${prefix}screenshots/home-${w}.png`, full)
+        taken++
+      }
+      const parts = await Promise.all(
+        Array.from({ length: CROPS_MAX }, (_, n) =>
+          bytes(`/tmp/crop-${w}-${n + 1}.png`)
+        )
       )
-      taken++
+      // A page shorter than the cap leaves the later pieces unmade.
+      for (const [n, part] of parts.entries()) {
+        if (!part) break
+        await env.SITES.put(cropKey(ids.orgId, revisionId, w, n + 1), part)
+      }
     }
   } catch (error) {
     console.error(

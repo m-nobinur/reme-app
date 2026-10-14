@@ -117,6 +117,18 @@ describe("the content gate", () => {
     ).toBe(false)
   })
 
+  it("reads a US number shown nationally as its E.164 fact", () => {
+    const facts = [...FACTS, fact("business.phone_us", "+12065550104")]
+    for (const shown of ["(206) 555-0104", "206-555-0104", "+1 206 555 0104"])
+      expect(
+        checkContent(pages(home(`<p>Call ${shown}</p>`)), facts).passed,
+        shown
+      ).toBe(true)
+    expect(
+      checkContent(pages(home("<p>Call (206) 555-0105</p>")), facts).passed
+    ).toBe(false)
+  })
+
   it("fails a claim in structured data too", () => {
     const ld = LD.replace("+15550142", "+15550199")
     const result = checkContent(pages(home(undefined, ld)), FACTS)

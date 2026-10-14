@@ -19,6 +19,11 @@ import { factsForContent, maskContentClaims } from "./text.ts"
  *   digits and cut to five characters, so "insured" traces to "insurance" and
  *   "certified" to "certification"; a phrase has to appear as consecutive
  *   stems, so "phone number" does not support "number one".
+ * - An **absolute** word ("fully", "completely", "comprehensive", "full")
+ *   directly before a claim word or a coverage word ("insured", "insurance",
+ *   "covered") widens it past what a fact usually states: "Insured up to $5
+ *   million" does not support "Fully insured". The whole phrase, absolute
+ *   included, has to appear as consecutive stems in a supporting fact.
  * - A **testimonial**, meaning quoted text or a blockquote of twenty
  *   characters or more, passes when a `testimonials.` fact carries that text
  *   and its `permission` is true: the customer agreed to be quoted.
@@ -93,6 +98,22 @@ export const CLAIM_VOCABULARY = {
     "no-quibble",
   ],
 } as const
+
+/** Words that widen a claim or a coverage word they sit before. */
+const ABSOLUTE_WORDS = [
+  "fully",
+  "completely",
+  "totally",
+  "entirely",
+  "comprehensively",
+  "comprehensive",
+  "full",
+  "complete",
+  "unlimited",
+]
+
+/** Coverage words: a claim only when an absolute word widens them. */
+const COVERAGE_WORDS = ["insurance", "coverage", "covered", "cover"]
 
 /**
  * The fact keys whose value may carry a superlative, a credential or a
@@ -207,6 +228,23 @@ const PHRASE_CLAIMS = (
     }))
 )
 
+/** "fully insured", "comprehensive coverage", "completely guaranteed": an absolute word and the word it widens. */
+const ABSOLUTE_CLAIMS = (() => {
+  const words = [
+    ...CLAIM_VOCABULARY.superlative,
+    ...CLAIM_VOCABULARY.credential,
+    ...CLAIM_VOCABULARY.guarantee,
+    ...COVERAGE_WORDS,
+  ]
+    .sort((a, b) => b.length - a.length)
+    .map((phrase) => literal(phrase).replace(/[\s-]+/g, "[\\s-]+"))
+  const absolute = ABSOLUTE_WORDS.join("|")
+  return new RegExp(
+    `(?<![a-z0-9])(?:${absolute})[\\s-]+(?:${words.join("|")})(?![a-z0-9])`,
+    "gi"
+  )
+})()
+
 const QUOTED = /["“]([^"“”]{20,})["”]/g
 
 /** Everything in one string that asserts something checkable. */
@@ -224,6 +262,8 @@ function claimsIn(text: string): Found[] {
     for (const m of masked.matchAll(pattern))
       found.push({ kind, text: m[0].trim() })
   }
+  for (const m of masked.matchAll(ABSOLUTE_CLAIMS))
+    found.push({ kind: "credential", text: m[0].trim() })
   for (const m of text.matchAll(QUOTED))
     found.push({ kind: "testimonial", text: m[1] ?? "" })
   // Two rules reading one phrase is one claim, not two.
