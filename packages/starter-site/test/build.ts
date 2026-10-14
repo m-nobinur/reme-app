@@ -15,7 +15,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
-import { fields } from "../src/site-config"
+import { fields, layout, site } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
 /** Reserved by RFC 2606, so nothing built here can name a real site. */
@@ -28,12 +28,13 @@ export type Built = { dir: string; dist: string }
  * (astro.config.mjs, tsconfig.json, src/), with node_modules linked rather
  * than installed, the way the sandbox does it. `site` replaces the config's
  * values, `quoteForm` replaces src/quote-form.json the way the seed writes
- * it from the owner's fact, `pages` plants page files and `remove` deletes
- * them.
+ * it from the owner's fact, `layout` replaces the pages' section lists,
+ * `pages` plants page files and `remove` deletes them.
  */
 export async function build(
   options: {
     site?: Record<string, string>
+    layout?: typeof layout
     quoteForm?: unknown
     pages?: Record<string, string>
     remove?: string[]
@@ -44,11 +45,12 @@ export async function build(
     cpSync(join(ROOT, entry), join(dir, entry), { recursive: true })
   }
   symlinkSync(join(ROOT, "node_modules"), join(dir, "node_modules"), "dir")
-  if (options.site) {
+  if (options.site || options.layout) {
     writeFileSync(
       join(dir, "src/site-config.ts"),
-      `export const site = ${JSON.stringify(options.site, null, 2)}\n\n` +
-        `export const fields = ${JSON.stringify(fields, null, 2)}\n`
+      `export const site = ${JSON.stringify(options.site ?? site, null, 2)}\n\n` +
+        `export const fields = ${JSON.stringify(fields, null, 2)}\n\n` +
+        `export const layout = ${JSON.stringify(options.layout ?? layout, null, 2)}\n`
     )
   }
   if (options.quoteForm !== undefined) {

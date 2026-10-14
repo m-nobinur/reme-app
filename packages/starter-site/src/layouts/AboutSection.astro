@@ -1,0 +1,79 @@
+---
+import Section from "../components/Section/Section.astro"
+import { hasRoute } from "../routes"
+import { site } from "../site-config"
+
+interface Props {
+  /** The home page's short about section, or the about page's story and proof. */
+  page: "home" | "about"
+}
+
+const { page } = Astro.props
+const story = site.overviewBody || site.overview
+const audience = site.audienceBody || site.audience
+const proof = site.proofBody || site.proof
+// Without an about page, the home page's section says who the business
+// serves too.
+const homeAudience =
+  !hasRoute("/about/") && (site.audienceBody || site.audience)
+const homeAbout = site.aboutIntro || site.overviewBody || site.overview
+// The story's photo: the first gallery photo, else the home hero's, since
+// neither shows on the about page. Both halves or none.
+const photo = [
+  { src: site.photo1Src, alt: site.photo1Alt },
+  { src: site.heroImage, alt: site.heroImageAlt },
+].find((each) => each.src && each.alt)
+const storyHeading = story ? site.overviewHeading : site.audienceHeading
+---
+
+{
+  page === "home" ? (
+    (homeAbout || homeAudience) && (
+      <Section heading={site.aboutHeading}>
+        {site.tagline && site.homeIntro && (
+          <p class="section-lede">{site.homeIntro}</p>
+        )}
+        {homeAbout && <p>{homeAbout}</p>}
+        {homeAudience && <p>{homeAudience}</p>}
+        {hasRoute("/about/") && site.aboutLink && (
+          <p class="section-more">
+            <a class="more-link" href="/about/">
+              {site.aboutLink}
+            </a>
+          </p>
+        )}
+      </Section>
+    )
+  ) : (
+    <>
+      {(story || audience) && (
+        <section class="band about-story">
+          <div class:list={["wrap", "story-inner", photo && "story-split"]}>
+            <div class="story-text">
+              {storyHeading && <h2>{storyHeading}</h2>}
+              {story && <p class="section-lede">{story}</p>}
+              {story && audience && site.audienceHeading && (
+                <h3>{site.audienceHeading}</h3>
+              )}
+              {audience && <p>{audience}</p>}
+            </div>
+            {photo && (
+              <img
+                class="story-photo"
+                src={photo.src}
+                alt={photo.alt}
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+          </div>
+        </section>
+      )}
+      {proof && (
+        <Section heading={site.proofHeading}>
+          <p>{proof}</p>
+        </Section>
+      )}
+    </>
+  )
+}

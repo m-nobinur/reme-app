@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { QUOTE_FIELD_TYPES, quoteFields } from "../src/quote-form"
-import { fields, site } from "../src/site-config"
+import { fields, layout, site } from "../src/site-config"
 import {
   type Built,
   build,
@@ -58,9 +58,10 @@ const MARKED_FORM = {
 let filled: Built | undefined
 let planted: Built | undefined
 let marked: Built | undefined
+let reordered: Built | undefined
 
 beforeAll(async () => {
-  ;[filled, planted, marked] = await Promise.all([
+  ;[filled, planted, marked, reordered] = await Promise.all([
     build({ site: FILLED }),
     build({
       site: { ...FILLED, phone: "", email: "" },
@@ -68,11 +69,22 @@ beforeAll(async () => {
       remove: ["quote.astro", "booking.astro", "about.astro"],
     }),
     build({ site: MARKED, quoteForm: MARKED_FORM }),
+    build({
+      site: FILLED,
+      layout: {
+        ...layout,
+        home: [
+          { kind: "cta_band", variant: "solid" },
+          { kind: "hero" },
+          { kind: "service_cards", variant: "numbered_rows" },
+        ],
+      },
+    }),
   ])
 }, 120_000)
 
 afterAll(() => {
-  for (const built of [filled, planted, marked]) clean(built)
+  for (const built of [filled, planted, marked, reordered]) clean(built)
 })
 
 const pagesOf = (built: Built | undefined) => {
@@ -370,43 +382,17 @@ describe("the quote form", () => {
   })
 })
 
-describe("the page recipes", () => {
-  const recipes = JSON.parse(
-    readFileSync(join(ROOT, "src/recipes.json"), "utf8")
-  ) as {
-    packs: Record<
-      string,
-      {
-        recipes: { page: string; components: string[]; fields: string[] }[]
-      }
-    >
-  }
-  const all = Object.values(recipes.packs).flatMap((pack) => pack.recipes)
-
-  test("name a page that exists, components that exist and fields that exist", () => {
-    expect(all.length).toBeGreaterThan(0)
-    const components = readdirSync(join(ROOT, "src/components"))
-    for (const recipe of all) {
-      expect(existsSync(join(ROOT, recipe.page)), recipe.page).toBe(true)
-      for (const component of recipe.components) {
-        expect(components, recipe.page).toContain(component)
-      }
-      for (const field of recipe.fields) {
-        expect(Object.keys(site), recipe.page).toContain(field)
-      }
-    }
-  })
-
-  test("list the components their page actually renders", () => {
-    for (const recipe of all) {
-      const source = readFileSync(join(ROOT, recipe.page), "utf8")
-      const used = [...source.matchAll(/<([A-Z]\w+)/g)].map((match) =>
-        String(match[1])
-      )
-      expect(new Set(recipe.components), recipe.page).toEqual(
-        new Set(used.filter((name) => name !== "Base"))
-      )
-    }
+describe("the pages' sections as data", () => {
+  test("render in the order layout gives, and a dropped kind is gone", () => {
+    const home = pagesOf(reordered).find((page) => page.file === "index.html")
+    const classes = [
+      ...(home?.html.matchAll(/<section class="([^"]*)"/g) ?? []),
+    ].map((match) => String(match[1]))
+    // The CTA band, the hero, then the services; no trust strip, no steps.
+    expect(classes).toHaveLength(3)
+    expect(classes[0]).toContain("cta-band")
+    expect(classes[1]).toContain("hero")
+    expect(classes[2]).toContain("services-numbered_rows")
   })
 })
 
