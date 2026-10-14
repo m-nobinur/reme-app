@@ -44,6 +44,8 @@ export type Brief = {
   restore_key: string | null
   /** The restored site's map for the stable segment, or null for the starter's. */
   map: string | null
+  /** The routing role the Developer starts on when not `build`: a section change's quick lane. */
+  role?: "quick_section"
 }
 
 /**

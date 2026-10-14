@@ -60,6 +60,22 @@ export const sandboxFor = (env: Env, id: string) =>
     sleepAfter: SLEEP_AFTER,
   })
 
+/**
+ * The site's sandbox as the build tail reads it (`tail.ts`), for a step that
+ * runs the tail outside the Developer's harness: the quick edit lane.
+ */
+export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
+  exec: (command: string, options?: { timeoutMs?: number }) =>
+    sandbox.exec(command, { timeout: options?.timeoutMs }),
+  readFile: (path: string) => sandbox.readFile(path),
+  readFileBuffer: async (path: string) => {
+    const file = await sandbox.readFile(path, { encoding: "base64" })
+    return Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+  },
+  writeFile: (path: string, content: string) =>
+    sandbox.writeFile(path, content),
+})
+
 type Ids = { orgId: string; assignmentId: string }
 
 /**
