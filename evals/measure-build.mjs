@@ -309,6 +309,7 @@ function save(name, result) {
 
 /** Points the local site at a revision so a revise has a base. DB only; see the header. */
 async function serve(revisionId) {
+  if (!revisionId) throw new Error("no revision to serve")
   const { sql: client } = connect()
   try {
     const [cur] =
@@ -328,7 +329,7 @@ async function serve(revisionId) {
   }
 }
 
-const latestRevision = (row) => row.revisions?.[0]?.id
+const latestRevision = (row) => row.revisions?.[0]?.revision_id
 
 async function main() {
   const spentAtStart = await keyUsage()
