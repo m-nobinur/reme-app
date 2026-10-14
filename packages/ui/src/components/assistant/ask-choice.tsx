@@ -253,6 +253,16 @@ function Visual({ visual }: { visual: Option["visual"] }) {
       </span>
     )
   }
+  if (visual.kind === "font_pair") {
+    return (
+      <span aria-hidden className="block truncate text-2xl leading-tight">
+        <span style={{ fontFamily: visual.display }}>Aa</span>{" "}
+        <span style={{ fontFamily: visual.body }}>Bb Cc</span>
+      </span>
+    )
+  }
+  // A layout sketch is OI's tray; this card draws nothing for it.
+  if (visual.kind === "layout") return null
   return (
     <span aria-hidden className="flex gap-1.5">
       {visual.colors.map((color) => (
