@@ -761,18 +761,33 @@ const MessageError: FC = () => {
   )
 }
 
-/** The dot a reply shows until its first words arrive. */
-const TypingIndicator: FC = () => (
-  <span data-slot="aui_assistant-message-indicator" role="status">
-    <span
-      aria-hidden
-      className="animate-pulse font-sans motion-reduce:animate-none"
-    >
-      {"●"}
+/**
+ * The dot a reply shows until its first words arrive. Quiet, and not under a
+ * card that already says it is working (Saving, Stopping): the owner has
+ * answered it and its own line is the progress.
+ */
+const TypingIndicator: FC = () => {
+  const answered = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "tool-call" &&
+        part.result === undefined &&
+        part.approval?.approved !== undefined
+    )
+  )
+  if (answered) return null
+  return (
+    <span data-slot="aui_assistant-message-indicator" role="status">
+      <span
+        aria-hidden
+        className="animate-pulse font-sans text-muted-foreground motion-reduce:animate-none"
+      >
+        {"●"}
+      </span>
+      <span className="sr-only">Working</span>
     </span>
-    <span className="sr-only">Working</span>
-  </span>
-)
+  )
+}
 
 /** How long a played-in message shows the typing dot, then takes over its words. */
 const REVEAL_TYPING_MS = 700

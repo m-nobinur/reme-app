@@ -357,7 +357,8 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
     cancelled="Not saved. You sent a message instead."
     refused="The review could not be saved."
     detail={(input) =>
-      `From ${input.name}. Only say yes if ${input.name} agreed to be quoted on your website under that name. It becomes review ${input.slot}, replacing any review there.`
+      // A name that ends in a dot (an initial) already closes the sentence.
+      `From ${input.name}${input.name.endsWith(".") ? "" : "."} Only say yes if ${input.name} agreed to be quoted on your website under that name. It becomes review ${input.slot}, replacing any review there.`
     }
     done={() => (
       <Done>Saved. Your website can show it from its next update.</Done>
