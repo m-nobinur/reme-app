@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
+import { Blueprint } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
@@ -234,6 +235,21 @@ export const AskDesignOutput = z.strictObject({
 })
 
 /**
+ * `review_blueprint`'s input: the plan the owner reads before a build starts.
+ * `revision_of` is the assignment this plan revises, when it is a re-plan.
+ */
+export const BlueprintReviewInput = z.strictObject({
+  blueprint: Blueprint,
+  revision_of: Uuid.optional(),
+})
+
+/** Build it as planned, or change it: `note` is the owner's words and is data. */
+export const BlueprintReviewOutput = z.discriminatedUnion("decision", [
+  z.strictObject({ decision: z.literal("build"), note: Text(500).optional() }),
+  z.strictObject({ decision: z.literal("change"), note: Text(500) }),
+])
+
+/**
  * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
  * on the wire so the web enforces what the api will.
  */
@@ -346,6 +362,7 @@ const ChatResult = z.discriminatedUnion("kind", [
       AskDetailsOutput,
       AskChoiceOutput,
       AskDesignOutput,
+      BlueprintReviewOutput,
       AskUploadOutput,
       ReviewQuoteFormOutput,
     ]),
@@ -426,6 +443,8 @@ export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
 export type AskDesignInput = z.infer<typeof AskDesignInput>
+export type BlueprintReviewInput = z.infer<typeof BlueprintReviewInput>
+export type BlueprintReviewOutput = z.infer<typeof BlueprintReviewOutput>
 export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
 export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>

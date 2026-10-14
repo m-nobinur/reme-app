@@ -24,6 +24,9 @@ export const HookName = z.enum([
 export const ModelRoute = z.strictObject({
   model: z.string().min(1),
   max_output_tokens: z.int().positive(),
+  /** Per-role reasoning effort and output cap; absent in specs signed before they existed. */
+  effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  max_tokens: z.int().positive().optional(),
 })
 
 /** §10.3: the gateway intersects requested namespaces with this policy. */
