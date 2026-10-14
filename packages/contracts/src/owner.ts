@@ -277,7 +277,10 @@ export const BuildSummary = z.strictObject({
   kind: z.enum(["site.build", "site.revise"]),
   state: AssignmentState,
   goal: z.string().min(1).max(GOAL_MAX),
+  /** The lane it runs in now: a quick edit that fell through reads `full`. */
   lane: BuildLane.optional(),
+  /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
+  fell_through: z.boolean().optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */

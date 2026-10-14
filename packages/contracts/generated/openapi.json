@@ -9177,6 +9177,9 @@
               "quick"
             ]
           },
+          "fell_through": {
+            "type": "boolean"
+          },
           "activity": {
             "maxItems": 5,
             "type": "array",
@@ -17042,6 +17045,9 @@
                               "quick"
                             ]
                           },
+                          "fell_through": {
+                            "type": "boolean"
+                          },
                           "activity": {
                             "maxItems": 5,
                             "type": "array",
@@ -23322,6 +23328,9 @@
                       "quick"
                     ]
                   },
+                  "fell_through": {
+                    "type": "boolean"
+                  },
                   "activity": {
                     "maxItems": 5,
                     "type": "array",
@@ -27491,6 +27500,9 @@
                     "full",
                     "quick"
                   ]
+                },
+                "fell_through": {
+                  "type": "boolean"
                 },
                 "activity": {
                   "maxItems": 5,

@@ -188,6 +188,8 @@ function WorkingOn({
     startedAt: string
     /** A build with no lane is a full one. */
     lane?: BuildLane
+    /** A quick edit that moved to a fuller lane, which the panel says once. */
+    fellThrough?: boolean
     /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
     activity?: BuildActivity[]
   }
@@ -279,6 +281,12 @@ function WorkingOn({
         <p aria-live="polite" className="text-sm">
           {note}
         </p>
+        {build.fellThrough ? (
+          <p className="text-sm" data-slot="fell-through">
+            This change needs more than a quick edit, so it will take a few
+            minutes.
+          </p>
+        ) : null}
         {!quick && build.activity?.length ? (
           <ul aria-label="What it is doing" className="flex flex-col gap-1">
             {build.activity.map((row) => {

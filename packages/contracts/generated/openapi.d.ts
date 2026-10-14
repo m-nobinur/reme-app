@@ -2542,6 +2542,7 @@ export interface components {
       goal: string
       /** @enum {string} */
       lane?: "full" | "quick"
+      fell_through?: boolean
       activity?: {
         id: string
         label: string
@@ -4710,6 +4711,7 @@ export interface components {
                   goal: string
                   /** @enum {string} */
                   lane?: "full" | "quick"
+                  fell_through?: boolean
                   activity?: {
                     id: string
                     label: string
@@ -6469,6 +6471,7 @@ export interface components {
             goal: string
             /** @enum {string} */
             lane?: "full" | "quick"
+            fell_through?: boolean
             activity?: {
               id: string
               label: string
@@ -7592,6 +7595,7 @@ export interface components {
         goal: string
         /** @enum {string} */
         lane?: "full" | "quick"
+        fell_through?: boolean
         activity?: {
           id: string
           label: string
