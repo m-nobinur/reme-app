@@ -1,6 +1,7 @@
 import {
   Assignment,
   type AssignmentState,
+  type BuildLane,
   type BuildSummary,
   type ChangeKind,
   ErrorEnvelope,
@@ -25,7 +26,13 @@ import {
 import { failure, issuePaths } from "./http.ts"
 import type { Session } from "./session.ts"
 import { ownerStaffId } from "./staff.ts"
-import { readApprovals, readBuilds, readFacts, readSite } from "./workspace.ts"
+import {
+  readApprovals,
+  readBuilds,
+  readFacts,
+  readLane,
+  readSite,
+} from "./workspace.ts"
 
 /**
  * An owner's writes that cross to the orchestrator, and the owner's facts:
@@ -223,9 +230,10 @@ export const notFound = (noun: "assignment" | "approval") =>
   })
 
 /** The build as the panel shows it, from the row the orchestrator returned. */
-const summary = (body: unknown): BuildSummary => {
+const summary = (body: unknown, lane?: BuildLane): BuildSummary => {
   const row = Assignment.parse(body)
   return {
+    ...(lane ? { lane } : {}),
     assignment_id: row.assignment_id,
     kind: row.kind as BuildSummary["kind"],
     state: row.state,
@@ -490,6 +498,9 @@ export async function startChange(
   })
   const call = (path: string, body?: unknown) =>
     bridge(env, owner, path, { body, key, signal })
+  // The panel and the chat line read the lane off the build the owner just started.
+  const laneOf = (id: string) =>
+    kit.withOrg({ orgId }, (db) => readLane(db, id)).catch(() => undefined)
   // The old review turned down once the new build exists. Only a definite
   // no cancels the new build: an unknown outcome may have ended the review.
   const end = async (build: Assignment, status: number, old: Replace) => {
@@ -500,7 +511,11 @@ export async function startChange(
       ),
       () => null
     )
-    if (ended.ok) return Response.json(summary(build), { status })
+    if (ended.ok) {
+      return Response.json(summary(build, await laneOf(build.assignment_id)), {
+        status,
+      })
+    }
     if (ended.status >= 500) return ended
     // The old build keeps the site, so nothing would release the new one.
     // If the cancel's outcome is not known, a retry finds the build still
@@ -552,8 +567,14 @@ export async function startChange(
     goal: text,
     ...(changeKind ? { change_kind: changeKind } : {}),
   })
-  const create = async (kind: "site.build" | "site.revise") =>
-    relay(await call("/", createBody(kind)), summary)
+  const create = async (kind: "site.build" | "site.revise") => {
+    const result = await call("/", createBody(kind))
+    const parsed = Assignment.safeParse(result.body)
+    const lane = parsed.success
+      ? await laneOf(parsed.data.assignment_id)
+      : undefined
+    return relay(result, (body) => summary(body, lane))
+  }
   switch (route.route) {
     case "refuse":
       return failure(409, {

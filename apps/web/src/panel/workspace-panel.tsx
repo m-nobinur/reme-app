@@ -60,12 +60,6 @@ import { useLiveWorkspace } from "@/lib/workspace"
  * always what `/workspace` last said and never a guess about what a write did.
  */
 
-/**
- * The range a build takes, in seconds, as measured when the polling decision
- * was made (owner-workspace.md): 115 to 313 s.
- */
-const TYPICAL_BUILD = { min: 115, max: 313 }
-
 const FAILED = "That did not go through. Try again."
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
@@ -322,10 +316,12 @@ export function useRequestChanges() {
 function Stoppable({
   build,
   queued,
+  expected,
   refresh,
 }: {
   build: BuildSummary
   queued: string[]
+  expected: Workspace["expectedSeconds"]
   refresh: Refresh
 }) {
   const stop = useWrite<"stop">(refresh)
@@ -336,8 +332,11 @@ function Stoppable({
         state: build.state,
         version: build.revision?.version ?? null,
         startedAt: build.created_at,
+        lane: build.lane ?? "full",
+        activity: build.activity ?? [],
       }}
       error={stop.error}
+      expectedSeconds={expected?.[build.lane ?? "full"]}
       onStop={() =>
         void stop.run("stop", () =>
           cancelBuild({ data: { assignmentId: build.assignment_id } })
@@ -345,7 +344,6 @@ function Stoppable({
       }
       queued={queued}
       stopping={stop.pending !== null}
-      typical={TYPICAL_BUILD}
     />
   )
 }
@@ -581,6 +579,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         >
           <Stoppable
             build={build}
+            expected={workspace.expectedSeconds}
             key={build.assignment_id}
             queued={panel.queued}
             refresh={refresh}

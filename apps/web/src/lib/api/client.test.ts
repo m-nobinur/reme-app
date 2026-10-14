@@ -517,6 +517,10 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     {
       site: { host: "fictional.example.invalid", live: null },
       builds: [building],
+      expected_seconds: {
+        full: { p50: 180, p95: 330 },
+        quick: { p50: 15, p95: 45 },
+      },
       attention: [],
       missing_facts: ["business.phone"],
       assistant_name: "Ava",
@@ -532,6 +536,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     etag: '"b2"',
     building: true,
     builds: [building],
+    expectedSeconds: { quick: { p50: 15, p95: 45 } },
     host: "fictional.example.invalid",
     missingFacts: ["business.phone"],
     assistantName: "Ava",

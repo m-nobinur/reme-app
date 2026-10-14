@@ -11,6 +11,7 @@ import type {
   FactValueKey,
   MessageFeedback,
   Reminder,
+  WorkspaceStatus,
 } from "@workspace/contracts"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
@@ -105,6 +106,8 @@ export type Workspace = {
   open: boolean
   /** Unfinished builds, newest first, as `/workspace` lists them. */
   builds: BuildSummary[]
+  /** How long each lane usually takes; absent until the api sends it. */
+  expectedSeconds?: WorkspaceStatus["expected_seconds"]
   /** The site's host, once it has one. */
   host: string | null
   /** The required facts still to ask for. */

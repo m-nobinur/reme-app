@@ -7,6 +7,8 @@ import {
 import {
   type ApprovalTarget,
   type AssignmentState,
+  type BuildActivity,
+  type BuildLane,
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
@@ -165,7 +167,7 @@ function useElapsed(startedAt: string, now?: number): number | null {
 function WorkingOn({
   build,
   queued = [],
-  typical,
+  expectedSeconds,
   now,
   onStop,
   stopping = false,
@@ -177,11 +179,15 @@ function WorkingOn({
     state: AssignmentState
     version: number | null
     startedAt: string
+    /** A build with no lane is a full one. */
+    lane?: BuildLane
+    /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
+    activity?: BuildActivity[]
   }
   /** What the owner asked for in each build waiting behind this one. */
   queued?: string[]
-  /** The measured range a build takes, in seconds. */
-  typical: { min: number; max: number }
+  /** How long this build's lane usually takes, in seconds; absent says nothing about time. */
+  expectedSeconds?: { p50: number; p95: number }
   now?: number
   onStop?: () => void
   stopping?: boolean
@@ -207,8 +213,19 @@ function WorkingOn({
     moveFocus.current = null
   }, [asked])
 
-  const long = elapsed !== null && elapsed > typical.max * 1000
-  const usually = `Builds usually take ${Math.round(typical.min / 60)} to ${Math.round(typical.max / 60)} minutes.`
+  const quick = build.lane === "quick"
+  const long =
+    elapsed !== null &&
+    expectedSeconds !== undefined &&
+    elapsed > expectedSeconds.p95 * 1000
+  const usually = expectedSeconds
+    ? quick
+      ? `Usually about ${expectedSeconds.p50} seconds.`
+      : `Builds usually take ${Math.round(expectedSeconds.p50 / 60)} to ${Math.round(expectedSeconds.p95 / 60)} minutes.`
+    : null
+  // A quick edit has no stages to walk: one line while it works, the usual note when it waits.
+  const note =
+    quick && WORKING.has(build.state) ? "Updating your preview." : stage.note
 
   return (
     <PanelSection title="Working on">
@@ -217,42 +234,71 @@ function WorkingOn({
           {build.version ? `Version ${build.version}: ` : null}
           {build.goal}
         </p>
-        <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
-          {STEPS.map((label, index) => (
-            <li
-              aria-current={index === stage.step ? "step" : undefined}
-              className="flex flex-col gap-1.5"
-              key={label}
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
-                  index < stage.step && "bg-primary/45",
-                  index === stage.step && "bg-primary",
-                  index === stage.step &&
-                    WORKING.has(build.state) &&
-                    "animate-pulse motion-reduce:animate-none",
-                  index > stage.step && "bg-border"
-                )}
-                data-slot="step-bar"
-              />
-              <span
-                className={cn(
-                  "text-[0.8125rem]",
-                  index === stage.step
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground"
-                )}
+        {quick ? null : (
+          <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
+            {STEPS.map((label, index) => (
+              <li
+                aria-current={index === stage.step ? "step" : undefined}
+                className="flex flex-col gap-1.5"
+                key={label}
               >
-                {label}
-              </span>
-            </li>
-          ))}
-        </ol>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
+                    index < stage.step && "bg-primary/45",
+                    index === stage.step && "bg-primary",
+                    index === stage.step &&
+                      WORKING.has(build.state) &&
+                      "animate-pulse motion-reduce:animate-none",
+                    index > stage.step && "bg-border"
+                  )}
+                  data-slot="step-bar"
+                />
+                <span
+                  className={cn(
+                    "text-[0.8125rem]",
+                    index === stage.step
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {label}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         <p aria-live="polite" className="text-sm">
-          {stage.note}
+          {note}
         </p>
+        {!quick && build.activity?.length ? (
+          <ul aria-label="What it is doing" className="flex flex-col gap-1">
+            {build.activity.map((row) => {
+              const done = row.done >= row.total
+              return (
+                <li
+                  className={cn(
+                    "flex items-center gap-2 text-[0.8125rem]",
+                    done ? "text-muted-foreground" : "text-foreground"
+                  )}
+                  key={row.id}
+                >
+                  {done ? (
+                    <CheckCircleIcon aria-hidden className="size-4" />
+                  ) : (
+                    <CircleIcon aria-hidden className="size-4" />
+                  )}
+                  <span>
+                    {row.label}
+                    {row.total > 1 ? `, ${row.done} of ${row.total}` : null}
+                    {done ? <span className="sr-only"> (done)</span> : null}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
         <p className={cn(META, "tabular-nums")}>
           {elapsed === null ? null : `${duration(elapsed)} so far. `}
           {long ? "This one is taking longer than usual." : usually}
@@ -616,6 +662,68 @@ type Preview = { url: string; screenshots: string[] }
 
 const SHOTS = ["on a phone", "on a tablet", "on a laptop"] as const
 
+/** Screenshots land about 10 s after the preview does; look again every 5 s for half a minute. */
+const SHOT_RETRY_MS = 5000
+const SHOT_TRIES = 6
+
+/**
+ * One width of the home page. Until the image exists it is a quiet block of
+ * the same size, never a broken image; a screenshot still missing after the
+ * last look tells the caller.
+ */
+function Shot({
+  src,
+  alt,
+  where,
+  onGiveUp,
+}: {
+  src: string | undefined
+  alt: string
+  where: string
+  onGiveUp: () => void
+}) {
+  const [tries, setTries] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (loaded || tries === 0) return
+    if (tries >= SHOT_TRIES) {
+      onGiveUp()
+      return
+    }
+    const timer = setTimeout(() => setTries(tries + 1), SHOT_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [loaded, tries, onGiveUp])
+  return (
+    <div className="relative aspect-[3/4]">
+      {loaded ? null : (
+        <div
+          className="absolute inset-0 rounded-md border border-border bg-muted"
+          data-slot="screenshot-pending"
+        >
+          <span className="sr-only">
+            Screenshot {where} is still being made
+          </span>
+        </div>
+      )}
+      <img
+        alt={alt}
+        className={cn(
+          "size-full rounded-md border border-border bg-muted object-cover object-top",
+          !loaded && "invisible"
+        )}
+        height={160}
+        // A fresh element per look, so the browser asks again.
+        key={tries}
+        loading="lazy"
+        onError={() => setTries(tries + 1)}
+        onLoad={() => setLoaded(true)}
+        src={src}
+        width={120}
+      />
+    </div>
+  )
+}
+
 /**
  * The version's home page at three widths. A preview that could not be
  * read says so and can be read again, with no link implied where there is
@@ -657,15 +765,12 @@ function Screenshots({
         preview === "loading" ? (
           <Skeleton className="aspect-[3/4] rounded-md" key={where} />
         ) : (
-          <img
+          <Shot
             alt={`Version ${version}, home page ${where}`}
-            className="aspect-[3/4] w-full rounded-md border border-border bg-muted object-cover object-top"
-            height={160}
             key={where}
-            loading="lazy"
-            onError={() => setBroken(preview)}
+            onGiveUp={() => setBroken(preview)}
             src={preview.screenshots[index]}
-            width={120}
+            where={where}
           />
         )
       )}

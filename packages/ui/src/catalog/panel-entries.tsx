@@ -43,7 +43,7 @@ const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in, pinned so the snapshot does not tick. */
 const NOW = Date.parse(STARTED) + 250_000
 const NOW_ISO = new Date(NOW).toISOString()
-const TYPICAL = { min: 115, max: 313 }
+const EXPECTED = { p50: 180, p95: 330 }
 const EXPIRES = "2026-10-04T09:00:00.000Z"
 const REVISION: ApprovalTarget = {
   kind: "revision",
@@ -143,7 +143,7 @@ const working = (state: AssignmentState, extra = {}) => (
     }}
     now={NOW}
     onStop={noop}
-    typical={TYPICAL}
+    expectedSeconds={EXPECTED}
     {...extra}
   />
 )
@@ -364,6 +364,38 @@ const panelCatalog: Entry[] = [
     ),
   },
   { name: "WorkingOn", render: () => working("implementing") },
+  {
+    name: "WorkingOn with activity",
+    render: () =>
+      working("implementing", {
+        build: {
+          goal: "Lead the hero with end of tenancy cleans",
+          state: "implementing",
+          version: null,
+          startedAt: STARTED,
+          lane: "full",
+          activity: [
+            { id: "planning", label: "Planning the layout", done: 1, total: 1 },
+            { id: "writing", label: "Writing the pages", done: 3, total: 5 },
+            { id: "photos", label: "Making photos", done: 0, total: 7 },
+          ],
+        },
+      }),
+  },
+  {
+    name: "WorkingOn quick lane",
+    render: () =>
+      working("revising", {
+        build: {
+          goal: "Change the hero title",
+          state: "revising",
+          version: null,
+          startedAt: STARTED,
+          lane: "quick",
+        },
+        expectedSeconds: { p50: 15, p95: 45 },
+      }),
+  },
   {
     name: "WorkingOn with a queue",
     render: () =>
