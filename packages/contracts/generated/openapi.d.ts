@@ -213,6 +213,10 @@ export interface components {
                         | "ultra_violet"
                         | "graphite"
                         | "onyx"
+                        | "mint"
+                        | "royal"
+                        | "meadow"
+                        | "pebble"
                       )
                     | "custom"
                   custom?: string
@@ -826,6 +830,10 @@ export interface components {
                     | "ultra_violet"
                     | "graphite"
                     | "onyx"
+                    | "mint"
+                    | "royal"
+                    | "meadow"
+                    | "pebble"
                   )
                 | "custom"
               custom?: string
@@ -1075,6 +1083,10 @@ export interface components {
                         | "ultra_violet"
                         | "graphite"
                         | "onyx"
+                        | "mint"
+                        | "royal"
+                        | "meadow"
+                        | "pebble"
                       )
                     | "custom"
                   custom?: string
@@ -1344,6 +1356,10 @@ export interface components {
                   | "ultra_violet"
                   | "graphite"
                   | "onyx"
+                  | "mint"
+                  | "royal"
+                  | "meadow"
+                  | "pebble"
                 )
               | "custom"
             custom?: string
@@ -1594,6 +1610,10 @@ export interface components {
                         | "ultra_violet"
                         | "graphite"
                         | "onyx"
+                        | "mint"
+                        | "royal"
+                        | "meadow"
+                        | "pebble"
                       )
                     | "custom"
                   custom?: string
@@ -1883,6 +1903,10 @@ export interface components {
               | "ultra_violet"
               | "graphite"
               | "onyx"
+              | "mint"
+              | "royal"
+              | "meadow"
+              | "pebble"
           }
         | {
             /** @constant */
@@ -2144,6 +2168,10 @@ export interface components {
                 | "ultra_violet"
                 | "graphite"
                 | "onyx"
+                | "mint"
+                | "royal"
+                | "meadow"
+                | "pebble"
             }
           | {
               /** @constant */
@@ -2648,6 +2676,10 @@ export interface components {
                                           | "ultra_violet"
                                           | "graphite"
                                           | "onyx"
+                                          | "mint"
+                                          | "royal"
+                                          | "meadow"
+                                          | "pebble"
                                         )
                                       | "custom"
                                     custom?: string
@@ -2909,6 +2941,10 @@ export interface components {
                                           | "ultra_violet"
                                           | "graphite"
                                           | "onyx"
+                                          | "mint"
+                                          | "royal"
+                                          | "meadow"
+                                          | "pebble"
                                         )
                                       | "custom"
                                     custom?: string
@@ -3416,6 +3452,10 @@ export interface components {
                     | "ultra_violet"
                     | "graphite"
                     | "onyx"
+                    | "mint"
+                    | "royal"
+                    | "meadow"
+                    | "pebble"
                   )
                 | "custom"
               custom?: string
@@ -3795,6 +3835,10 @@ export interface components {
                           | "ultra_violet"
                           | "graphite"
                           | "onyx"
+                          | "mint"
+                          | "royal"
+                          | "meadow"
+                          | "pebble"
                         )
                       | "custom"
                     custom?: string
@@ -4378,6 +4422,10 @@ export interface components {
         | "ultra_violet"
         | "graphite"
         | "onyx"
+        | "mint"
+        | "royal"
+        | "meadow"
+        | "pebble"
       )[]
       /** @enum {string} */
       hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
@@ -4700,6 +4748,10 @@ export interface components {
                   | "ultra_violet"
                   | "graphite"
                   | "onyx"
+                  | "mint"
+                  | "royal"
+                  | "meadow"
+                  | "pebble"
                 )
               | "custom"
             custom?: string
@@ -5011,6 +5063,10 @@ export interface components {
         | "ultra_violet"
         | "graphite"
         | "onyx"
+        | "mint"
+        | "royal"
+        | "meadow"
+        | "pebble"
       label: string
       paper: string
       ink: string
@@ -5434,6 +5490,10 @@ export interface components {
                     | "ultra_violet"
                     | "graphite"
                     | "onyx"
+                    | "mint"
+                    | "royal"
+                    | "meadow"
+                    | "pebble"
                   )
                 | "custom"
               custom?: string

@@ -50,7 +50,7 @@ it("shows every option once before any repeats, and never the same four twice ru
   let shown = ids.slice(0, 4)
   let seen = [...shown]
   const round = [...shown]
-  for (let press = 0; press < 3; press++) {
+  for (let press = 0; press < ids.length / 4 - 1; press++) {
     const next = nextShown(ids, shown, seen, random)
     expect(next.shown).toHaveLength(4)
     expect(next.shown.some((id) => shown.includes(id))).toBe(false)

@@ -10,7 +10,8 @@
    The brand ramp defaults to the shared accent. When the owner has chosen a
    colour, src/brand.ts derives --brand, --brand-foreground and --brand-text
    from it at build time, checks both pairs against WCAG AA and writes them into
-   the page head, which overrides the three below and leaves the rest to follow. */
+   the page head, which overrides the three below and leaves the rest to follow.
+   It writes the other roles too, read below as --role-*. */
 
 :root {
   /* The chosen pair, when there is one: Astro writes --face-body and
@@ -84,8 +85,18 @@
   --brand: var(--primary);
   --brand-foreground: var(--primary-foreground);
   --brand-text: var(--primary);
-  --brand-soft: color-mix(in oklch, var(--brand) 7%, var(--background));
-  --brand-line: color-mix(in oklch, var(--brand) 22%, var(--border));
+  /* The palette's roles. brandTheme writes --role-tint, --role-line and
+     --role-accent (and sets --background to paper, --foreground to ink) from
+     the owner's colour; a site with none keeps the mixes. */
+  --brand-soft: var(
+    --role-tint,
+    color-mix(in oklch, var(--brand) 7%, var(--background))
+  );
+  --brand-line: var(
+    --role-line,
+    color-mix(in oklch, var(--brand) 22%, var(--border))
+  );
+  --brand-accent: var(--role-accent, var(--brand));
 
   --radius-card: var(--radius-lg);
   --radius-button: var(--radius-md);

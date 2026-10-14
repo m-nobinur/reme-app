@@ -20,6 +20,7 @@ import {
   FONTS,
   FontId,
   INDUSTRIES,
+  PALETTES,
   TEMPLATES,
   TemplateId,
 } from "../src/index.ts"
@@ -100,6 +101,26 @@ describe("Palette", () => {
     for (const { text, on } of PALETTE_AA_PAIRS) {
       const ratio = contrast(palette[text] as string, palette[on] as string)
       expect(ratio, `${text} on ${on}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it("reads at AA on every named pair, for every shipped palette", () => {
+    for (const {
+      id,
+      label,
+      hint: _hint,
+      brand: _b,
+      swatches: _s,
+      ...roles
+    } of PALETTES) {
+      const palette = Palette.parse({ id, label, ...roles }) as Record<
+        string,
+        string
+      >
+      for (const { text, on } of PALETTE_AA_PAIRS) {
+        const ratio = contrast(palette[text] as string, palette[on] as string)
+        expect(ratio, `${id}: ${text} on ${on}`).toBeGreaterThanOrEqual(4.5)
+      }
     }
   })
 
