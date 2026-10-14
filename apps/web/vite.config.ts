@@ -25,7 +25,19 @@ const markdownHtml: Plugin = {
 }
 
 const config = defineConfig({
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // pnpm installs @assistant-ui/react twice, once per `ai` peer (zod 3 for
+    // packages/ui, zod 4 for the app), and each copy brings its own core. A
+    // history adapter provided through one is invisible to the runtime built
+    // from the other, so a reloaded conversation opened empty.
+    dedupe: [
+      "@assistant-ui/react",
+      "@assistant-ui/core",
+      "@assistant-ui/store",
+      "@assistant-ui/tap",
+    ],
+  },
   plugins: [
     // First: merges the Worker config into the framework's SSR build, so dev,
     // preview and production all run on workerd.
