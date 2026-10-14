@@ -1,0 +1,9 @@
+---
+import { site } from "../../site-config"
+---
+
+{ site.x && (<p style="border-color: #12543e">{site.x}</p>) }
+
+<style>
+  p { color: #12543e; }
+</style>
