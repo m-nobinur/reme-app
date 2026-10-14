@@ -1,4 +1,5 @@
 import {
+  Blueprint,
   CompletionReport,
   type FactRecord,
   FactSnapshot,
@@ -99,6 +100,14 @@ export async function assignmentFacts(
   return [...snapshot.facts, ...answered]
 }
 
+/** The planned build's slots and pages for the claims gate; nothing for a build that did not plan. */
+const planned = (blueprint: unknown) => {
+  const plan = Blueprint.safeParse(blueprint)
+  return plan.success
+    ? { plan: { images: plan.data.images, pages: plan.data.pages } }
+    : {}
+}
+
 export type Verdict =
   | { outcome: "preview_ready"; report_id: string }
   | { outcome: "repairing"; report_id: string; failed: GateResult[] }
@@ -195,6 +204,7 @@ export async function validateRevision(
     facts: factsUsed,
     hosts: [siteHost(slug ?? "", hostSuffix)],
     timings,
+    ...planned(row.blueprint),
   })
 
   const gates: GateResult[] = await Promise.all(

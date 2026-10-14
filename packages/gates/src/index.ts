@@ -424,6 +424,8 @@ export async function runGates(input: {
   evidence?: (key: string) => Promise<Uint8Array | null>
   /** Filled with milliseconds per gate, and `read` for the page reads. */
   timings?: Record<string, number>
+  /** The Blueprint's image slots and pages, so a generated photo in a claim section fails (ADR-039). */
+  plan?: Parameters<typeof generatedImageFindings>[0]
 }): Promise<GateResult[]> {
   const lap = <T>(name: string, fn: () => T): T => {
     const started = Date.now()
@@ -493,7 +495,7 @@ export async function runGates(input: {
     lap("links", () => checkLinks(pages, parsed.data.files)),
     lap("structured_data", () => checkStructuredData(pages)),
     lap("content", () => checkContent(pages, input.facts, input.hosts)),
-    lap("claims", () => checkClaims(pages, input.facts)),
+    lap("claims", () => checkClaims(pages, input.facts, input.plan)),
     axe,
     await (async () => {
       const started = Date.now()

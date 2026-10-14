@@ -9,6 +9,15 @@ import {
   industryOf,
   packVoice,
 } from "../src/developer-rules.ts"
+import {
+  copyFields,
+  FAN_OUT,
+  leadLines,
+  pageInstructions,
+  pageOfPrompt,
+  pageTasks,
+  taskGroups,
+} from "../src/fanout.ts"
 import { BUILD_MARK, instructions } from "../src/instructions.ts"
 import { fallbackBlueprint } from "../src/planner.ts"
 
@@ -171,5 +180,51 @@ describe("the pack voice slot", () => {
     expect(instructions(brief([cleaning]), 20)).toContain("Industry pack")
     const other = fact("business.industry", { name: "X", category: null })
     expect(instructions(brief([other]), 20)).not.toContain("Industry pack")
+  })
+})
+
+const fanPlan = fallbackBlueprint({ facts: [cleaning], recent: [] })
+const planned = { ...brief([cleaning]), blueprint: fanPlan }
+
+describe("the parallel first build", () => {
+  it("gives every site field to one owner at most, the copy writer's to no page", () => {
+    const owned = [
+      ...pageTasks(fanPlan).flatMap((t) => t.fields),
+      ...copyFields(fanPlan),
+    ]
+    expect(owned.length).toBeGreaterThan(0)
+    expect(new Set(owned).size).toBe(owned.length)
+    expect(copyFields(fanPlan)).toContain("homeTitle")
+    expect(pageTasks(fanPlan).map((t) => t.page)).toEqual(
+      fanPlan.pages.map((p) => p.page)
+    )
+  })
+
+  it("sends at most four tasks a turn, every page once and the copy writer once", () => {
+    const groups = taskGroups(fanPlan)
+    expect(groups.every((g) => g.length <= FAN_OUT)).toBe(true)
+    const all = groups.flat()
+    expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
+    expect(
+      all.filter((t) => t.agent === "page").map((t) => pageOfPrompt(t.prompt))
+    ).toEqual(fanPlan.pages.map((p) => p.page))
+  })
+
+  it("tells a planned first build's lead to fan out, and no one else", () => {
+    const text = instructions(planned, 20)
+    for (const line of leadLines(planned, fanPlan)) expect(text).toContain(line)
+    expect(text).toContain("<use_parallel_tool_calls>")
+    expect(instructions({ ...planned, restore_key: "k" }, 20)).not.toContain(
+      "<use_parallel_tool_calls>"
+    )
+    expect(instructions(brief([cleaning]), 20)).not.toContain("task agent")
+  })
+
+  it("gives every page builder the same instructions, the facts and the plan included", () => {
+    const text = pageInstructions(planned)
+    expect(text).toBe(pageInstructions(planned))
+    expect(text).toContain("Blueprint, the plan the owner approved")
+    expect(text).toContain("Canonical facts")
+    expect(text).not.toContain("ask_chief for the first missing")
   })
 })

@@ -11,6 +11,7 @@ import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
+import { planNote } from "./blueprint-plan"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
@@ -52,6 +53,7 @@ export function useConversationRuntime({
   suggestions,
   intent,
   onIntentSent,
+  planChange,
 }: {
   onFinish: () => void
   suggestions: ThreadSuggestion[]
@@ -62,6 +64,12 @@ export function useConversationRuntime({
    */
   intent?: { current: ChatRequest["intent"] }
   onIntentSent?: () => void
+  /**
+   * Set while a Blueprint card waits (blueprint-plan.tsx): a message that
+   * finishes its "Change something" goes there as the owner's note, not to
+   * the chat. A ref for the same reason as `intent`.
+   */
+  planChange?: { current: ((note: string) => Promise<boolean>) | null }
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -168,6 +176,14 @@ export function useConversationRuntime({
           quoteChanges(chat.messages, text, carried) ??
           blueprintChanges(chat.messages, text, carried)
         if (changes) return addToolOutput(changes)
+        const note = carried ? null : planNote(text)
+        const decide = planChange?.current
+        if (note !== null && decide) {
+          // A refused note goes back into the composer, as a failed turn's words do.
+          return decide(note).then((done) => {
+            if (!done) runtime.thread.composer.setText(text)
+          })
+        }
         chat.setMessages(cancelOvertaken)
         if (!carried) return chat.sendMessage(message, options)
         onIntentSent?.()

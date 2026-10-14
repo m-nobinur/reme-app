@@ -33,6 +33,7 @@ import {
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { usePlanCard } from "./blueprint-plan"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { asked, missingConversations, startsNewChat } from "./history"
@@ -87,6 +88,11 @@ export function ChatPage() {
   )
   const intent = useRef<"site_change" | undefined>(undefined)
   intent.current = siteChange ? "site_change" : undefined
+  // A Blueprint waiting on the owner, from the polled workspace like the
+  // ready card; a typed "Change the plan: …" goes to it.
+  const plan = usePlanCard(live)
+  const planChange = useRef(plan.change)
+  planChange.current = plan.change
   const useThreadRuntime = () =>
     useConversationRuntime({
       // A turn can change what waits on the owner and the conversation's
@@ -103,6 +109,7 @@ export function ChatPage() {
       suggestions: id ? [] : briefing.suggestions,
       intent,
       onIntentSent: () => setSiteChange(null),
+      planChange,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -184,7 +191,12 @@ export function ChatPage() {
             <UploadPhotosProvider value={uploadPhotos}>
               <SaveDesignAnswerProvider value={saveDesignAnswer}>
                 <Thread
-                  after={<SiteReadyCard />}
+                  after={
+                    <>
+                      {plan.card}
+                      <SiteReadyCard />
+                    </>
+                  }
                   briefing={briefing.line}
                   components={{ ToolFallback: Approval }}
                   mode={mode}

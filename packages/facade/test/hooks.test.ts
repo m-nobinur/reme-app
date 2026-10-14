@@ -502,6 +502,25 @@ describe("the turn gate", () => {
     )
   })
 
+  it("cuts a subagent's answer to the lead at 4,000 characters and leaves a short one alone", async () => {
+    const gate = createTurnGate()
+    const answer = (text: string) => async () => ({
+      content: [{ type: "text", text }],
+    })
+    const long = (await gate.interceptor(
+      op("task"),
+      ctx,
+      answer("x".repeat(9_000))
+    )) as { content: { text: string }[] }
+    expect(long.content[0]?.text).toContain("cut at 4000 of 9000")
+    expect(long.content[0]?.text.length).toBeLessThan(4_200)
+    await expect(
+      gate.interceptor(op("task"), ctx, answer("Filled the about page."))
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "Filled the about page." }],
+    })
+  })
+
   it("refuses a terminal call while a task runs, so a report never builds under a child's edit", async () => {
     const gate = createTurnGate()
     let release: (v: string) => void = () => undefined

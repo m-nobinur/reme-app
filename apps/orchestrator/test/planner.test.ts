@@ -11,9 +11,11 @@ import {
   diversityNote,
   fallbackBlueprint,
   outputSchema,
+  ownerChoices,
   plan,
   plannerPrompt,
   problems,
+  withOwnerChoices,
 } from "../src/planner.ts"
 
 // brief.ts names the registry host from sandbox.ts, which loads the container SDK.
@@ -145,6 +147,26 @@ describe("the fallback Blueprint", () => {
       "contact",
       "quote",
     ])
+  })
+
+  it("takes the owner's direction and font pair from the design tray", () => {
+    const facts = [
+      ...CLEANING,
+      fact("site.direction", { id: "counsel" }),
+      fact("site.font", { id: "sora_manrope" }),
+    ]
+    const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
+    expect([made.direction, made.fonts]).toEqual(["counsel", "sora_manrope"])
+    // Left to the builder, or the assistant's guess: the plan decides.
+    for (const held of [
+      fact("site.direction", { id: "builder" }),
+      fact("site.direction", { id: "counsel" }, "inferred"),
+    ]) {
+      expect(ownerChoices([...CLEANING, held]).direction).toBeUndefined()
+    }
+    expect(
+      withOwnerChoices({ ...made, direction: "calm_daylight" }, facts).direction
+    ).toBe("counsel")
   })
 
   it("takes the direction recent sites used least", () => {

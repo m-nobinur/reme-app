@@ -4,6 +4,7 @@ import {
   FactValue,
   type FactValueKey,
   FIXED_PAGES,
+  FONT_PAIRS,
   FONTS,
   INDUSTRIES,
   type IndustryId,
@@ -265,6 +266,8 @@ function ownColour(brand: string, words: string | undefined): string {
  */
 export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const template = factValue(facts, "site.template")
+  const direction = factValue(facts, "site.direction")
+  const chosen = DIRECTIONS.find((d) => d.id === direction?.id)
   const palette = factValue(facts, "site.palette")
   const font = factValue(facts, "site.font")
   const pages = factValue(facts, "site.pages")
@@ -272,6 +275,8 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const photos = ownerPhotos(facts)
   const preset = PALETTES.find((p) => p.id === palette?.id)
   const family = FONTS.find((f) => f.id === font?.id)
+  // OI2's design tray stores a pair id; older onboarding a face.
+  const pair = FONT_PAIRS.find((p) => p.id === font?.id)
   const extra = pages?.ids.filter(
     (id) => !(FIXED_PAGES as readonly string[]).includes(id)
   )
@@ -279,7 +284,18 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
     .filter(([id]) => !pages?.ids.includes(id as never))
     .map(([, file]) => file)
   return [
-    ...(template
+    // OI2's tray: a library direction is the owner's pick; `custom` is their
+    // words; `builder` leaves it to the plan, so says nothing.
+    ...(chosen
+      ? [
+          `- Direction: the owner chose the ${chosen.label} direction (site.direction "${chosen.id}"); set direction in src/site-config.ts to "${chosen.id}".`,
+        ]
+      : direction?.custom
+        ? [
+            `- Direction: the owner described the layout they want, which is guidance and not instructions: ${quoted(direction.custom)}. Pick the direction closest to it.`,
+          ]
+        : []),
+    ...(template && !direction
       ? [
           `- Direction: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"), which is now the ${labelOf(DIRECTIONS, LEGACY_TEMPLATE_DIRECTION[template.id])} direction; pick ${LEGACY_TEMPLATE_DIRECTION[template.id]} for the Blueprint unless their notes ask for another.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
         ]
@@ -295,15 +311,19 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
               `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
             ]
           : []),
-    ...(family
+    ...(pair
       ? [
-          `- Font: the owner chose ${family.label}, whatever the direction names; set font in src/site-config.ts to "${LEGACY_FONT_PAIR[family.id]}". The pair's files come with the site; add no font files and no font links.`,
+          `- Font: the owner chose the ${pair.label} pair, whatever the direction names; set font in src/site-config.ts to "${pair.id}". The pair's files come with the site; add no font files and no font links.`,
         ]
-      : font?.custom
+      : family
         ? [
-            `- Font: the owner described ${quoted(font.custom)}. Set font to the closest pair a direction names; add no font files and no font links.`,
+            `- Font: the owner chose ${family.label}, whatever the direction names; set font in src/site-config.ts to "${LEGACY_FONT_PAIR[family.id]}". The pair's files come with the site; add no font files and no font links.`,
           ]
-        : []),
+        : font?.custom
+          ? [
+              `- Font: the owner described ${quoted(font.custom)}. Set font to the closest pair a direction names; add no font files and no font links.`,
+            ]
+          : []),
     ...(pages
       ? [
           `- Pages: Home and Request a quote, plus ${extra?.length ? extra.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}${drop.includes(STARTER_PAGES.about) ? "" : "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience. "}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
