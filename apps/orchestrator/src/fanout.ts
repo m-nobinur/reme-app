@@ -158,7 +158,12 @@ export function leadLines(brief: Brief, plan: Blueprint): string[] {
 }
 
 /** What every child is told before its own part; one string for every page builder, so they share a cached prefix. */
-function childPrefix(brief: Brief, role: string): string[] {
+function childPrefix(
+  brief: Brief,
+  role: string,
+  /** The first rule: a page builder reads the file first, the copy writer does not need to. */
+  reading = "Read src/site-config.ts and the components your fields feed before you write."
+): string[] {
   const { facts } = brief.snapshot
   const pack = packVoice(facts)
   const { hidden } = factsToAsk(SEED_FIELDS, facts)
@@ -166,7 +171,7 @@ function childPrefix(brief: Brief, role: string): string[] {
     role,
     "",
     "Rules:",
-    "- The lead has written the shell: direction, font, colour and the `layout` export in src/site-config.ts. Read src/site-config.ts and the components your fields feed before you write.",
+    `- The lead has written the shell: direction, font, colour and the \`layout\` export in src/site-config.ts. ${reading}`,
     "- Edit only the site fields your task names, and your page's layout entry when it names one, in src/site-config.ts, with one edit call whose edits are each anchored on the field's own line. Never touch another field, another page's entry or any other file: other subagents are editing the same file now.",
     "- Never run astro check or astro build; the lead builds once, after you.",
     "- You cannot ask anyone anything. A field whose fact is missing stays empty; say so in your summary.",
@@ -206,14 +211,31 @@ export const pageInstructions = (brief: Brief) =>
     "You are a page builder at Reme. Your task names one page of this business's site and the site fields you own on it; you write that page's copy from the canonical facts and the Blueprint, and nothing else. Image fields take the paths the Blueprint's image slots give."
   ).join("\n")
 
+/**
+ * What the copy writer is told beyond the shared rules. The measured copy child
+ * took 98.5 s over 12 turns, against 8 to 25 s for a page: it drafted all 28
+ * values in a script (no python3 in the sandbox), counted characters in bash to
+ * hit 50 to 60 and 140 to 155 exactly, redrafted, edited, then measured and
+ * edited again. It owns a fixed list of empty fields and the build's copy check
+ * (packages/starter-site/src/copy-check.ts) already passes 45 to 65 and 120 to
+ * 165, so it is told to write once, by feel, and stop.
+ */
+export const COPY_WRITER_RULES = [
+  "- Write all your fields in one edit call as your first action, each edit anchored on the field's own empty line, for example `  homeTitle: \"\",`. Read a field's line only if an edit says it does not match. Use no other tool.",
+  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 145; the build's copy check accepts 45 to 65 and 120 to 165 and reports any line outside to the lead, who fixes it.",
+  "- FAQ answers say only what a fact says; a question no fact answers is left out, its fields empty.",
+  "- When the edit succeeds, stop and write the summary. Do not read the file back or check your work.",
+].join("\n")
+
 /** The copy writer's instructions: SEO titles and descriptions and the FAQ, from the facts. */
 export const copyInstructions = (brief: Brief) =>
   [
     ...childPrefix(
       brief,
-      "You are the copy writer at Reme. Your task names the site fields you own: each page's SEO title and description, and the FAQ entries."
+      "You are the copy writer at Reme. Your task names the site fields you own: each page's SEO title and description, and the FAQ entries.",
+      "Your fields are empty, one to a line, in src/site-config.ts, and everything you need is below."
     ),
-    "- A title is under 60 characters and names the business and the page; a description is one sentence under 155 characters. FAQ answers say only what a fact says; a question no fact answers is left out, its fields empty.",
+    COPY_WRITER_RULES,
   ].join("\n")
 
 /** The catalog lines the lead sees for each subagent. */

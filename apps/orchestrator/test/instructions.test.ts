@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import type { FactRecord } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it, vi } from "vitest"
@@ -10,7 +11,9 @@ import {
   packVoice,
 } from "../src/developer-rules.ts"
 import {
+  COPY_WRITER_RULES,
   copyFields,
+  copyInstructions,
   FAN_OUT,
   leadLines,
   pageInstructions,
@@ -230,6 +233,38 @@ describe("the parallel first build", () => {
     expect(text).toContain("Blueprint, the plan the owner approved")
     expect(text).toContain("Canonical facts")
     expect(text).not.toContain("ask_chief for the first missing")
+  })
+
+  it("has the copy writer write its fields in one edit and stop, not draft, count and re-edit", () => {
+    const text = copyInstructions(planned)
+    expect(text).toContain(COPY_WRITER_RULES)
+    expect(text).toContain("Write all your fields in one edit call")
+    expect(text).toContain("Never count characters")
+    expect(text).toContain("stop and write the summary")
+    // Its fields are empty lines it can anchor on, so it is not sent to read the file first.
+    expect(text).not.toContain("Read src/site-config.ts and the components")
+    expect(pageInstructions(planned)).toContain(
+      "Read src/site-config.ts and the components"
+    )
+  })
+
+  it("quotes the copy check's own ranges to the copy writer", () => {
+    const source = readFileSync(
+      new URL(
+        "../../../packages/starter-site/src/copy-check.ts",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    const range = (name: string) => {
+      const [m] = source.matchAll(
+        new RegExp(`${name} = \\{ min: (\\d+), max: (\\d+) \\}`, "g")
+      )
+      if (!m) throw new Error(`${name} is not in copy-check.ts`)
+      return `${m[1]} to ${m[2]}`
+    }
+    expect(COPY_WRITER_RULES).toContain(range("TITLE_CHARS"))
+    expect(COPY_WRITER_RULES).toContain(range("DESCRIPTION_CHARS"))
   })
 })
 
