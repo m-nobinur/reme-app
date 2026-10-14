@@ -111,7 +111,10 @@ function FixtureThread({
   isLoading = false,
   bare = false,
   rates = false,
+  stored,
 }: {
+  /** The thread is this stored conversation, as at `/app/c/$id`. */
+  stored?: string
   height?: string
   /** Records a thumb on a reply, as the app does, so the thumbs show. */
   rates?: boolean
@@ -137,7 +140,24 @@ function FixtureThread({
     messages,
     onNew: noop,
     suggestions,
-    ...(rates ? { adapters: { feedback: { submit: noop } } } : {}),
+    adapters: {
+      ...(rates ? { feedback: { submit: noop } } : {}),
+      ...(stored
+        ? {
+            threadList: {
+              threadId: stored,
+              threads: [
+                {
+                  id: stored,
+                  remoteId: stored,
+                  status: "regular" as const,
+                  title: "Getting started",
+                },
+              ],
+            },
+          }
+        : {}),
+    },
   })
 
   return (
@@ -176,6 +196,7 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
       settings={{
         placeholder: "Ask Reme anything…",
         quickActions: OWNER_QUICK_ACTIONS,
+        ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
       }}
     />
@@ -1658,7 +1679,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
  * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
  * alone at phone and desktop widths.
  */
-function ConversationSample() {
+function ConversationSample({ stored }: { stored?: string }) {
   return (
     <WorkspaceShell
       className="h-192 border border-border"
@@ -1672,13 +1693,14 @@ function ConversationSample() {
         <span className="text-muted-foreground text-sm">Nothing right now</span>
       }
       rail={<p className="text-sm">Brightclean</p>}
-      title="New chat"
+      title={stored ? "Getting started" : "New chat"}
     >
       <OwnerThread
         bare
         height="h-full"
         isDisabled={false}
         messages={[]}
+        {...(stored ? { stored } : {})}
         settings={{
           briefing: "v3 is live. Version 4 is ready for you to approve.",
         }}
@@ -2087,6 +2109,12 @@ const assistantCatalog = [
     ),
   },
   { name: "Conversation", render: () => <ConversationSample /> },
+  // A stored conversation with nothing in it yet, as onboarding opens: the
+  // same welcome and suggestions, composer in the middle.
+  {
+    name: "Conversation stored and empty",
+    render: () => <ConversationSample stored="stored-1" />,
+  },
   {
     name: "ConversationMenu",
     render: () => <ConversationMenu newChat={<a href="#new" />} />,

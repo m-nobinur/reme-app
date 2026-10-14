@@ -104,9 +104,10 @@ export function ChatPage() {
       // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.2
       // the adapter runs only after an assistant turn ends and then replaces
       // these, and the empty thread is the only place suggestions show.
-      // A stored conversation never offers them: one pressed while its
-      // history loaded started a second conversation.
-      suggestions: id ? [] : briefing.suggestions,
+      // A stored conversation shows them only when it is empty, and the thread
+      // calls it empty only once its history is in: one pressed while it
+      // loaded started a second conversation.
+      suggestions: briefing.suggestions,
       intent,
       onIntentSent: () => setSiteChange(null),
       planChange,

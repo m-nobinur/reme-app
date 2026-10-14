@@ -134,6 +134,7 @@ export type ThreadProps = {
    * The id of a stored conversation, at its own address. It is never a new
    * chat: while its history loads it shows a skeleton, never the welcome or
    * suggestions, and nothing sends until the thread is that conversation.
+   * Once loaded and still empty it shows the welcome, like a new chat.
    */
   stored?: string | undefined
   autoFocus?: boolean | undefined
@@ -261,7 +262,21 @@ export const Thread: FC<ThreadProps> = ({
   after,
   reveal,
 }) => {
-  const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
+  // A stored conversation with nothing in it is as empty as a new chat, once
+  // its history is in: the same welcome and suggestions, with the composer in
+  // the middle. Until then it is loading, and the held flag keeps the render
+  // in between from showing the welcome.
+  const loadingStored = useAuiState((s) =>
+    stored
+      ? s.thread.isLoading ||
+        s.threads.isLoading ||
+        s.threadListItem.remoteId !== stored
+      : false
+  )
+  const holdStored = useHeld(loadingStored, 300)
+  const isEmpty = useAuiState((s) =>
+    stored ? !holdStored && s.thread.messages.length === 0 : isNewChatView(s)
+  )
   const settings = useMemo(
     () => ({ stored, placeholder, briefing, quickActions, mode, reveal }),
     [stored, placeholder, briefing, quickActions, mode, reveal]
