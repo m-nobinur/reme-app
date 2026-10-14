@@ -131,6 +131,7 @@ const STATES: [string, QuestionTrayStart | undefined, string?][] = [
   ],
   ["Collapsed", { index: 1, collapsed: true }],
   ["Phone width", { index: 0 }, "max-w-[22.5rem]"],
+  ["Phone width, lettering", { index: 1 }, "max-w-[22.5rem]"],
   ["Phone width, layout", { index: 2 }, "max-w-[22.5rem]"],
 ]
 

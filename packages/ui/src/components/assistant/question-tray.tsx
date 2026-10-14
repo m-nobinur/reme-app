@@ -377,7 +377,7 @@ function Picture({ option, stops }: { option: Option; stops: Stops }) {
     return (
       <span aria-hidden className="flex w-full flex-col gap-0.5">
         <span
-          className="truncate text-lg leading-tight"
+          className="wrap-break-word text-lg leading-tight"
           style={{
             fontFamily: face(display),
             fontWeight: displayWeight(display),
@@ -386,7 +386,7 @@ function Picture({ option, stops }: { option: Option; stops: Stops }) {
           Title · {display}
         </span>
         <span
-          className="truncate text-muted-foreground text-sm"
+          className="wrap-break-word text-muted-foreground text-sm"
           style={{ fontFamily: face(body) }}
         >
           Body · {body}
@@ -622,7 +622,12 @@ function QuestionTray({
               <div
                 aria-labelledby={`${id}-question`}
                 className={cn(
-                  "grid grid-cols-1 gap-2 min-[380px]:grid-cols-2",
+                  "grid grid-cols-1 gap-2",
+                  // A pair's names are long, so they stay one to a row until
+                  // two fit side by side.
+                  question.visual === "font_pair"
+                    ? "@md:grid-cols-2"
+                    : "min-[380px]:grid-cols-2",
                   // Four wireframes in a row once the tray is wide, so the
                   // arrangement question fits without a scroll.
                   question.visual === "layout" && "@xl:grid-cols-4"
