@@ -230,6 +230,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         questions: [],
         approvals: [],
         missing_facts: expect.any(Array),
+        expected_seconds: expect.any(Object),
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
     })
