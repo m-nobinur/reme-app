@@ -40,22 +40,16 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import type { Brief } from "../brief.ts"
-import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
+import { instructions } from "../instructions.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
   askedOptions,
   refuseQuestion,
 } from "../question.ts"
-import { repoMap } from "../repo-map.ts"
 import { placePhotos, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
-import {
-  QUOTE_FORM_FILE,
-  quoteFormFile,
-  SEED_DIGEST,
-  seedFiles,
-} from "../seed.ts"
+import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
 import { since } from "../timing.ts"
@@ -283,57 +277,6 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
   return created
 }
 
-/**
- * The stable prompt segment, ordered from what every build shares to what
- * only this one has, so a provider that caches the longest repeated prefix
- * reuses it across builds: the role and the rules that never change, the
- * starter's components, then this business's rules and facts, the site map,
- * and last the assignment's goal and budget. The whole segment is fixed for
- * a build, so its calls reuse all of it.
- */
-function instructions(brief: Brief, runtime: ResolvedRuntime): string {
-  const facts = brief.snapshot.facts
-    .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
-    .join("\n")
-  const revising = brief.restore_key !== null
-  return [
-    revising
-      ? "You are the Developer at Reme, revising a small business's published website in the Astro site under /workspace/site. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is. You build from canonical facts and from nothing else."
-      : "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
-    "",
-    "Rules:",
-    "- Build pages from the components listed below, as their manifests say, and never in a way a manifest forbids.",
-    "- Read every file you need in one turn; reads run together.",
-    "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
-    "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
-    "- Call checkpoint after a coherent set of edits.",
-    "- A run.interrupted message means your turn ended before you finished it. Your work up to your last checkpoint is there; anything after it may not be. Look at git log and git status, then continue from what you find.",
-    "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
-    "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
-    "",
-    "Components (name, file, props, never):",
-    SEED_DIGEST,
-    "",
-    "Rules for this site:",
-    ...siteRules(revising, brief.snapshot.facts, goalTainted(brief, revising)),
-    "",
-    `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
-    facts || "- (none)",
-    "",
-    "Site map (every file, in path order):",
-    // The seed's own map, built from the files the sandbox is seeded with so
-    // it cannot drift from them. A restored site (`site.revise`) carries its
-    // own map in the brief, built from the container by the Workflow.
-    brief.map ?? repoMap(seedFiles(brief.snapshot.facts)),
-    "",
-    assignmentGoal(brief, revising),
-    "Acceptance criteria:",
-    ...brief.acceptance_criteria.map((c) => `- ${c}`),
-    "",
-    `Budget: ${runtime.budget.model_usd_cap} USD of model spend for this assignment. Be brief.`,
-  ].join("\n")
-}
-
 export function Developer({ id }: AgentProps) {
   const raw = useInitialData<Brief | undefined>()
   if (!raw) throw new Error("the Developer needs a brief at creation")
@@ -406,7 +349,7 @@ export function Developer({ id }: AgentProps) {
       // §10.6: what the model was shown is in the log before it is shown.
       current.tee.emit("runtime.context_segment", {
         snapshot_id: brief.snapshot.snapshot_id,
-        instructions: instructions(brief, runtime),
+        instructions: instructions(brief, runtime.budget.model_usd_cap),
       })
       setSegmentLogged(true)
     }
@@ -469,7 +412,7 @@ export function Developer({ id }: AgentProps) {
     current.tee.flush().catch(() => undefined)
   })
 
-  return instructions(brief, runtime)
+  return instructions(brief, runtime.budget.model_usd_cap)
 }
 
 Developer.agentName = "developer"

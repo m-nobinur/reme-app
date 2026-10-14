@@ -566,7 +566,7 @@ function createCheckpointTool(sandbox: Sandbox, root: string, git: string) {
     name: "checkpoint",
     label: "Checkpoint",
     description:
-      "Commit the current state of the site with a one-line summary. Call it after a coherent set of edits.",
+      "Commit the current state of the site with a one-line summary. Call it after a coherent set of edits, and before a risky change, so a later turn or an interrupted one can start from here. Only the lead builder calls it; a subagent that needs one reports to the lead instead.",
     parameters: Type.Object({
       summary: Type.String({
         description: "One line saying what the edits did",

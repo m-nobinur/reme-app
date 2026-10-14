@@ -1,0 +1,120 @@
+import type { FactRecord } from "@workspace/contracts"
+import { describe, expect, it } from "vitest"
+import type { Brief } from "../src/brief.ts"
+import { DESIGN_RULES, industryOf, packVoice } from "../src/developer-rules.ts"
+import { BUILD_MARK, instructions } from "../src/instructions.ts"
+
+const fact = (key: string, value: unknown): FactRecord => ({
+  fact_id: "10000001-0000-4000-8000-000000000001",
+  org_id: "10000001-0000-4000-8000-000000000000",
+  key,
+  fact_type: key.split(".")[0] as string,
+  value,
+  version: 1,
+  provenance: {
+    source: "owner_stated",
+    confidence: 1,
+    verified_by_staff_id: null,
+    verified_at: null,
+  },
+  valid_from: "2026-10-14T12:00:00.000Z",
+  valid_to: null,
+  superseded_by_fact_id: null,
+})
+
+const brief = (facts: FactRecord[], restore: string | null = null): Brief =>
+  ({
+    snapshot: { snapshot_id: "snap-1", facts },
+    goal: "Build the site",
+    goal_tainted: false,
+    acceptance_criteria: ["It builds"],
+    restore_key: restore,
+    map: "- src/site-config.ts",
+  }) as unknown as Brief
+
+const cleaning = fact("business.industry", {
+  name: "Bright Clean",
+  category: "cleaning",
+})
+const legal = fact("business.industry", {
+  name: "Hale and Co",
+  category: "legal",
+})
+
+describe("the twelve design rules", () => {
+  it("are numbered one to twelve and reach the instructions", () => {
+    expect(DESIGN_RULES).toHaveLength(12)
+    DESIGN_RULES.forEach((rule, i) => {
+      expect(rule.startsWith(`${i + 1}. `)).toBe(true)
+    })
+    const text = instructions(brief([cleaning]), 20)
+    for (const rule of DESIGN_RULES) expect(text).toContain(rule)
+  })
+})
+
+describe("the instructions' cache order", () => {
+  const at = (text: string, needle: string) => {
+    const i = text.indexOf(needle)
+    expect(i, needle).toBeGreaterThan(-1)
+    return i
+  }
+
+  it("runs rules, design rules, components, then the build, its facts, the map and the goal", () => {
+    const text = instructions(brief([cleaning]), 20)
+    const order = [
+      "Rules:",
+      "The site never shows a price",
+      "Design rules",
+      "Components (name, file, props, never):",
+      BUILD_MARK,
+      "This is a first build",
+      "Canonical facts",
+      "Site map",
+      "Assignment goal",
+      "Budget:",
+    ].map((needle) => at(text, needle))
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
+  it("shares one prefix across businesses and between a build and a revise", () => {
+    const prefix = (text: string) => text.slice(0, text.indexOf(BUILD_MARK))
+    const first = instructions(brief([cleaning]), 20)
+    const other = instructions(
+      brief([fact("business.name", "Someone Else")], "sites/x/source.tar.zst"),
+      5
+    )
+    expect(prefix(first).length).toBeGreaterThan(1000)
+    expect(prefix(other)).toBe(prefix(first))
+    expect(other).toContain("This is a revision")
+  })
+
+  it("keeps ADR-033 whole: no claim without a fact, the owner decides what is shown", () => {
+    const text = instructions(brief([cleaning], "sites/x/source.tar.zst"), 20)
+    expect(text).toContain("The site never shows a price")
+    expect(text).toContain("business.proof is the only source")
+    expect(text).toContain("It decides what the site shows")
+    expect(text).toContain("never a fact")
+  })
+})
+
+describe("the pack voice slot", () => {
+  const packs = { legal: ["- Plain words, no jargon."] }
+
+  it("is the industry's own notes and nothing for one without a pack", () => {
+    expect(industryOf([legal])).toBe("legal")
+    expect(packVoice([legal], packs)).toEqual(packs.legal)
+    expect(packVoice([cleaning], packs)).toEqual([])
+    expect(
+      packVoice(
+        [fact("business.industry", { name: "X", category: null })],
+        packs
+      )
+    ).toEqual([])
+    expect(packVoice([], packs)).toEqual([])
+  })
+
+  it("is empty today, so no segment is invented", () => {
+    expect(packVoice([cleaning])).toEqual([])
+    expect(instructions(brief([cleaning]), 20)).not.toContain("Industry pack")
+  })
+})

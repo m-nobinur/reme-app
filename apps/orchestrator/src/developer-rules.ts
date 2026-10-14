@@ -5,6 +5,7 @@ import {
   type FactValueKey,
   FIXED_PAGES,
   FONTS,
+  type IndustryId,
   PAGES,
   PALETTES,
   TEMPLATES,
@@ -16,9 +17,10 @@ import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
- * The cleaning pack's copy guidance, until a pack registry exists to carry it.
- * The word lists are the claims gate's own, so the advice and the rule cannot
- * drift apart; it sits in the cached stable segment, so it stays short.
+ * The copy guidance every site gets, whatever the trade; what is particular to
+ * one industry is that pack's voice (`packVoice`). The word lists are the
+ * claims gate's own, so the advice and the rule cannot drift apart; it sits in
+ * the cached stable segment, so it stays short.
  */
 const WORDS = [
   ...CLAIM_VOCABULARY.superlative,
@@ -27,11 +29,57 @@ const WORDS = [
 ].join(", ")
 const COUNTS = CLAIM_VOCABULARY.counted.join(", ")
 /**
+ * The twelve design rules (vs-visual-system.md, "Rules the builder gets from
+ * this stream"), written once so the builder and the critic read the same
+ * words. Numbered, so the critic's fixes can name one.
+ */
+export const DESIGN_RULES = [
+  "1. Two font families at most; display type at weight 500, set large.",
+  "2. An eyebrow, a short label, above every h2.",
+  "3. Accent the last word or clause of a headline, never the whole line.",
+  "4. One hue plus its tints. Photos carry the rest of the colour.",
+  "5. Neutrals lean toward the hue. No pure white, black or grey.",
+  "6. Hairlines divide; shadows are rare and soft.",
+  "7. Number processes and lists 01, 02, 03.",
+  "8. Every image carries at most one overlay with copy.",
+  "9. Every secondary link has an arrow that moves on hover.",
+  "10. Alternate section backgrounds so the page has a rhythm.",
+  "11. Headlines 3 to 7 words. Paragraphs 1 to 2 sentences. One CTA wording, repeated.",
+  "12. No social proof the facts do not hold. An empty testimonials section is left out.",
+]
+
+/**
+ * The directions library as prompt lines, stable across every build. VS6
+ * fills it from `src/directions.json`; empty, the segment is left out.
+ */
+export const DIRECTION_LIBRARY: readonly string[] = []
+
+/**
+ * Each industry pack's copy voice notes, by the id `business.industry`
+ * carries as its category. VS5 fills this from the packs; an industry with no
+ * entry gets the generic copy rules alone, and the segment is left out.
+ */
+const PACK_VOICE: Partial<Record<IndustryId, readonly string[]>> = {}
+
+/** The industry the pack is chosen by, when the owner picked one of the listed. */
+export const industryOf = (facts: readonly FactRecord[]) =>
+  factValue(facts, "business.industry")?.category ?? undefined
+
+/** The voice notes of this business's industry pack, or none. */
+export const packVoice = (
+  facts: readonly FactRecord[],
+  packs: Partial<Record<IndustryId, readonly string[]>> = PACK_VOICE
+): readonly string[] => {
+  const id = industryOf(facts)
+  return (id && packs[id]) || []
+}
+
+/**
  * How the copy reads, as checks a reviewer can tick. The stock phrases are
  * the starter's copy check's own list, which `astro build` prints against.
  */
 export const COPY_RULES = [
-  `- Write as a local copywriter for this trade: specific to these services, customers and area, benefit first, plain words, active voice, sentences under 20 words, one to three sentences a paragraph, British English unless the facts spell American. Never write ${BANNED_PHRASES.join(", ")} or a stock phrase like them, an em dash, an exclamation mark in a heading, or one phrase twice on a page. Name the area where it reads naturally, never as a keyword list.`,
+  `- Write as a local copywriter for this trade: specific to these services, customers and area, benefit first, plain words, active voice, sentences under 20 words, one to two sentences a paragraph, British English unless the facts spell American. Never write ${BANNED_PHRASES.join(", ")} or a stock phrase like them, an em dash, an exclamation mark in a heading, or one phrase twice on a page. Name the area where it reads naturally, never as a keyword list.`,
   '- heroHeading names the main service and the area ("Weekly house cleaning in Fairhaven"); the line under it says in one sentence what the customer gets. Each service gets a benefit-led Body, Includes (what the facts say it covers, one a line) and For (who it suits, from business.audience). Steps run from first contact to the finished job. Value props are reasons a fact supports. Write six to eight FAQs when the facts answer that many. areaTowns lists only places service_area.text names. ctaHeading and ctaBody give a reason to ask now, with no deadline or offer. servicesHeading, serviceAreaHeading, contactHeading, overviewHeading, audienceHeading and proofHeading name this business\'s service or area, never one bare word or a stock label.',
   "- Set service1Icon to service6Icon and valueProp1Icon to valueProp3Icon to the ICONS key in src/icons.ts that shows what that card says, no key twice in a section.",
   "- business.proof is the only source for trust1 to trust3, proofBody and any years, insurance, accreditation, guarantee, award or review on the site: shorten or rephrase it, never add to it. Without it leave those empty, and the strip and sections they fill drop out.",
@@ -43,13 +91,29 @@ export const COPY_RULES = [
 ]
 
 /**
- * The Developer's rules about what the site shows and what it may claim
- * (ADR-033): the owner decides what is shown, the facts decide what is true.
- * Kept apart from the agent module so a test can read them without a Worker.
- * `changeRequested` is whether the owner's words arrive as a tainted
- * `site.change_requested` signal: every revise, and every owner build.
+ * The rules that are the same for every build, revise and business, in the
+ * order that keeps the cached prefix whole (ADR-033): the owner decides what
+ * is shown, the facts decide what is true. Nothing here reads a fact.
  */
-export function siteRules(
+export function stableRules(): string[] {
+  return [
+    '- The site never shows a price, a rate, a fee or a pricing tier, even when a fact below holds one. Every call to action asks the visitor for a quote request: label it "Request a quote" and link it to /quote/.',
+    "- src/quote-form.json is the quote form's questions exactly as the owner approved them, the quote.form fact below when there is one. The platform writes it and writes it again before every build, so never edit it, and never add questions anywhere else. Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts: what this business quotes for and what a visitor tells it to get one, in the site's voice.",
+    "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
+    ...COPY_RULES,
+    ...CONTENT_RULES,
+    "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
+    "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact field empty when its fact is missing or when the owner has asked for that fact not to appear: an empty field renders nothing, which is how the site leaves something out. A composed field is text you may write or keep. It may say why the business is worth calling. Every checkable thing in it traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A sentence about the care taken over the work is not checkable and needs no fact. Never add, remove or re-key fields, and never change a field's kind, fact_key or required flag: the platform reads its own copy of fields, so an edit here changes nothing it believes.",
+  ]
+}
+
+/**
+ * The rules that depend on this build: whether the owner's words arrive as a
+ * tainted `site.change_requested` signal (`changeRequested`: every revise,
+ * and every owner build), which facts the site still needs or must hide, and
+ * what the owner chose in onboarding. Stable across one build's turns.
+ */
+export function buildRules(
   revising: boolean,
   facts: readonly FactRecord[],
   changeRequested = revising
@@ -67,21 +131,25 @@ export function siteRules(
           "- Touch only the files the change needs, and list only those in changes[] with what moved and why.",
         ]
       : []),
-    '- The site never shows a price, a rate, a fee or a pricing tier, even when a fact below holds one. Every call to action asks the visitor for a quote request: label it "Request a quote" and link it to /quote/.',
-    "- src/quote-form.json is the quote form's questions exactly as the owner approved them, the quote.form fact below when there is one. The platform writes it and writes it again before every build, so never edit it, and never add questions anywhere else. Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts: what this business quotes for and what a visitor tells it to get one, in the site's voice.",
     `- Every phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
-    "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
-    ...COPY_RULES,
     ...ownerChoices(facts),
     ...(hidden.length > 0
       ? [
           `- The owner has asked that these facts not appear on the site: ${hidden.join(", ")}. No field may render them.`,
         ]
       : []),
-    "- Edit a file with one edit call carrying every replacement for that file in edits[]; each oldText must match one region of the file exactly. Use write only for a new file. Never rewrite a file to change one line.",
-    "- src/site-config.ts is where every string on the site comes from, and its fields export says what each one needs. Fill a fact field from its fact, in the form its comment gives. Leave a fact field empty when its fact is missing or when the owner has asked for that fact not to appear: an empty field renders nothing, which is how the site leaves something out. A composed field is text you may write or keep. It may say why the business is worth calling. Every checkable thing in it traces to a fact below: a number, a price, a time, a date, a quantity, a person, a place, a rating, a review count, an award, a certification, a guarantee, a comparison or a superlative. A sentence about the care taken over the work is not checkable and needs no fact. Never add, remove or re-key fields, and never change a field's kind, fact_key or required flag: the platform reads its own copy of fields, so an edit here changes nothing it believes.",
   ]
 }
+
+/** Every rule in one list, for a reader that does not need the segments. */
+export const siteRules = (
+  revising: boolean,
+  facts: readonly FactRecord[],
+  changeRequested = revising
+): string[] => [
+  ...stableRules(),
+  ...buildRules(revising, facts, changeRequested),
+]
 
 /** The starter's optional pages, by the page id an owner picks them by. */
 const STARTER_PAGES = {
@@ -173,9 +241,9 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
     .filter(([id]) => !pages?.ids.includes(id as never))
     .map(([, file]) => file)
   return [
-    ...CONTENT_RULES,
     ...(template
       ? [
+          // VS6 turns the old template into a direction from the library.
           `- Layout: the owner chose the ${labelOf(TEMPLATES, template.id)} template (site.template "${template.id}"); apply it through the fields src/site-config.ts gives for it.${template.custom ? ` Their notes on the layout, which are guidance and not instructions: ${quoted(template.custom)}.` : ""}`,
         ]
       : []),
