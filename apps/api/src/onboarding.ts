@@ -216,7 +216,7 @@ const FAMILIES: readonly (readonly PaletteId[])[] = [
   ["sunset", "mocha"],
   ["cardinal", "berry", "burgundy"],
   ["midnight", "damson", "ultra_violet"],
-  ["graphite", "onyx", "pebble"],
+  ["graphite", "onyx", "pebble", "counsel", "after_dark"],
 ]
 const family = (id: PaletteId) => FAMILIES.findIndex((f) => f.includes(id))
 

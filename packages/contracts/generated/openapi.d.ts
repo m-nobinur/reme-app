@@ -217,6 +217,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -854,6 +856,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -1126,6 +1130,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -1419,6 +1425,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
                 )
               | "custom"
             custom?: string
@@ -1693,6 +1701,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                       )
                     | "custom"
                   custom?: string
@@ -2011,6 +2021,8 @@ export interface components {
               | "royal"
               | "meadow"
               | "pebble"
+              | "counsel"
+              | "after_dark"
           }
         | {
             /** @constant */
@@ -2276,6 +2288,8 @@ export interface components {
                 | "royal"
                 | "meadow"
                 | "pebble"
+                | "counsel"
+                | "after_dark"
             }
           | {
               /** @constant */
@@ -2592,6 +2606,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
               }
             | {
                 /** @constant */
@@ -2857,6 +2873,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
               }
             | {
                 /** @constant */
@@ -3316,6 +3334,8 @@ export interface components {
                                           | "royal"
                                           | "meadow"
                                           | "pebble"
+                                          | "counsel"
+                                          | "after_dark"
                                         )
                                       | "custom"
                                     custom?: string
@@ -3601,6 +3621,8 @@ export interface components {
                                           | "royal"
                                           | "meadow"
                                           | "pebble"
+                                          | "counsel"
+                                          | "after_dark"
                                         )
                                       | "custom"
                                     custom?: string
@@ -4132,6 +4154,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -4547,6 +4571,8 @@ export interface components {
                           | "royal"
                           | "meadow"
                           | "pebble"
+                          | "counsel"
+                          | "after_dark"
                         )
                       | "custom"
                     custom?: string
@@ -4760,6 +4786,8 @@ export interface components {
                               | "royal"
                               | "meadow"
                               | "pebble"
+                              | "counsel"
+                              | "after_dark"
                           }
                         | {
                             /** @constant */
@@ -5025,6 +5053,8 @@ export interface components {
                               | "royal"
                               | "meadow"
                               | "pebble"
+                              | "counsel"
+                              | "after_dark"
                           }
                         | {
                             /** @constant */
@@ -5700,6 +5730,8 @@ export interface components {
         | "royal"
         | "meadow"
         | "pebble"
+        | "counsel"
+        | "after_dark"
       )[]
       /** @enum {string} */
       hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
@@ -6026,6 +6058,8 @@ export interface components {
                   | "royal"
                   | "meadow"
                   | "pebble"
+                  | "counsel"
+                  | "after_dark"
                 )
               | "custom"
             custom?: string
@@ -6360,6 +6394,8 @@ export interface components {
         | "royal"
         | "meadow"
         | "pebble"
+        | "counsel"
+        | "after_dark"
       label: string
       paper: string
       ink: string
@@ -6519,6 +6555,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                     }
                   | {
                       /** @constant */
@@ -6784,6 +6822,8 @@ export interface components {
                         | "royal"
                         | "meadow"
                         | "pebble"
+                        | "counsel"
+                        | "after_dark"
                     }
                   | {
                       /** @constant */
@@ -7319,6 +7359,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                   )
                 | "custom"
               custom?: string
@@ -7642,6 +7684,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                 }
               | {
                   /** @constant */
@@ -7907,6 +7951,8 @@ export interface components {
                     | "royal"
                     | "meadow"
                     | "pebble"
+                    | "counsel"
+                    | "after_dark"
                 }
               | {
                   /** @constant */

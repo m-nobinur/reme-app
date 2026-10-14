@@ -55,7 +55,7 @@
     "paper": "#f8f9f8",
     "ink": "#171c19",
     "primary": "#54705c",
-    "tint": "#e6eae7",
+    "tint": "#e8ece9",
     "accent": "#37bea6",
     "line": "#d3d9d5"
   },
@@ -65,7 +65,7 @@
     "paper": "#faf8f7",
     "ink": "#201713",
     "primary": "#c2410c",
-    "tint": "#efe5e1",
+    "tint": "#f5efed",
     "accent": "#bea737",
     "line": "#dfd2cd"
   },
@@ -75,7 +75,7 @@
     "paper": "#f9f8f8",
     "ink": "#1d1816",
     "primary": "#8b6452",
-    "tint": "#ece7e4",
+    "tint": "#f2f0ee",
     "accent": "#beaa37",
     "line": "#dbd4d1"
   },
@@ -198,5 +198,25 @@
     "tint": "#e9e7e1",
     "accent": "#9bb09f",
     "line": "#d6d3cb"
+  },
+  "counsel": {
+    "label": "Counsel",
+    "hint": "Ivory paper, ink navy and brass",
+    "paper": "#faf7ef",
+    "ink": "#111a2e",
+    "primary": "#1f2f52",
+    "tint": "#efe9d8",
+    "accent": "#b08d3c",
+    "line": "#ddd5bf"
+  },
+  "after_dark": {
+    "label": "After dark",
+    "hint": "Near-black, champagne and warm text",
+    "paper": "#0f0d0b",
+    "ink": "#f1e9da",
+    "primary": "#d8c08a",
+    "tint": "#1d1914",
+    "accent": "#e6d3a3",
+    "line": "#3a342b"
   }
 }

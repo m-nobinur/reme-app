@@ -78,6 +78,7 @@ export const FONT_PAIRS = FontPairId.options.map((id) =>
  * - `paper` on `primary`: button labels and dark bands.
  * - `ink` on `tint`: text on a tinted band.
  * - `primary` on `paper`: links and headings in the brand colour.
+ * - `primary` on `tint`: the same links, eyebrows and numerals on a tinted band.
  *
  * `accent` is for marks and underlines, not text, and `line` for hairlines;
  * neither carries a contrast rule. The JSON Schema cannot compute contrast, so
@@ -101,6 +102,7 @@ export const PALETTE_AA_PAIRS = [
   { text: "paper", on: "primary" },
   { text: "ink", on: "tint" },
   { text: "primary", on: "paper" },
+  { text: "primary", on: "tint" },
 ] as const
 
 /**

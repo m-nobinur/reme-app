@@ -105,6 +105,8 @@ export const PaletteId = z.enum([
   "royal",
   "meadow",
   "pebble",
+  "counsel",
+  "after_dark",
 ])
 export const PALETTES = PaletteId.options.map((id) => {
   const spec = (palettes as Record<PaletteId, PaletteSpec>)[id]
