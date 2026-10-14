@@ -59,7 +59,7 @@ import {
   QUOTE_CHANGES_PLACEHOLDER,
   waitsOnQuoteForm,
 } from "@workspace/ui/lib/quote-form"
-import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
+import { SESSION_ENDED, waitsOnDesign } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import {
@@ -139,6 +139,8 @@ export type ThreadProps = {
   stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
+  /** The composer's placeholder while design questions are open above it. */
+  questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
@@ -256,6 +258,7 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   stored,
   placeholder,
+  questionPlaceholder,
   briefing,
   quickActions,
   mode,
@@ -278,8 +281,24 @@ export const Thread: FC<ThreadProps> = ({
     stored ? !holdStored && s.thread.messages.length === 0 : isNewChatView(s)
   )
   const settings = useMemo(
-    () => ({ stored, placeholder, briefing, quickActions, mode, reveal }),
-    [stored, placeholder, briefing, quickActions, mode, reveal]
+    () => ({
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      reveal,
+    }),
+    [
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      reveal,
+    ]
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
@@ -401,7 +420,7 @@ const ThreadRoot: FC<{
               )}
             >
               <ThreadScrollToBottom />
-              <div className="group/dock flex flex-col">
+              <div className="flex flex-col gap-2">
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} />
               </div>
@@ -553,9 +572,11 @@ const ThreadSuggestionItem: FC = () => {
 }
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { placeholder = "Send a message", mode } = useContext(
-    ThreadSettingsContext
-  )
+  const {
+    placeholder = "Send a message",
+    questionPlaceholder,
+    mode,
+  } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   // A proposed quote form waits on the owner: what they type next is their
   // change to it, and the placeholder says so.
@@ -564,6 +585,9 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   )
   const planning = useAuiState((s) =>
     waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
+  )
+  const asking = useAuiState((s) =>
+    waitsOnDesign(s.thread.messages.at(-1)?.parts)
   )
   // Disabled, not only kept from sending: words typed into the placeholder
   // thread would stay behind with it when the stored one replaces it. The
@@ -578,8 +602,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           whenever the page is open, so a heavy ring would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        // A docked tray takes the top corners, so the two read as one card.
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring group-has-[[data-slot=question-tray]]/dock:rounded-t-none"
+        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
       >
         <ComposerPrimitive.Input
           ref={input}
@@ -589,7 +612,9 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
               ? QUOTE_CHANGES_PLACEHOLDER
               : planning
                 ? PLAN_CHANGES_PLACEHOLDER
-                : placeholder)
+                : asking && questionPlaceholder
+                  ? questionPlaceholder
+                  : placeholder)
           }
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}

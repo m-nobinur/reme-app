@@ -195,6 +195,7 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
       {...props}
       settings={{
         placeholder: "Ask Reme anything…",
+        questionPlaceholder: "Or tell Reme something else…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
@@ -1885,6 +1886,10 @@ const assistantCatalog = [
         <FixtureThread
           height="h-[44rem]"
           isDisabled={false}
+          settings={{
+            placeholder: "Ask Fern anything…",
+            questionPlaceholder: "Or tell Fern something else…",
+          }}
           messages={[
             {
               content: [

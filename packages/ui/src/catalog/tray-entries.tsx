@@ -11,7 +11,7 @@ import type { CatalogEntry } from "./entries"
 
 /**
  * The question tray in each state the owner can put it in, for a made-up
- * business, "Mop & Pail Cleaning". It sits above a stand-in composer so the
+ * business, "Mop & Pail Cleaning". It sits above a stand-in composer, a card of its own, so the
  * docking reads; nothing here is a real answer.
  */
 
@@ -148,15 +148,15 @@ const trayCatalog: CatalogEntry[] = [
             <h3 className="font-medium text-muted-foreground text-xs">
               {title}
             </h3>
-            <div>
+            <div className="flex flex-col gap-2">
               <QuestionTray
                 input={INPUT}
                 onAnswer={noop}
                 onFinish={noop}
                 start={start}
               />
-              <div className="rounded-b-4xl border border-border bg-background px-4 py-3 text-muted-foreground text-sm">
-                Message Sam
+              <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
+                Or tell Sam something else…
               </div>
             </div>
           </section>

@@ -202,6 +202,7 @@ export function ChatPage() {
                   components={{ ToolFallback: Approval }}
                   mode={mode}
                   placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
+                  questionPlaceholder={`Or tell ${assistantOf(live.workspace)} something else…`}
                   quickActions={OWNER_QUICK_ACTIONS}
                   reveal={onboarding ? OPENING_REVEAL : undefined}
                   stored={id}

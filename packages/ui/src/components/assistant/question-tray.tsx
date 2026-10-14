@@ -3,7 +3,6 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
   CaretUpIcon,
-  CheckCircleIcon,
 } from "@phosphor-icons/react"
 import {
   type AskDesignInput,
@@ -21,25 +20,19 @@ import {
   previewFaces,
 } from "@workspace/ui/lib/font-faces"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  type KeyboardEvent,
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react"
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react"
 
 /**
- * The design questions of a build as one tray, docked above the composer at
- * its width. One question shows at a time: the options as a native radio
+ * The design questions of a build as one tray, a card of its own docked above
+ * the composer at its width and radius, with a gap between the two. One
+ * question shows at a time: the options as a native radio
  * group (arrow keys, Space and the screen reader come with it), Write your
  * own, back and forward, Skip all and Next, which reads Build my site on the
  * last question. Collapsed it is one row, the question and "2 of 4". The
  * tray holds its own state and never touches the composer, so a message
  * typed while it is open is an ordinary turn and the tray stays where it
- * was. On a phone it is a full-width sheet with a handle, still in the flow
- * above the composer so the composer stays reachable. Answers are code's:
+ * was. On a phone it is still in the flow above the composer, so the
+ * composer stays reachable. Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
  * `AskDesignOutput` on Build my site or Skip all.
  */
@@ -104,7 +97,7 @@ function LayoutSketch({
   return (
     <svg
       aria-hidden
-      className="h-auto w-full rounded-xl ring-1 ring-foreground/15"
+      className="mx-auto h-24 w-auto rounded-xl ring-1 ring-foreground/15"
       data-hero={hero}
       data-services={services}
       viewBox="0 0 120 84"
@@ -413,11 +406,6 @@ function Picture({ option, stops }: { option: Option; stops: Stops }) {
   return null
 }
 
-/** The tray's heading row, whichever way it is open. */
-function Row({ children }: { children: ReactNode }) {
-  return <div className="flex items-center gap-2 px-4 py-3">{children}</div>
-}
-
 /** Where a tray starts, when it does not start fresh. The catalog draws every state with it. */
 type Start = {
   index?: number
@@ -463,7 +451,6 @@ function QuestionTray({
   const [more, setMore] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLElement>(null)
-  const groupRef = useRef<HTMLDivElement>(null)
   const settled = useRef<boolean>(false)
   const focusComposer = useFocusComposer()
 
@@ -476,7 +463,7 @@ function QuestionTray({
       return
     }
     if (rootRef.current?.contains(document.activeElement)) {
-      groupRef.current
+      bodyRef.current
         ?.querySelector<HTMLInputElement>("input:checked, input")
         ?.focus()
     }
@@ -562,7 +549,7 @@ function QuestionTray({
     <section
       aria-label="Design questions"
       className={cn(
-        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-t-[var(--composer-radius,var(--radius-4xl))] border border-border border-b-0 bg-card text-card-foreground",
+        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground",
         className
       )}
       data-slot="question-tray"
@@ -572,37 +559,33 @@ function QuestionTray({
       <p aria-live="polite" className="sr-only">
         {`Question ${index + 1} of ${total}`}
       </p>
-      <span
-        aria-hidden
-        className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-border sm:hidden"
-      />
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-t-[var(--composer-radius,var(--radius-4xl))] px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
           onClick={() => setCollapsed(false)}
           type="button"
         >
-          <span className="min-w-0 flex-1 truncate font-medium text-sm">
+          <span className="min-w-0 flex-1 truncate font-medium text-base">
             {prompt}
           </span>
-          <span className="shrink-0 text-muted-foreground text-xs">
+          <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
             {index + 1} of {total}
           </span>
           <CaretUpIcon aria-hidden className="size-4 shrink-0" />
         </button>
       ) : (
         <>
-          <Row>
+          <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
             <h2
-              className="min-w-0 flex-1 font-medium text-sm"
+              className="min-w-0 flex-1 font-medium text-base"
               id={`${id}-question`}
             >
               {prompt}
             </h2>
             <span
               aria-hidden
-              className="shrink-0 text-muted-foreground text-xs"
+              className="shrink-0 text-muted-foreground text-xs tabular-nums"
             >
               {index + 1} of {total}
             </span>
@@ -618,84 +601,77 @@ function QuestionTray({
             >
               <CaretDownIcon aria-hidden />
             </Button>
-          </Row>
-          <div className="relative flex min-h-0 flex-col">
+          </div>
+          <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
             <div
-              className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pb-3"
+              className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
             >
               {question.visual === "font_pair" && <PreviewFaces />}
-              <div
-                aria-labelledby={`${id}-question`}
-                className={cn(
-                  "grid grid-cols-1 gap-2",
-                  // A pair's names are long, so they stay one to a row until
-                  // two fit side by side.
-                  question.visual === "font_pair"
-                    ? "@md:grid-cols-2"
-                    : "min-[380px]:grid-cols-2",
-                  // Four wireframes in a row once the tray is wide, so the
-                  // arrangement question fits without a scroll.
-                  question.visual === "layout" && "@xl:grid-cols-4"
-                )}
-                key={question.id}
-                ref={groupRef}
-                role="radiogroup"
-              >
-                {question.card.options.map((option) => {
-                  const checked =
-                    answer !== undefined &&
-                    "choice" in answer &&
-                    answer.choice === option.id
-                  return (
-                    <label
-                      className={cn(
-                        OPTION,
-                        OPTION_TILE,
-                        "has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-                        "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
-                      )}
-                      key={option.id}
-                    >
-                      <input
-                        checked={checked}
-                        className="sr-only"
-                        name={`${id}-${question.id}`}
-                        onChange={() => pick(option.id)}
-                        type="radio"
-                        value={option.id}
-                      />
-                      <Picture option={option} stops={stops} />
-                      <span className="flex items-center gap-1.5 font-medium text-sm">
-                        {question.visual === "font_pair" ? (
-                          <span className="sr-only">{option.label}</span>
-                        ) : (
-                          option.label
+              {question.card.options.length > 0 ? (
+                <div
+                  aria-labelledby={`${id}-question`}
+                  className={cn(
+                    "grid grid-cols-1 gap-3",
+                    // A pair's names are long, so they stay one to a row until
+                    // two fit side by side.
+                    question.visual === "font_pair"
+                      ? "@md:grid-cols-2"
+                      : "min-[380px]:grid-cols-2"
+                  )}
+                  key={question.id}
+                  role="radiogroup"
+                >
+                  {question.card.options.map((option) => {
+                    const checked =
+                      answer !== undefined &&
+                      "choice" in answer &&
+                      answer.choice === option.id
+                    return (
+                      <label
+                        className={cn(
+                          OPTION,
+                          OPTION_TILE,
+                          "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
+                          // Picked is a 2px line in the text colour: a border
+                          // and an inset ring of one pixel each.
+                          "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
                         )}
-                        {checked ? (
-                          <CheckCircleIcon
-                            aria-hidden
-                            className="ml-auto size-4 shrink-0 text-primary"
-                            weight="fill"
-                          />
-                        ) : null}
-                      </span>
-                      {option.hint ? (
-                        <span className="text-muted-foreground text-xs">
-                          {option.hint}
+                        key={option.id}
+                      >
+                        <input
+                          checked={checked}
+                          className="sr-only"
+                          name={`${id}-${question.id}`}
+                          onChange={() => pick(option.id)}
+                          type="radio"
+                          value={option.id}
+                        />
+                        <Picture option={option} stops={stops} />
+                        <span className="flex items-center gap-1.5 font-medium text-sm">
+                          {question.visual === "font_pair" ? (
+                            <span className="sr-only">{option.label}</span>
+                          ) : (
+                            option.label
+                          )}
                         </span>
-                      ) : null}
-                    </label>
-                  )
-                })}
-              </div>
+                        {option.hint ? (
+                          <span className="text-muted-foreground text-xs">
+                            {option.hint}
+                          </span>
+                        ) : null}
+                      </label>
+                    )
+                  })}
+                </div>
+              ) : null}
               {other ? (
                 <Input
                   aria-label={other.label}
                   className={cn(
-                    "rounded-[var(--composer-radius,var(--radius-4xl))]",
+                    "h-12 rounded-xl border-border bg-card px-3.5 md:text-sm",
                     ACCENT_RING
                   )}
                   autoComplete="off"
@@ -710,17 +686,17 @@ function QuestionTray({
               // A fade, not a decoration: it says there are more options below.
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-3xl bg-linear-to-t from-(--body) to-transparent"
               />
             ) : null}
           </div>
-          <div className="flex items-center gap-1 border-border border-t px-3 py-2">
+          <div className="flex items-center gap-1 p-4">
             <Button
               aria-label="Previous question"
               className={ACCENT_RING}
               disabled={index === 0}
               onClick={() => go(index - 1, false)}
-              size="icon-sm"
+              size="icon"
               type="button"
               variant="ghost"
             >
@@ -731,7 +707,7 @@ function QuestionTray({
               className={ACCENT_RING}
               disabled={last || !ready}
               onClick={() => go(index + 1, true)}
-              size="icon-sm"
+              size="icon"
               type="button"
               variant="ghost"
             >
@@ -741,7 +717,7 @@ function QuestionTray({
             <Button
               className={ACCENT_RING}
               onClick={() => finish(true)}
-              size="sm"
+              size="default"
               type="button"
               variant="ghost"
             >
@@ -751,11 +727,11 @@ function QuestionTray({
             <Button
               className={cn(
                 ACCENT_RING,
-                "focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               )}
               disabled={!ready}
               onClick={next}
-              size="sm"
+              size="default"
               type="button"
             >
               {last ? "Build my site" : "Next"}
