@@ -1,13 +1,16 @@
 import { spawn } from "node:child_process"
 import {
   cpSync,
+  existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs"
+import { createServer, type Server } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -83,6 +86,42 @@ export async function build(
     throw new Error(`astro build failed in ${dir}\n${result.output}`)
   }
   return { dir, dist: join(dir, "dist") }
+}
+
+const TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+}
+
+/**
+ * Serves a build over HTTP on a free local port. A stylesheet is linked
+ * absolutely, and a file:// page loads none of it, which is the one thing a
+ * contrast check cannot do without.
+ */
+export async function serve(
+  dist: string
+): Promise<{ server: Server; origin: string }> {
+  const server = createServer((request, response) => {
+    const path = new URL(request.url ?? "/", "http://site.invalid").pathname
+    const file = join(dist, path.endsWith("/") ? `${path}index.html` : path)
+    if (
+      !file.startsWith(dist) ||
+      !existsSync(file) ||
+      statSync(file).isDirectory()
+    ) {
+      response.writeHead(404).end()
+      return
+    }
+    const type = TYPES[file.slice(file.lastIndexOf("."))]
+    response.writeHead(200, type ? { "Content-Type": type } : {})
+    response.end(readFileSync(file))
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  const port = typeof address === "object" && address ? address.port : 0
+  return { server, origin: `http://127.0.0.1:${port}` }
 }
 
 export const clean = (built: Built | undefined) => {
