@@ -3,6 +3,7 @@ import type {
   DesignDirection,
   FactRecord,
 } from "@workspace/contracts"
+import { SECTION_VARIANTS } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 
 import { blueprintLayout } from "../src/blueprint.ts"
@@ -127,6 +128,24 @@ describe("the structured output schema", () => {
     }
     expect(text).toContain('"anyOf"')
     expect(text).toContain('"additionalProperties":false')
+  })
+
+  // Anthropic refused the per-kind union as "compiled grammar is too large".
+  it("sends a section as one object with every kind and variant pooled", () => {
+    const pages = (outputSchema().properties as Record<string, any>).pages
+    const section = pages.items.properties.sections.items
+    expect(section.anyOf).toBeUndefined()
+    expect(section.properties.kind.enum).toEqual(Object.keys(SECTION_VARIANTS))
+    expect(new Set(section.properties.variant.enum)).toEqual(
+      new Set(Object.values(SECTION_VARIANTS).flat())
+    )
+    expect(section.required).toEqual(
+      expect.arrayContaining(["kind", "variant", "purpose", "content_notes"])
+    )
+    // A union whose branches differ beyond kind stays a union.
+    expect(
+      (outputSchema().properties as Record<string, any>).palette.anyOf
+    ).toHaveLength(2)
   })
 })
 
