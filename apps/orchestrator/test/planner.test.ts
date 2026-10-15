@@ -395,8 +395,8 @@ describe("page header photos", () => {
           : p
       ),
     } as Blueprint
-    const about = (plan: Blueprint) =>
-      plan.pages.find((p) => p.page === "about")?.sections ?? []
+    const about = (shown: Blueprint) =>
+      shown.pages.find((p) => p.page === "about")?.sections ?? []
     expect(about(dropped).map((s) => s.kind)).not.toContain("steps")
     const kept = about(withOwnerChoices(dropped, CLEANING))
     const kinds = kept.map((s) => s.kind)
