@@ -47,6 +47,7 @@ import {
   COPY_AGENT,
   copyInstructions,
   PAGE_AGENT,
+  pageCheck,
   pageInstructions,
   pageOfPrompt,
 } from "../fanout.ts"
@@ -95,6 +96,8 @@ type Session = {
   warm: PrefixWarmer
   /** Page builders' tasks by id, and the pages they finished, for the panel's "3 of 5". */
   pages: { byTask: Map<string, string>; done: Set<string>; started: boolean }
+  /** Every subagent's task prompt by id, and the tasks the per-page copy check has spoken to. */
+  checks: { prompts: Map<string, string>; sent: Set<string> }
   budgetExhausted: boolean
 }
 const sessions = new Map<string, Session>()
@@ -107,6 +110,9 @@ observe((observation, ctx) => {
   found.tee.subscriber(observation)
   found.budget.instrumentation.observe(observation, ctx)
   found.warm.observe(observation as { type?: string; taskId?: string })
+  const o = observation as { type?: string; taskId?: string; prompt?: string }
+  if (o.type === "task_start" && o.taskId && o.prompt)
+    found.checks.prompts.set(o.taskId, o.prompt)
   pageProgress(found, observation)
   interrupted(found, observation)
 })
@@ -220,8 +226,10 @@ instrument({
     // subagent's first model call may wait on a sibling's warm-up before the
     // budget reads the spend.
     return found.gate.interceptor(operation, ctx, () =>
-      found.warm.interceptor(operation, ctx, () =>
-        found.budget.instrumentation.interceptor(operation, ctx, next)
+      checkedEdit(found, operation, ctx.taskId, () =>
+        found.warm.interceptor(operation, ctx, () =>
+          found.budget.instrumentation.interceptor(operation, ctx, next)
+        )
       )
     )
   },
@@ -229,6 +237,47 @@ instrument({
     sessions.clear()
   },
 })
+
+/**
+ * The per-page copy check (fanout.ts `pageCheck`): when a subagent's edit
+ * returns, the copy gate's field rules over its own fields ride back on that
+ * edit's result, once a task, so it fixes its page before the lead
+ * integrates. A read of one file and no model call; a failed read changes
+ * nothing, and the gate after the build still reads the page.
+ */
+async function checkedEdit<T>(
+  found: Session,
+  operation: { type: string; toolName?: string },
+  taskId: string | undefined,
+  next: () => Promise<T>
+): Promise<T> {
+  const result = await next()
+  if (
+    operation.type !== "tool" ||
+    operation.toolName !== "edit" ||
+    !taskId ||
+    found.checks.sent.has(taskId)
+  )
+    return result
+  const content = (result as { content?: unknown[] }).content
+  if (!Array.isArray(content)) return result
+  try {
+    const file = await getSandbox(
+      env.SANDBOX as never,
+      found.runtime.spec.org_id
+    ).readFile(`${SITE_ROOT}/src/site-config.ts`)
+    const message = pageCheck(file.content, found.checks.prompts.get(taskId))
+    if (!message) return result
+    found.checks.sent.add(taskId)
+    found.tee.emit("developer.page_check", {
+      task_id: taskId,
+      findings: message.split("\n- ").length - 1,
+    })
+    return { ...result, content: [...content, { type: "text", text: message }] }
+  } catch {
+    return result
+  }
+}
 
 const sandboxIds = (found: Session) => ({
   orgId: found.runtime.spec.org_id,
@@ -293,6 +342,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     interruptions: new Set(),
     warm: createPrefixWarmer(),
     pages: { byTask: new Map(), done: new Set(), started: false },
+    checks: { prompts: new Map(), sent: new Set() },
     budgetExhausted: false,
   }
   created.gate = createTurnGate({

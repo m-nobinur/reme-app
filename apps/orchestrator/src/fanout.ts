@@ -7,6 +7,7 @@ import {
   COPY_WORDS,
   DESCRIPTION_CHARS,
   factsToAsk,
+  fieldFindings,
   TITLE_CHARS,
 } from "@workspace/gates"
 import { blueprintLines } from "./blueprint.ts"
@@ -88,6 +89,8 @@ export const serviceCount = (brief: Brief) =>
     )?.items?.length ?? SERVICES_MAX
   )
 
+const ABOUT_BODY = ["overview", "overviewBody", "audience", "audienceBody"]
+
 /**
  * Each planned page and the site fields its builder owns: the recipe's
  * fields for that page, less the copy writer's and less any an earlier page
@@ -100,9 +103,12 @@ export function pageTasks(
   services = SERVICES_MAX
 ): PageTask[] {
   const taken = new Set(copyFields(plan))
+  // The about page's body is the one the copy gate counts (120 to 200 words),
+  // so its builder writes it rather than the home page's, which wrote a teaser.
+  const about = plan.pages.some((p) => p.page === "about") ? ABOUT_BODY : []
   return plan.pages.flatMap(({ page }): PageTask[] => {
     const fields = (RECIPES.pages[page]?.fields ?? []).filter(
-      (f) => !taken.has(f)
+      (f) => !taken.has(f) && (page === "about" || !about.includes(f))
     )
     for (const f of fields) taken.add(f)
     if (page !== "service") return [{ page, fields }]
@@ -117,6 +123,60 @@ export function pageTasks(
 /** The page a page builder's prompt names, for the progress count. */
 export const pageOfPrompt = (prompt: string | undefined) =>
   /^Page ([a-z_]+)\./.exec(prompt ?? "")?.[1] ?? null
+
+/** The site fields a task's prompt gives its writer, page builder or copy writer. */
+export const fieldsOfPrompt = (prompt: string | undefined) =>
+  /Your fields: ([\w, ]+)\.$/
+    .exec(prompt ?? "")?.[1]
+    ?.split(", ")
+    .filter(Boolean) ?? []
+
+/**
+ * Every string field of src/site-config.ts's values, as written: `name: "…"`
+ * on its line or wrapped to the next. A value that is not one JSON string
+ * literal (a template literal, a half-written edit) is left out.
+ */
+export function siteValues(source: string): Record<string, string> {
+  const values: Record<string, string> = {}
+  for (const [, name, literal] of source.matchAll(
+    /^ {2}(\w+):\s*("(?:[^"\\\n]|\\.)*")/gm
+  )) {
+    try {
+      values[name as string] = JSON.parse(literal as string) as string
+    } catch {
+      // Not JSON: the gate reads the built page later either way.
+    }
+  }
+  return values
+}
+
+/**
+ * BA4's per-page copy check: after a writer's edit, the copy gate's field
+ * rules over its own filled fields, against every heading on the site so
+ * far. Siblings in one group write at once, so of two that collide the later
+ * one sees the earlier. Null when nothing fails; the message otherwise, which
+ * the writer acts on in the same session. The caller sends it once a task. In the confirming run of 2026-10-15 every one of the first
+ * gate's nine misses was one of these, and the two repair rounds they cost
+ * took 61 s and 18 s of the lead's turns after a gate run each.
+ */
+export function pageCheck(
+  source: string,
+  prompt: string | undefined
+): string | null {
+  const owned = fieldsOfPrompt(prompt)
+  if (owned.length === 0) return null
+  const found = fieldFindings(
+    siteValues(source),
+    owned,
+    pageOfPrompt(prompt) ?? undefined
+  )
+  if (found.length === 0) return null
+  return [
+    "The copy gate's check of your fields, before the build, found:",
+    ...found.map((line) => `- ${line}`),
+    "Fix exactly these with one more edit call, then stop and write your summary. This check runs once.",
+  ].join("\n")
+}
 
 /**
  * The task prompts, in the groups the lead sends them: one turn per group.

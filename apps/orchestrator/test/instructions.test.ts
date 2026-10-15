@@ -17,10 +17,13 @@ import {
   copyFields,
   copyInstructions,
   FAN_OUT,
+  fieldsOfPrompt,
   leadLines,
+  pageCheck,
   pageInstructions,
   pageOfPrompt,
   pageTasks,
+  siteValues,
   taskGroups,
 } from "../src/fanout.ts"
 import {
@@ -265,6 +268,63 @@ describe("the parallel first build", () => {
     const joined = COPY_BRIEF.join(" ")
     for (const { aim } of Object.values(COPY_WORDS))
       expect(joined).toContain(`${aim[0]} to ${aim[1]} words`)
+  })
+
+  it("gives the about page its own body, and the home page's builder only when there is none", () => {
+    const owner = (plan: typeof fanPlan, field: string) =>
+      pageTasks(plan).find((t) => t.fields.includes(field))?.page
+    expect(fanPlan.pages.map((p) => p.page)).toContain("about")
+    for (const field of ["overviewBody", "audienceBody"]) {
+      expect(owner(fanPlan, field)).toBe("about")
+      const homeOnly = {
+        ...fanPlan,
+        pages: fanPlan.pages.filter((p) => p.page !== "about"),
+      }
+      expect(owner(homeOnly, field)).toBe("home")
+    }
+  })
+
+  it("checks a writer's own fields after its edit and names what to fix", () => {
+    const [about] = taskGroups(fanPlan)
+      .flat()
+      .filter((t) => pageOfPrompt(t.prompt) === "about")
+    expect(fieldsOfPrompt(about?.prompt)).toContain("aboutCtaHeading")
+    const source = [
+      "const values = {",
+      '  ctaHeading: "Ready for a tidier garden?",',
+      '  aboutCtaHeading: "Ready for a tidier garden",',
+      "  overviewBody:",
+      `    "${"word ".repeat(20).trim()}",`,
+      '  audienceBody: "",',
+      "}",
+    ].join("\n")
+    expect(siteValues(source)).toMatchObject({
+      aboutCtaHeading: "Ready for a tidier garden",
+      overviewBody: expect.stringMatching(/^word/),
+      audienceBody: "",
+    })
+    const message = pageCheck(source, about?.prompt) ?? ""
+    expect(message).toContain('aboutCtaHeading "Ready for a tidier garden"')
+    expect(message).toContain("have 20 words together")
+    expect(message).toContain("Fix exactly these with one more edit call")
+    // Only the writer's own fields: the home page's builder hears of its
+    // ctaHeading, never of the about body, and clean fields pass.
+    const home = taskGroups(fanPlan)
+      .flat()
+      .find((t) => pageOfPrompt(t.prompt) === "home")
+    const told = pageCheck(source, home?.prompt) ?? ""
+    expect(told).toContain('ctaHeading "Ready for a tidier garden?" repeats')
+    expect(told).not.toContain("words together")
+    expect(
+      pageCheck(
+        source.replace(
+          'Ready for a tidier garden"',
+          'Questions about the garden"'
+        ),
+        home?.prompt
+      )
+    ).toBeNull()
+    expect(pageCheck(source, undefined)).toBeNull()
   })
 
   it("sends at most four tasks a turn, every page once and the copy writer once", () => {
