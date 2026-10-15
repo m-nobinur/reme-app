@@ -518,8 +518,8 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
   answers["GET /workspace"] = Response.json(
     {
       site: {
-        host: "fictional.example.invalid",
-        url: "http://fictional.example.invalid:3004",
+        host: "fictional.reme.localhost",
+        url: "http://fictional.reme.localhost:3004",
         live: null,
       },
       builds: [building],
@@ -543,8 +543,8 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     building: true,
     builds: [building],
     expectedSeconds: { quick: { p50: 15, p95: 45 } },
-    host: "fictional.example.invalid",
-    url: "http://fictional.example.invalid:3004",
+    host: "fictional.reme.localhost",
+    url: "http://fictional.reme.localhost:3004",
     missingFacts: ["business.phone"],
     assistantName: "Ava",
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
