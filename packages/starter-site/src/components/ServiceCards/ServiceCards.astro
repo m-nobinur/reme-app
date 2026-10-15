@@ -147,7 +147,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
         {detail &&
           items.map((item) => (
             <article class="service-detail" id={item.id}>
-              {item.photo && (
+              {item.photo && !only && (
                 <Photo
                   class="service-photo"
                   src={item.photo.src}

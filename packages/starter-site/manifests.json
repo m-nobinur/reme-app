@@ -465,6 +465,12 @@
         "type": "string",
         "required": false,
         "description": "The h2, where a page has its own; empty is site.stepsHeading."
+      },
+      {
+        "name": "items",
+        "type": "{ title: string; body: string }[]",
+        "required": false,
+        "description": "The steps, where a page has its own; empty is the site's step1 to step4."
       }
     ],
     "constraints": [

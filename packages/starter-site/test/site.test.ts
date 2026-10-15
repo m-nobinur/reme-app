@@ -345,7 +345,7 @@ describe("the about page", () => {
     const photo = about.elements.find((el) =>
       (el.attrs.class ?? "").split(" ").includes("story-photo")
     )
-    expect(photo?.attrs.src).toBe(FILLED.photo1Src)
+    expect(photo?.attrs.src).toMatch(/^\/_astro\//)
     expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
   })
 

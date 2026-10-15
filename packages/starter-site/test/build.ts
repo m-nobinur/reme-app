@@ -16,9 +16,12 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
+import sharp from "sharp"
 import { fields, layout, site } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
+/** A stand-in photo's one colour, as sharp takes it. */
+const GREY = { r: 140, g: 140, b: 140 }
 /** Reserved by RFC 2606, so nothing built here can name a real site. */
 export const ORIGIN = "https://starter.invalid"
 
@@ -41,6 +44,8 @@ export async function build(
     remove?: string[]
     /** Files planted beside the site, by path from its root, such as src/assets/uploads/x.jpg. */
     files?: Record<string, Uint8Array>
+    /** False plants no stand-in for a photo the site names, to build one whose file is missing. */
+    standIns?: boolean
   } = {}
 ): Promise<Built> {
   const dir = mkdtempSync(join(tmpdir(), "reme-starter-"))
@@ -66,7 +71,22 @@ export async function build(
     writeFileSync(join(dir, "src/pages", name), source)
   }
   for (const name of options.remove ?? []) rmSync(join(dir, "src/pages", name))
-  for (const [name, bytes] of Object.entries(options.files ?? {})) {
+  // The sandbox places every photo the site names before a build, so a field
+  // that names one gets a small stand-in unless the test plants its own.
+  const named = Object.values(options.site ?? {})
+    .filter((value) => /^\/?[\w/.-]+\.(?:jpe?g|png|webp)$/.test(value))
+    .map((value) => `src/assets/${value.replace(/^\/?(?:src\/assets\/)?/, "")}`)
+  const planted = { ...options.files }
+  for (const name of options.standIns === false ? [] : named) {
+    planted[name] ??= await sharp({
+      create: { width: 640, height: 480, channels: 3, background: GREY },
+    })
+      [
+        name.endsWith(".png") ? "png" : name.endsWith(".webp") ? "webp" : "jpeg"
+      ]()
+      .toBuffer()
+  }
+  for (const [name, bytes] of Object.entries(planted)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true })
     writeFileSync(join(dir, name), bytes)
   }

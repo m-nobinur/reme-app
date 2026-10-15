@@ -85,6 +85,12 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     title: site[`service${n}Title`],
     description: site[`service${n}Description`],
     stepsHeading: site[`service${n}StepsHeading`],
+    steps: ([1, 2, 3, 4] as const)
+      .map((m) => ({
+        title: site[`service${n}Step${m}Title`],
+        body: site[`service${n}Step${m}Body`],
+      }))
+      .filter((item) => item.title || item.body),
     faqHeading: site[`service${n}FaqHeading`],
     faqs: ([1, 2, 3, 4] as const)
       .map((m) => ({

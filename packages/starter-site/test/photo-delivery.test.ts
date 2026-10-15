@@ -21,6 +21,7 @@ async function generated(w = 1152, h = 1536): Promise<Uint8Array> {
 let built: Built
 beforeAll(async () => {
   built = await build({
+    standIns: false,
     site: {
       ...FILLED,
       logo: "",

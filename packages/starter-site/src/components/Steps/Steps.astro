@@ -7,12 +7,17 @@ interface Props {
   variant?: "circles" | "dark_band" | "timeline"
   /** The h2, where a page has its own; empty is site.stepsHeading. */
   heading?: string
+  /** The steps, where a page has its own; empty is the site's step1 to step4. */
+  items?: { title: string; body: string }[]
 }
 
-const { variant = "timeline", heading = site.stepsHeading } = Astro.props
-const items = ([1, 2, 3, 4] as const)
-  .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
-  .filter((item) => item.title || item.body)
+const {
+  variant = "timeline",
+  heading = site.stepsHeading,
+  items = ([1, 2, 3, 4] as const)
+    .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
+    .filter((item) => item.title || item.body),
+} = Astro.props
 ---
 
 {
