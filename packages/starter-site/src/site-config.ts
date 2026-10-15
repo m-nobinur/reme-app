@@ -248,6 +248,8 @@ const values = {
   serviceCardsHeading: "What we do",
   /** The link under the service cards to the services page, off that page. */
   serviceCardsLink: "See all services",
+  /** The words on each service card's link to its part of the services page. */
+  serviceMoreLabel: "Explore service",
   serviceIncludesLabel: "What is included",
   serviceForLabel: "Who it is for",
   /**
@@ -446,6 +448,10 @@ const values = {
   areaLink: "See the areas we cover",
   faqEyebrow: "Questions",
   faqHeading: "Common questions",
+  /** One or two sentences under the FAQ heading, beside the questions. Empty leaves the heading alone. */
+  faqIntro: "",
+  /** The link under the FAQ intro to the contact page, off that page. */
+  faqLink: "Ask us something else",
   /**
    * Five to eight questions a customer of this trade asks before booking,
    * each answered in 40 to 90 words: the trade's usual practice in general

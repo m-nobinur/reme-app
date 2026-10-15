@@ -1,4 +1,5 @@
 ---
+import { iconFor } from "../../icons"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
 
@@ -12,28 +13,54 @@ const { variant = "icons" } = Astro.props
 // no label. The points restate business.proof and are empty without it. So
 // with no proof and no figures there is no strip at all.
 const figures = [
-  { value: site.statYearsValue, label: site.statYearsLabel },
-  { value: site.statClientsValue, label: site.statClientsLabel },
-  { value: site.statRatingValue, label: site.statRatingLabel },
+  {
+    value: site.statYearsValue,
+    label: site.statYearsLabel,
+    icon: "calendarCheck",
+  },
+  { value: site.statClientsValue, label: site.statClientsLabel, icon: "users" },
+  { value: site.statRatingValue, label: site.statRatingLabel, icon: "star" },
 ].filter((item) => item.value)
-const points = [site.trust1, site.trust2, site.trust3].filter(Boolean)
+// Each point shows the icon its words call for, no two alike where another fits.
+const taken = new Set<string>(figures.map((item) => item.icon))
+const points = [site.trust1, site.trust2, site.trust3]
+  .filter(Boolean)
+  .map((text) => {
+    const icon = iconFor("", text, "checkCircle", taken)
+    taken.add(icon)
+    return { text, icon }
+  })
+const count = figures.length + points.length
+// Columns on a wide screen: one row up to four items, rows of three past that.
+const columns = count <= 4 ? count : 3
 ---
 
 {
-  (figures.length > 0 || points.length > 0) && (
+  count > 0 && (
     <section class:list={["trust-strip", `trust-${variant}`]}>
       <div class="wrap">
-        <ul class="trust-list">
+        <ul class="trust-list" style={`--trust-cols: ${columns}`}>
           {figures.map((item) => (
             <li>
-              <span class="trust-value">{item.value}</span>
-              {item.label && <span class="trust-label">{item.label}</span>}
+              {variant === "icons" && (
+                <span class="trust-icon">
+                  <Icon name={item.icon} />
+                </span>
+              )}
+              <span class="trust-text">
+                <span class="trust-value">{item.value}</span>
+                {item.label && <span class="trust-label">{item.label}</span>}
+              </span>
             </li>
           ))}
           {points.map((point) => (
             <li>
-              {variant === "icons" && <Icon name="checkCircle" />}
-              <span>{point}</span>
+              {variant === "icons" && (
+                <span class="trust-icon">
+                  <Icon name={point.icon} />
+                </span>
+              )}
+              <span class="trust-text">{point.text}</span>
             </li>
           ))}
         </ul>

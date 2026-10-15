@@ -1,3 +1,4 @@
+import { iconFor } from "./icons"
 import { site } from "./site-config"
 
 /**
@@ -62,6 +63,11 @@ export const slugOf = (name: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
 
+/** The icons the owner's services name, so a picked one is not a repeat. */
+const taken = new Set<string>(
+  ([1, 2, 3, 4, 5, 6] as const).map((n) => site[`service${n}Icon`])
+)
+
 /**
  * The services the cards, the hero, the services page and each service's
  * own page show, numbered so a card can link to its page. An entry needs a
@@ -97,10 +103,22 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     },
   }))
   .filter((item) => item.name || item.body)
+  // An empty or unknown icon takes one from the service's own words, and no
+  // service takes one another already shows.
+  .map((item) => {
+    const icon = iconFor(
+      item.icon,
+      `${item.name} ${item.body}`,
+      "sparkle",
+      taken
+    )
+    taken.add(icon)
+    return { ...item, icon }
+  })
   .map((item, i, all) => {
     const base = slugOf(item.name) || item.id
-    const taken = all.slice(0, i).some((o) => (slugOf(o.name) || o.id) === base)
-    return { ...item, slug: taken ? `${base}-${item.n}` : base }
+    const used = all.slice(0, i).some((o) => (slugOf(o.name) || o.id) === base)
+    return { ...item, slug: used ? `${base}-${item.n}` : base }
   })
 
 export type ServiceItem = (typeof serviceItems)[number]

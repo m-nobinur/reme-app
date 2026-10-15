@@ -46,10 +46,12 @@ const variant =
 const detail = variant === "alternating"
 const linked = !detail && hasRoute("/services/")
 const headed = !onServices && !only
-// Cards per row on a wide screen. Five fill 3 and 2 and six 3 and 3, instead of
-// four and a short row; a short last row sits centred (site.css). At most six
-// services exist, so 4 is the grid's own count for the rest.
-const perRow = items.length === 5 || items.length === 6 ? 3 : undefined
+// Cards per row on a wide screen: four in one row, otherwise rows of three,
+// a short last row centred (site.css counts the cards itself).
+const perRow = items.length === 4 ? 4 : 3
+const number = (i: number) => String(i + 1).padStart(2, "0")
+// A linked card's name is the link, stretched over the card; the words and
+// arrow at its foot repeat it for the eye, so they are hidden from readers.
 ---
 
 {
@@ -69,12 +71,8 @@ const perRow = items.length === 5 || items.length === 6 ? 3 : undefined
           />
         )}
         {(variant === "photo_cards" || variant === "fleet") && (
-          <ul
-            class="card-grid"
-            data-balanced={perRow ? "" : undefined}
-            style={perRow ? `--per-row: ${perRow}` : undefined}
-          >
-            {items.map((item) => (
+          <ul class="card-grid">
+            {items.map((item, i) => (
               <li class:list={["card", linked && "card-linked"]}>
                 {item.photo ? (
                   <div class="card-media">
@@ -82,11 +80,12 @@ const perRow = items.length === 5 || items.length === 6 ? 3 : undefined
                       class="card-photo"
                       src={item.photo.src}
                       alt={item.photo.alt}
-                      sizes={`(min-width: 64rem) ${Math.floor(100 / (perRow ?? 4))}vw, (min-width: 40rem) 50vw, calc(100vw - 2rem)`}
+                      sizes={`(min-width: 80rem) ${perRow === 4 ? 19 : 26}rem, (min-width: 64rem) ${Math.floor(100 / perRow)}vw, (min-width: 40rem) 50vw, calc(100vw - 2rem)`}
                     />
                     {variant === "photo_cards" && (
                       <span class="card-tag">
                         <Icon name={item.icon} />
+                        <span>{number(i)}</span>
                       </span>
                     )}
                   </div>
@@ -110,7 +109,11 @@ const perRow = items.length === 5 || items.length === 6 ? 3 : undefined
                     ))}
                   </ul>
                 )}
-                {linked && <span class="card-arrow" aria-hidden="true" />}
+                {linked && (
+                  <span class="card-arrow" aria-hidden="true">
+                    {site.serviceMoreLabel}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

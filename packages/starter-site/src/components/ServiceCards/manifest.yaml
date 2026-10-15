@@ -18,18 +18,20 @@ props:
 constraints:
   - Reads serviceItems from src/structured-data.ts (service1Name to
     service6For); a service renders only with a name or a body.
-  - photo_cards are cards with a 4:3 photo, the icon on it, and an arrow;
-    numbered_rows are hairline rows with a number, an icon circle and a round
-    arrow; practice_list is a numbered list with the name beside its sentence,
-    for legal; fleet is 16:9 cards with Includes as spec pills, for limousine;
-    alternating is photo and text rows with the Includes check list.
+  - photo_cards are cards with a 4:3 photo, a pill with the icon and number on
+    it, and serviceMoreLabel with an arrow; numbered_rows are hairline rows with
+    a number, an icon circle and a round arrow; practice_list is a numbered list
+    with the name beside its sentence, for legal; fleet is 16:9 cards with
+    Includes as spec pills, for limousine; alternating is photo and text rows
+    with the Includes check list.
   - Every pattern but alternating links each name to its section, id service-N,
     on the services page. alternating adds Includes, one item to a line, For,
     and a quote link, and is what the services page uses.
   - serviceNImage with serviceNImageAlt is the service's photo; without it a
     card shows its icon and a row its text. A fleet photo is an owner upload.
   - The section's eyebrow is site.serviceCardsEyebrow.
-  - Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice.
+  - Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice; an empty
+    or unknown one is picked from the service's words.
 examples:
   - "<ServiceCards />"
   - '<ServiceCards variant="photo_cards" />'

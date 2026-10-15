@@ -1,5 +1,6 @@
 ---
 import SectionHead from "../../layouts/SectionHead.astro"
+import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
 import { faqItems } from "../../structured-data"
 
@@ -17,13 +18,26 @@ const {
   items = faqItems,
   heading = site.faqHeading,
 } = Astro.props
+// Off the contact page, a question the list does not answer goes there.
+const more =
+  site.faqLink && hasRoute("/contact/") && Astro.url.pathname !== "/contact/"
 ---
 
 {
   items.length > 0 && (
     <section class:list={["band faq", `faq-${variant}`]}>
       <div class="wrap faq-inner">
-        <SectionHead eyebrow={site.faqEyebrow} heading={heading} />
+        <div class="faq-intro">
+          <SectionHead eyebrow={site.faqEyebrow} heading={heading} />
+          {site.faqIntro && <p class="faq-lede">{site.faqIntro}</p>}
+          {more && (
+            <p class="section-more">
+              <a class="more-link" href="/contact/">
+                {site.faqLink}
+              </a>
+            </p>
+          )}
+        </div>
         <div class="faq-list">
           {items.map((item) => (
             <details>

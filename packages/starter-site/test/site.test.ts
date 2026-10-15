@@ -606,6 +606,8 @@ describe("templates", () => {
       leftovers(page)
         .map((text) => text.replace(/«[A-Za-z0-9]+»/g, ""))
         .filter((rest) => /[\p{L}\p{N}]/u.test(rest))
+        // A card's ordinal (01, 02) is design rule 7's numbering, not copy.
+        .filter((rest) => !/^\s*\d{2}\s*$/.test(rest))
         .map((rest) => `${page.file}: "${rest.trim()}"`)
     )
     expect(inline).toEqual([])

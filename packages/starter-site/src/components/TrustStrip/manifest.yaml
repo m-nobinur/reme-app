@@ -14,8 +14,9 @@ constraints:
   - trust1 to trust3 restate business.proof in under six words each, and stay
     empty without it.
   - Renders nothing when there are no figures and no points.
-  - icons sets them in columns split by hairlines, a check beside each point;
-    phrases sets them in one uppercase line with dots between.
+  - icons sets them in columns split by hairlines, each with the icon its words
+    call for in a soft circle; phrases sets them in one uppercase line with dots
+    between.
 examples:
   - "<TrustStrip />"
   - '<TrustStrip variant="icons" />'

@@ -154,10 +154,13 @@ describe("the photo director", () => {
     ])
     const drawn = images(calls)
     expect(drawn).toHaveLength(2)
+    // The hero asks for its pixels outright: "2K" alone gave 1536 px wide.
     expect(drawn[0]?.body).toMatchObject({
       model: QUALITY_MODELS[0]?.id,
       resolution: "2K",
+      size: "2560x1920",
     })
+    expect(drawn[1]?.body.size).toBeUndefined()
     expect(drawn[0]?.body.input_references).toBeUndefined()
     expect(drawn[0]?.body.prompt).toContain(NEVER)
     // The first fast model draws, as listed (recraft takes no references); the

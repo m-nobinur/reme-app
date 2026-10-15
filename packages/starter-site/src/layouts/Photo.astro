@@ -16,6 +16,8 @@ interface Props {
   sizes?: string
   /** The one image above the fold: eager, high priority, preloaded. */
   priority?: boolean
+  /** Encoding quality, 1 to 100. The hero asks for more than the rest. */
+  quality?: number
 }
 
 // Lazy, so only the photo this page names is imported: an eager glob makes
@@ -30,6 +32,7 @@ const {
   widths = [480, 768, 1280, 1920],
   sizes = "(min-width: 64rem) 50vw, 100vw",
   priority = false,
+  quality = 55,
 } = Astro.props
 const load = files[`/src/assets/${src.replace(/^\/?(?:src\/assets\/)?/, "")}`]
 const meta = load ? (await load()).default : undefined
@@ -43,8 +46,6 @@ const emitted = meta
     ].sort((a, b) => a - b)
   : []
 if (meta && emitted.length === 0) emitted.push(meta.width)
-// shortcut: one quality for every photo, tune per slot if a hero still misses its budget.
-const quality = 55
 const preload =
   meta && priority
     ? await getImage({ src: meta, widths: emitted, format: "avif", quality })
