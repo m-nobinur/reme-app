@@ -3,9 +3,10 @@ import { fileURLToPath } from "node:url"
 import { defineConfig, fontProviders } from "astro/config"
 import { copyFindings } from "./src/copy-check.ts"
 import { familiesOf, pairOf } from "./src/fonts.ts"
+import { iconFindings } from "./src/icons.ts"
 import { site } from "./src/site-config.ts"
 
-/** Prints the copy check over the built pages. It warns; it never fails a build. */
+/** Prints the copy check over the built pages, and any icon the config names that src/icons.ts lacks. It warns; it never fails a build. */
 const copyCheck = {
   name: "copy-check",
   hooks: {
@@ -16,7 +17,7 @@ const copyCheck = {
         .filter((file) => file.endsWith(".html"))
         .sort()
         .map((file) => ({ file, html: readFileSync(root + file, "utf8") }))
-      const found = copyFindings(pages)
+      const found = [...iconFindings(site), ...copyFindings(pages)]
       for (const line of found) logger.warn(line)
       logger.info(
         found.length > 0

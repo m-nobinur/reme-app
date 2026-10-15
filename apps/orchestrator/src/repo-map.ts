@@ -12,8 +12,8 @@
 
 import type { ComponentManifest } from "@workspace/contracts"
 
-/** 11,000 characters is about 2,750 tokens at the ratio measured on the starter, in the cached segment. The starter with its fonts, palettes, directions and section heads needs about 10,200 (2026-10-14); `seed.test.ts` fails if the seed's own map is ever cut. */
-export const REPO_MAP_MAX_CHARS = 11_000
+/** 14,000 characters is about 3,500 tokens at the ratio measured on the starter, in the cached segment. The starter with its fonts, palettes, directions and section heads needed about 10,200 (2026-10-14); the 99 ICONS keys the Developer may name, the favicon set and the motifs bring it to 13,487 (2026-10-15). `seed.test.ts` fails if the seed's own map is ever cut. */
+export const REPO_MAP_MAX_CHARS = 14_000
 
 /** Room kept for the notice that says what a cut map left out. */
 const NOTICE_CHARS = 600
