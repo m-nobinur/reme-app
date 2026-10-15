@@ -49,6 +49,10 @@ test("a card of many ticks several with Space, in order, and none is unanswered"
     name: "Which pages should the site have, besides Home and Request a quote?",
   })
   await expect(group).toHaveCount(1)
+  // Said under the question and read with the group; a card of one has no such line.
+  await expect(group).toHaveAccessibleDescription("Pick any that fit")
+  await expect(pages.getByText("Pick any that fit")).toBeVisible()
+  await expect(tray(page, 0).getByText("Pick any that fit")).toHaveCount(0)
   await expect(pages.getByRole("radio")).toHaveCount(0)
   const box = (name: string) => group.getByRole("checkbox", { name })
   await expect(box("Services What you offer")).toBeChecked()

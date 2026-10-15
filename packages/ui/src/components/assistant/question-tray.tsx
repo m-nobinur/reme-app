@@ -3,6 +3,8 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
   CaretUpIcon,
+  CheckSquareIcon,
+  SquareIcon,
 } from "@phosphor-icons/react"
 import {
   type AskDesignInput,
@@ -591,12 +593,16 @@ function QuestionTray({
       ) : (
         <>
           <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
-            <h2
-              className="min-w-0 flex-1 font-medium text-base"
-              id={`${id}-question`}
-            >
-              {prompt}
-            </h2>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <h2 className="font-medium text-base" id={`${id}-question`}>
+                {prompt}
+              </h2>
+              {multiple ? (
+                <p className="text-muted-foreground text-xs" id={`${id}-hint`}>
+                  Pick any that fit
+                </p>
+              ) : null}
+            </div>
             <span
               aria-hidden
               className="shrink-0 text-muted-foreground text-xs tabular-nums"
@@ -627,6 +633,7 @@ function QuestionTray({
               {question.card.options.length > 0 ? (
                 // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
                 <div
+                  aria-describedby={multiple ? `${id}-hint` : undefined}
                   aria-labelledby={`${id}-question`}
                   className={cn(
                     "grid grid-cols-1 gap-3",
@@ -674,6 +681,21 @@ function QuestionTray({
                           ) : (
                             option.label
                           )}
+                          {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
+                          {multiple ? (
+                            checked ? (
+                              <CheckSquareIcon
+                                aria-hidden
+                                className="ml-auto size-5 shrink-0"
+                                weight="fill"
+                              />
+                            ) : (
+                              <SquareIcon
+                                aria-hidden
+                                className="ml-auto size-5 shrink-0 text-muted-foreground"
+                              />
+                            )
+                          ) : null}
                         </span>
                         {option.hint ? (
                           <span className="text-muted-foreground text-xs">
