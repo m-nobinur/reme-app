@@ -5,7 +5,7 @@ const EM_DASH = String.fromCharCode(0x2014)
 
 const TITLE = "Weekly house cleaning in Fairhaven | BrightClean"
 const DESCRIPTION =
-  "One cleaner keeps your home on the same day each week, across Fairhaven and the villages around it. Tell us about your home to get a quote."
+  "One cleaner keeps your home on the same day each week, across Fairhaven and the villages around it. Tell us about your home to get a quote today."
 const page = (body: string, title = TITLE, description = DESCRIPTION) =>
   `<html><head><title>${title}</title><meta name="description" content="${description}"></head><body>${body}</body></html>`
 

@@ -32,12 +32,14 @@ const onServices = Astro.url.pathname === "/services/"
 // over: numbered rows carry the same services as a list. Cards need a photo
 // each; the services page keeps its detail rows either way, as the one place
 // the full lists live.
-const variant =
-  (asked === "photo_cards" && !items.every((item) => item.photo)) ||
-  (asked === "alternating" &&
-    !onServices &&
-    !only &&
-    !items.some((item) => item.photo))
+// A service's own page always shows its detail row: the includes and who-it-suits
+// blocks live only there, and any other pattern would drop them.
+const variant = only
+  ? "alternating"
+  : (asked === "photo_cards" && !items.every((item) => item.photo)) ||
+      (asked === "alternating" &&
+        !onServices &&
+        !items.some((item) => item.photo))
     ? "numbered_rows"
     : asked
 // Alternating rows are a service's detail, the place every other pattern
@@ -182,7 +184,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                       {site.serviceIncludesLabel && (
                         <h3 class="facts-label">{site.serviceIncludesLabel}</h3>
                       )}
-                      <ul class="check-list">
+                      <ul class="check-list" data-copy="service_includes">
                         {item.includes.map((line) => (
                           <li>
                             <Icon name="checkCircle" />
@@ -197,7 +199,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                       {site.serviceForLabel && (
                         <h3 class="facts-label">{site.serviceForLabel}</h3>
                       )}
-                      <p>{item.for}</p>
+                      <p data-copy="service_for">{item.for}</p>
                     </>
                   )}
                 </div>

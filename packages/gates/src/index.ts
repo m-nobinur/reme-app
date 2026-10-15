@@ -582,7 +582,8 @@ export async function runGates(input: {
     lap("copy", () =>
       checkCopy(
         built.map(({ page, html }) => ({ file: page.file, html })),
-        input.plan !== undefined
+        input.plan !== undefined,
+        input.facts
       )
     ),
     axe,
