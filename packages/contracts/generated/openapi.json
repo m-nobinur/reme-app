@@ -8761,6 +8761,29 @@
         ],
         "additionalProperties": false
       },
+      "BlueprintReceipt": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "round": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "build",
+              "change"
+            ]
+          }
+        },
+        "required": [
+          "round",
+          "decision"
+        ],
+        "additionalProperties": false
+      },
       "BlueprintReviewInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -24495,7 +24518,7 @@
           "url": {
             "type": "string",
             "format": "uri",
-            "pattern": "^https://"
+            "pattern": "^(https://|http://[^/?#@:]+\\.localhost(:[0-9]+)?([/?#]|$))"
           },
           "screenshots": {
             "minItems": 3,
@@ -24504,7 +24527,7 @@
             "items": {
               "type": "string",
               "format": "uri",
-              "pattern": "^https://"
+              "pattern": "^(https://|http://[^/?#@:]+\\.localhost(:[0-9]+)?([/?#]|$))"
             }
           },
           "expires_at": {
@@ -29181,7 +29204,8 @@
                 "anyOf": [
                   {
                     "type": "string",
-                    "format": "uri"
+                    "format": "uri",
+                    "pattern": "^(https://|http://[^/?#@:]+\\.localhost(:[0-9]+)?([/?#]|$))"
                   },
                   {
                     "type": "null"

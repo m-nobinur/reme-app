@@ -268,6 +268,15 @@ export const BlueprintReviewOutput = z.discriminatedUnion("decision", [
 ])
 
 /**
+ * What `POST /builds/:id/blueprint` answers (202): the round decided and the
+ * decision on record. Not the build's state, which the decision has not moved yet.
+ */
+export const BlueprintReceipt = z.strictObject({
+  round: z.int().positive(),
+  decision: z.enum(["build", "change"]),
+})
+
+/**
  * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
  * on the wire so the web enforces what the api will.
  */
@@ -463,6 +472,7 @@ export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
 export type AskDesignInput = z.infer<typeof AskDesignInput>
 export type BlueprintReviewInput = z.infer<typeof BlueprintReviewInput>
 export type BlueprintReviewOutput = z.infer<typeof BlueprintReviewOutput>
+export type BlueprintReceipt = z.infer<typeof BlueprintReceipt>
 export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
 export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
