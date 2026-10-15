@@ -36,7 +36,7 @@ const proofItems = [
     [site.statRatingValue, site.statRatingLabel],
   ]
     .filter(([value]) => value)
-    .map(([value, label]) => `${value} ${label}`.trim()),
+    .map(([value, label]) => `${value} ${label?.toLowerCase()}`.trim()),
   ...[site.trust1, site.trust2, site.trust3].filter(Boolean),
 ]
 const storyHeading = story ? site.overviewHeading : site.audienceHeading

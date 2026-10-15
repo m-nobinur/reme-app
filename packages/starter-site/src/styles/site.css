@@ -976,7 +976,7 @@ picture {
 }
 
 /* Two columns on a phone, so four items sit 2 by 2; on a wide screen one row
-   of up to four (TrustStrip sets --trust-cols). Every item draws a hairline
+   of up to four, rows of three past that (TrustStrip sets --trust-cols). Every item draws a hairline
    on its start edge and the list clips the first column's, so the dividers
    sit only between neighbours whatever the count. */
 .trust-list {

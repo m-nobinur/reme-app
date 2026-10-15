@@ -1,0 +1,108 @@
+- generic [active] [ref=f2e1]:
+  - link "Skip to content" [ref=f2e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - link [ref=f2e5] [cursor=pointer]:
+        - /url: /
+        - img "BrightClean" [ref=f2e7]
+      - group [ref=f2e8]:
+        - generic "Menu" [ref=f2e9] [cursor=pointer]
+  - main [ref=f2e10]:
+    - generic [ref=f2e13]:
+      - heading "About us" [level=1] [ref=f2e14]
+      - paragraph [ref=f2e15]: A local cleaning firm with its own cleaners, not an agency.
+    - list [ref=f2e18]:
+      - listitem [ref=f2e19]:
+        - generic [ref=f2e23]:
+          - generic [ref=f2e24]: "12"
+          - generic [ref=f2e25]: Years in business
+      - listitem [ref=f2e26]:
+        - generic [ref=f2e30]: Cleaning Fairhaven since 2014
+      - listitem [ref=f2e31]:
+        - generic [ref=f2e35]: Fully insured
+      - listitem [ref=f2e36]:
+        - generic [ref=f2e40]: Our own employed cleaners
+    - generic [ref=f2e42]:
+      - generic [ref=f2e43]:
+        - generic [ref=f2e44]:
+          - paragraph [ref=f2e45]: Our story
+          - heading "One cleaner for every home in Fairhaven" [level=2] [ref=f2e46]
+        - paragraph [ref=f2e47]: Your home gets one cleaner, who learns how you like it kept. They come on the same day every week, so you always know when.
+        - heading "Homes we clean for" [level=3] [ref=f2e48]
+        - paragraph [ref=f2e49]: We clean for households with busy weeks, and for homes with pets underfoot.
+      - img "A kitchen worktop after a clean" [ref=f2e51]
+    - generic [ref=f2e53]:
+      - generic [ref=f2e54]:
+        - paragraph [ref=f2e55]: Our record
+        - heading "Why Fairhaven trusts us" [level=2] [ref=f2e56]
+      - generic [ref=f2e58]:
+        - paragraph [ref=f2e59]: We have cleaned homes in Fairhaven since 2014. We are fully insured, and every cleaner works for us directly rather than through an agency.
+        - list [ref=f2e60]:
+          - listitem [ref=f2e61]:
+            - generic [ref=f2e64]: 12 Years in business
+          - listitem [ref=f2e65]:
+            - generic [ref=f2e68]: Cleaning Fairhaven since 2014
+          - listitem [ref=f2e69]:
+            - generic [ref=f2e72]: Fully insured
+          - listitem [ref=f2e73]:
+            - generic [ref=f2e76]: Our own employed cleaners
+    - generic [ref=f2e78]:
+      - generic [ref=f2e79]:
+        - paragraph [ref=f2e80]: Next step
+        - heading "Meet the cleaners in person" [level=2] [ref=f2e81]
+        - paragraph [ref=f2e82]: Ask for a quote and we come round first.
+      - generic [ref=f2e83]:
+        - link "Request a quote" [ref=f2e84] [cursor=pointer]:
+          - /url: /quote/
+        - link "+15550142" [ref=f2e85] [cursor=pointer]:
+          - /url: tel:+15550142
+  - contentinfo [ref=f2e86]:
+    - generic [ref=f2e87]:
+      - generic [ref=f2e88]:
+        - paragraph [ref=f2e89]:
+          - img "BrightClean" [ref=f2e91]
+        - paragraph [ref=f2e92]: Weekly cleaning for homes in Fairhaven
+        - link "Request a quote" [ref=f2e93] [cursor=pointer]:
+          - /url: /quote/
+      - navigation "Footer" [ref=f2e94]:
+        - paragraph [ref=f2e95]: Pages
+        - list [ref=f2e96]:
+          - listitem [ref=f2e97]:
+            - link "Home" [ref=f2e98] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=f2e99]:
+            - link "Services" [ref=f2e100] [cursor=pointer]:
+              - /url: /services/
+          - listitem [ref=f2e101]:
+            - link "Service area" [ref=f2e102] [cursor=pointer]:
+              - /url: /service-area/
+          - listitem [ref=f2e103]:
+            - link "About" [ref=f2e104] [cursor=pointer]:
+              - /url: /about/
+          - listitem [ref=f2e105]:
+            - link "Contact" [ref=f2e106] [cursor=pointer]:
+              - /url: /contact/
+          - listitem [ref=f2e107]:
+            - link "Request a quote" [ref=f2e108] [cursor=pointer]:
+              - /url: /quote/
+      - generic [ref=f2e109]:
+        - paragraph [ref=f2e110]: Get in touch
+        - generic [ref=f2e111]:
+          - generic [ref=f2e112]:
+            - term [ref=f2e113]: Phone
+            - definition [ref=f2e117]:
+              - link "+15550142" [ref=f2e118] [cursor=pointer]:
+                - /url: tel:+15550142
+          - generic [ref=f2e119]:
+            - term [ref=f2e120]: Email
+            - definition [ref=f2e124]:
+              - link "hello@brightclean.invalid" [ref=f2e125] [cursor=pointer]:
+                - /url: mailto:hello@brightclean.invalid
+          - generic [ref=f2e126]:
+            - term [ref=f2e127]: Weekdays
+            - definition [ref=f2e131]: 08:00 to 17:00
+          - generic [ref=f2e132]:
+            - term [ref=f2e133]: Service area
+            - definition [ref=f2e137]: Fairhaven and the villages around it
+    - paragraph [ref=f2e139]: © BrightClean

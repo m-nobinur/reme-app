@@ -71,7 +71,7 @@ const count = figures.length + points.length
   count > 0 && (
     <section class="trust-strip">
       <div class="wrap">
-        <ul class="trust-list" style={`--trust-cols: ${Math.min(count, 4)}`}>
+        <ul class="trust-list" style={`--trust-cols: ${count <= 4 ? count : 3}`}>
           {figures.map((item) => (
             <li>
               <span class="trust-icon">
