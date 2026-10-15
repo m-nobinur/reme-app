@@ -7,6 +7,7 @@ import {
 } from "@workspace/contracts"
 import { checkAxe, parseAxe } from "./axe.ts"
 import { claimFindings, generatedImageFindings } from "./claims.ts"
+import { checkCopy } from "./copy.ts"
 import {
   CUSTOM_CHECK,
   checkCustomSections,
@@ -35,6 +36,14 @@ export {
   generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
+export {
+  COPY_WORDS,
+  type CopyFinding,
+  type CopyKind,
+  checkCopy,
+  copyFindings,
+  STOCK_HEADINGS,
+} from "./copy.ts"
 export {
   CUSTOM_CHECK,
   type CustomFinding,
@@ -131,18 +140,28 @@ export function checkPlannedPages(
   files: Record<string, string>
 ): GateResult | null {
   const slug = (page: string) =>
-    page === "home" ? "index" : page.replaceAll("_", "-")
+    page === "home"
+      ? "index"
+      : page === "service"
+        ? "services/[slug]"
+        : page.replaceAll("_", "-")
+  // `service` is one page per service under services/; the services page's
+  // links to each are the links gate's to check.
+  const servicePages = Object.keys(files).filter((f) =>
+    /^services\/[^/]+\/index\.html$/.test(f)
+  ).length
   const missing = plan.pages
     .map(({ page }) => page)
-    .filter(
-      (page) =>
-        !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
+    .filter((page) =>
+      page === "service"
+        ? servicePages === 0
+        : !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
     )
   const [first] = missing
   if (!first) return null
   return fail(
     "build",
-    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}. Every planned page stays, whatever the facts`,
+    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}${missing.includes("service") ? " (it builds a page for each service with a name)" : ""}. Every planned page stays, whatever the facts`,
     first
   )
 }
@@ -447,7 +466,7 @@ export function checkClaims(
 const READS = 8
 
 /**
- * All eight gates over one artifact, in the contract's order. Each file is
+ * All nine gates over one artifact, in the contract's order. Each file is
  * read once: the build gate hashes every file while the pages are read for
  * the other gates, and a page both need comes from the same read.
  */
@@ -466,7 +485,8 @@ export async function runGates(input: {
   timings?: Record<string, number>
   /**
    * The Blueprint's image slots and pages, so a generated photo in a claim
-   * section fails (ADR-039), and so does a planned page the build lacks.
+   * section fails (ADR-039), and so does a planned page the build lacks. The
+   * copy gate runs only with it.
    */
   plan?: Parameters<typeof generatedImageFindings>[0]
 }): Promise<GateResult[]> {
@@ -518,13 +538,14 @@ export async function runGates(input: {
       fail("structured_data", unreadable),
       fail("content", unreadable),
       fail("claims", unreadable),
+      fail("copy", unreadable),
       axe,
       fail("size", unreadable),
     ]
   }
   const decoder = new TextDecoder()
   const readStarted = Date.now()
-  const [build, pages] = await Promise.all([
+  const [build, built] = await Promise.all([
     (async () => {
       const started = Date.now()
       const result = await checkBuild(input.manifest, read)
@@ -538,13 +559,16 @@ export async function runGates(input: {
           .sort()
           .map(async (file) => {
             const bytes = await read(file)
-            return bytes ? parsePage(file, decoder.decode(bytes)) : null
+            if (!bytes) return null
+            const html = decoder.decode(bytes)
+            return { page: parsePage(file, html), html }
           })
       )
       if (input.timings) input.timings.read = Date.now() - readStarted
-      return found.filter((page): page is Page => page !== null)
+      return found.filter((each) => each !== null)
     })(),
   ])
+  const pages = built.map((each) => each.page)
   const gap = input.plan
     ? checkPlannedPages(input.plan, parsed.data.files)
     : null
@@ -555,6 +579,12 @@ export async function runGates(input: {
     lap("structured_data", () => checkStructuredData(pages)),
     lap("content", () => checkContent(pages, input.facts, input.hosts)),
     lap("claims", () => checkClaims(pages, input.facts, input.plan)),
+    lap("copy", () =>
+      checkCopy(
+        built.map(({ page, html }) => ({ file: page.file, html })),
+        input.plan !== undefined
+      )
+    ),
     axe,
     await (async () => {
       const started = Date.now()

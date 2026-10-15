@@ -232,6 +232,68 @@ describe("a component with its fields filled", () => {
       'A home you come back <span class="accent">to</span></h1>'
     )
   })
+
+  test("marks the copy the copy gate reads (packages/gates/src/copy.ts)", () => {
+    const html = (file: string) =>
+      pagesOf(filled).find((p) => p.file === file)?.html ?? ""
+    const home = html("index.html")
+    // The subhead is homeIntro; the owner's tagline moves to the about section.
+    expect(home).toMatch(
+      new RegExp(`data-copy="hero_lede"[^>]*>\\s*${FILLED.homeIntro}`)
+    )
+    expect(home).toContain(`<p class="hero-note">${FILLED.heroNote}</p>`)
+    expect(home).toContain(FILLED.tagline)
+    expect(home).toContain('<span class="accent">Fairhaven homes</span>')
+    for (const kind of ["service_body", "step_body", "faq_answer"])
+      expect(home, kind).toContain(`data-copy="${kind}"`)
+    expect(home).toContain(FILLED.step4Body)
+    expect(html("services/weekly-clean/index.html")).toMatch(
+      new RegExp(`data-copy="service_detail"[^>]*>\\s*${FILLED.service1Detail}`)
+    )
+  })
+
+  test("gives each named service its own page, linked, in the sitemap and as a Service", () => {
+    const pages = pagesOf(filled)
+    const html = (file: string) =>
+      pages.find((p) => p.file === file)?.html ?? ""
+    const slugs = ["weekly-clean", "deep-clean", "end-of-tenancy"]
+    for (const slug of slugs) {
+      expect(html(`services/${slug}/index.html`), slug).toContain("<h1")
+      // Linked from the home cards and the services page.
+      for (const from of ["index.html", "services/index.html"])
+        expect(html(from), `${from} ${slug}`).toContain(
+          `href="/services/${slug}/"`
+        )
+    }
+    const page = html("services/weekly-clean/index.html")
+    expect(page).toContain(`<title>${FILLED.service1Title}</title>`)
+    expect(page).toContain(FILLED.service1Description)
+    expect(page).toContain(`<h1>${FILLED.service1Heading}</h1>`)
+    for (const text of [
+      FILLED.service1StepsHeading,
+      FILLED.service1FaqHeading,
+      FILLED.service1Faq1Answer,
+      FILLED.service1CtaHeading,
+      FILLED.service1CtaBody,
+      "Bathrooms cleaned",
+    ])
+      expect(page, text).toContain(text)
+    // Its questions are its own, never the site's.
+    expect(page).not.toContain(FILLED.faq2Answer)
+    const ld = jsonLdOf(
+      pages.find((p) => p.file === "services/weekly-clean/index.html") as never
+    )
+    expect(ld.map((t) => t["@type"])).toEqual(["Service", "FAQPage"])
+    expect(ld[0]?.url).toBe(`${ORIGIN}/services/weekly-clean/`)
+    const sitemap = sitemapUrls(fileOf(filled, "sitemap.xml"))
+    for (const slug of slugs)
+      expect(sitemap).toContain(`${ORIGIN}/services/${slug}/`)
+    // A service page without its own band fields takes the home page's.
+    expect(html("services/deep-clean/index.html")).toContain(FILLED.ctaHeading)
+    // Each page's own closing band.
+    expect(html("about/index.html")).toContain(FILLED.aboutCtaHeading)
+    expect(html("about/index.html")).not.toContain(FILLED.ctaHeading)
+  })
 })
 
 describe("proof", () => {
@@ -283,7 +345,7 @@ describe("the about page", () => {
     const photo = about.elements.find((el) =>
       (el.attrs.class ?? "").split(" ").includes("story-photo")
     )
-    expect(photo?.attrs.src).toBe(FILLED.photo1Src)
+    expect(photo?.attrs.src).toMatch(/^\/_astro\//)
     expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
   })
 
@@ -544,6 +606,8 @@ describe("templates", () => {
       leftovers(page)
         .map((text) => text.replace(/«[A-Za-z0-9]+»/g, ""))
         .filter((rest) => /[\p{L}\p{N}]/u.test(rest))
+        // A card's ordinal (01, 02) is design rule 7's numbering, not copy.
+        .filter((rest) => !/^\s*\d{2}\s*$/.test(rest))
         .map((rest) => `${page.file}: "${rest.trim()}"`)
     )
     expect(inline).toEqual([])

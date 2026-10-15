@@ -1,7 +1,8 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
-import { hasRoute, primaryAction } from "../../routes"
+import { hasPhoto } from "../../photo-files"
+import { hasRoute, primaryAction, serviceHref } from "../../routes"
 import { site } from "../../site-config"
 import { serviceItems } from "../../structured-data"
 import ActionLink from "../ActionLink/ActionLink.astro"
@@ -15,13 +16,17 @@ interface Props {
     | "alternating"
     | "fleet"
     | "practice_list"
+  /** On a service's own page, the one service it shows by id: its detail, under the page's hero. */
+  only?: string
 }
 
-const { variant: asked = "photo_cards" } = Astro.props
-const items = serviceItems.map((item) => ({
-  ...item,
-  photo: item.image.src && item.image.alt ? item.image : null,
-}))
+const { variant: asked = "photo_cards", only } = Astro.props
+const items = serviceItems
+  .filter((item) => !only || item.id === only)
+  .map((item) => ({
+    ...item,
+    photo: item.image.alt && hasPhoto(item.image.src) ? item.image : null,
+  }))
 const onServices = Astro.url.pathname === "/services/"
 // A pattern built on pictures, with none to show, is one icon card three times
 // over: numbered rows carry the same services as a list. Cards need a photo
@@ -29,14 +34,19 @@ const onServices = Astro.url.pathname === "/services/"
 // the full lists live.
 const variant =
   (asked === "photo_cards" && !items.every((item) => item.photo)) ||
-  (asked === "alternating" && !onServices && !items.some((item) => item.photo))
+  (asked === "alternating" &&
+    !onServices &&
+    !only &&
+    !items.some((item) => item.photo))
     ? "numbered_rows"
     : asked
-// Alternating rows are the services page itself, the place every other
-// pattern links to, so they link nowhere and the page's hero is their head.
+// Alternating rows are a service's detail, the place every other pattern
+// links to (its own page, or the services page on a site without them), so
+// they link nowhere. On the services page and a service's own page, the
+// page's hero is the section's head.
 const detail = variant === "alternating"
 const linked = !detail && hasRoute("/services/")
-const href = (id: string) => `/services/#${id}`
+const headed = !onServices && !only
 // Cards per row on a wide screen: four in one row, otherwise rows of three,
 // a short last row centred (site.css counts the cards itself).
 const perRow = items.length === 4 ? 4 : 3
@@ -55,7 +65,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
       ]}
     >
       <div class="wrap">
-        {!(detail && onServices) && (
+        {headed && (
           <SectionHead
             eyebrow={site.serviceCardsEyebrow}
             heading={site.serviceCardsHeading}
@@ -89,10 +99,10 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                 )}
                 {item.name && (
                   <h3>
-                    {linked ? <a href={href(item.id)}>{item.name}</a> : item.name}
+                    {linked ? <a href={serviceHref(item)}>{item.name}</a> : item.name}
                   </h3>
                 )}
-                {item.body && <p>{item.body}</p>}
+                {item.body && <p data-copy="service_body">{item.body}</p>}
                 {variant === "fleet" && item.includes.length > 0 && (
                   <ul class="spec-pills">
                     {item.includes.map((line) => (
@@ -122,13 +132,13 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                   {item.name && (
                     <h3>
                       {linked ? (
-                        <a href={href(item.id)}>{item.name}</a>
+                        <a href={serviceHref(item)}>{item.name}</a>
                       ) : (
                         item.name
                       )}
                     </h3>
                   )}
-                  {item.body && <p>{item.body}</p>}
+                  {item.body && <p data-copy="service_body">{item.body}</p>}
                 </div>
                 {linked && <span class="row-arrow" aria-hidden="true" />}
               </li>
@@ -138,7 +148,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
         {detail &&
           items.map((item) => (
             <article class="service-detail" id={item.id}>
-              {item.photo && (
+              {item.photo && !only && (
                 <Photo
                   class="service-photo"
                   src={item.photo.src}
@@ -152,7 +162,11 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                   <p class="eyebrow">{site.serviceCardsEyebrow}</p>
                 )}
                 {item.name && <h2>{item.name}</h2>}
-                {item.body && <p class="service-detail-body">{item.body}</p>}
+                {(item.detail || item.body) && (
+                  <p class="service-detail-body" data-copy="service_detail">
+                    {item.detail || item.body}
+                  </p>
+                )}
                 {primaryAction && (
                   <ActionLink
                     href={primaryAction.href}
@@ -190,7 +204,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
               )}
             </article>
           ))}
-        {linked && site.serviceCardsLink && (
+        {linked && !onServices && site.serviceCardsLink && (
           <p class="section-more">
             <a class="more-link" href="/services/">
               {site.serviceCardsLink}

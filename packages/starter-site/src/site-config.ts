@@ -151,12 +151,22 @@ const values = {
    * cleaning in Fairhaven". Falls back to the business name.
    */
   heroHeading: "",
-  /** One sentence: what a customer gets. Under the h1 when there is no tagline. */
+  /**
+   * The hero's subhead under the h1: two or three sentences, 25 to 55 words,
+   * on who the business serves, where, and what the customer gets. Wins over
+   * the tagline, which then shows in the home about section.
+   */
   homeIntro: "",
+  /**
+   * A short reassurance line under the hero's buttons, under twelve words,
+   * about how easy the next step is ("Tell us about your home and we reply
+   * with a quote"). Never a claim no fact holds. Empty shows nothing.
+   */
+  heroNote: "",
   /**
    * Each page's <title> and meta description. A title is 50 to 60
    * characters with the service, the area and the business name; a
-   * description is 140 to 155 characters with a reason to request a quote.
+   * description is 140 to 160 characters with a reason to request a quote.
    * Empty falls back to the page's heading and intro.
    */
   homeTitle: "",
@@ -171,7 +181,7 @@ const values = {
   contactDescription: "",
   quoteTitle: "",
   quoteDescription: "",
-  /** Each page's lede under its h1: one or two sentences for that page. */
+  /** Each page's lede under its h1: two or three sentences, 30 to 60 words, for that page. */
   aboutIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
@@ -187,6 +197,8 @@ const values = {
   bookingIntro: "",
   aboutEyebrow: "About",
   aboutHeading: "About us",
+  /** The home page's about section h2, so it never repeats the about page's h1. Empty uses aboutHeading. */
+  homeAboutHeading: "",
   /** The link from the home page's about section to the about page. */
   aboutLink: "More about us",
   overviewEyebrow: "Our story",
@@ -194,7 +206,7 @@ const values = {
   audienceHeading: "Who we work with",
   proofEyebrow: "Our record",
   proofHeading: "What sets us apart",
-  /** business.overview in the site's voice, in two to four sentences: rephrase it, never add to it. Empty shows overview as given. */
+  /** business.overview in the site's voice, up to 200 words in one or two paragraphs: rephrase it, never add to it. Empty shows overview as given. */
   overviewBody: "",
   /** business.audience in the site's voice, in one or two sentences: rephrase it, never add to it. Empty shows audience as given. */
   audienceBody: "",
@@ -242,39 +254,47 @@ const values = {
   serviceForLabel: "Who it is for",
   /**
    * Up to six services, one per business.offerings item that a fact
-   * describes. Name; Body, one benefit-led sentence; Icon, a key of ICONS in
+   * describes. Name; Body, 25 to 45 words, benefit first, then what it
+   * covers; Detail, the intro on its own page, 60 to 100 words on what
+   * the job involves and the result; Icon, a key of ICONS in
    * src/icons.ts, no key twice; Includes, what the service covers, one item
-   * to a line, from the facts; For, one sentence on who it suits, from
-   * business.audience. A card shows Name, Body and Icon; the services page
-   * shows them all.
+   * to a line, four to six, from the facts; For, one or two sentences on who it suits, from
+   * business.audience. A card shows Name, Body and Icon and links to the
+   * service's own page, which shows them all.
    */
   service1Name: "",
   service1Body: "",
+  service1Detail: "",
   service1Icon: "",
   service1Includes: "",
   service1For: "",
   service2Name: "",
   service2Body: "",
+  service2Detail: "",
   service2Icon: "",
   service2Includes: "",
   service2For: "",
   service3Name: "",
   service3Body: "",
+  service3Detail: "",
   service3Icon: "",
   service3Includes: "",
   service3For: "",
   service4Name: "",
   service4Body: "",
+  service4Detail: "",
   service4Icon: "",
   service4Includes: "",
   service4For: "",
   service5Name: "",
   service5Body: "",
+  service5Detail: "",
   service5Icon: "",
   service5Includes: "",
   service5For: "",
   service6Name: "",
   service6Body: "",
+  service6Detail: "",
   service6Icon: "",
   service6Includes: "",
   service6For: "",
@@ -296,15 +316,167 @@ const values = {
   service5ImageAlt: "",
   service6Image: "",
   service6ImageAlt: "",
+  /**
+   * Each service's own page at /services/<slug>/, the slug made from its
+   * name. Heading is its h1, naming the service and the area (never the bare
+   * name, which is the page's h2); Title (50 to 60 characters) and
+   * Description (140 to 160) are its own; the hero's lede is Body, the intro
+   * is Detail, and Includes and For follow. Step1 to Step4 are three or four
+   * steps of this service alone, from first contact to the finished job
+   * (a title of 2 to 5 words, a body of 20 to 35), under StepsHeading; no
+   * page shares a step's words with another. Faq1 to Faq4 are two to four questions about this
+   * service only, under FaqHeading; CtaHeading and CtaBody are its closing
+   * band. Every heading is the site's only one of its words.
+   */
+  service1Heading: "",
+  service1Title: "",
+  service1Description: "",
+  service1StepsHeading: "",
+  service1Step1Title: "",
+  service1Step1Body: "",
+  service1Step2Title: "",
+  service1Step2Body: "",
+  service1Step3Title: "",
+  service1Step3Body: "",
+  service1Step4Title: "",
+  service1Step4Body: "",
+  service1FaqHeading: "",
+  service1Faq1Question: "",
+  service1Faq1Answer: "",
+  service1Faq2Question: "",
+  service1Faq2Answer: "",
+  service1Faq3Question: "",
+  service1Faq3Answer: "",
+  service1Faq4Question: "",
+  service1Faq4Answer: "",
+  service1CtaHeading: "",
+  service1CtaBody: "",
+  service2Heading: "",
+  service2Title: "",
+  service2Description: "",
+  service2StepsHeading: "",
+  service2Step1Title: "",
+  service2Step1Body: "",
+  service2Step2Title: "",
+  service2Step2Body: "",
+  service2Step3Title: "",
+  service2Step3Body: "",
+  service2Step4Title: "",
+  service2Step4Body: "",
+  service2FaqHeading: "",
+  service2Faq1Question: "",
+  service2Faq1Answer: "",
+  service2Faq2Question: "",
+  service2Faq2Answer: "",
+  service2Faq3Question: "",
+  service2Faq3Answer: "",
+  service2Faq4Question: "",
+  service2Faq4Answer: "",
+  service2CtaHeading: "",
+  service2CtaBody: "",
+  service3Heading: "",
+  service3Title: "",
+  service3Description: "",
+  service3StepsHeading: "",
+  service3Step1Title: "",
+  service3Step1Body: "",
+  service3Step2Title: "",
+  service3Step2Body: "",
+  service3Step3Title: "",
+  service3Step3Body: "",
+  service3Step4Title: "",
+  service3Step4Body: "",
+  service3FaqHeading: "",
+  service3Faq1Question: "",
+  service3Faq1Answer: "",
+  service3Faq2Question: "",
+  service3Faq2Answer: "",
+  service3Faq3Question: "",
+  service3Faq3Answer: "",
+  service3Faq4Question: "",
+  service3Faq4Answer: "",
+  service3CtaHeading: "",
+  service3CtaBody: "",
+  service4Heading: "",
+  service4Title: "",
+  service4Description: "",
+  service4StepsHeading: "",
+  service4Step1Title: "",
+  service4Step1Body: "",
+  service4Step2Title: "",
+  service4Step2Body: "",
+  service4Step3Title: "",
+  service4Step3Body: "",
+  service4Step4Title: "",
+  service4Step4Body: "",
+  service4FaqHeading: "",
+  service4Faq1Question: "",
+  service4Faq1Answer: "",
+  service4Faq2Question: "",
+  service4Faq2Answer: "",
+  service4Faq3Question: "",
+  service4Faq3Answer: "",
+  service4Faq4Question: "",
+  service4Faq4Answer: "",
+  service4CtaHeading: "",
+  service4CtaBody: "",
+  service5Heading: "",
+  service5Title: "",
+  service5Description: "",
+  service5StepsHeading: "",
+  service5Step1Title: "",
+  service5Step1Body: "",
+  service5Step2Title: "",
+  service5Step2Body: "",
+  service5Step3Title: "",
+  service5Step3Body: "",
+  service5Step4Title: "",
+  service5Step4Body: "",
+  service5FaqHeading: "",
+  service5Faq1Question: "",
+  service5Faq1Answer: "",
+  service5Faq2Question: "",
+  service5Faq2Answer: "",
+  service5Faq3Question: "",
+  service5Faq3Answer: "",
+  service5Faq4Question: "",
+  service5Faq4Answer: "",
+  service5CtaHeading: "",
+  service5CtaBody: "",
+  service6Heading: "",
+  service6Title: "",
+  service6Description: "",
+  service6StepsHeading: "",
+  service6Step1Title: "",
+  service6Step1Body: "",
+  service6Step2Title: "",
+  service6Step2Body: "",
+  service6Step3Title: "",
+  service6Step3Body: "",
+  service6Step4Title: "",
+  service6Step4Body: "",
+  service6FaqHeading: "",
+  service6Faq1Question: "",
+  service6Faq1Answer: "",
+  service6Faq2Question: "",
+  service6Faq2Answer: "",
+  service6Faq3Question: "",
+  service6Faq3Answer: "",
+  service6Faq4Question: "",
+  service6Faq4Answer: "",
+  service6CtaHeading: "",
+  service6CtaBody: "",
   stepsEyebrow: "Process",
   stepsHeading: "How it works",
-  /** Three steps from first contact to the finished job. */
+  /** Three or four steps from first contact to the finished job: a title and 20 to 35 words each. */
   step1Title: "",
   step1Body: "",
   step2Title: "",
   step2Body: "",
   step3Title: "",
   step3Body: "",
+  step4Title: "",
+  step4Body: "",
   statYearsLabel: "Years in business",
   statClientsLabel: "Clients served",
   statRatingLabel: "Average rating",
@@ -318,8 +490,10 @@ const values = {
    * not name. Empty shows service_area.text as given.
    */
   areaTowns: "",
-  /** A short paragraph on working in the area, with no landmark, venue or time the facts do not give. */
+  /** A paragraph of 40 to 80 words on working in the area, with no landmark, venue or time the facts do not give. */
   areaBody: "",
+  /** The home page's area section h2, so it never repeats the service area page's h1. Empty uses serviceAreaHeading. */
+  homeAreaHeading: "",
   /** The link from the home page's area section to the service area page. */
   areaLink: "See the areas we cover",
   faqEyebrow: "Questions",
@@ -329,9 +503,10 @@ const values = {
   /** The link under the FAQ intro to the contact page, off that page. */
   faqLink: "Ask us something else",
   /**
-   * Six to eight questions a customer of this trade asks before booking,
-   * each answered from a fact in one or two sentences. Fewer when the facts
-   * answer fewer; never a price.
+   * Five to eight questions a customer of this trade asks before booking,
+   * each answered in 40 to 90 words: the trade's usual practice in general
+   * terms, and this business's own policy only as a fact states it. Never a
+   * price.
    */
   faq1Question: "",
   faq1Answer: "",
@@ -350,8 +525,21 @@ const values = {
   faq8Question: "",
   faq8Answer: "",
   ctaEyebrow: "Next step",
+  /** The closing band on every page: a headline of 4 to 9 words and one sentence of 12 to 30 words. */
   ctaHeading: "",
   ctaBody: "",
+  /**
+   * The closing band of each other page, so no two pages share its heading.
+   * Empty falls back to ctaHeading and ctaBody, the home page's.
+   */
+  aboutCtaHeading: "",
+  aboutCtaBody: "",
+  servicesCtaHeading: "",
+  servicesCtaBody: "",
+  serviceAreaCtaHeading: "",
+  serviceAreaCtaBody: "",
+  contactCtaHeading: "",
+  contactCtaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
   ctaLabel: "",
   /** A photo behind the closing band, under the brand colour; decoration, so no alt. */
@@ -476,6 +664,7 @@ export type LayoutPage =
   | "home"
   | "about"
   | "services"
+  | "service"
   | "service_area"
   | "contact"
   | "quote"
@@ -498,11 +687,14 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
     { kind: "hero" },
     { kind: "trust_strip", variant: "icons" },
     { kind: "about" },
-    { kind: "value_props" },
-    { kind: "testimonials", variant: "wall" },
     { kind: "cta_band" },
   ],
   services: [
+    { kind: "hero" },
+    { kind: "service_cards", variant: "photo_cards" },
+    { kind: "cta_band" },
+  ],
+  service: [
     { kind: "hero" },
     { kind: "service_cards", variant: "alternating" },
     { kind: "steps" },

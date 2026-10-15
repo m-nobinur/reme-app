@@ -399,6 +399,20 @@ describe("the planned pages", () => {
     ).toBeNull()
   })
 
+  it("counts the service pages: one or more under services/ when the plan has them", () => {
+    const files = { "index.html": "x", "services/index.html": "x" }
+    const result = checkPlannedPages(plan("home", "services", "service"), files)
+    expect(result).toMatchObject({ passed: false, offending_node: "service" })
+    expect(result?.message).toContain("restore src/pages/services/[slug].astro")
+    expect(
+      checkPlannedPages(plan("home", "services", "service"), {
+        ...files,
+        "services/deep-clean/index.html": "x",
+        "services/weekly-clean/index.html": "x",
+      })
+    ).toBeNull()
+  })
+
   it("fails the build gate naming each planned page the build lacks and its file", () => {
     const result = checkPlannedPages(
       plan("home", "services", "contact", "service_area"),
@@ -489,6 +503,7 @@ describe("all the gates", () => {
       "build",
       "claims",
       "content",
+      "copy",
       "links",
       "read",
       "size",
@@ -501,6 +516,7 @@ describe("all the gates", () => {
       "structured_data",
       "content",
       "claims",
+      "copy",
       "a11y",
       "size",
     ])
@@ -539,6 +555,13 @@ describe("all the gates", () => {
     })
     expect(planned.find((r) => r.gate === "claims")?.offending_node).toContain(
       "images.team"
+    )
+    // The copy gate reads the pages only on a planned build.
+    expect(results.find((r) => r.gate === "copy")?.message).toContain(
+      "not a planned first build"
+    )
+    expect(planned.find((r) => r.gate === "copy")?.message).not.toContain(
+      "not a planned first build"
     )
     // The Blueprint reaches the build gate too: a planned page the lead
     // deleted fails it, so the repair puts it back.

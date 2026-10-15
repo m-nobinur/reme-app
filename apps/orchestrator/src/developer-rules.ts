@@ -18,7 +18,12 @@ import {
   TEMPLATES,
   TONES,
 } from "@workspace/contracts"
-import { CLAIM_VOCABULARY, factsToAsk } from "@workspace/gates"
+import {
+  CLAIM_VOCABULARY,
+  COPY_WORDS,
+  type CopyKind,
+  factsToAsk,
+} from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
 import { DIRECTIONS } from "./directions.ts"
@@ -52,7 +57,7 @@ export const DESIGN_RULES = [
   "8. Every image carries at most one overlay with copy.",
   "9. Every secondary link has an arrow that moves on hover.",
   "10. Alternate section backgrounds so the page has a rhythm.",
-  "11. Headlines 3 to 7 words. Paragraphs 1 to 2 sentences. One CTA wording, repeated.",
+  "11. Headlines 4 to 9 words, each on the site once: a section other than the hero and the closing band sits on one page only. Body copy as full as the copy brief asks. One CTA wording, repeated.",
   "12. No social proof the facts do not hold. An empty testimonials section is left out.",
 ]
 
@@ -129,15 +134,44 @@ export const packVoice = (
  * the starter's copy check's own list, which `astro build` prints against.
  */
 export const COPY_RULES = [
-  `- Write as a local copywriter for this trade: specific to these services, customers and area, benefit first, plain words, active voice, sentences under 20 words, one to two sentences a paragraph, British English unless the facts spell American. Never write ${BANNED_PHRASES.join(", ")} or a stock phrase like them, an em dash, an exclamation mark in a heading, or one phrase twice on a page. State each fact once per page, never again in other words ("8 Years in business" beside "8 years trading"). Name the area where it reads naturally, never as a keyword list.`,
-  '- heroHeading names the main service and the area ("Weekly house cleaning in Fairhaven"); the line under it says in one sentence what the customer gets. Each service gets a benefit-led Body, Includes (what the facts say it covers, one a line) and For (who it suits, from business.audience). Steps run from first contact to the finished job. Value props are reasons a fact supports. Write six to eight FAQs when the facts answer that many. areaTowns lists only places service_area.text names. ctaHeading and ctaBody give a reason to ask now, with no deadline or offer. servicesHeading, serviceAreaHeading, contactHeading, overviewHeading, audienceHeading and proofHeading name this business\'s service or area, never one bare word or a stock label.',
+  `- Write as a local copywriter for this trade: specific to these services, customers and area, benefit first, plain words, active voice, sentences mostly under 22 words, two to four sentences a paragraph, British English unless the facts spell American. Never write ${BANNED_PHRASES.join(", ")} or a stock phrase like them, an em dash, an exclamation mark in a heading, or one phrase twice on a page. State each fact once per page, never again in other words ("8 Years in business" beside "8 years trading"). Name the area where it reads naturally, never as a keyword list.`,
+  "- heroHeading names the main service and the area (\"Weekly house cleaning in Fairhaven\"); homeIntro under it is the copy brief's subhead. Each service gets a benefit-led Body, a Detail, Includes (one a line) and For (who it suits, from business.audience). Value props are reasons a fact supports. areaTowns lists only places service_area.text names. ctaHeading and ctaBody give a reason to ask now, with no deadline or offer. servicesHeading, serviceAreaHeading, contactHeading, overviewHeading, audienceHeading and proofHeading name this business's service or area, never one bare word or a stock label.",
   "- Set service1Icon to service6Icon and valueProp1Icon to valueProp3Icon to the ICONS key in src/icons.ts that shows what that card says, no key twice in a section.",
   "- business.proof is the only source for trust1 to trust3, proofBody and any years, insurance, accreditation, guarantee, award or rating on the site: shorten or rephrase it, never add to it. Without it leave those empty, and the strip and sections they fill drop out.",
   "- overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add, empty without the fact.",
-  "- Each page's Title field (homeTitle, servicesTitle and so on) is 50 to 60 characters naming service, area and business; its Description field is 140 to 155 characters saying what the page offers and why to request a quote; both unique to the page. FAQ questions are what this trade's customers ask before booking, in their words.",
+  "- Each page's Title field (homeTitle, servicesTitle and so on) is 50 to 60 characters naming service, area and business; its Description field is 140 to 160 characters saying what the page offers and why to request a quote; both unique to the page. FAQ questions are what this trade's customers ask before booking, in their words.",
   `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. A widening word such as fully or comprehensive needs the fact to carry it too: "Insured up to $5 million" does not make "Fully insured". Write the line without the claim instead.`,
   "- Beyond the required facts, call ask_chief only when a missing fact would leave a core section empty or wrong, such as no detail on any service: once a build at most, as one plain question with an example answer. Never ask for a nice-to-have or for business.proof; leave its section out.",
   "- astro build ends with a copy check. Fix every line it prints about text you wrote; a fact shown as given may stay.",
+]
+
+/** A gated section's word range, as the copy gate states it. */
+const range = (kind: CopyKind) =>
+  `${COPY_WORDS[kind].aim[0]} to ${COPY_WORDS[kind].aim[1]} words`
+
+/**
+ * The copy brief, section by section: how much each part of the page says
+ * and how it is built, so a site reads as finished rather than as a sketch.
+ * The gated ranges are the copy gate's own (packages/gates/src/copy.ts).
+ * Length comes from saying more about what the facts and the trade's usual
+ * practice support, never from claims; the truth rules above still hold.
+ */
+export const COPY_BRIEF = [
+  "- The copy brief, per section. A section that renders reads as finished, specific copy for this business and place, written to the range below; never one thin line where the brief asks for a paragraph.",
+  `- Hero: heroHeading 4 to 9 words naming the main service or outcome and the place. homeIntro, the subhead, two or three sentences (${range("hero_lede")}): who the business serves, where, and what the customer gets. heroNote, under the buttons, one reassurance line under 12 words about how the next step works, never a promise no fact makes.`,
+  "- Trust strip: trust1 to trust3, under six words each, from business.proof only.",
+  `- Service cards: serviceNName as a customer would search for it; serviceNBody ${range("service_body")}, the result first, then what the work covers in general terms. serviceCardsLink is a short label for the link to the services page.`,
+  `- Each service's own page (/services/<slug>/, from serviceNName): serviceNHeading, its h1, 4 to 9 words naming the service and the area, never the bare name; serviceNTitle 50 to 60 characters and serviceNDescription 140 to 160, both its own; serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service covers, from the facts and the trade's usual practice; serviceNFor one or two sentences on who it suits, from business.audience; three or four steps of this service alone (serviceNStep1Title to serviceNStep4Body, each a title of 2 to 5 words and a body of ${range("step_body")}) under serviceNStepsHeading, sharing no words with the home page's steps or another service's; two to four questions about this service only (serviceNFaq1Question to serviceNFaq4Answer, each answer ${range("faq_answer")}) under serviceNFaqHeading; serviceNCtaHeading and serviceNCtaBody its closing band.`,
+  "- The services page (servicesIntro and its cards) introduces every service and links each to its own page; it repeats no service page's words.",
+  `- Steps: three or four (step1 to step4) from first contact to the finished job, each a title of 2 to 5 words and a body of ${range("step_body")}.`,
+  "- About: overviewBody and audienceBody together 120 to 200 words in two paragraphs, rephrasing business.overview and business.audience only; shorter when those facts are short, never padded with history, people or numbers they do not give.",
+  `- FAQ: five to eight questions this trade's customers ask before booking, in their words, each answer ${range("faq_answer")}.`,
+  "- Areas: areaBody 40 to 80 words on serving the places service_area.text names; areaTowns lists them.",
+  "- Testimonials: only the stored reviews, word for word; never written.",
+  "- Closing band, one per page and each its own: ctaHeading and ctaBody on home, aboutCtaHeading, servicesCtaHeading, serviceAreaCtaHeading, contactCtaHeading (each with its Body) and serviceNCtaHeading on the others. The heading 4 to 9 words; the body one sentence of 12 to 30 words with a reason to ask now and no deadline or offer.",
+  "- Page ledes (aboutIntro, servicesIntro, serviceAreaIntro, contactIntro, quoteIntro): two or three sentences, 30 to 60 words, on what that page offers.",
+  "- Headings: every h1 and h2 on the site is its own, with no repeat or near-repeat on any page, and each names this business's service, customer or place. A stock label (Our services, Why choose us, How it works, About us, Common questions) is only ever an eyebrow. homeAboutHeading and homeAreaHeading are the home sections' own h2s, so they never repeat the about or service area page's h1.",
+  "- A planned build runs a copy gate after yours: it fails a repeated or stock heading, a page title another page shares and a section under its range, and lists each one. Rewrite exactly those.",
 ]
 
 /**
@@ -152,6 +186,7 @@ export function stableRules(): string[] {
     "- Every file under src/layouts/ and src/components/, except your own custom sections in src/components/custom/, is the starter's and read-only. The build compares them with the starter, puts a changed one back and fails the report. When a gate fails on one (a photo over the size line, say), fix what the page feeds it, never the file.",
     "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
     ...COPY_RULES,
+    ...COPY_BRIEF,
     ...CONTENT_RULES,
     ...LOOK_RULES,
     CUSTOM_SECTION_RULES,
@@ -266,8 +301,8 @@ const LOOK_RULES = [
 const CONTENT_RULES = [
   "- Write the copy from business.industry, business.offerings, business.audience, business.overview, service_area.text and the contact facts below: what the business does, for whom, how it works with a customer and where. Every service description, benefit, process step, FAQ answer and line that reads like a customer's words traces to one of them. Rephrase; never add.",
   '- A benefit heading may stay general ("Easy to book", "Local to you"), but no line states a specific that no fact states: no place beyond service_area.text (no airports, venues or landmarks), no service extra such as meet and greet or a driver who keeps in touch, no response or arrival time, no years, no award, no fleet or team size, no qualification or membership, no named equipment, product or brand.',
-  "- When the facts are thin, write less: fewer cards, shorter lines, plainer words. Leave an optional field empty rather than fill it with something the facts do not say; a section with nothing set drops out, so never pad one to keep it.",
-  "- An FAQ answer only restates a fact below or points the visitor to Request a quote. Leave out a question no fact answers.",
+  "- When the facts are thin, write from the trade's usual practice, never from invention: what a service of this kind involves and what the customer is left with, in general terms, with no specific the facts do not give. Leave a field empty only when no fact names its subject (a service the offerings do not list, a review, proof); a section with nothing set drops out, so never pad one with filler to keep it.",
+  "- An FAQ answer may explain how such a service usually works in this trade; what this business itself does (its supplies, access, pets, insurance, timing, rebooking) it says only as a fact says it, and otherwise tells the visitor to mention it in their quote request. Never a price.",
   "- Before report_complete, read back every sentence you wrote. For each specific in it (a place, a service, an extra, a time, a number, a person, a qualification) name the fact it came from. Cut or generalise any you cannot, and list what you cut in risks.",
 ]
 
@@ -312,9 +347,12 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   )
   const sections = extra?.filter((id) => id in SECTION_PICKS) ?? []
   const pagePicks = extra?.filter((id) => !(id in SECTION_PICKS))
+  // Each service's own page goes with the services page.
   const drop = Object.entries(STARTER_PAGES)
     .filter(([id]) => !pages?.ids.includes(id as never))
-    .map(([, file]) => file)
+    .flatMap(([id, file]) =>
+      id === "services" ? [file, "src/pages/services/[slug].astro"] : [file]
+    )
   return [
     // OI2's tray: a library direction is the owner's pick; `custom` is their
     // words; `builder` leaves it to the plan, so says nothing.

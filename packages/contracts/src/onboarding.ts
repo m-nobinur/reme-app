@@ -171,7 +171,21 @@ export const PAGES = [
   { id: "contact", label: "Contact", hint: "Phone, email and hours" },
   { id: "quote", label: "Request a quote", hint: "Always included" },
 ] as const satisfies readonly Preset<string>[]
-export const PageId = z.enum(ids(PAGES))
+
+/**
+ * Every page a Blueprint may plan: the owner's picks and `service`, one page
+ * per service at /services/<slug>/, which comes with the services page and is
+ * never picked on its own.
+ */
+export const PLANNED_PAGES = [
+  ...PAGES,
+  {
+    id: "service",
+    label: "Each service",
+    hint: "A page for each service, with the services page",
+  },
+] as const satisfies readonly Preset<string>[]
+export const PageId = z.enum(ids(PLANNED_PAGES))
 
 /** The pages a site has whether or not the owner picks them. */
 export const FIXED_PAGES = [
@@ -270,7 +284,10 @@ export const choiceFacts = {
   },
   font: { id: orCustom(FontId), custom: Text(200).optional() },
   pages: {
-    ids: z.array(PageId).min(1).max(PAGES.length),
+    ids: z
+      .array(z.enum(ids(PAGES)))
+      .min(1)
+      .max(PAGES.length),
     custom: Text(200).optional(),
   },
   uploads: { items: z.array(Asset).min(1).max(UPLOAD_MAX_FILES) },

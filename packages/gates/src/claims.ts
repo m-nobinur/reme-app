@@ -55,6 +55,8 @@ export const CLAIM_VOCABULARY = {
     "staff",
     "team members",
     "employees",
+    "hours",
+    "days",
   ],
   superlative: [
     "best",
@@ -71,6 +73,8 @@ export const CLAIM_VOCABULARY = {
     "award-winning",
     "better than",
     "cheaper than",
+    "trusted by",
+    "most reliable",
   ],
   credential: [
     "award",
@@ -88,6 +92,9 @@ export const CLAIM_VOCABULARY = {
     "as seen on",
     "member of",
     "partner of",
+    "qualified",
+    "trained",
+    "registered with",
   ],
   guarantee: [
     "guarantee",
@@ -96,6 +103,14 @@ export const CLAIM_VOCABULARY = {
     "money-back",
     "risk-free",
     "no-quibble",
+    "no-obligation",
+    "free quote",
+    "free quotes",
+    "free estimate",
+    "satisfaction promise",
+    "24/7",
+    "round the clock",
+    "around the clock",
   ],
 } as const
 

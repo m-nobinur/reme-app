@@ -10,6 +10,11 @@ props:
     description: The pattern. alternating is the services page's own. photo_cards
       shows numbered_rows unless every service has a photo, and alternating off
       the services page unless one has.
+  - name: only
+    type: string
+    required: false
+    description: "On a service's own page, the one service it shows by id: its
+      detail, under the page's hero."
 constraints:
   - Reads serviceItems from src/structured-data.ts (service1Name to
     service6For); a service renders only with a name or a body.

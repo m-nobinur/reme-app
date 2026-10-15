@@ -98,6 +98,13 @@ p {
   line-height: 1.55;
 }
 
+/* The hero's reassurance line, under its buttons. */
+.hero-note {
+  margin: var(--space-sm) 0 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
 .mark {
   width: 1.25rem;
   height: 1.25rem;

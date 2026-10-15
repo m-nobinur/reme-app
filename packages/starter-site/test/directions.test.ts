@@ -206,7 +206,7 @@ describe("a direction", () => {
       const img = home(name).elements.find((el) =>
         (el.attrs.class ?? "").split(" ").includes("hero-image")
       )
-      expect(img?.attrs.src, name).toBe(FILLED.heroImage)
+      expect(img?.attrs.src, name).toMatch(/^\/_astro\//)
       expect(img?.attrs.alt, name).toBe(FILLED.heroImageAlt)
       expect(classes(home(name)), name).toContain("hero-photo")
       expect(classes(home(name)), name).not.toContain("hero-list")
@@ -226,7 +226,7 @@ describe("a direction", () => {
       const found = logos(home(name))
       expect(found, name).toHaveLength(2)
       for (const img of found) {
-        expect(img.attrs.src, name).toBe(FILLED.logo)
+        expect(img.attrs.src, name).toMatch(/^\/_astro\//)
         expect(img.attrs.alt, name).toBe(FILLED.logoAlt)
       }
     }

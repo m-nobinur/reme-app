@@ -2,14 +2,17 @@
 import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
-import { site } from "../site-config"
+import { layout, site } from "../site-config"
 import { faqPage, services } from "../structured-data"
 ---
 
 <Base
   title={site.servicesTitle || plain(site.servicesHeading)}
   description={site.servicesDescription || site.servicesIntro}
-  jsonLd={[...services(Astro.site), ...faqPage()]}
+  jsonLd={[
+    ...services(Astro.site),
+    ...(layout.services.some((s) => s.kind === "faq") ? faqPage() : []),
+  ]}
 >
   <Sections page="services" />
 </Base>

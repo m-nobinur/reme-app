@@ -13,7 +13,7 @@ import {
   FactValue,
   FactValueKey,
   InformationRequest,
-  PAGES,
+  PLANNED_PAGES,
   SiteFields,
   siteHost,
   siteUrl,
@@ -176,7 +176,7 @@ export function activityFor(
     settled.filter((s) => s.stage === "pages").map((s) => s.item)
   )
   const pages = plan?.pages.map(({ page }) => ({
-    label: PAGES.find((p) => p.id === page)?.label ?? page,
+    label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
     done: passed("writing") || pagesDone.has(page),
   }))
   const photos =

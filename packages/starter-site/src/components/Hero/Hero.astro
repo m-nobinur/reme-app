@@ -1,6 +1,7 @@
 ---
 import Motif from "../../layouts/Motif.astro"
 import Photo from "../../layouts/Photo.astro"
+import { hasPhoto } from "../../photo-files"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
   caption?: string
   /** Services shown when there is no photo. */
   highlights?: { name: string; icon: string }[]
+  /** A short reassurance line under the actions, as site.heroNote. */
+  note?: string
 }
 
 const {
@@ -28,8 +31,9 @@ const {
   image,
   caption = "",
   highlights = [],
+  note = "",
 } = Astro.props
-const photo = variant && image?.src && image.alt ? image : null
+const photo = variant && image?.alt && hasPhoto(image.src) ? image : null
 // The box each variant's photo renders in (src/styles/site.css), so the browser
 // does not fetch a 1280 px candidate for a 480 px frame.
 const SIZES = {
@@ -79,8 +83,13 @@ const actions = Astro.slots.has("default")
               {accent && <span class="accent">{accent}</span>}
             </h1>
           )}
-          {lede && <p class="lede">{lede}</p>}
+          {lede && (
+            <p class="lede" data-copy={variant ? "hero_lede" : undefined}>
+              {lede}
+            </p>
+          )}
           {actions && <div class="actions" set:html={actions} />}
+          {note && <p class="hero-note">{note}</p>}
         </div>
         {photo && (
           <div class="hero-media">

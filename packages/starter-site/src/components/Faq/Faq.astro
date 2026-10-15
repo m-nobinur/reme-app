@@ -2,14 +2,22 @@
 import SectionHead from "../../layouts/SectionHead.astro"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
-import { faqItems as items } from "../../structured-data"
+import { faqItems } from "../../structured-data"
 
 interface Props {
   /** split puts the heading beside the questions, stacked above them. */
   variant?: "split" | "stacked"
+  /** The questions, where a page has its own; empty is the site's FAQ. */
+  items?: { question: string; answer: string }[]
+  /** The h2, where a page has its own; empty is site.faqHeading. */
+  heading?: string
 }
 
-const { variant = "split" } = Astro.props
+const {
+  variant = "split",
+  items = faqItems,
+  heading = site.faqHeading,
+} = Astro.props
 // Off the contact page, a question the list does not answer goes there.
 const more =
   site.faqLink && hasRoute("/contact/") && Astro.url.pathname !== "/contact/"
@@ -20,7 +28,7 @@ const more =
     <section class:list={["band faq", `faq-${variant}`]}>
       <div class="wrap faq-inner">
         <div class="faq-intro">
-          <SectionHead eyebrow={site.faqEyebrow} heading={site.faqHeading} />
+          <SectionHead eyebrow={site.faqEyebrow} heading={heading} />
           {site.faqIntro && <p class="faq-lede">{site.faqIntro}</p>}
           {more && (
             <p class="section-more">
@@ -34,7 +42,7 @@ const more =
           {items.map((item) => (
             <details>
               <summary>{item.question}</summary>
-              <p>{item.answer}</p>
+              <p data-copy="faq_answer">{item.answer}</p>
             </details>
           ))}
         </div>

@@ -1,5 +1,6 @@
 ---
 import Photo from "../../layouts/Photo.astro"
+import { hasPhoto } from "../../photo-files"
 import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
@@ -15,7 +16,7 @@ const current = Astro.url.pathname
 // twice reads as a mistake, so the button takes it and the list drops it.
 const links = navLinks.filter((link) => link.href !== primaryAction?.href)
 // The owner's logo stands in for the name only with alt text to name it.
-const logo = site.logo && site.logoAlt
+const logo = site.logo && site.logoAlt && hasPhoto(site.logo)
 // One list for both menus: inline on a wide screen, behind a native
 // disclosure on a phone, so the menu opens with no script.
 const items = links.map((link) => ({

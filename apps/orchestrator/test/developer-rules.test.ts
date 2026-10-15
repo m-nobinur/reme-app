@@ -82,7 +82,7 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("local copywriter for this trade")
     expect(rules).toContain("heroHeading names the main service and the area")
     expect(rules).toContain("50 to 60 characters")
-    expect(rules).toContain("140 to 155 characters")
+    expect(rules).toContain("140 to 160 characters")
     expect(rules).toContain("ICONS key in src/icons.ts")
     expect(rules).toContain("astro build ends with a copy check")
     expect(rules).not.toContain(String.fromCharCode(0x2014))
@@ -261,7 +261,7 @@ describe("the owner's onboarding choices in the rules", () => {
       'set font in src/site-config.ts to "newsreader_inter"'
     )
     expect(rules).toContain(
-      "Home and Request a quote, plus About. Gallery is a section on the home page, not a page: build no page file for it, and the Blueprint says which the home page holds. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
+      "Home and Request a quote, plus About. Gallery is a section on the home page, not a page: build no page file for it, and the Blueprint says which the home page holds. Delete src/pages/services.astro, src/pages/services/[slug].astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
     )
     expect(rules).toContain(
       "Build any other extra page from the existing components"
@@ -366,9 +366,11 @@ describe("the owner's onboarding choices in the rules", () => {
     ]) {
       expect(rules, specific).toContain(specific)
     }
-    expect(rules).toContain("When the facts are thin, write less")
     expect(rules).toContain(
-      "An FAQ answer only restates a fact below or points the visitor to Request a quote"
+      "When the facts are thin, write from the trade's usual practice, never from invention"
+    )
+    expect(rules).toContain(
+      "what this business itself does (its supplies, access, pets, insurance, timing, rebooking) it says only as a fact says it"
     )
   })
 

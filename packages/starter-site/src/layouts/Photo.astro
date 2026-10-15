@@ -1,11 +1,13 @@
 ---
 import { getImage, Picture } from "astro:assets"
+import { photoFile } from "../photo-files"
 
 // An image from the owner's uploads (src/assets/uploads/) or the photo
 // director (src/assets/generated/), resized and re-encoded at build time.
 // `src` is the path the site config holds: "/uploads/<id>.jpg" or
-// "src/assets/generated/<slot>.png". A path no file answers to renders as a
-// plain <img>, so a page never breaks on a missing photo.
+// "src/assets/generated/<slot>.png". A path no file answers to renders
+// nothing: the site serves no file outside the build's own, so a plain <img>
+// would be a broken image.
 interface Props {
   src: string
   alt: string
@@ -20,11 +22,6 @@ interface Props {
   quality?: number
 }
 
-// Lazy, so only the photo this page names is imported: an eager glob makes
-// Astro emit every original beside its resized variants.
-const files = import.meta.glob<{ default: ImageMetadata }>(
-  "/src/assets/**/*.{jpg,jpeg,png,webp,avif}"
-)
 const {
   src,
   alt,
@@ -34,7 +31,7 @@ const {
   priority = false,
   quality = 55,
 } = Astro.props
-const load = files[`/src/assets/${src.replace(/^\/?(?:src\/assets\/)?/, "")}`]
+const load = photoFile(src)
 const meta = load ? (await load()).default : undefined
 // A source under the largest width asked for is offered at its own width too.
 const emitted = meta
@@ -65,7 +62,7 @@ const preload =
   )
 }
 {
-  meta ? (
+  meta && (
     <Picture
       src={meta}
       alt={alt}
@@ -75,15 +72,6 @@ const preload =
       formats={["avif", "webp"]}
       fallbackFormat="webp"
       quality={quality}
-      loading={priority ? "eager" : "lazy"}
-      decoding="async"
-      fetchpriority={priority ? "high" : undefined}
-    />
-  ) : (
-    <img
-      src={src}
-      alt={alt}
-      class={className}
       loading={priority ? "eager" : "lazy"}
       decoding="async"
       fetchpriority={priority ? "high" : undefined}

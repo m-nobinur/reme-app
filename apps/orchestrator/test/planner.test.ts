@@ -175,6 +175,7 @@ describe("the fallback Blueprint", () => {
       "home",
       "about",
       "services",
+      "service",
       "service_area",
       "contact",
       "quote",
@@ -235,7 +236,12 @@ describe("the fallback Blueprint", () => {
     const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
     expect(made.palette).toEqual({ kind: "preset", id: "berry" })
     expect(made.fonts).toBe("newsreader_inter")
-    expect(made.pages.map((p) => p.page)).toEqual(["home", "services", "quote"])
+    expect(made.pages.map((p) => p.page)).toEqual([
+      "home",
+      "services",
+      "service",
+      "quote",
+    ])
     expect(made.images).toMatchObject([
       { id: "home_hero", source: "upload", alt: "A clean kitchen" },
       { id: "gallery_1", section: "gallery", source: "upload" },
@@ -310,6 +316,7 @@ describe("pages the starter has no file for", () => {
       "home",
       "about",
       "services",
+      "service",
       "contact",
       "quote",
     ])
@@ -381,6 +388,7 @@ describe("pages the starter has no file for", () => {
       "home",
       "about",
       "services",
+      "service",
       "service_area",
       "contact",
       "quote",

@@ -27,6 +27,11 @@ const HEADINGS = [
   "ctaHeading",
   "quoteAsideHeading",
   "quoteTalkHeading",
+  "homeAboutHeading",
+  "aboutCtaHeading",
+  "service1StepsHeading",
+  "service1FaqHeading",
+  "service1CtaHeading",
 ] as const
 const MARKED = {
   ...FILLED,
@@ -273,11 +278,11 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
     expect(page(all, "index.html")).toContain("services-photo_cards")
   })
 
-  test("the default alternating pattern needs a photo on the home page, not on the services page", () => {
+  test("the default alternating pattern needs a photo on the home page, not on a service's own page", () => {
     // FILLED asks for the direction's own pattern, which is alternating.
     expect(page(direction, "index.html")).not.toContain("services-alternating")
     expect(page(direction, "index.html")).toContain("services-numbered_rows")
-    expect(page(direction, "services/index.html")).toContain(
+    expect(page(direction, "services/weekly-clean/index.html")).toContain(
       "services-alternating"
     )
   })

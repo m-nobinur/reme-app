@@ -19,27 +19,46 @@ import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
 import { directionOf } from "../directions"
 import { phoneText } from "../phone"
+import { hasPhoto } from "../photo-files"
 import { primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
-import { serviceItems } from "../structured-data"
+import { type ServiceItem, serviceItems } from "../structured-data"
 import AboutSection from "./AboutSection.astro"
 import SectionHead from "./SectionHead.astro"
 
 interface Props {
   page: LayoutPage
+  /** On a service's own page (page "service"), the service it is about. */
+  service?: ServiceItem
 }
 
-const { page } = Astro.props
+const { page, service } = Astro.props
 // The page's h1 and lede, which are its own fields.
 const HEAD = {
-  home: [site.heroHeading || site.businessName, site.tagline || site.homeIntro],
+  home: [site.heroHeading || site.businessName, site.homeIntro || site.tagline],
   about: [site.aboutHeading, site.aboutIntro],
   services: [site.servicesHeading, site.servicesIntro],
   service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
   contact: [site.contactHeading, site.contactIntro],
   quote: [site.quoteHeading, site.quoteIntro],
+  service: [service?.heading || service?.name || "", service?.body ?? ""],
 } as const
 const [marked, lede] = HEAD[page]
+// Each page's closing band, the home page's where a page has none of its own.
+const CTA: Record<LayoutPage, [string, string]> = {
+  home: [site.ctaHeading, site.ctaBody],
+  about: [site.aboutCtaHeading, site.aboutCtaBody],
+  services: [site.servicesCtaHeading, site.servicesCtaBody],
+  service_area: [site.serviceAreaCtaHeading, site.serviceAreaCtaBody],
+  contact: [site.contactCtaHeading, site.contactCtaBody],
+  quote: ["", ""],
+  service: [service?.ctaHeading ?? "", service?.ctaBody ?? ""],
+}
+const [ctaHeading, ctaBody] = CTA[page]
+// A service page's header shows the service's photo when the build has it,
+// in the hero's photo form; without one it keeps the text header.
+const servicePhoto =
+  service?.image.alt && hasPhoto(service.image.src) ? service.image : undefined
 // The h1 shares a field with a section heading elsewhere, and shows no accent marks.
 const heading = plain(marked)
 const home = page === "home"
@@ -71,15 +90,18 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "hero":
         return (
           <Hero
-            variant={v}
+            variant={servicePhoto ? (v ?? "split_frame") : v}
             eyebrow={home ? site.industry : ""}
             heading={heading}
             lede={lede}
             image={
-              home ? { src: site.heroImage, alt: site.heroImageAlt } : undefined
+              home
+                ? { src: site.heroImage, alt: site.heroImageAlt }
+                : servicePhoto
             }
             caption={home ? site.heroCaption : ""}
             highlights={home ? serviceItems.slice(0, 3) : []}
+            note={home ? site.heroNote : ""}
           >
             {home && primaryAction && (
               <ActionLink href={primaryAction.href} label={primaryAction.label} />
@@ -98,7 +120,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "service_cards":
         return (
           <>
-            <ServiceCards variant={v} />
+            <ServiceCards variant={v} only={service?.id} />
             {page === "services" && offerings.length > 0 && (
               <Section
                 eyebrow={site.offeringsEyebrow}
@@ -116,7 +138,13 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "value_props":
         return <ValueProps />
       case "steps":
-        return <Steps variant={v} />
+        return (
+          <Steps
+            variant={v}
+            heading={service?.stepsHeading || undefined}
+            items={service?.steps.length ? service.steps : undefined}
+          />
+        )
       case "about":
         return <AboutSection page={home ? "home" : "about"} />
       case "testimonials":
@@ -125,12 +153,28 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return <Gallery />
       case "service_area":
         return (
-          <AreaSection heading={home ? site.serviceAreaHeading : undefined} />
+          <AreaSection
+            heading={
+              home ? site.homeAreaHeading || site.serviceAreaHeading : undefined
+            }
+          />
         )
       case "faq":
-        return <Faq variant={v} />
+        return (
+          <Faq
+            variant={v}
+            items={service?.faqs}
+            heading={service?.faqHeading || undefined}
+          />
+        )
       case "cta_band":
-        return <CtaBand variant={v} />
+        return (
+          <CtaBand
+            variant={v}
+            heading={ctaHeading || site.ctaHeading}
+            body={ctaBody || site.ctaBody}
+          />
+        )
       case "contact":
         return (
           <section class="band">

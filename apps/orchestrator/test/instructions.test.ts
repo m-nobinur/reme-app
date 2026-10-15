@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs"
 import type { FactRecord } from "@workspace/contracts"
+import { COPY_WORDS } from "@workspace/gates"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it, vi } from "vitest"
 import { blueprintLayout } from "../src/blueprint.ts"
 import type { Brief } from "../src/brief.ts"
 import {
+  COPY_BRIEF,
   DESIGN_RULES,
   DIRECTION_LIBRARY,
   industryOf,
@@ -212,19 +214,82 @@ describe("the parallel first build", () => {
     expect(owned.length).toBeGreaterThan(0)
     expect(new Set(owned).size).toBe(owned.length)
     expect(copyFields(fanPlan)).toContain("homeTitle")
-    expect(pageTasks(fanPlan).map((t) => t.page)).toEqual(
+    expect(copyFields(fanPlan)).not.toContain("serviceTitle")
+    expect([...new Set(pageTasks(fanPlan).map((t) => t.page))]).toEqual(
       fanPlan.pages.map((p) => p.page)
+    )
+    // One task per service page, each owning only its own service's fields.
+    const services = pageTasks(fanPlan, 3).filter((t) => t.page === "service")
+    expect(services.map((t) => t.service)).toEqual([1, 2, 3])
+    expect(services[1]?.fields).toEqual(
+      expect.arrayContaining([
+        "service2Heading",
+        "service2Title",
+        "service2Detail",
+        "service2Faq4Answer",
+        "service2Step1Title",
+        "service2Step4Body",
+        "service2CtaBody",
+      ])
+    )
+    expect(services[1]?.fields.every((f) => f.startsWith("service2"))).toBe(
+      true
     )
   })
 
+  it("gives every section heading the copy gate reads to a writer, and the brief to all of them", () => {
+    const owned = new Set([
+      ...pageTasks(fanPlan).flatMap((t) => t.fields),
+      ...copyFields(fanPlan),
+    ])
+    const home = fanPlan.pages.find((p) => p.page === "home")
+    const kinds = new Set(home?.sections.map((s) => s.kind))
+    const heads: Record<string, string> = {
+      service_cards: "serviceCardsHeading",
+      value_props: "valuePropsHeading",
+      steps: "stepsHeading",
+      about: "homeAboutHeading",
+      service_area: "homeAreaHeading",
+      faq: "faqHeading",
+    }
+    for (const [kind, field] of Object.entries(heads))
+      if (kinds.has(kind as never)) expect(owned, field).toContain(field)
+    for (const text of [
+      pageInstructions(planned),
+      copyInstructions(planned),
+      instructions(planned, 20),
+    ]) {
+      for (const line of COPY_BRIEF) expect(text).toContain(line)
+    }
+    // The brief quotes the gate's ranges, so the two cannot drift.
+    const joined = COPY_BRIEF.join(" ")
+    for (const { aim } of Object.values(COPY_WORDS))
+      expect(joined).toContain(`${aim[0]} to ${aim[1]} words`)
+  })
+
   it("sends at most four tasks a turn, every page once and the copy writer once", () => {
-    const groups = taskGroups(fanPlan)
+    const groups = taskGroups(fanPlan, 5)
     expect(groups.every((g) => g.length <= FAN_OUT)).toBe(true)
     const all = groups.flat()
     expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
+    const pages = all
+      .filter((t) => t.agent === "page")
+      .map((t) => pageOfPrompt(t.prompt))
+    expect(pages.filter((p) => p !== "service")).toEqual(
+      fanPlan.pages.map((p) => p.page).filter((p) => p !== "service")
+    )
+    // Five service pages, in groups after every other task, so each reads
+    // the name the home page's builder wrote.
+    expect(pages.filter((p) => p === "service")).toHaveLength(5)
+    const firstService = groups.findIndex((g) =>
+      g.some((t) => pageOfPrompt(t.prompt) === "service")
+    )
     expect(
-      all.filter((t) => t.agent === "page").map((t) => pageOfPrompt(t.prompt))
-    ).toEqual(fanPlan.pages.map((p) => p.page))
+      groups
+        .slice(firstService)
+        .flat()
+        .every((t) => pageOfPrompt(t.prompt) === "service")
+    ).toBe(true)
   })
 
   it("tells a planned first build's lead to fan out, and no one else", () => {

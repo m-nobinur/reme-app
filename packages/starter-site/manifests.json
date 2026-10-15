@@ -91,6 +91,18 @@
         "type": "\"solid\" | \"photo\"",
         "required": false,
         "description": "solid is the brand colour, photo puts site.ctaImage under it."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2, the page's own; empty is site.ctaHeading."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": false,
+        "description": "The sentence under it, the page's own; empty is site.ctaBody."
       }
     ],
     "constraints": [
@@ -116,6 +128,18 @@
         "type": "\"split\" | \"stacked\"",
         "required": false,
         "description": "split puts the heading beside the questions, stacked above them."
+      },
+      {
+        "name": "items",
+        "type": "{ question: string; answer: string }[]",
+        "required": false,
+        "description": "The questions, where a page has its own; empty is the site's FAQ."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2, where a page has its own; empty is site.faqHeading."
       }
     ],
     "constraints": [
@@ -196,6 +220,12 @@
         "type": "{ name: string; icon: string }[]",
         "required": false,
         "description": "Services shown when there is no photo."
+      },
+      {
+        "name": "note",
+        "type": "string",
+        "required": false,
+        "description": "A short reassurance line under the actions, as site.heroNote."
       }
     ],
     "constraints": [
@@ -349,6 +379,12 @@
         "type": "\"photo_cards\" | \"numbered_rows\" | \"alternating\" | \"fleet\" | \"practice_list\"",
         "required": false,
         "description": "The pattern. alternating is the services page's own. photo_cards shows numbered_rows unless every service has a photo, and alternating off the services page unless one has."
+      },
+      {
+        "name": "only",
+        "type": "string",
+        "required": false,
+        "description": "On a service's own page, the one service it shows by id: its detail, under the page's hero."
       }
     ],
     "constraints": [
@@ -423,6 +459,18 @@
         "type": "\"circles\" | \"dark_band\" | \"timeline\"",
         "required": false,
         "description": "circles on a tint band, dark_band beside its heading, timeline on a line."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2, where a page has its own; empty is site.stepsHeading."
+      },
+      {
+        "name": "items",
+        "type": "{ title: string; body: string }[]",
+        "required": false,
+        "description": "The steps, where a page has its own; empty is the site's step1 to step4."
       }
     ],
     "constraints": [
