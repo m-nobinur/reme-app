@@ -25,7 +25,20 @@ const blurb = site.tagline || site.homeIntro
               <Photo class="site-logo" src={site.logo} alt={site.logoAlt} widths={[160, 320, 480]} sizes="160px" />
             </p>
           ) : (
-            site.businessName && <p class="site-name">{site.businessName}</p>
+            site.businessName && (
+              <p class="site-name footer-name">
+                <img
+                  class="footer-mark"
+                  src="/favicon.svg"
+                  alt=""
+                  width="32"
+                  height="32"
+                  loading="lazy"
+                  decoding="async"
+                />
+                {site.businessName}
+              </p>
+            )
           )}
           {blurb && <p class="footer-blurb">{blurb}</p>}
           {primaryAction && (
@@ -62,6 +75,13 @@ const blurb = site.tagline || site.homeIntro
       {site.disclaimer && (
         <div class="wrap">
           <p class="footer-disclaimer">{site.disclaimer}</p>
+        </div>
+      )}
+      {site.businessName && (
+        <div class="wrap">
+          <p class="footer-base">
+            © {site.businessName}
+          </p>
         </div>
       )}
     </footer>

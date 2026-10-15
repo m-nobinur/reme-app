@@ -8,6 +8,7 @@ import Seo from "../components/Seo/Seo.astro"
 import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
 import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
 import { directionOf } from "../directions"
+import { markColours } from "../favicon"
 import { BODY_VAR, DISPLAY_VAR, fontTheme, pairOf } from "../fonts"
 import { site } from "../site-config"
 
@@ -25,6 +26,7 @@ const props = Astro.props
 const pair = pairOf(site.font)
 const theme = brandTheme(site.brandColor, site.palette) + fontTheme(pair)
 const direction = directionOf(site.direction)
+const mark = markColours(site.palette, site.brandColor)
 ---
 
 <html
@@ -37,6 +39,12 @@ const direction = directionOf(site.direction)
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo {...props} />
+    {/* The favicon set src/pages writes from the brand; see src/favicon.ts. */}
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content={mark.primary} />
     {theme && <style is:inline set:html={theme} />}
     {
       pair && (
