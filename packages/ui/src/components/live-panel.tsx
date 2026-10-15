@@ -1,5 +1,6 @@
 import {
   ArrowSquareOutIcon,
+  CaretDownIcon,
   CheckCircleIcon,
   CheckIcon,
   CircleIcon,
@@ -19,7 +20,6 @@ import {
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -225,8 +225,7 @@ function Decided({ plan }: { plan: Blueprint }) {
 
 /**
  * One generated photo as the build makes it: a quiet shimmer while it is
- * drawn, the picture badged once it exists, and a plain note when no model
- * drew it. A picture that does not load is a quiet tile, never a broken image.
+ * drawn, the picture once it exists, and a plain note when no model drew it. A picture that does not load is a quiet tile, never a broken image.
  */
 function PhotoTile({ photo }: { photo: BuildPhoto }) {
   const [loaded, setLoaded] = useState(false)
@@ -276,12 +275,6 @@ function PhotoTile({ photo }: { photo: BuildPhoto }) {
           className="absolute top-1.5 left-1.5 size-4 text-muted-foreground"
         />
       )}
-      <Badge
-        className="absolute bottom-1 left-1 h-4 px-1.5 text-[0.625rem]"
-        variant="secondary"
-      >
-        AI-generated
-      </Badge>
     </div>
   )
 }
@@ -381,9 +374,10 @@ function StepDetail({
 }
 
 /**
- * Every step of a full build, in order: done ones ticked, the one it is on
- * marked and moving, the rest quiet. Each says what it settled or made as it
- * lands. A screen reader hears the step change, never the counts ticking.
+ * Every step of a full build, in order: done ones ticked and folded, the one
+ * it is on marked, moving and open, the rest quiet. A done step's detail
+ * opens on demand. A screen reader hears the step change, never the counts
+ * ticking.
  */
 function BuildSteps({
   rows,
@@ -438,38 +432,64 @@ function BuildSteps({
                   <CircleNotchIcon className="size-4 animate-spin text-primary motion-reduce:animate-none" />
                 )}
               </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
-                  <span
-                    className={cn(
-                      at === "now" && "font-medium text-foreground",
-                      at === "done" && "text-foreground",
-                      at === "next" && "text-muted-foreground"
-                    )}
-                  >
-                    {row.label}
-                    <span className="sr-only">
-                      {at === "done"
-                        ? " (done)"
-                        : at === "now"
-                          ? " (now)"
-                          : " (next)"}
+              {at === "done" ? (
+                // A finished step folds to its line; its detail opens on demand.
+                <details className="group/step flex min-w-0 flex-1 flex-col">
+                  <summary className="flex cursor-pointer list-none items-baseline gap-1.5 rounded-sm text-[0.8125rem] focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 flex-1 text-foreground">
+                      {row.label}
+                      <span className="sr-only"> (done)</span>
                     </span>
-                  </span>
-                  {row.total > 1 && at !== "next" ? (
-                    <span className="shrink-0 text-muted-foreground tabular-nums">
-                      {row.done} of {row.total}
+                    {row.total > 1 ? (
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
+                        {row.done} of {row.total}
+                      </span>
+                    ) : null}
+                    <CaretDownIcon
+                      aria-hidden
+                      className="size-3 shrink-0 self-center text-muted-foreground transition-transform group-open/step:rotate-180 motion-reduce:transition-none"
+                    />
+                  </summary>
+                  <div className="flex flex-col gap-2 pt-2">
+                    <StepDetail
+                      at={at}
+                      awaiting={awaiting}
+                      photos={photos}
+                      plan={plan}
+                      row={row}
+                    />
+                  </div>
+                </details>
+              ) : (
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
+                    <span
+                      className={cn(
+                        at === "now"
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {row.label}
+                      <span className="sr-only">
+                        {at === "now" ? " (now)" : " (next)"}
+                      </span>
                     </span>
-                  ) : null}
-                </p>
-                <StepDetail
-                  at={at}
-                  awaiting={awaiting}
-                  photos={photos}
-                  plan={plan}
-                  row={row}
-                />
-              </div>
+                    {row.total > 1 && at !== "next" ? (
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
+                        {row.done} of {row.total}
+                      </span>
+                    ) : null}
+                  </p>
+                  <StepDetail
+                    at={at}
+                    awaiting={awaiting}
+                    photos={photos}
+                    plan={plan}
+                    row={row}
+                  />
+                </div>
+              )}
             </li>
           )
         })}

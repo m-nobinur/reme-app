@@ -1,5 +1,4 @@
 import { ImageIcon } from "@phosphor-icons/react"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { useId, useRef, useState } from "react"
 
@@ -22,7 +21,7 @@ export type PhotoActions = {
 }
 
 /**
- * The picture, badged where it is shown. A photo with no thumbnail of its own
+ * The picture, with nothing laid over it. A photo with no thumbnail of its own
  * shows the top of the version's laptop screenshot when it belongs to the
  * hero, which is the first thing that screenshot holds; any other picture, and
  * one that does not load, is a quiet tile, never a broken image.
@@ -50,16 +49,13 @@ function Thumb({ src }: { src: string | undefined }) {
           className="absolute top-2 left-2 size-5 text-muted-foreground"
         />
       )}
-      <Badge className="absolute bottom-1 left-1" variant="secondary">
-        AI-generated
-      </Badge>
     </div>
   )
 }
 
 /**
- * The review's list of generated photos, each badged, with the three ways to
- * change it. The owner never has to accept a picture they did not choose: an
+ * The review's list of generated photos, under a heading that says they were
+ * made, with the three ways to change it. The owner never has to accept a picture they did not choose: an
  * upload always wins the slot.
  */
 export function GeneratedPhotos({
