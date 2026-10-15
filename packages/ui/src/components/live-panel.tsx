@@ -359,6 +359,18 @@ function StepDetail({
           ))}
         </ul>
       ) : null
+    case "design":
+      return at === "now" ? (
+        <p className={META}>
+          Reading the home page at phone, tablet and desktop widths.
+        </p>
+      ) : null
+    case "fixing":
+      return at === "now" ? (
+        <p className={META}>
+          Putting right what the checks flagged, then checking again.
+        </p>
+      ) : null
     case "checking":
       return at === "now" ? (
         <p className={META}>Links, facts, accessibility and page weight.</p>

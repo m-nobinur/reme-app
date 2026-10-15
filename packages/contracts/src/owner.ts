@@ -322,8 +322,8 @@ export const BuildPhoto = z.strictObject({
   thumbnail: PhotoThumbnail.nullable(),
 })
 
-/** The most progress rows a build shows at once. */
-export const BUILD_ACTIVITY_MAX = 5
+/** The most progress rows a build shows at once: planning, photos, pages, design, a repair and the checks. */
+export const BUILD_ACTIVITY_MAX = 6
 
 /**
  * The plan a build was given (ADR-038), for the Blueprint card. `round`

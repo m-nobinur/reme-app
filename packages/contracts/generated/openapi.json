@@ -9822,7 +9822,7 @@
             "type": "boolean"
           },
           "activity": {
-            "maxItems": 5,
+            "maxItems": 6,
             "type": "array",
             "items": {
               "type": "object",
@@ -18229,7 +18229,7 @@
                             "type": "boolean"
                           },
                           "activity": {
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "object",
@@ -24927,7 +24927,7 @@
                     "type": "boolean"
                   },
                   "activity": {
-                    "maxItems": 5,
+                    "maxItems": 6,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -29308,7 +29308,7 @@
                   "type": "boolean"
                 },
                 "activity": {
-                  "maxItems": 5,
+                  "maxItems": 6,
                   "type": "array",
                   "items": {
                     "type": "object",

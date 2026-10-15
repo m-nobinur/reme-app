@@ -70,16 +70,48 @@ export const EXPECTED_SECONDS = {
   full: { p50: 180, p95: 330 },
 } as const
 
-/** Stage rows in the order a full build reaches them; fixed strings, never model text. */
-const STAGES: { id: string; label: string; at: AssignmentState[] }[] = [
-  { id: "planning", label: "Planning the layout", at: ["planning"] },
-  {
-    id: "writing",
-    label: "Writing the pages",
-    at: ["implementing", "revising", "repairing"],
-  },
-  { id: "checking", label: "Checking the site", at: ["validating"] },
-]
+/** The steps in the order a full build reaches them; the photos row travels with the pages. */
+const ORDER = ["planning", "writing", "design", "fixing", "checking"] as const
+type Step = (typeof ORDER)[number]
+
+/**
+ * An event that says where a build has got to, in the order they landed: the
+ * lead's completion report, the design look's rounds (`fixes` is how many it
+ * asked for, none when it did not run) and each move into `repairing`, which
+ * `readBuilds` is the only one to select. The assignment state alone cannot
+ * say these: the look and the lead's fix rounds both happen in `implementing`,
+ * and a gate repair returns to `implementing` in the same instant.
+ */
+export type Mark = { type: string; fixes?: number | null }
+
+const REPORTED = "assignment.completion_reported"
+const REPAIRED = "assignment.state_changed"
+
+/**
+ * The step a build is on, or null in a state that is not one of them. After
+ * the lead's first report a planned build is being looked over until a look
+ * asks for nothing or the second has run; a move into `repairing` that no
+ * report has followed is the lead fixing what the gates found.
+ */
+function stepOf(
+  state: AssignmentState,
+  marks: readonly Mark[],
+  planned: boolean
+): Step | null {
+  if (state === "planning") return "planning"
+  if (state === "validating") return "checking"
+  if (state === "repairing") return "fixing"
+  if (!["implementing", "revising"].includes(state)) return null
+  const types = marks.map((m) => m.type)
+  const reported = types.lastIndexOf(REPORTED)
+  if (types.lastIndexOf(REPAIRED) > reported) return "fixing"
+  if (reported < 0) return "writing"
+  const asked = marks.find((m) => m.type === "design.critiqued")
+  const looked =
+    marks.some((m) => m.type === "design.rechecked") ||
+    (asked !== undefined && !asked.fixes)
+  return planned && !looked ? "design" : "checking"
+}
 
 /** Counts from the parallel builder's `build.progress` events (BA4), by stage. */
 export type Progress = Partial<
@@ -102,59 +134,75 @@ const toDraw = (plan: Blueprint | null | undefined) =>
   (plan?.images ?? []).filter((i) => i.source === "generated" && !i.asset_id)
 
 /**
- * Every stage row of the build, in order: those passed are done, the rest
- * count what they have finished so far. A planned build counts its photos,
- * when it makes any, and names its pages ("Writing the pages, 3 of 5"), then
- * has its design looked over before the checks; any other stage is whole,
- * `1 of 1`. A quick build gets none; the panel shows one line for it.
+ * Every step of the build, in order: those passed are done, the rest count
+ * what they have finished so far. A planned build counts its photos, when it
+ * makes any, and names its pages ("Writing the pages, 3 of 5"), then has its
+ * design looked over before the checks. A build the gates sent back shows
+ * "Fixing what the checks found" until the lead reports again. The step it is
+ * on follows the build's own events (`marks`), not the state alone; the pages
+ * tick as each is written, or all at once when the lead reports a build it
+ * wrote itself. Any other step is whole, `1 of 1`. A quick build gets none;
+ * the panel shows one line for it.
  */
 export function activityFor(
   lane: BuildLane,
   state: AssignmentState,
   progress: Progress = {},
-  { plan, settled = [] }: { plan?: Blueprint | null; settled?: Settled[] } = {}
+  {
+    plan,
+    settled = [],
+    marks = [],
+  }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
 ): BuildActivity[] {
-  const now = STAGES.findIndex((stage) => stage.at.includes(state))
-  if (lane === "quick" || now < 0) return []
+  const at = stepOf(state, marks, Boolean(plan))
+  if (lane === "quick" || !at) return []
+  const now = ORDER.indexOf(at)
+  const passed = (step: Step) => ORDER.indexOf(step) < now
   const row = (
     id: string,
     label: string,
-    passed: boolean,
+    done: boolean,
     count?: { done: number; total: number }
   ): BuildActivity => {
     const total = Math.min(Math.max(count?.total ?? 1, 1), COUNT_MAX)
     return {
       id,
       label,
-      done: passed ? total : Math.min(count?.done ?? 0, total),
+      done: done ? total : Math.min(count?.done ?? 0, total),
       total,
     }
   }
   const pagesDone = new Set(
     settled.filter((s) => s.stage === "pages").map((s) => s.item)
   )
-  return STAGES.flatMap(({ id, label }, i) => {
-    const passed = i < now
-    if (id !== "writing") return [row(id, label, passed)]
-    const pages = plan?.pages.map(({ page }) => ({
-      label: PAGES.find((p) => p.id === page)?.label ?? page,
-      done: passed || pagesDone.has(page),
-    }))
-    const photos =
-      progress.photos ??
-      (toDraw(plan).length > 0
-        ? { done: 0, total: toDraw(plan).length }
-        : undefined)
-    return [
-      ...(photos ? [row("photos", "Making photos", passed, photos)] : []),
-      {
-        ...row(id, label, passed, progress.pages),
-        ...(pages ? { items: pages } : {}),
-      },
-      // BA5's look before the gates runs only on a planned build.
-      ...(plan ? [row("design", "Looking over the design", passed)] : []),
-    ]
-  })
+  const pages = plan?.pages.map(({ page }) => ({
+    label: PAGES.find((p) => p.id === page)?.label ?? page,
+    done: passed("writing") || pagesDone.has(page),
+  }))
+  const photos =
+    progress.photos ??
+    (toDraw(plan).length > 0
+      ? { done: 0, total: toDraw(plan).length }
+      : undefined)
+  const repaired = marks.some((m) => m.type === REPAIRED)
+  return [
+    row("planning", "Planning the layout", passed("planning")),
+    ...(photos
+      ? [row("photos", "Making photos", passed("writing"), photos)]
+      : []),
+    {
+      ...row("writing", "Writing the pages", passed("writing"), progress.pages),
+      ...(pages ? { items: pages } : {}),
+    },
+    // BA5's look before the gates runs only on a planned build.
+    ...(plan
+      ? [row("design", "Looking over the design", passed("design"))]
+      : []),
+    ...(repaired || at === "fixing"
+      ? [row("fixing", "Fixing what the checks found", passed("fixing"))]
+      : []),
+    row("checking", "Checking the site", passed("checking")),
+  ]
 }
 
 /**
@@ -239,6 +287,11 @@ export async function readBuilds(
       settled: sql<
         Settled[] | null
       >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id') order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
+      // Where the build has got to, in order: the lead's reports, the design
+      // look's rounds and each move into repairing (`activityFor`'s marks).
+      marks: sql<
+        Mark[] | null
+      >`(select json_agg(json_build_object('type', e.type, 'fixes', case when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked') or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
       // Time the build waited on the owner's decided plan reviews: each
       // `blueprint.decided` back to the review round it answered.
       reviewMs: sql<
@@ -265,7 +318,11 @@ export async function readBuilds(
       goal: row.goal,
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
-      activity: activityFor(lane, row.state, progress, { plan, settled }),
+      activity: activityFor(lane, row.state, progress, {
+        plan,
+        settled,
+        marks: row.marks ?? [],
+      }),
       revision: row.revision,
       ...planOf(row),
       ...(progress.photos ? { photos: photosOf(plan, settled) } : {}),
