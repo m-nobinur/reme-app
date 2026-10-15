@@ -109,3 +109,84 @@ test("the eyebrow dot is the colour of the eyebrow", async () => {
   })
   expect(dot).toBe(text)
 })
+
+test("five service cards fill rows of 3 and 2, the last row centred", async () => {
+  const five = await build({
+    site: {
+      ...FILLED,
+      direction: "calm_daylight",
+      ...Object.fromEntries(
+        [1, 2, 3, 4, 5].flatMap((n) => [
+          [`service${n}Name`, `Service ${n}`],
+          [`service${n}Body`, `What service ${n} covers.`],
+          [`service${n}Image`, `/photos/service-${n}.jpg`],
+          [`service${n}ImageAlt`, `Service ${n} at work`],
+        ])
+      ),
+    },
+  })
+  const { server: other, origin: base } = await serve(five.dist)
+  try {
+    if (!browser) throw new Error("the browser did not start")
+    const page = await (
+      await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    ).newPage()
+    await page.goto(`${base}/`)
+    const cards = await page.locator(".card-grid > .card").evaluateAll((els) =>
+      els.map((el) => {
+        const { x, y, width } = el.getBoundingClientRect()
+        return { x: Math.round(x), y: Math.round(y), width: Math.round(width) }
+      })
+    )
+    expect(cards).toHaveLength(5)
+    const rows = [...new Set(cards.map((c) => c.y))]
+    expect(rows).toHaveLength(2)
+    expect(cards.filter((c) => c.y === rows[0])).toHaveLength(3)
+    expect(new Set(cards.map((c) => c.width)).size).toBe(1)
+    // The two on the last row are centred under the three.
+    const [first, , last, fourth, fifth] = cards
+    if (!(first && last && fourth && fifth)) throw new Error("missing cards")
+    const left = fourth.x - first.x
+    const right = last.x + last.width - (fifth.x + fifth.width)
+    expect(Math.abs(left - right)).toBeLessThanOrEqual(1)
+  } finally {
+    other.close()
+    clean(five)
+  }
+}, 120_000)
+
+// bright_local sets its accent clause on one line for the stroke beneath it; a
+// long clause pushed the whole column wider than a phone.
+test("a long accent clause in the areas heading stays inside a 390 px phone", async () => {
+  const wide = await build({
+    site: {
+      ...FILLED,
+      direction: "bright_local",
+      serviceAreaHeading: "Gardens across *Bristol, Bath and Clevedon*",
+      areaTowns: "Bristol\nBath\nClevedon",
+      areaBody: "We work in Bristol, Bath and Clevedon.",
+    },
+  })
+  const { server: other, origin: base } = await serve(wide.dist)
+  try {
+    if (!browser) throw new Error("the browser did not start")
+    const page = await (
+      await browser.newContext({ viewport: { width: 390, height: 844 } })
+    ).newPage()
+    await page.goto(`${base}/`)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth)
+    ).toBeLessThanOrEqual(390)
+    const right = await page.evaluate(() =>
+      Math.max(
+        ...[...document.querySelectorAll(".area-section *")].map(
+          (el) => el.getBoundingClientRect().right
+        )
+      )
+    )
+    expect(right).toBeLessThanOrEqual(390)
+  } finally {
+    other.close()
+    clean(wide)
+  }
+}, 120_000)

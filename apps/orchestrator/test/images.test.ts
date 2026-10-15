@@ -14,6 +14,7 @@ const {
   MAX_PER_BUILD,
   MAX_PER_DAY,
   NEVER,
+  PHOTO_DISTINCT,
   placeGenerated,
   QUALITY_MODELS,
 } = await import("../src/images.ts")
@@ -159,12 +160,14 @@ describe("the photo director", () => {
     })
     expect(drawn[0]?.body.input_references).toBeUndefined()
     expect(drawn[0]?.body.prompt).toContain(NEVER)
-    // With the hero to match, the first fast model that reads references draws.
+    // The first fast model draws, as listed (recraft takes no references); the
+    // shared style line, not a reference, keeps the set together.
     expect(drawn[1]?.body).toMatchObject({
-      model: FAST_MODELS.find((m) => m.refs)?.id,
+      model: FAST_MODELS[0]?.id,
       resolution: "1K",
     })
-    expect(drawn[1]?.body.input_references).toHaveLength(1)
+    expect(FAST_MODELS[0]?.refs).toBe(false)
+    expect(drawn[1]?.body.input_references).toBeUndefined()
     expect(out.map((r) => [r.slot_id, r.status])).toEqual([
       ["hero", "generated"],
       ["kitchen", "generated"],
@@ -175,6 +178,66 @@ describe("the photo director", () => {
       model: QUALITY_MODELS[0]?.id,
       cost_usd: "0.034",
     })
+  })
+
+  it("hands the hero reference only to a fast model that reads it, after the cheaper one is down", async () => {
+    const first = FAST_MODELS[0]?.id
+    const { calls, fetcher } = openrouter({
+      down: (body) => body.model === first,
+    })
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["kitchen", "service_cards"],
+      ]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    const card = images(calls).slice(1)
+    expect(card.map((c) => c.body.model)).toEqual([
+      first,
+      FAST_MODELS.find((m) => m.refs)?.id,
+    ])
+    expect(card[0]?.body.input_references).toBeUndefined()
+    expect(card[1]?.body.input_references).toHaveLength(1)
+  })
+
+  it("asks for a different scene in every slot and draws each with its own", async () => {
+    const { calls, fetcher } = openrouter()
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["patios", "service_cards"],
+        ["lawn", "service_cards"],
+        ["planting", "service_cards"],
+      ]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    const writer = calls.find((c) => c.url.endsWith("/chat/completions"))
+    const messages = writer?.body.messages as { content: string }[]
+    expect(messages[0]?.content).toContain(PHOTO_DISTINCT)
+    // The writer sees each slot's idea and alt, which name its service.
+    expect(JSON.parse(messages[1]?.content ?? "{}").slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "lawn",
+          idea: expect.any(String),
+          alt: "lawn",
+        }),
+      ])
+    )
+    const prompts = images(calls).map((c) => String(c.body.prompt))
+    expect(prompts).toHaveLength(4)
+    expect(new Set(prompts).size).toBe(4)
+    for (const id of ["patios", "lawn", "planting"])
+      expect(
+        prompts.filter((p) => p.includes(`A bright room for ${id}`))
+      ).toHaveLength(1)
   })
 
   it("reuses a stored photo and pays nothing on a rebuild", async () => {
