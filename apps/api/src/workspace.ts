@@ -159,6 +159,19 @@ export function activityFor(
   if (lane === "quick" || !at) return []
   const now = ORDER.indexOf(at)
   const passed = (step: Step) => ORDER.indexOf(step) < now
+  const photos =
+    progress.photos ??
+    (toDraw(plan).length > 0
+      ? { done: 0, total: toDraw(plan).length }
+      : undefined)
+  // The photos are drawn before the pages are written, so while slots are
+  // still settling and no page has been, the photos are the step it is on.
+  const drawing =
+    at === "writing" &&
+    photos !== undefined &&
+    photos.done < photos.total &&
+    !progress.pages?.done
+  const current = drawing ? "photos" : at
   const row = (
     id: string,
     label: string,
@@ -171,7 +184,7 @@ export function activityFor(
       label,
       done: done ? total : Math.min(count?.done ?? 0, total),
       total,
-      ...(id === at ? { now: true as const } : {}),
+      ...(id === current ? { now: true as const } : {}),
     }
   }
   const pagesDone = new Set(
@@ -181,11 +194,6 @@ export function activityFor(
     label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
     done: passed("writing") || pagesDone.has(page),
   }))
-  const photos =
-    progress.photos ??
-    (toDraw(plan).length > 0
-      ? { done: 0, total: toDraw(plan).length }
-      : undefined)
   const repaired = marks.some((m) => m.type === REPAIRED)
   return [
     row("planning", "Planning the layout", passed("planning")),

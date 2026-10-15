@@ -12,6 +12,7 @@ import {
   causeOf,
   EXPECTED_SECONDS,
   type Mark,
+  type Progress,
   photosOf,
   planOf,
 } from "../src/workspace.ts"
@@ -78,6 +79,28 @@ describe("build activity rows", () => {
       ["writing", 5, 5],
       ["checking", 0, 1],
     ])
+  })
+
+  it("makes the photos the current step with a live count while slots settle", () => {
+    const current = (progress: Progress) =>
+      activityFor("full", "implementing", progress).find((r) => r.now)
+    expect(current({ photos: { done: 0, total: 7 } })).toMatchObject({
+      id: "photos",
+      done: 0,
+      total: 7,
+    })
+    expect(current({ photos: { done: 5, total: 7 } })).toMatchObject({
+      id: "photos",
+      done: 5,
+    })
+    // Every slot settled, or a page already written: the pages are the step.
+    expect(current({ photos: { done: 7, total: 7 } })?.id).toBe("writing")
+    expect(
+      current({ photos: { done: 5, total: 7 }, pages: { done: 1, total: 5 } })
+        ?.id
+    ).toBe("writing")
+    // A build with no photos has nothing to draw first.
+    expect(current({})?.id).toBe("writing")
   })
 
   it("names a plan's pages as they are written, and adds its photos and the design look", () => {
