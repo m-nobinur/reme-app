@@ -22,8 +22,11 @@ import { photoKey, SITE_ROOT } from "./revise.ts"
  * cost as metadata, and the day's generations are the objects uploaded today.
  *
  * ponytail: the daily count lists R2 and reads `uploaded`, so it is eventually
- * consistent and counts only photos that were kept. A counter row in
- * `packages/db` once a second Worker generates for the same org.
+ * consistent and counts only photos that were kept. A draw the defect check
+ * turned down is paid for and not counted, but a slot redraws once at most,
+ * so a build pays for at most 2 x MAX_PER_BUILD draws and a day 2 x
+ * MAX_PER_DAY. A counter row in `packages/db` once a second Worker
+ * generates for the same org, or paid draws need an exact cap.
  */
 
 type PhotoModel = {
