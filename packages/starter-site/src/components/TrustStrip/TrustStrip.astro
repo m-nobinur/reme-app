@@ -1,6 +1,8 @@
 ---
 import { iconFor } from "../../icons"
+import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
+import { servicePages } from "../../structured-data"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
@@ -23,13 +25,44 @@ const figures = [
 ].filter((item) => item.value)
 // Each point shows the icon its words call for, no two alike where another fits.
 const taken = new Set<string>(figures.map((item) => item.icon))
-const points = [site.trust1, site.trust2, site.trust3]
+const points: { text: string; icon: string }[] = [
+  site.trust1,
+  site.trust2,
+  site.trust3,
+]
   .filter(Boolean)
   .map((text) => {
     const icon = iconFor("", text, "checkCircle", taken)
     taken.add(icon)
     return { text, icon }
   })
+const towns = site.areaTowns.split("\n").filter((line) => line.trim())
+if (figures.length + points.length === 0) {
+  const plain = [
+    {
+      text:
+        site.serviceArea ||
+        (towns.length > 1 ? `Covering ${towns.length} local areas` : ""),
+      icon: "mapPin",
+    },
+    {
+      text: site.weekdayHours ? `Open weekdays ${site.weekdayHours}` : "",
+      icon: "clock",
+    },
+    {
+      text: hasRoute("/quote/") ? "Request a quote online" : "",
+      icon: "clipboardText",
+    },
+    {
+      text:
+        servicePages.length > 1
+          ? `${servicePages.length} services to choose from`
+          : "",
+      icon: "listChecks",
+    },
+  ].filter((item) => item.text)
+  if (plain.length >= 2) points.push(...plain)
+}
 const count = figures.length + points.length
 // Columns on a wide screen: one row up to four items, rows of three past that.
 const columns = count <= 4 ? count : 3

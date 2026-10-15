@@ -298,15 +298,36 @@ describe("a component with its fields filled", () => {
 
 describe("proof", () => {
   let bare: Built | undefined
+  let nothing: Built | undefined
   beforeAll(async () => {
-    bare = await build({ site: NO_PROOF })
+    ;[bare, nothing] = await Promise.all([
+      build({ site: NO_PROOF }),
+      // No proof, no area, no hours, one service: only the quote link is left to say.
+      build({
+        site: {
+          ...NO_PROOF,
+          serviceArea: "",
+          areaTowns: "",
+          weekdayHours: "",
+          service2Name: "",
+          service3Name: "",
+        },
+      }),
+    ])
   }, 120_000)
-  afterAll(() => clean(bare))
+  afterAll(() => {
+    clean(bare)
+    clean(nothing)
+  })
+
+  const strip = (built: Built | undefined) =>
+    pagesOf(built)
+      .find((p) => p.file === "index.html")
+      ?.html.match(/<section class="trust-strip[\s\S]*?<\/section>/)?.[0]
 
   test("shows no figure, review or proof point without the facts behind them", () => {
     const pages = pagesOf(bare)
-    for (const name of ["trust-strip", "testimonials"])
-      expect(hasClass(pages, name), name).toBe(false)
+    expect(hasClass(pages, "testimonials")).toBe(false)
     const texts = visible(pages)
     for (const text of [
       FILLED.statYearsValue,
@@ -315,6 +336,27 @@ describe("proof", () => {
       FILLED.testimonial1Quote,
     ])
       expect(texts, text).not.toContain(text)
+  })
+
+  test("the trust strip falls back to plain facts when there is no proof, and claims nothing", () => {
+    const html = strip(bare) ?? ""
+    expect(html).toContain(FILLED.serviceArea)
+    expect(html).toContain(`Open weekdays ${FILLED.weekdayHours}`)
+    expect(html).toContain("Request a quote online")
+    expect(html).toMatch(/\d+ services to choose from/)
+    expect(html).not.toMatch(/insured|since|years|rated|award|guarantee|free/i)
+  })
+
+  test("leaves the trust strip out when fewer than two plain facts exist", () => {
+    expect(strip(nothing)).toBeUndefined()
+  })
+
+  test("keeps the owner's own proof in place of the fallback", () => {
+    const html = pagesOf(filled)
+      .find((p) => p.file === "index.html")
+      ?.html.match(/<section class="trust-strip[\s\S]*?<\/section>/)?.[0]
+    expect(html).toContain(FILLED.trust2)
+    expect(html).not.toContain("Request a quote online")
   })
 
   test("shows the owner's proof, as given or rephrased, on the about page", () => {
