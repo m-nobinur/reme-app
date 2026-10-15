@@ -34,7 +34,12 @@ beforeAll(async () => {
   }
   ;[bare, photos] = await Promise.all([
     build({
-      site: { ...FILLED, servicesCtaHeading: "Ready to *book your clean*?" },
+      site: {
+        ...FILLED,
+        servicesCtaHeading: "Ready to *book your clean*?",
+        // One line repeats a service's name, one is new work.
+        offerings: "weekly CLEAN\nOven cleaning",
+      },
       layout: TEXT_LED,
     }),
     build({
@@ -128,5 +133,17 @@ describe("an accent clause before punctuation", () => {
   test("leaves no space between the clause and the question mark", () => {
     const html = pagesOf(bare).find((p) => p.file === "services/index.html")
     expect(html?.html).toContain("book your clean</span>?")
+  })
+})
+
+describe("the services page's offerings", () => {
+  test("leave out a line that only repeats a service's name", () => {
+    if (!bare) throw new Error("the build did not run")
+    const html =
+      readPages(bare.dist).find((p) => p.file === "services/index.html")
+        ?.html ?? ""
+    const list = /<ol class="offerings">([\s\S]*?)<\/ol>/.exec(html)?.[1] ?? ""
+    expect(list).toContain("Oven cleaning")
+    expect(list.toLowerCase()).not.toContain("weekly clean")
   })
 })

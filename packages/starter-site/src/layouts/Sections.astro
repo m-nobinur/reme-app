@@ -61,10 +61,19 @@ const pagePhoto = headerPhoto(service ? `service:${service.id}` : page)
 // The h1 shares a field with a section heading elsewhere, and shows no accent marks.
 const heading = plain(marked)
 const home = page === "home"
+// Offerings are work beyond the service rows; a line that only repeats a
+// service's name would list the same services twice on one page.
+const named = new Set(
+  [1, 2, 3, 4, 5, 6].map((n) =>
+    String(site[`service${n}Name` as keyof typeof site] ?? "")
+      .trim()
+      .toLowerCase()
+  )
+)
 const offerings = site.offerings
   .split("\n")
   .map((item) => item.trim())
-  .filter(Boolean)
+  .filter((item) => item && !named.has(item.toLowerCase()))
 const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
 const talk = site.phone || site.email
 
