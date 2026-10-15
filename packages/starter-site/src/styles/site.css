@@ -804,7 +804,7 @@ picture {
   text-align: center;
 }
 
-.hero-dark_center :is(.hero-text, .lede) {
+.hero-dark_center :is(.hero-text, .lede, .hero-note) {
   margin-inline: auto;
 }
 
