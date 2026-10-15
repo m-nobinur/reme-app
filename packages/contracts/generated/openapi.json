@@ -2381,6 +2381,26 @@
                 {
                   "type": "object",
                   "properties": {
+                    "choices": {
+                      "minItems": 1,
+                      "maxItems": 16,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40,
+                        "pattern": "\\S"
+                      }
+                    }
+                  },
+                  "required": [
+                    "choices"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
                     "own": {
                       "type": "string",
                       "minLength": 1,
@@ -14275,6 +14295,26 @@
                                             },
                                             "required": [
                                               "choice"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "choices": {
+                                                "minItems": 1,
+                                                "maxItems": 16,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 40,
+                                                  "pattern": "\\S"
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "choices"
                                             ],
                                             "additionalProperties": false
                                           },

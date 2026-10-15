@@ -30,6 +30,7 @@ import {
   onboardingStep,
   openCard,
   opening,
+  pagesNamed,
   progressOf,
   STEPS,
   type StepId,
@@ -158,7 +159,13 @@ const everyCard = (card: ToolPart): unknown => {
     const { questions } = AskDesignInput.parse(card.input)
     return {
       answers: Object.fromEntries(
-        questions.map((q) => [q.id, { choice: q.card.options[0]?.id }])
+        questions.map((q) => {
+          const first = q.card.options[0]?.id
+          return [
+            q.id,
+            q.card.multiple ? { choices: [first] } : { choice: first },
+          ]
+        })
       ),
       skip_all: false,
     }
@@ -1352,7 +1359,9 @@ describe("the design tray", () => {
       "airy",
       undefined,
     ])
-    for (const q of input.questions) expect(q.card.preselected).toEqual([])
+    // Pages, a card of many, opens on the usual ones.
+    for (const q of input.questions.slice(0, 3))
+      expect(q.card.preselected).toEqual([])
     // A hex code is held as the brand colour and comes back as the words;
     // pages' own words ride beside the ids they came with.
     const code = PALETTES[0]?.brand as string
@@ -1389,7 +1398,7 @@ describe("the design tray", () => {
       palette: { choice: palette },
       lettering: { choice: ids(input(), "lettering")[0] },
       arrangement: { choice: ids(input(), "arrangement")[0] },
-      pages: { choice: "showcase" },
+      pages: { choices: ["services", "gallery", "faq"] },
     })
     expect(all).toMatchObject({ kind: "design", settled: true })
     expect((all as { facts: FactValue[] }).facts.map((f) => f.key)).toEqual([
@@ -1399,8 +1408,66 @@ describe("the design tray", () => {
       "site.pages",
     ])
     expect((all as { facts: FactValue[] }).facts.at(-1)?.value).toEqual({
-      ids: ["home", "services", "about", "gallery", "contact", "quote"],
+      ids: ["home", "services", "gallery", "faq", "quote"],
     })
+  })
+
+  it("asks for pages one tick each, the usual ones or the held ones ticked", () => {
+    const pages = input().questions.find((q) => q.id === "pages")?.card
+    expect(pages?.multiple).toBe(true)
+    expect(pages?.options.map((o) => o.id)).toEqual([
+      "services",
+      "about",
+      "gallery",
+      "testimonials",
+      "faq",
+      "service_area",
+      "contact",
+    ])
+    expect(pages?.preselected).toEqual(["services", "about", "contact"])
+    const held = tray({
+      facts: [
+        ...heldBefore(),
+        { key: "site.pages", value: { ids: ["home", "gallery", "quote"] } },
+      ],
+    }).questions.find((q) => q.id === "pages")?.card
+    expect(held?.preselected).toEqual(["gallery"])
+  })
+
+  it("reads the pages an owner names in their own words as ticked", () => {
+    // The words of the 2026-10-15 run, which once kept only Home and quote.
+    expect(
+      pick({
+        pages: {
+          own: "Home, Services, About, Gallery, FAQ, Contact, Request a quote",
+        },
+      })
+    ).toMatchObject({
+      facts: [
+        {
+          key: "site.pages",
+          value: {
+            ids: [
+              "home",
+              "services",
+              "about",
+              "gallery",
+              "faq",
+              "contact",
+              "quote",
+            ],
+            custom:
+              "Home, Services, About, Gallery, FAQ, Contact, Request a quote",
+          },
+        },
+      ],
+    })
+    expect(pagesNamed("FAQs and reviews, plus the service area")).toEqual([
+      "testimonials",
+      "faq",
+      "service_area",
+    ])
+    expect(pagesNamed("a blog and a price list")).toEqual([])
   })
 
   it("keeps the owner's own words, a colour code as the brand colour", () => {
@@ -1445,6 +1512,12 @@ describe("the design tray", () => {
       pick({ lettering: { choice: ids(input(), "palette")[0] } })
     ).toBeNull()
     expect(pick({ colours: { choice: "ocean" } })).toBeNull()
+    // One pick on a card of many, many on a card of one, a page set from a
+    // tray before pages were ticked one by one.
+    expect(pick({ pages: { choice: "gallery" } })).toBeNull()
+    expect(pick({ palette: { choices: ids(input(), "palette") } })).toBeNull()
+    expect(pick({ pages: { choices: ["gallery", "blog"] } })).toBeNull()
+    expect(pick({ pages: { choices: ["home"] } })).toBeNull()
     expect(cardAnswer(card(), { answers: {}, skip_all: "yes" }, [])).toBeNull()
   })
 
