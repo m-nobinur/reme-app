@@ -63,7 +63,7 @@ import { checkpoint, recover } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
-import { checksOf, finishRevision, GIT } from "../tail.ts"
+import { checksOf, finishRevision, GIT, SEAL_PHOTOS } from "../tail.ts"
 import { LEAD_TURN_MS, since } from "../timing.ts"
 
 /**
@@ -524,6 +524,10 @@ export function Developer({ id }: AgentProps) {
       if (seeded.exitCode !== 0)
         throw new Error(`seed failed: ${seeded.stderr}`)
     }
+    // The photos as placed are the baseline the report holds the lead to.
+    const sealed = await sandbox.exec(`cd ${SITE_ROOT} && ${SEAL_PHOTOS}`)
+    if (sealed.exitCode !== 0)
+      throw new Error(`photo seal failed: ${sealed.stderr}`)
     setRestored(true)
   })
 
@@ -667,6 +671,7 @@ export const reportComplete = (current: Session) =>
           orgId,
           assignmentId,
           facts: current.brief.snapshot.facts,
+          holdPhotos: true,
         })
 
       const report = CompletionReport.parse({

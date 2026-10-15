@@ -10,7 +10,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { SITE_ROOT } from "../src/revise.ts"
-import { finishRevision, runAxe, uploadDist } from "../src/tail.ts"
+import { finishRevision, runAxe, SEAL_PHOTOS, uploadDist } from "../src/tail.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
@@ -226,7 +226,11 @@ describe("the build at the end of a report", () => {
    * whose `astro` exits and writes as the case says. The steps after the
    * build are not reached here: the first one stops the run.
    */
-  const finish = async (build: string, edit?: (site: string) => void) => {
+  const finish = async (
+    build: string,
+    edit?: (site: string) => void,
+    holdPhotos = false
+  ) => {
     const site = mkdtempSync(join(tmpdir(), "reme-tail-"))
     mkdirSync(join(site, "node_modules/.bin"), { recursive: true })
     // The site as seeded: the starter's files in the first commit.
@@ -294,6 +298,7 @@ describe("the build at the end of a report", () => {
       orgId: "o",
       assignmentId: "a",
       facts: [],
+      holdPhotos,
     } as unknown as Parameters<typeof finishRevision>[0])
     return { outcome, ran }
   }
@@ -323,6 +328,58 @@ describe("the build at the end of a report", () => {
       "starter src/layouts/Photo.astro\n"
     )
     expect(ran).toEqual([])
+  })
+
+  /** The pipeline places a photo, the photos are sealed, then the lead acts. */
+  const withPhoto = (lead: (site: string, photo: string) => void) => {
+    let photo = ""
+    return {
+      photo: () => photo,
+      edit: (site: string) => {
+        photo = join(site, "src/assets/generated/home_hero.jpg")
+        mkdirSync(dirname(photo), { recursive: true })
+        writeFileSync(photo, "the pipeline's 2560 px hero\n")
+        execFileSync("bash", ["-c", SEAL_PHOTOS], { cwd: site })
+        lead(site, photo)
+      },
+    }
+  }
+
+  it("fails the report when the lead replaced a generated photo, and puts it back", async () => {
+    const lead = withPhoto((_, photo) =>
+      writeFileSync(photo, "an 800 px one\n")
+    )
+    const { outcome, ran } = await finish("exit 0", lead.edit, true)
+    await expect(outcome).rejects.toThrow(
+      /src\/assets\/generated\/home_hero\.jpg belong to the photo pipeline and are read-only/
+    )
+    expect(readFileSync(lead.photo(), "utf8")).toBe(
+      "the pipeline's 2560 px hero\n"
+    )
+    expect(ran).toEqual([])
+  })
+
+  it("fails the report when the lead added a smaller photo beside it, and removes it", async () => {
+    const small = (site: string) => join(site, "src/assets/uploads/small.jpg")
+    let added = ""
+    const lead = withPhoto((site) => {
+      added = small(site)
+      mkdirSync(dirname(added), { recursive: true })
+      writeFileSync(added, "800 px\n")
+    })
+    const { outcome } = await finish("exit 0", lead.edit, true)
+    await expect(outcome).rejects.toThrow(/src\/assets\/uploads\/small\.jpg/)
+    expect(() => readFileSync(added)).toThrow()
+  })
+
+  it("lets the report through when the photos are as the pipeline placed them", async () => {
+    const lead = withPhoto(() => undefined)
+    const { outcome } = await finish(
+      "mkdir -p dist && echo '<html></html>' > dist/index.html",
+      lead.edit,
+      true
+    )
+    await expect(outcome).rejects.toThrow("reached the revision")
   })
 
   it("leaves custom sections and the pages writable", async () => {
