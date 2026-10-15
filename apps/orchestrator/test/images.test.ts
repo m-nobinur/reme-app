@@ -63,9 +63,15 @@ const CLEAN = {
   anatomy: 0,
   clutter: 1,
   grade: 0,
+  texture: 0,
   subject: 0,
   style: 0,
   note: "",
+}
+const MUSHY = {
+  ...CLEAN,
+  texture: 2,
+  note: "the hedge dissolves into smeared brush strokes",
 }
 const WARPED = {
   ...CLEAN,
@@ -291,6 +297,33 @@ describe("the photo director", () => {
     expect(card).toContain(FRAMING.card)
     // The scene leads, where image models weigh words most.
     expect(card?.startsWith("A bright room for kitchen")).toBe(true)
+  })
+
+  it("asks for crisp texture and redraws a painterly, mushy photo", async () => {
+    const { calls, fetcher } = openrouter({ verdicts: [MUSHY] })
+    const lines = await drawLines(async () => {
+      const out = await directPhotos({
+        env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+        orgId: ORG,
+        plan: plan([["hedge", "service_cards"]]),
+        brief: BRIEF,
+        fetch: fetcher,
+      })
+      expect(out[0]).toMatchObject({ status: "generated" })
+    })
+    const system = String(
+      (
+        checks(calls)[0]?.body.messages as { content: unknown }[] | undefined
+      )?.[0]?.content
+    )
+    expect(system).toContain("texture: painterly, smeared or mushy")
+    expect(String(images(calls)[0]?.body.prompt)).toContain(
+      "never painterly, smeared or over-sharpened"
+    )
+    expect(String(images(calls)[1]?.body.prompt)).toContain(
+      "avoid it: the hedge dissolves into smeared brush strokes."
+    )
+    expect(lines.map((l) => l.defects)).toEqual([["texture"], []])
   })
 
   it("checks each photo and redraws a defect once on the next model, naming it", async () => {

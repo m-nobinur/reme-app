@@ -14,6 +14,7 @@ import type { ImageSlot, IndustryId } from "@workspace/contracts"
 export const HOUSE_STYLE =
   "Editorial photograph for an architecture and lifestyle magazine, full-frame camera, 35 to 50 mm lens, eye level or slightly above, straight vertical lines. " +
   "Soft natural daylight (window light indoors, bright overcast or low sun outdoors), high-key but never blown out, gentle contrast, true-to-life colour, light depth of field. " +
+  "Crisp, natural fine texture: leaves, grass, wood grain, stone and fabric resolve as real detail, sharp where the eye lands and never painterly, smeared or over-sharpened. " +
   "Minimal tidy styling, few objects, every surface clean. Not CGI or a 3D render, no HDR, no oversaturation, no fisheye, no vignette, no heavy grain."
 
 /** The places a trade's photos are set in, which the prompt writer picks its scenes from. */
