@@ -12,8 +12,8 @@ import { manifestDigest } from "./repo-map.ts"
 /**
  * The seed (ruling 4): `packages/starter-site`'s config and `src`, with the
  * sandbox image's `package.json` so the site names exactly the dependencies
- * `/opt/astro/node_modules` holds. The package's tests, scripts and size
- * budget stay out, and so does the booking page, which a first build does
+ * `/opt/astro/node_modules` holds, and the image's node typings shim. The package's tests, scripts and
+ * size budget stay out, and so does the booking page, which a first build does
  * not ship. The quote page ships: it is where every call to action points. Bundled into the Worker as text; the model never
  * sees these paths, only the files in the sandbox.
  */
@@ -26,16 +26,22 @@ const SEED = import.meta.glob(
     "../../../packages/starter-site/src/**/*",
     "!../../../packages/starter-site/src/pages/booking.astro",
     "../../../infra/sandbox/astro/package.json",
+    "../../../infra/sandbox/astro/node-shims.d.ts",
   ],
   { query: "?raw", import: "default", eager: true }
 ) as Record<string, string>
 
+const FROM_IMAGE: Record<string, string> = {
+  "/infra/sandbox/astro/package.json": "package.json",
+  // The image has no @types/node, which src/favicon.ts needs for astro check.
+  "/infra/sandbox/astro/node-shims.d.ts": "src/node-shims.d.ts",
+}
+
 /** The seed's files by their path in the site. */
 export const STARTER_FILES: Record<string, string> = Object.fromEntries(
   Object.entries(SEED).map(([file, content]) => [
-    file.endsWith("/infra/sandbox/astro/package.json")
-      ? "package.json"
-      : file.slice(file.indexOf("/starter-site/") + "/starter-site/".length),
+    Object.entries(FROM_IMAGE).find(([from]) => file.endsWith(from))?.[1] ??
+      file.slice(file.indexOf("/starter-site/") + "/starter-site/".length),
     content,
   ])
 )

@@ -192,6 +192,15 @@ const values = {
    * sends it by email to site.email instead; with neither, no form renders.
    */
   quoteFormAction: "",
+  /**
+   * A photo for the About and Contact page headers, as a path the build placed
+   * and its alt text; shown only with both, and never the home hero's photo.
+   * Empty gives the header its text-only form, which needs no photo to look finished.
+   */
+  aboutImage: "",
+  aboutImageAlt: "",
+  contactImage: "",
+  contactImageAlt: "",
   /** The subject line of a request sent by email. */
   quoteEmailSubject: "Quote request",
   bookingIntro: "",
@@ -300,7 +309,8 @@ const values = {
   service6For: "",
   /**
    * A photo for each service, by number: a path the build placed, as
-   * "/uploads/<id>.jpg", and its alt text. Shown only with both. A fleet's
+   * "/uploads/<id>.jpg", and its alt text. Shown only with both, on its card
+   * and in its own page's header, where it is never the home hero's photo. A fleet's
    * photos are the owner's own uploads, never generated. Empty shows the
    * service without a photo.
    */

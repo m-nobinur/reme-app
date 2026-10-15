@@ -20,6 +20,8 @@ interface Props {
   highlights?: { name: string; icon: string }[]
   /** A short reassurance line under the actions, as site.heroNote. */
   note?: string
+  /** Every page but home: with no photo the header is the plain page header, whatever the variant. */
+  inner?: boolean
 }
 
 const {
@@ -31,6 +33,7 @@ const {
   caption = "",
   highlights = [],
   note = "",
+  inner = false,
 } = Astro.props
 const photo = variant && image?.alt && hasPhoto(image.src) ? image : null
 // The box each variant's photo renders in (src/styles/site.css), so the browser
@@ -47,6 +50,8 @@ const SIZES = {
 // source's own width under that), at a quality the other photos do not need.
 const HERO_WIDTHS = [640, 960, 1280, 1920, 2560]
 const HERO_QUALITY = 75
+// A header whose photo is missing is one text block, not a text column beside an empty one.
+const plainPage = !variant || (inner && !photo)
 const listed = variant && !photo ? highlights.filter((h) => h.name) : []
 // A home hero sets its last word in the accent, never the whole line.
 const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
@@ -64,9 +69,13 @@ const actions = Astro.slots.has("default")
     <section
       class:list={[
         "hero",
-        variant
-          ? ["hero-home", `hero-${variant}`, photo ? "hero-photo" : "hero-plain"]
-          : "hero-page",
+        plainPage
+          ? "hero-page"
+          : [
+              "hero-home",
+              `hero-${variant}`,
+              photo ? "hero-photo" : "hero-plain",
+            ],
       ]}
     >
       <div class="wrap hero-inner">

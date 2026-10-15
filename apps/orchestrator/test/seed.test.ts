@@ -32,7 +32,7 @@ describe("the seed", () => {
           ["astro.config.mjs", "tsconfig.json", ".gitignore"].includes(path)
       )
     expect(Object.keys(STARTER_FILES).sort()).toEqual(
-      [...expected, "package.json"].sort()
+      [...expected, "package.json", "src/node-shims.d.ts"].sort()
     )
   })
 
@@ -41,7 +41,9 @@ describe("the seed", () => {
       const source =
         path === "package.json"
           ? "infra/sandbox/astro/package.json"
-          : `packages/starter-site/${path}`
+          : path === "src/node-shims.d.ts"
+            ? "infra/sandbox/astro/node-shims.d.ts"
+            : `packages/starter-site/${path}`
       expect(content, path).toBe(readFileSync(`${repo}${source}`, "utf8"))
     }
   })
