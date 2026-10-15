@@ -19,6 +19,7 @@ import {
   photoFile,
   siteRules,
 } from "../src/developer-rules.ts"
+import { COPY_WRITER_RULES } from "../src/fanout.ts"
 import { SEED_FIELDS } from "../src/seed.ts"
 
 const hidden = (keys: string[]): FactRecord => ({
@@ -350,6 +351,35 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("Name any photo you left out, and why, in risks")
     expect(rules).toContain('never the file name and never "image"')
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
+  })
+
+  it("tells the writer never to mention facts or gaps, to leave a question out, and names the gate", () => {
+    const rules = text(false)
+    expect(rules).toContain("Never write about your inputs.")
+    for (const phrase of [
+      "our facts don't say",
+      "isn't set out",
+      "the owner hasn't said",
+      "as an AI",
+    ])
+      expect(rules, phrase).toContain(phrase)
+    expect(rules).toContain(
+      "A question the facts do not answer is left out: write fewer questions rather than one that admits a gap"
+    )
+    expect(rules).toContain("exactly as service_area.text spells it")
+    // The old advice that invited the notes is gone.
+    expect(rules).not.toContain("answered only as far as the facts go")
+    expect(rules).not.toContain(
+      "tells the visitor to mention it in their quote request"
+    )
+    expect(COPY_WRITER_RULES).toContain(
+      "Leave a question out rather than answer that you do not know"
+    )
+    expect(COPY_WRITER_RULES).toContain(
+      "the copy gate accepts 45 to 65 and 140 to 165"
+    )
+    expect(rules).toContain("the copy gate fails under 100")
+    expect(rules).toContain("the copy gate fails a service page without either")
   })
 
   it("traces every service line to a fact and names the specifics a build once invented", () => {

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import sharp from "sharp"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { layout } from "../src/site-config"
 import { type Built, build, clean, type Page, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -20,9 +21,24 @@ const image = (w: number, h: number) =>
 /** FILLED names a logo it ships no file for; `photos` ships it and service 1's photo. */
 let bare: Built | undefined
 let photos: Built | undefined
+let rows: Built | undefined
 beforeAll(async () => {
-  ;[bare, photos] = await Promise.all([
+  ;[bare, rows, photos] = await Promise.all([
     build({ site: FILLED, standIns: false }),
+    // The reference run's Blueprint gave a service page numbered rows, which dropped both blocks.
+    build({
+      site: FILLED,
+      standIns: false,
+      layout: {
+        ...layout,
+        service: [
+          { kind: "hero" },
+          { kind: "service_cards", variant: "numbered_rows" },
+          { kind: "faq" },
+          { kind: "cta_band" },
+        ],
+      },
+    }),
     build({
       site: {
         ...FILLED,
@@ -40,6 +56,7 @@ beforeAll(async () => {
 }, 180_000)
 afterAll(() => {
   clean(bare)
+  clean(rows)
   clean(photos)
 })
 
@@ -58,6 +75,31 @@ const imageUrls = (page: Page) =>
         .map((candidate) => candidate.trim().split(/\s+/)[0] ?? "")
         .filter(Boolean),
     ])
+
+describe("a service page's included and who-it-suits blocks", () => {
+  test.each([
+    ["the default layout", () => bare],
+    ["a layout that asks for numbered rows", () => rows],
+  ])("show on every service page with %s", (_name, get) => {
+    const pages = pagesOf(get()).filter((p) =>
+      /^services\/[^/]+\/index\.html$/.test(p.file)
+    )
+    expect(pages.length).toBeGreaterThan(1)
+    for (const page of pages) {
+      expect(page.html, page.file).toContain('data-copy="service_includes"')
+      expect(page.html, page.file).toContain('data-copy="service_for"')
+      expect(page.html, page.file).toContain("What is included")
+      expect(page.html, page.file).toContain("Who it is for")
+    }
+  })
+
+  test("show the service's own words", () => {
+    const html =
+      pagesOf(rows).find((p) => p.file === "services/weekly-clean/index.html")
+        ?.html ?? ""
+    expect(html).toContain(FILLED.service1For)
+  })
+})
 
 describe("built images", () => {
   test("every image a page asks for is a file in dist", () => {

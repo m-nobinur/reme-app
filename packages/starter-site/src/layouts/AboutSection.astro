@@ -60,11 +60,17 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
                 eyebrow={site.overviewEyebrow}
                 heading={storyHeading}
               />
-              {story && <p class="section-lede">{story}</p>}
+              {
+                story && (
+                  <p class="section-lede" data-copy="about_body">
+                    {story}
+                  </p>
+                )
+              }
               {story && audience && site.audienceHeading && (
                 <h3>{site.audienceHeading}</h3>
               )}
-              {audience && <p>{audience}</p>}
+              {audience && <p data-copy="about_body">{audience}</p>}
             </div>
             {photo && (
               <Photo
