@@ -399,6 +399,20 @@ describe("the planned pages", () => {
     ).toBeNull()
   })
 
+  it("counts the service pages: one or more under services/ when the plan has them", () => {
+    const files = { "index.html": "x", "services/index.html": "x" }
+    const result = checkPlannedPages(plan("home", "services", "service"), files)
+    expect(result).toMatchObject({ passed: false, offending_node: "service" })
+    expect(result?.message).toContain("restore src/pages/services/[slug].astro")
+    expect(
+      checkPlannedPages(plan("home", "services", "service"), {
+        ...files,
+        "services/deep-clean/index.html": "x",
+        "services/weekly-clean/index.html": "x",
+      })
+    ).toBeNull()
+  })
+
   it("fails the build gate naming each planned page the build lacks and its file", () => {
     const result = checkPlannedPages(
       plan("home", "services", "contact", "service_area"),

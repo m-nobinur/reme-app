@@ -140,18 +140,28 @@ export function checkPlannedPages(
   files: Record<string, string>
 ): GateResult | null {
   const slug = (page: string) =>
-    page === "home" ? "index" : page.replaceAll("_", "-")
+    page === "home"
+      ? "index"
+      : page === "service"
+        ? "services/[slug]"
+        : page.replaceAll("_", "-")
+  // `service` is one page per service under services/; the services page's
+  // links to each are the links gate's to check.
+  const servicePages = Object.keys(files).filter((f) =>
+    /^services\/[^/]+\/index\.html$/.test(f)
+  ).length
   const missing = plan.pages
     .map(({ page }) => page)
-    .filter(
-      (page) =>
-        !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
+    .filter((page) =>
+      page === "service"
+        ? servicePages === 0
+        : !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
     )
   const [first] = missing
   if (!first) return null
   return fail(
     "build",
-    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}. Every planned page stays, whatever the facts`,
+    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}${missing.includes("service") ? " (it builds a page for each service with a name)" : ""}. Every planned page stays, whatever the facts`,
     first
   )
 }

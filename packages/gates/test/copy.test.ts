@@ -9,7 +9,8 @@ const page = (file: string, title: string, main: string, head = "") => ({
   html: `<!doctype html><html lang="en"><head><title>${title}</title>${head}</head><body><main id="main">${main}</main><footer><h2>Pages</h2><h2>Get in touch</h2></footer></body></html>`,
 })
 
-const cta = `<section class="cta-band" data-repeats><h2>Book your first garden visit</h2><p>${words(14)}</p></section>`
+const cta = (heading: string) =>
+  `<section class="cta-band"><h2>${heading}</h2><p>${words(14)}</p></section>`
 
 /** A site that meets the brief: every heading its own, every section its words. */
 const GOOD = [
@@ -20,14 +21,23 @@ const GOOD = [
      <section><h2>Garden work for homes across Bristol</h2><ul><li><h3>Planting</h3><p data-copy="service_body">${words(32)}</p></li></ul></section>
      <section><h2>From first visit to finished garden</h2><ol><li><h3>Visit</h3><p data-copy="step_body">${words(25)}</p></li></ol></section>
      <section><h2>Before we start on your garden</h2><details><summary>Do I need to be home?</summary><p data-copy="faq_answer">${words(55)}</p></details></section>
-     ${cta}`
+     ${cta("Book your first garden visit")}`
   ),
   page(
     "services/index.html",
     "Garden design, planting and lawn care | Greenleaf",
     `<section><h1>Landscaping services for Bristol gardens</h1></section>
+     <ul><li><h3><a href="/services/planting/">Planting</a></h3><p data-copy="service_body">${words(30)}</p></li></ul>
+     ${cta("Plan the next season of your garden")}`
+  ),
+  page(
+    "services/planting/index.html",
+    "Planting borders and beds in Bristol | Greenleaf",
+    `<section><h1>Borders and beds planted in Bristol</h1><p class="lede">${words(30)}</p></section>
      <article><h2>Planting</h2><p data-copy="service_detail">${words(80)}</p></article>
-     ${cta}`
+     <section><h2>How a planting job runs</h2><ol><li><h3>Visit</h3><p data-copy="step_body">${words(25)}</p></li></ol></section>
+     <section><h2>Planting questions from Bristol gardeners</h2><details><summary>When is the best time to plant?</summary><p data-copy="faq_answer">${words(50)}</p></details></section>
+     ${cta("Get your borders planted this spring")}`
   ),
   page(
     "404.html",
@@ -105,36 +115,45 @@ describe("the copy gate", () => {
       "the home hero's subhead (homeIntro) has 10 words; write 25 to 55",
       "a service card (serviceNBody) has 14 words; write 25 to 45",
       "a process step (stepNBody) has 5 words; write 20 to 35",
-      "an FAQ answer (faqNAnswer) has 20 words; write 40 to 90",
-      "a service on the services page (serviceNDetail) has 30 words; write 60 to 100",
+      "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page) has 20 words; write 40 to 90",
+      "a service page's intro (serviceNDetail) has 30 words; write 60 to 100",
     ])
   })
 
-  it("does not compare the closing band across pages, nor read the footer", () => {
+  it("compares each page's closing band like any heading, and never reads the footer", () => {
     const pages = [
       page(
         "index.html",
         "Greenleaf garden landscaping in Bristol",
-        `<h1>Gardens made for Bristol</h1>${cta}`
+        `<h1>Gardens made for Bristol</h1>${cta("Book your first garden visit")}`
       ),
       page(
         "contact/index.html",
         "Contact Greenleaf about a garden in Bath",
-        `<h1>Talk to Greenleaf about your garden</h1>${cta}`
+        `<h1>Talk to Greenleaf about your garden</h1>${cta("Book your first garden visit")}`
       ),
     ]
-    expect(copyFindings(pages)).toEqual([])
-    // A section heading that repeats the band's is still a repeat.
+    const found = copyFindings(pages)
+    expect(found.map((f) => [f.file, f.text])).toEqual([
+      ["contact/index.html", "Book your first garden visit"],
+    ])
+    expect(found[0]?.detail).toContain("each page has its own closing band")
+  })
+
+  it("holds a service page's headings to the rest of the site's", () => {
+    const service = (file: string, faq: string) =>
+      page(
+        file,
+        `${file} garden work | Greenleaf`,
+        `<h1>${file} in Bristol</h1><section><h2>${faq}</h2></section>`
+      )
+    // Two service pages left on the site's own FAQ heading repeat it.
     expect(
       copyFindings([
-        ...pages,
-        page(
-          "about/index.html",
-          "About Greenleaf, gardeners in Bristol",
-          "<h1>About Greenleaf</h1><h2>Book your first garden visit</h2>"
-        ),
-      ]).map((f) => f.file)
-    ).toEqual(["about/index.html"])
+        GOOD[0] as (typeof GOOD)[number],
+        service("services/lawns/index.html", "Before we start on your garden"),
+      ]).map((f) => [f.file, f.problem])
+    ).toEqual([["services/lawns/index.html", "duplicate"]])
   })
 
   it("passes a build that did not plan, whatever its copy", () => {

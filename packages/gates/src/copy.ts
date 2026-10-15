@@ -14,10 +14,10 @@ import { parse } from "parse5"
  * - two pages with the same title;
  * - a section's copy under its minimum word count.
  *
- * The starter marks what is checked: `data-copy="<kind>"` on the elements
- * whose words are counted, and `data-repeats` on the closing band, which is
- * the same on every page by design and so is not compared across pages.
- * Headings outside <main> (the footer's) are site chrome and are not read.
+ * The starter marks what is checked with `data-copy="<kind>"` on the
+ * elements whose words are counted. Every h1 and h2 inside <main> is
+ * compared, each page's closing band included; headings outside it (the
+ * footer's) are site chrome and are not read.
  */
 
 /**
@@ -42,9 +42,10 @@ export type CopyKind = keyof typeof COPY_WORDS
 const LABEL: Record<CopyKind, string> = {
   hero_lede: "the home hero's subhead (homeIntro)",
   service_body: "a service card (serviceNBody)",
-  service_detail: "a service on the services page (serviceNDetail)",
+  service_detail: "a service page's intro (serviceNDetail)",
   step_body: "a process step (stepNBody)",
-  faq_answer: "an FAQ answer (faqNAnswer)",
+  faq_answer:
+    "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page)",
 }
 
 /** Headings that fit any business: an eyebrow may say them, an h1 or h2 may not. */
@@ -152,19 +153,14 @@ const alike = (a: Set<string>, b: Set<string>) => {
 
 type Read = {
   title: string
-  headings: { tag: string; text: string; node: string; repeats: boolean }[]
+  headings: { tag: string; text: string; node: string }[]
   copy: { kind: CopyKind; text: string; node: string }[]
   indexed: boolean
 }
 
 function read(html: string): Read {
   const out: Read = { title: "", headings: [], copy: [], indexed: true }
-  const walk = (
-    node: TreeNode,
-    path: string,
-    inMain: boolean,
-    repeats: boolean
-  ) => {
+  const walk = (node: TreeNode, path: string, inMain: boolean) => {
     const children = node.childNodes ?? node.content?.childNodes ?? []
     const counts = new Map<string, number>()
     for (const child of children) {
@@ -181,10 +177,9 @@ function read(html: string): Read {
       )
         out.indexed = false
       const main = inMain || tag === "main"
-      const repeating = repeats || attr(child, "data-repeats") !== undefined
       if (main && (tag === "h1" || tag === "h2")) {
         const text = squash(textOf(child))
-        if (text) out.headings.push({ tag, text, node: at, repeats: repeating })
+        if (text) out.headings.push({ tag, text, node: at })
       }
       const kind = attr(child, "data-copy")
       if (kind && Object.hasOwn(COPY_WORDS, kind)) {
@@ -194,10 +189,10 @@ function read(html: string): Read {
           node: at,
         })
       }
-      walk(child, at, main, repeating)
+      walk(child, at, main)
     }
   }
-  walk(parse(html) as unknown as TreeNode, "", false, false)
+  walk(parse(html) as unknown as TreeNode, "", false)
   return out
 }
 
@@ -206,12 +201,7 @@ export function copyFindings(
   pages: readonly { file: string; html: string }[]
 ): CopyFinding[] {
   const found: CopyFinding[] = []
-  const headings: {
-    file: string
-    text: string
-    repeats: boolean
-    stems: Set<string>
-  }[] = []
+  const headings: { file: string; text: string; stems: Set<string> }[] = []
   const titles = new Map<string, string>()
   for (const { file, html } of pages) {
     const page = read(html)
@@ -241,8 +231,7 @@ export function copyFindings(
       }
       const stems = stemsOf(h.text)
       const first = headings.find((each) => alike(each.stems, stems))
-      // The closing band repeats on every page by design; once is compared.
-      if (first && !(first.repeats && h.repeats && first.file !== file)) {
+      if (first) {
         found.push({
           file,
           node: h.node,
@@ -251,10 +240,9 @@ export function copyFindings(
           detail:
             first.file === file
               ? `the ${h.tag} repeats "${first.text}" on the same page`
-              : `the ${h.tag} repeats "${first.text}" from ${first.file}; rewrite one, or when one shared section sits on both pages, drop it from one page's layout entry`,
+              : `the ${h.tag} repeats "${first.text}" from ${first.file}; write this page's own (each page has its own closing band, aboutCtaHeading and the rest, and each service page its own fields), or when one shared section sits on both pages, drop it from one page's layout entry`,
         })
-      } else if (!first)
-        headings.push({ file, text: h.text, repeats: h.repeats, stems })
+      } else headings.push({ file, text: h.text, stems })
     }
 
     for (const c of page.copy) {
