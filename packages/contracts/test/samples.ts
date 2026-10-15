@@ -353,6 +353,7 @@ export const samples: Record<ContractName, unknown> = {
     blueprint: BLUEPRINT,
     revision_of: ASSIGNMENT,
   },
+  BlueprintReceipt: { round: 1, decision: "build" },
   BlueprintReviewOutput: { decision: "change", note: "Add a gallery page" },
   BuildSummary: {
     assignment_id: ASSIGNMENT,

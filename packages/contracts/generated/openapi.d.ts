@@ -2390,6 +2390,11 @@ export interface components {
         purpose: string
       }[]
     }
+    BlueprintReceipt: {
+      round: number
+      /** @enum {string} */
+      decision: "build" | "change"
+    }
     BlueprintReviewInput: {
       blueprint: {
         direction: string

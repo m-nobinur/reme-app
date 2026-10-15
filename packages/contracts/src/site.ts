@@ -317,3 +317,20 @@ export function siteUrl(host: string, port: string | undefined): string {
     `no site link for ${JSON.stringify(host)} on port ${JSON.stringify(port)}`
   )
 }
+
+/**
+ * A link to a site or a preview, as `siteUrl` mints it: https, or http for a
+ * `.localhost` host alone. `meta` carries the same rule into the JSON Schema,
+ * which `protocol` and a host check cannot.
+ */
+export const SiteLink = z
+  .url({ protocol: /^https?$/ })
+  .refine((link) => {
+    // Zod runs this after a failed url check too, which has already refused it.
+    if (!URL.canParse(link)) return true
+    const { protocol, hostname } = new URL(link)
+    return protocol === "https:" || hostname.endsWith(".localhost")
+  }, "A link is https, or http on a .localhost host.")
+  .meta({
+    pattern: "^(https://|http://[^/?#@:]+\\.localhost(:[0-9]+)?([/?#]|$))",
+  })

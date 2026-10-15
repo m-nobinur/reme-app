@@ -9,6 +9,7 @@ import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { choiceFacts } from "./onboarding.ts"
+import { SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -250,14 +251,11 @@ export const DecisionRequest = z.strictObject({
   revision_id: Uuid,
 })
 
-/** `meta` carries the protocol rule into the JSON Schema, which `protocol` alone does not. */
-const Https = z.url({ protocol: /^https$/ }).meta({ pattern: "^https://" })
-
 /** A signed preview of one revision: the page, and its three screenshots. */
 export const PreviewLink = z.strictObject({
   revision_id: Uuid,
-  url: Https,
-  screenshots: z.array(Https).length(3),
+  url: SiteLink,
+  screenshots: z.array(SiteLink).length(3),
   expires_at: Timestamp,
 })
 
@@ -487,7 +485,7 @@ export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
     host: z.string().min(1).nullable(),
     /** Where `host` opens, built by `siteUrl`: http and a port on local dev. Null with `host`. */
-    url: z.url().nullable(),
+    url: SiteLink.nullable(),
     /**
      * The version being served, and the build that made it, so the panel can
      * read its screenshots through `GET /builds/:id/preview`.

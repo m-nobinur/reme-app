@@ -386,14 +386,35 @@ describe("the requests around them", () => {
     expect(live({ ...sample.site.live, assignment_id: "a1" })).toEqual(REFUSED)
   })
 
-  it("links a preview over https only, with exactly three screenshots", () => {
+  it("links a preview over https, or http on a .localhost host, with exactly three screenshots", () => {
     const link = samples.PreviewLink as { screenshots: string[] }
+    const local = "http://preview-v1-brightclean.reme.localhost:3004"
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,
-        url: "http://example.invalid/open",
+        url: `${local}/open?t=abc.def`,
+        screenshots: link.screenshots.map((_, i) => `${local}/s${i}.png?t=x`),
       })
-    ).toEqual(REFUSED)
+    ).toEqual(ACCEPTED)
+    for (const url of [
+      "http://example.invalid/open",
+      "http://brightclean.localhost.evil.com/open",
+      "http://evil.com/x.localhost",
+      "http://user@evil.com:80/.localhost",
+      "javascript:alert(1)",
+    ]) {
+      expect(
+        verdict("PreviewLink", PreviewLink, { ...link, url }),
+        url
+      ).toEqual(REFUSED)
+      expect(
+        verdict("PreviewLink", PreviewLink, {
+          ...link,
+          screenshots: [url, ...link.screenshots.slice(1)],
+        }),
+        url
+      ).toEqual(REFUSED)
+    }
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,

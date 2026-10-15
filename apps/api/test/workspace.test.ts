@@ -1630,6 +1630,40 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(stub.calls).toHaveLength(1)
     })
 
+    it("relays the builder's receipt for a Blueprint decision", async () => {
+      // What the orchestrator's `/blueprint` answers: the round and the decision.
+      const stub = stubOrchestrator(() =>
+        Response.json({ round: 1, decision: "build" }, { status: 202 })
+      )
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/blueprint`,
+        json({ decision: "build" }, "blueprint-1")
+      )
+      expect(response.status).toBe(202)
+      expect(await response.json()).toEqual({ round: 1, decision: "build" })
+      expect(stub.calls[0]?.body).toEqual({ decision: "build" })
+    })
+
+    it("relays a preview that opens on the local router", async () => {
+      const host = "preview-v1-brightclean.reme.localhost:3004"
+      const link = {
+        revision_id: crypto.randomUUID(),
+        url: `http://${host}/open?t=abc.def`,
+        screenshots: [390, 768, 1440].map(
+          (w) => `http://${host}/screenshots/home-${w}.png?t=abc.def`
+        ),
+        expires_at: new Date().toISOString(),
+      }
+      const stub = stubOrchestrator(() => Response.json(link))
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/preview`
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(link)
+    })
+
     it.each([
       [500, 503, "transient", "orchestrator.unavailable"],
       // A 4xx outside the envelope is a route or shape mismatch: nothing

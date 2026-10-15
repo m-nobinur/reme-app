@@ -2,6 +2,7 @@ import {
   AnswerRequest,
   ApprovalDecision,
   Assignment,
+  BlueprintReceipt,
   BlueprintReviewOutput,
   DecisionRequest,
   FactList,
@@ -117,8 +118,9 @@ async function buildAction(
   })
   if (action === "answer") return relay(result, InformationAnswer.parse)
   if (action === "preview") return relay(result, PreviewLink.parse)
-  // `/cancel` and `/blueprint` (the plan's decision, which the orchestrator turns
-  // into `blueprint.decided`) answer the id and the state it settled in.
+  // The plan's decision, which the orchestrator turns into `blueprint.decided`.
+  if (action === "blueprint") return relay(result, BlueprintReceipt.parse)
+  // `/cancel` answers the id and the state it settled in.
   return relay(result, (b) =>
     Assignment.pick({ assignment_id: true, state: true }).parse(b)
   )
