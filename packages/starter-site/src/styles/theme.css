@@ -38,18 +38,21 @@
     serif
   );
 
-  /* Type, to the bar the reference sites set: a 16 px body at 1.7, a hero of
-     64 to 82 px, a section heading of 38 to 56 px, all in a display weight of
-     500 that is set large rather than bold, the same in every direction. */
+  /* Type, measured from the reference (spotless-templates.lovable.app) at 1440
+     and 390 px: h1 72 / 48 px at 1.07, h2 42 / 32 px at 1.2, h3 23 px, body
+     16 px at 1.7, card and step copy 14 px, eyebrows 11 px. Every step is
+     fluid between those two widths and fixed outside them. Display type is set
+     at one weight and normal tracking, body type at 400 and 500 only. */
+  --text-xs: 0.6875rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
-  --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
-  --text-xl: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
-  --text-2xl: clamp(2.125rem, 1.2rem + 2.9vw, 3.5rem);
-  --text-page: clamp(2.5rem, 1.5rem + 3.4vw, 4rem);
-  --text-hero: clamp(2.5rem, 1.2rem + 5.6vw, 5.125rem);
+  --text-lg: 1.0625rem;
+  --text-xl: 1.4375rem;
+  --text-2xl: clamp(2rem, 1.768rem + 0.952vw, 2.625rem);
+  --text-page: clamp(2.5rem, 2.03rem + 1.9vw, 3.5rem);
+  --text-hero: clamp(3rem, 2.443rem + 2.286vw, 4.5rem);
   --display-weight: 500;
-  --display-tracking: -0.03em;
+  --display-tracking: 0em;
   --display-case: none;
 
   --space-3xs: 0.25rem;
@@ -61,25 +64,23 @@
   --space-xl: 3rem;
   --space-2xl: 4rem;
 
-  /* Rhythm. Every section is a band with the same padding, every band holds
-     one container, and every grid uses one gap, so nothing on a page sits at
-     a spacing of its own. */
-  --gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
-  --container: 75rem;
+  /* Rhythm, measured the same way: a 1,280 px container with 80 px gutters at
+     1440 and 20 px at 390, sections 82 px apart on a wide screen and 56 px on
+     a phone. Every section is a band with the same padding, every band holds
+     one container, and every grid uses one gap. */
+  --gutter: clamp(1.25rem, 5.714vw - 0.143rem, 5rem);
+  --container: 80rem;
   --container-narrow: 46rem;
-  /* A lede line, 340 to 460 px on the reference sites. */
+  /* A lede line, 365 to 460 px on the reference. */
   --measure: 28rem;
-  --section-pad: clamp(3.5rem, 1.9rem + 5vw, 6rem);
-  --section-head-gap: clamp(1.75rem, 1.25rem + 1.5vw, 2.75rem);
-  --grid-gap: clamp(1rem, 0.7rem + 1.2vw, 1.75rem);
+  --section-pad: clamp(3.5rem, 2.896rem + 2.476vw, 5.125rem);
+  --section-head-gap: clamp(1.75rem, 1.5rem + 0.8vw, 2.25rem);
+  --grid-gap: clamp(1rem, 0.75rem + 0.8vw, 1.5rem);
   --header-h: 4.5rem;
 
   --radius-sm: calc(var(--radius) - 0.15rem);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) * 2.5);
-  --shadow-card:
-    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
-    0 8px 24px -12px color-mix(in oklch, var(--foreground) 18%, transparent);
 
   --brand: var(--primary);
   --brand-foreground: var(--primary-foreground);
@@ -121,9 +122,12 @@
   --input: var(--border);
   --ring: color-mix(in oklch, var(--primary) 40%, oklch(0.63 0 0));
 
-  --radius-card: var(--radius-lg);
-  --radius-button: var(--radius-md);
-  --radius-media: var(--radius-lg);
+  /* The reference's finish: 8 px cards and photos, 6 px buttons in the
+     header and the closing band, pills for the hero's two actions. */
+  --radius-card: 0.5rem;
+  --radius-button: 0.375rem;
+  --radius-media: 0.5rem;
+  --radius-hero-action: 999px;
 
   /* The page's own pair, kept by name so a surface can turn it over: a dark
      band sets --background to --ink and --foreground to --paper. */
@@ -139,17 +143,18 @@ html {
 }
 
 /* The direction's radius language (src/directions.ts). soft is the default
-   above; square is the 2 to 4 px of an editorial site, round the large cards
+   above; square is the 2 to 4 px of an editorial site, round the larger cards
    and pill buttons of a friendly one. Pills on captions and tags keep their
    own shape in every direction. */
 [data-radius="square"] {
   --radius-card: 0.25rem;
   --radius-button: 0.125rem;
   --radius-media: 0.125rem;
+  --radius-hero-action: var(--radius-button);
 }
 
 [data-radius="round"] {
-  --radius-card: 1.5rem;
+  --radius-card: 1rem;
   --radius-button: 999px;
-  --radius-media: 1.5rem;
+  --radius-media: 1rem;
 }

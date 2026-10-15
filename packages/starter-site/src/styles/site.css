@@ -80,12 +80,13 @@ h1 {
 
 h2 {
   font-size: var(--text-2xl);
+  line-height: 1.2;
   margin: 0 0 var(--space-md);
 }
 
 h3 {
-  font-size: var(--text-lg);
-  letter-spacing: -0.01em;
+  font-size: var(--text-xl);
+  line-height: 1.3;
   margin: 0 0 var(--space-2xs);
 }
 
@@ -99,7 +100,7 @@ p {
   max-width: var(--measure);
   color: var(--muted-foreground);
   font-size: var(--text-lg);
-  line-height: 1.55;
+  line-height: 1.7;
 }
 
 /* The hero's reassurance line, under its buttons. */
@@ -116,17 +117,25 @@ p {
   color: var(--brand-text);
 }
 
-/* Bands. Every band keeps both paddings, and every second band on a page is
-   tinted, so the page reads base, tint, base and ends on the dark closing band
-   (the CTA's brand surface). `of .band` counts bands only, so the hero and the
-   trust strip do not shift the beat. :where() keeps this at zero specificity:
-   a direction or a component that sets its own surface wins. */
+/* Bands. Every band keeps both paddings. The tint is used the way the
+   reference uses it, sparingly: every third band, never beside a band a
+   variant tints itself (.band-tint), and the page ends on the dark closing
+   band (the CTA's brand surface). `of .band` counts bands only, so the hero
+   and the trust strip do not shift the beat. :where() keeps this at zero
+   specificity: a direction or a component that sets its own surface wins. */
 
 .band {
   padding-block: var(--section-pad);
 }
 
-:where(main > .band:nth-child(even of .band):not(.cta-band)) {
+:where(
+  main
+    > .band:nth-child(3n + 2 of .band):not(
+      .cta-band,
+      .band-tint + .band,
+      :has(+ .band-tint)
+    )
+) {
   background: var(--brand-soft);
 }
 
@@ -148,7 +157,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration-thickness: 1px;
 }
 
@@ -240,7 +249,7 @@ p {
   color: var(--muted-foreground);
   font-family: var(--font-sans);
   font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.16em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -286,9 +295,8 @@ picture {
   display: inline-flex;
   align-items: center;
   min-height: 2.75rem;
-  color: var(--foreground);
+  color: var(--muted-foreground);
   font-size: var(--text-sm);
-  font-weight: 500;
   text-decoration: none;
 }
 
@@ -298,7 +306,8 @@ picture {
 
 .nav-wide a[aria-current="page"] {
   color: var(--brand-text);
-  box-shadow: inset 0 -2px 0 var(--brand);
+  text-decoration: underline 1px;
+  text-underline-offset: 0.45em;
 }
 
 /* The phone menu is a native disclosure: it opens with no script, and the
@@ -314,7 +323,7 @@ picture {
   color: var(--foreground);
   cursor: pointer;
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
   list-style: none;
 }
 
@@ -343,7 +352,6 @@ picture {
   padding: var(--space-2xs) var(--gutter) var(--space-md);
   border-bottom: 1px solid var(--border);
   background: var(--background);
-  box-shadow: var(--shadow-card);
 }
 
 .nav-narrow a {
@@ -414,12 +422,11 @@ picture {
   justify-content: center;
   min-height: 3rem;
   padding-inline: var(--space-md);
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-button);
   gap: var(--space-2xs);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-decoration: none;
   transition:
     background-color 160ms ease,
@@ -462,6 +469,12 @@ picture {
   display: none;
 }
 
+/* The hero's two actions are pills on the reference; the header's and the
+   closing band's keep the button radius. */
+.hero-home .action {
+  border-radius: var(--radius-hero-action);
+}
+
 .action-primary {
   background: var(--brand);
   color: var(--brand-foreground);
@@ -483,7 +496,7 @@ picture {
 
 .header-action .action {
   min-height: 2.75rem;
-  padding-inline: var(--space-sm);
+  padding-inline: var(--space-md);
   white-space: nowrap;
 }
 
@@ -527,10 +540,10 @@ picture {
   align-items: center;
   gap: 0.625rem;
   margin: 0 0 var(--space-sm);
-  color: var(--brand-text);
+  color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 500;
   letter-spacing: 0.16em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -542,7 +555,7 @@ picture {
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 50%;
-  background: currentcolor;
+  background: var(--brand-text);
 }
 
 /* The last word of a headline, never the whole line: in the italic face
@@ -554,7 +567,7 @@ picture {
 
 .hero-home h1 {
   font-size: var(--text-hero);
-  line-height: 1.05;
+  line-height: 1.07;
 }
 
 .hero-page {
@@ -648,20 +661,6 @@ picture {
   position: relative;
 }
 
-/* Two soft arcs in the top corner, behind the copy and the photo. */
-.hero-home {
-  isolation: isolate;
-}
-
-.hero-motif {
-  position: absolute;
-  z-index: -1;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  width: clamp(9rem, 4rem + 18vw, 20rem);
-  height: auto;
-}
-
 .hero-plain .hero-list {
   padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--brand-line);
@@ -686,12 +685,11 @@ picture {
   inset-inline-end: var(--space-md);
   max-width: 16rem;
   margin: 0;
-  padding: var(--space-2xs) var(--space-sm);
+  padding: 0.625rem 0.9375rem;
   border-radius: 999px;
   background: var(--paper);
   color: var(--ink);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -789,7 +787,7 @@ picture {
   .hero-wash.hero-photo {
     display: grid;
     align-items: center;
-    min-height: clamp(34rem, 80vh, 48rem);
+    min-height: clamp(32rem, 70vh, 44rem);
   }
 
   .hero-wash.hero-photo .hero-media {
@@ -880,7 +878,7 @@ picture {
   border-radius: 999px;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -930,7 +928,7 @@ picture {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   gap: var(--space-md) 0;
   margin: 0;
-  padding: var(--space-lg) 0;
+  padding: 2.25rem 0;
   list-style: none;
 }
 
@@ -938,11 +936,10 @@ picture {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 0.6875rem;
   padding-inline: var(--space-md);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .trust-text {
@@ -950,15 +947,11 @@ picture {
   min-width: 0;
 }
 
-/* The icon in a soft circle of the brand's tint, one size on every item. */
+/* The icon on its own, in the brand, one size on every item. */
 .trust-icon {
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--brand-soft);
   color: var(--brand-text);
 }
 
@@ -1000,16 +993,14 @@ picture {
 
 .trust-value {
   font-family: var(--font-display);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: var(--display-weight);
-  line-height: 1.05;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .trust-label {
   color: var(--muted-foreground);
-  font-size: var(--text-sm);
-  font-weight: 500;
 }
 
 .trust-phrases .trust-list {
@@ -1101,7 +1092,7 @@ picture {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
-  padding: var(--space-lg) var(--space-md);
+  padding: var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--card);
@@ -1112,25 +1103,28 @@ picture {
   margin: 0;
 }
 
-.card p {
+/* Card, step and answer copy is the reference's 14 px, in the muted ink. */
+:is(.card, .step-list, .value-list, .row-text) p {
   color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
-/* Every item icon sits in a soft circle of the brand's tint, one size. */
+/* Every item icon sits in a hairline circle, the outline of the reference's
+   step numbers, one size. */
 .card-icon {
   display: inline-grid;
   flex: none;
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
+  border: 1px solid var(--brand-line);
   border-radius: 50%;
-  background: var(--brand-soft);
   color: var(--brand-text);
 }
 
 .card-icon .mark {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
   color: inherit;
 }
 
@@ -1162,14 +1156,11 @@ picture {
 }
 
 .card-linked {
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+  transition: border-color 160ms ease;
 }
 
 .card-linked:hover {
   border-color: var(--brand-line);
-  box-shadow: var(--shadow-card);
 }
 
 .card-linked:hover h3,
@@ -1184,17 +1175,24 @@ picture {
 .card-media {
   position: relative;
   overflow: hidden;
-  margin: calc(var(--space-lg) * -1) calc(var(--space-md) * -1) var(--space-xs);
+  margin: calc(var(--space-md) * -1) calc(var(--space-md) * -1) var(--space-xs);
   border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
 
+/* 3:2 on a phone, 7:4 in a row of three: the reference's crop at both. */
 .card-photo {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
   object-fit: cover;
   background: var(--brand-soft);
   transition: transform 200ms ease;
+}
+
+@media (min-width: 64rem) {
+  .card-photo {
+    aspect-ratio: 7 / 4;
+  }
 }
 
 .services-fleet .card-photo {
@@ -1205,29 +1203,6 @@ picture {
   transform: scale(1.035);
 }
 
-/* The label pill on the photo: the service's icon and its number. */
-.card-tag {
-  position: absolute;
-  inset-block-end: var(--space-sm);
-  inset-inline-start: var(--space-sm);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.3125rem 0.75rem 0.3125rem 0.5rem;
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.card-tag .mark {
-  width: 1rem;
-  height: 1rem;
-}
-
 /* The card's own link, in words, at its foot so a row of cards lines up. */
 .card-arrow {
   display: inline-flex;
@@ -1236,8 +1211,8 @@ picture {
   margin-block-start: auto;
   padding-block-start: var(--space-sm);
   color: var(--brand-text);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .spec-pills {
@@ -1253,8 +1228,7 @@ picture {
   padding: var(--space-3xs) var(--space-xs);
   border: 1px solid var(--brand-line);
   border-radius: 999px;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: 0.8125rem;
 }
 
 .service-rows {
@@ -1286,6 +1260,7 @@ picture {
   color: var(--muted-foreground);
   font-family: var(--font-display);
   font-size: var(--text-sm);
+  font-weight: var(--display-weight);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1338,21 +1313,7 @@ picture {
   color: var(--brand-foreground);
 }
 
-/* Reasons to choose: the heading with an orbit drawn under it on a wide
-   screen, the reasons beside them. */
-
-.value-head .value-motif {
-  display: none;
-}
-
-@media (min-width: 56rem) {
-  .value-head .value-motif {
-    display: block;
-    width: min(15rem, 80%);
-    height: auto;
-    margin-block-start: var(--space-xl);
-  }
-}
+/* Reasons to choose: the heading, the reasons beside it. */
 
 .value-list {
   display: grid;
@@ -1379,11 +1340,8 @@ picture {
   color: var(--muted-foreground);
   font-family: var(--font-display);
   font-size: var(--text-sm);
+  font-weight: var(--display-weight);
   font-variant-numeric: tabular-nums;
-}
-
-.value-list .card-icon {
-  background: var(--background);
 }
 
 .value-list p {
@@ -1482,7 +1440,7 @@ picture {
 .facts-label {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
@@ -1564,7 +1522,7 @@ picture {
   color: var(--brand-text);
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--display-weight);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1622,13 +1580,15 @@ picture {
 }
 
 .steps-circles .step-list li::before {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
   margin: 0 0 var(--space-md);
   border-color: var(--brand-text);
   background: transparent;
+  color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: var(--text-sm);
+  font-size: 0.8125rem;
+  font-weight: 400;
 }
 
 .steps-circles .step-list h3 {
@@ -1683,12 +1643,12 @@ picture {
 .testimonials figure {
   margin: 0;
   gap: var(--space-sm);
-  border-inline-start: 3px solid var(--brand);
 }
 
 .testimonials blockquote {
   margin: 0;
   font-family: var(--font-display);
+  font-weight: var(--display-weight);
   font-size: var(--text-xl);
   line-height: 1.35;
 }
@@ -1717,7 +1677,7 @@ picture {
 .testimonials figcaption {
   color: var(--muted-foreground);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Gallery */
@@ -1845,13 +1805,10 @@ picture {
   background: var(--card);
 }
 
-.area-motif {
-  position: absolute;
-  z-index: -1;
-  inset-block-end: -3.5rem;
-  inset-inline-end: -2.5rem;
-  width: 15rem;
-  height: auto;
+/* On a phone the pin would sit under the towns, so it is drawn only where
+   the card has a column of its own for it. */
+.area-places .area-motif {
+  display: none;
 }
 
 @media (min-width: 56rem) {
@@ -1860,7 +1817,11 @@ picture {
     padding-inline-end: 12rem;
   }
 
-  .area-motif {
+  .area-places .area-motif {
+    position: absolute;
+    z-index: -1;
+    display: block;
+    height: auto;
     inset-block: 50% auto;
     translate: 0 -50%;
     inset-inline-end: -1.5rem;
@@ -1886,7 +1847,7 @@ picture {
 .area-towns {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2xs);
+  gap: var(--space-2xs) var(--space-md);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1896,11 +1857,6 @@ picture {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3xs);
-  padding: var(--space-3xs) var(--space-xs);
-  border: 1px solid var(--brand-line);
-  border-radius: 999px;
-  background: var(--brand-soft);
-  font-weight: 500;
 }
 
 .area-towns .mark {
@@ -1975,7 +1931,7 @@ picture {
   background: var(--brand);
   color: var(--brand-foreground);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .quote-form {
@@ -2007,7 +1963,7 @@ picture {
 }
 
 .quote-field label {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .quote-optional {
@@ -2112,10 +2068,6 @@ picture {
 }
 
 /* Questions between hairlines, a plus that turns to a cross when open. */
-.faq-list {
-  border-block-start: 1px solid var(--border);
-}
-
 .faq details {
   border-block-end: 1px solid var(--border);
 }
@@ -2125,11 +2077,11 @@ picture {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  min-height: 3.75rem;
-  padding-block: var(--space-sm);
+  min-height: 4rem;
+  padding-block: 1.25rem;
   cursor: pointer;
-  font-weight: 600;
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1.5;
   list-style: none;
 }
 
@@ -2146,7 +2098,7 @@ picture {
   flex: none;
   width: 1.125rem;
   height: 1.125rem;
-  background: var(--brand-text);
+  background: currentColor;
   mask:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z'/%3E%3C/svg%3E")
     center / contain no-repeat;
@@ -2159,9 +2111,10 @@ picture {
 
 .faq details p {
   margin: 0;
-  padding-block-end: var(--space-md);
+  padding-block-end: 1.25rem;
   max-width: 62ch;
   color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 /* Contact details. A dl's rows may hold only dt and dd, so the icon sits
@@ -2208,7 +2161,6 @@ picture {
   translate: 0 -50%;
   width: 2.25rem;
   height: 2.25rem;
-  background: var(--background);
 }
 
 .contact-list .card-icon .mark {
@@ -2234,12 +2186,13 @@ picture {
 }
 
 .contact-cards dd {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Call to action */
 
 .cta-band {
+  padding-block: var(--space-xl);
   background: var(--brand);
   color: var(--brand-foreground);
 }
@@ -2281,12 +2234,14 @@ picture {
 }
 
 .cta-text .eyebrow {
+  --brand-text: var(--brand-foreground);
   color: var(--brand-foreground);
 }
 
 .cta-text h2 {
   margin: 0 0 var(--space-2xs);
   color: var(--brand-foreground);
+  font-size: clamp(1.75rem, 1.56rem + 0.76vw, 2.25rem);
 }
 
 .cta-text .accent {
@@ -2295,6 +2250,7 @@ picture {
 
 .cta-body {
   margin: 0;
+  font-size: var(--text-sm);
 }
 
 .cta-band .actions {
@@ -2328,9 +2284,8 @@ picture {
 /* Footer */
 
 .site-footer {
-  padding-block: var(--section-pad) var(--space-xl);
+  padding-block: var(--space-xl) var(--space-lg);
   border-top: 1px solid var(--border);
-  background: var(--brand-soft);
 }
 
 .footer-grid {
@@ -2374,7 +2329,7 @@ picture {
   border-block-start: 1px solid var(--border);
   max-width: none;
   color: var(--muted-foreground);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .site-footer .site-logo {
@@ -2400,8 +2355,7 @@ picture {
   margin: 0 0 var(--space-sm);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 500;
   text-transform: none;
 }
 
@@ -2416,7 +2370,8 @@ picture {
 .site-footer nav a {
   display: inline-block;
   padding-block: var(--space-3xs);
-  color: var(--foreground);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
   text-decoration: none;
 }
 
@@ -2543,20 +2498,14 @@ picture {
   --brand-foreground: var(--ink);
 }
 
-/* On the inverted page a hero with no photo stays dark, on the card, and a
-   photo's tag keeps an ink icon on its paper pill. */
+/* On the inverted page a hero with no photo stays dark, on the card. */
 [data-bands="inverted"] .hero-dark_center.hero-plain {
   --brand: var(--card);
   --brand-foreground: var(--paper);
 }
 
-[data-bands="inverted"] .card-tag {
-  color: var(--ink);
-}
-
-/* Motifs (src/layouts/Motif.astro): hairlines in the brand's line colour, a
-   blob in a faint tint of the brand, the spark and the pin in the accent.
-   Square directions keep the lines and drop the soft blob. */
+/* Motifs (src/layouts/Motif.astro): hairlines in the brand's line colour,
+   only where they mean something: the approach and the service area. */
 .motif {
   display: block;
   overflow: visible;
@@ -2564,27 +2513,10 @@ picture {
   pointer-events: none;
 }
 
-.motif-blob {
-  fill: color-mix(in oklch, var(--brand) 16%, transparent);
-  stroke: none;
-}
-
-.motif-spark {
-  stroke: var(--brand-accent);
-}
-
-:is(.motif-pin-shape, .motif-spark-dot) {
-  fill: var(--brand-accent);
-  stroke: none;
-}
-
-.motif-pin-dot {
-  fill: var(--paper);
-  stroke: none;
-}
-
-[data-radius="square"] .motif-blob {
-  display: none;
+/* The pin is drawn in the brand's text colour, not filled: the motif stays a
+   drawing in hairlines. */
+.motif-pin-shape {
+  stroke: var(--brand-text);
 }
 
 /* Ornaments: each direction's one signature, beyond what its variants draw.

@@ -155,8 +155,8 @@ test("five service cards fill rows of 3 and 2, the last row centred", async () =
   }
 }, 120_000)
 
-// A long accent clause once pushed the whole column wider than a phone. The decorative motif
-// svg bleeds past the edge by design and is clipped, so only text and boxes count.
+// A long accent clause once pushed the whole column wider than a phone. Every
+// element counts, the map pin's drawing too: on a phone it is not drawn.
 test("a long accent clause in the areas heading stays inside a 390 px phone", async () => {
   const wide = await build({
     site: {
@@ -179,7 +179,7 @@ test("a long accent clause in the areas heading stays inside a 390 px phone", as
     ).toBeLessThanOrEqual(390)
     const right = await page.evaluate(() =>
       Math.max(
-        ...[...document.querySelectorAll(".area-section :not(svg, svg *)")].map(
+        ...[...document.querySelectorAll(".area-section *")].map(
           (el) => el.getBoundingClientRect().right
         )
       )
