@@ -359,6 +359,25 @@ describe("proof", () => {
     expect(html).not.toContain("Request a quote online")
   })
 
+  test("the trust strip shows an icon for every item, four in a row at most", () => {
+    const html = strip(filled) ?? ""
+    const items = html.match(/<li>/g)?.length ?? 0
+    expect(items).toBeGreaterThanOrEqual(2)
+    expect(html.match(/class="trust-icon"/g)?.length).toBe(items)
+    expect(html).toMatch(/--trust-cols: [2-4]/)
+  })
+
+  test("the about record is a paragraph and a list, and no band when the proof is thin", () => {
+    const about = (built: Built | undefined) =>
+      pagesOf(built).find((p) => p.file === "about/index.html")?.html ?? ""
+    const record = about(filled).match(
+      /<div class="proof-record">[\s\S]*?<\/ul>/
+    )?.[0]
+    expect(record).toContain(`<p>${FILLED.proofBody}</p>`)
+    expect(record?.match(/<li>/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(about(bare)).not.toContain("proof-record")
+  })
+
   test("shows the owner's proof, as given or rephrased, on the about page", () => {
     const about = pagesOf(filled).find((p) => p.file === "about/index.html")
     expect(about?.texts).toContain(FILLED.proofHeading)
