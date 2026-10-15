@@ -263,8 +263,8 @@ export const pageInstructions = (brief: Brief) =>
  */
 export const COPY_WRITER_RULES = [
   "- Write all your fields in one edit call as your first action, each edit anchored on the field's own empty line, for example `  homeTitle: \"\",`. Read a field's line only if an edit says it does not match. Use no other tool.",
-  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the build's copy check accepts 45 to 65 and 120 to 165 and reports any line outside to the lead, who fixes it. No two pages share a title or a description.",
-  `- The FAQ follows the copy brief: five to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks and as true as the facts allow. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
+  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the copy gate accepts 45 to 65 and 140 to 165 and fails any line outside, so a description under 140 is a repair round. No two pages share a title or a description.",
+  `- The FAQ follows the copy brief: up to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks. Ask only what you can answer in full from the facts or from how the trade usually works, promising nothing for this business that a fact does not. Leave a question out rather than answer that you do not know: never write "our facts don't say", "isn't set out", "not stated" or any note about what you were told. The copy gate fails it. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
   "- When the edit succeeds, stop and write the summary. Do not read the file back or check your work.",
 ].join("\n")
 
