@@ -124,6 +124,36 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails the promises longer copy reaches for unless business.proof states them", () => {
+    const promises = [
+      "<p>We reply within 24 hours</p>",
+      "<p>Open 7 days a week</p>",
+      "<p>Get a free quote today</p>",
+      "<p>A no-obligation estimate</p>",
+      "<p>Our trained cleaners</p>",
+      "<p>A qualified solicitor</p>",
+      "<p>Trusted by local families</p>",
+      "<p>Available 24/7</p>",
+    ]
+    for (const main of promises)
+      expect(verdict(main, PLAIN).passed, main).toBe(false)
+    const proof = [
+      ...PLAIN,
+      fact("business.proof", {
+        text: "Free quotes, no-obligation. Trained cleaners, available 24/7, 7 days a week, replies within 24 hours.",
+      }),
+    ]
+    for (const main of promises.filter((m) => !/qualified|Trusted/.test(m)))
+      expect(verdict(main, proof).passed, main).toBe(true)
+    // General trade practice with no promise in it passes on the plain facts.
+    expect(
+      verdict(
+        "<p>A deep clean reaches the places a weekly visit skips, from the tops of cupboards to the grout.</p>",
+        PLAIN
+      ).passed
+    ).toBe(true)
+  })
+
   it("lets the owner's business.proof support what it says, and nothing more", () => {
     const proof = [
       ...PLAIN,
