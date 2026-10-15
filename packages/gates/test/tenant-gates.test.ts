@@ -109,7 +109,10 @@ describe("the size gate", () => {
         `<!doctype html><html><body><picture><source type="image/avif" sizes="${sizes}" srcset="/_astro/card-768.avif 768w, /_astro/card-1200.avif 1200w"><img src="/_astro/card-768.avif" loading="lazy"></picture></body></html>`
       )
     const run = (sizes: string) => {
-      const all = { ...files, "index.html": home(sizes) }
+      const all: Record<string, Uint8Array> = {
+        ...files,
+        "index.html": home(sizes),
+      }
       return checkSize(
         Object.fromEntries(Object.keys(all).map((f) => [f, "x"])),
         async (f) => all[f] ?? null,
