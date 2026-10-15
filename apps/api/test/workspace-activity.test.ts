@@ -1,4 +1,5 @@
 import {
+  type AssignmentState,
   Blueprint,
   BUILD_ACTIVITY_MAX,
   BuildActivity,
@@ -9,6 +10,7 @@ import { describe, expect, it } from "vitest"
 import {
   activityFor,
   EXPECTED_SECONDS,
+  type Mark,
   photosOf,
   planOf,
 } from "../src/workspace.ts"
@@ -100,6 +102,79 @@ describe("build activity rows", () => {
     const items = rows.find((r) => r.id === "writing")?.items ?? []
     expect(items.map((i) => i.done)).toEqual(plan.pages.map((_, i) => i === 0))
     expect(items[0]?.label).toBe(PAGES.find((p) => p.id === first?.page)?.label)
+  })
+
+  it("follows the build's events past the pages: the look, the checks, a repair", () => {
+    const plan = Blueprint.parse(PLAN)
+    const at = (state: AssignmentState, marks: Mark[]) => {
+      const rows = activityFor(
+        "full",
+        state,
+        { photos: { done: 1, total: 1 } },
+        { plan, marks }
+      )
+      for (const row of rows) BuildActivity.parse(row)
+      expect(rows.length).toBeLessThanOrEqual(BUILD_ACTIVITY_MAX)
+      return rows.find((r) => r.done < r.total)?.id
+    }
+    const reported = { type: "assignment.completion_reported" }
+    const asked = { type: "design.critiqued", fixes: 2 }
+    const repairing = { type: "assignment.state_changed" }
+    expect(at("implementing", [])).toBe("writing")
+    // The lead's report ends the pages and starts the look, which the fix round keeps.
+    expect(at("implementing", [reported])).toBe("design")
+    expect(at("implementing", [reported, asked])).toBe("design")
+    expect(at("implementing", [reported, asked, reported])).toBe("design")
+    // A look that asked for nothing, did not run, or was checked is over.
+    expect(
+      at("implementing", [reported, { type: "design.critiqued", fixes: 0 }])
+    ).toBe("checking")
+    expect(
+      at("implementing", [reported, { type: "design.critiqued", fixes: null }])
+    ).toBe("checking")
+    expect(
+      at("implementing", [
+        reported,
+        asked,
+        reported,
+        { type: "design.rechecked", fixes: 1 },
+      ])
+    ).toBe("checking")
+    expect(at("validating", [reported])).toBe("checking")
+    // The gates send it back to the lead, who is `implementing` again at once.
+    const looked = [reported, { type: "design.critiqued", fixes: 0 }]
+    expect(at("implementing", [...looked, repairing])).toBe("fixing")
+    expect(at("repairing", looked)).toBe("fixing")
+    expect(at("implementing", [...looked, repairing, reported])).toBe(
+      "checking"
+    )
+    // The repair row stays once there has been one, done, before the checks.
+    const rows = activityFor(
+      "full",
+      "validating",
+      {},
+      { plan, marks: [...looked, repairing, reported] }
+    )
+    expect(rows.map((r) => [r.id, r.done === r.total])).toEqual([
+      ["planning", true],
+      ["photos", true],
+      ["writing", true],
+      ["design", true],
+      ["fixing", true],
+      ["checking", false],
+    ])
+    // Pages tick together when the lead wrote them itself.
+    expect(
+      activityFor("full", "implementing", {}, { plan, marks: [reported] })
+        .find((r) => r.id === "writing")
+        ?.items?.map((i) => i.done)
+    ).toEqual([true, true])
+    // No plan, no look: the report goes straight to the checks.
+    expect(
+      activityFor("full", "implementing", {}, { marks: [reported] }).map(
+        (r) => r.id
+      )
+    ).toEqual(["planning", "writing", "checking"])
   })
 
   it("shows none for a quick build or a state outside the stages", () => {
