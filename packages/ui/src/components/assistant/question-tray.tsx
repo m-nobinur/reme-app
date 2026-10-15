@@ -150,22 +150,14 @@ function LayoutSketch({
           <rect height="5" rx="1.5" style={text} width="30" x="8" y="26" />
           <rect height="2" rx="1" style={quiet} width="34" x="8" y="34" />
           <rect height="5" rx="1.5" style={button} width="14" x="8" y="40" />
+          <rect height="34" rx="3" style={wash} width="48" x="64" y="13" />
           <rect
-            height="34"
-            rx="1.5"
-            style={{ ...fill(paper), ...rule }}
-            width="46"
-            x="66"
-            y="13"
-          />
-          <rect height="28" rx="1.5" style={wash} width="40" x="69" y="16" />
-          <rect
-            height="10"
-            rx="1.5"
-            style={{ ...fill(paper), ...rule }}
-            width="20"
-            x="58"
-            y="38"
+            height="4"
+            rx="2"
+            style={fill(paper, 0.9)}
+            width="18"
+            x="90"
+            y="41"
           />
         </>
       ) : hero === "text_led" ? (

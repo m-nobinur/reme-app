@@ -570,11 +570,11 @@ picture {
   line-height: 1.07;
 }
 
+/* An inner page's header is type on the page, as on the reference: 70 px
+   above and 50 below at 1440, 50 and 30 at 390, no band and no rule. */
 .hero-page {
-  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem)
-    clamp(2.5rem, 1.75rem + 3vw, 4.5rem);
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
+  padding-block: clamp(3.125rem, 2.66rem + 1.905vw, 4.375rem)
+    clamp(1.875rem, 1.41rem + 1.905vw, 3.125rem);
 }
 
 .hero-page h1 {
@@ -692,8 +692,8 @@ picture {
   border-top: 1px solid var(--border);
 }
 
-/* The one overlay on the photo that carries copy: a pill by default, a stamp
-   card on the split heroes. */
+/* The one overlay on the photo that carries copy: a small pill in the page's
+   colours on every variant, as the reference's caption. */
 .hero-caption {
   position: absolute;
   z-index: 1;
@@ -715,37 +715,9 @@ picture {
   }
 }
 
-/* split_frame: the photo in a plain frame, a stamp card over its corner. */
-:is(.hero-split_frame, .hero-wash.hero-plain) {
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
-}
-
-.hero-split_frame .hero-image {
-  padding: var(--space-2xs);
-  border: 1px solid var(--brand-line);
-  background: var(--card);
-}
-
-:is(.hero-split_frame, .hero-split_arch) .hero-caption {
-  inset-block-end: calc(var(--space-md) * -1);
-  inset-inline: var(--space-sm) auto;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--brand-line);
-  border-radius: var(--radius-card);
-  background: var(--card);
-  color: var(--card-foreground);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--display-weight);
-  letter-spacing: var(--display-tracking);
-}
-
-@media (min-width: 56rem) {
-  :is(.hero-split_frame, .hero-split_arch) .hero-caption {
-    inset-inline-start: calc(var(--space-xl) * -1);
-  }
-}
+/* split_frame: the reference's split. The copy on the page, the photo a crisp
+   panel beside it with only the media radius: no mat, no border, no tinted
+   band, and the caption pill is the one thing on the photo. */
 
 /* split_arch: the photo under an arch, a hairline arch offset behind it. */
 .hero-split_arch .hero-media {
@@ -2554,8 +2526,8 @@ picture {
 }
 
 /* Ornaments: each direction's one signature, beyond what its variants draw.
-   calm_daylight's pill captions and fresh_modern's stamp card are the wash
-   and split_frame heroes' own. */
+   calm_daylight's and fresh_modern's pill captions are the wash and
+   split_frame heroes' own. */
 
 /* warm_editorial: an eight-spoked mark leads the eyebrow. */
 [data-direction="warm_editorial"] .eyebrow::before {

@@ -47,7 +47,7 @@ constraints:
     photo beside the copy, and with no photo (inner) it is the plain page
     header, one text block with no empty half. wash is the photo full-bleed with
     a pale wash under the copy; split_arch the photo under an arch beside the
-    copy; split_frame the photo in a frame with a stamp card on its corner;
+    copy; split_frame the photo a crisp rounded panel beside the copy, no frame;
     dark_center the photo full-bleed under a dark gradient with the copy
     centred; text_led large type with the photo as a portrait inset.
   - The home hero sets the h1's last word in the accent colour.
