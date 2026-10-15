@@ -20,9 +20,13 @@ import ValueProps from "../components/ValueProps/ValueProps.astro"
 import { directionOf } from "../directions"
 import { headerPhoto } from "../header-photo"
 import { phoneText } from "../phone"
-import { primaryAction } from "../routes"
+import { hasRoute, primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
-import { type ServiceItem, serviceItems } from "../structured-data"
+import {
+  type ServiceItem,
+  serviceItems,
+  servicesFaqItems,
+} from "../structured-data"
 import AboutSection from "./AboutSection.astro"
 import SectionHead from "./SectionHead.astro"
 
@@ -75,6 +79,19 @@ const offerings = site.offerings
   .map((item) => item.trim())
   .filter((item) => item && !named.has(item.toLowerCase()))
 const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
+const about = page === "about"
+// The about page's own principles and visit steps, apart from the home page's.
+const approach = ([1, 2, 3, 4] as const).map((n) => ({
+  title: site[`approach${n}Title`],
+  body: site[`approach${n}Body`],
+  icon: site[`approach${n}Icon`],
+}))
+const visit = ([1, 2, 3, 4] as const)
+  .map((n) => ({
+    title: site[`aboutStep${n}Title`],
+    body: site[`aboutStep${n}Body`],
+  }))
+  .filter((item) => item.title || item.body)
 const talk = site.phone || site.email
 
 // A section with no variant of its own takes the direction's; a page hero
@@ -130,6 +147,21 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return (
           <>
             <ServiceCards variant={v} only={service?.id} />
+            {page === "services" && site.servicesHelpBody && (
+              <Section
+                eyebrow={site.servicesHelpEyebrow}
+                heading={site.servicesHelpHeading}
+              >
+                <p data-copy="services_help">{site.servicesHelpBody}</p>
+                {primaryAction && (
+                  <p class="section-more">
+                    <a class="more-link" href={primaryAction.href}>
+                      {primaryAction.label}
+                    </a>
+                  </p>
+                )}
+              </Section>
+            )}
             {page === "services" && offerings.length > 0 && (
               <Section
                 eyebrow={site.offeringsEyebrow}
@@ -145,13 +177,27 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
           </>
         )
       case "value_props":
-        return <ValueProps />
+        return about ? (
+          <ValueProps
+            eyebrow={site.approachEyebrow}
+            heading={site.approachHeading}
+            items={approach}
+            copy="approach_body"
+          />
+        ) : (
+          <ValueProps />
+        )
       case "steps":
         return (
           <Steps
             variant={v}
-            heading={service?.stepsHeading || undefined}
-            items={service?.steps.length ? service.steps : undefined}
+            heading={
+              (about ? site.aboutStepsHeading : service?.stepsHeading) ||
+              undefined
+            }
+            items={
+              about ? visit : service?.steps.length ? service.steps : undefined
+            }
           />
         )
       case "about":
@@ -164,7 +210,11 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return (
           <AreaSection
             heading={
-              home ? site.homeAreaHeading || site.serviceAreaHeading : undefined
+              home
+                ? site.homeAreaHeading || site.serviceAreaHeading
+                : about
+                  ? site.aboutAreaHeading
+                  : undefined
             }
           />
         )
@@ -172,8 +222,12 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return (
           <Faq
             variant={v}
-            items={service?.faqs}
-            heading={service?.faqHeading || undefined}
+            items={page === "services" ? servicesFaqItems : service?.faqs}
+            heading={
+              (page === "services"
+                ? site.servicesFaqHeading
+                : service?.faqHeading) || undefined
+            }
           />
         )
       case "cta_band":
@@ -186,11 +240,28 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         )
       case "contact":
         return (
-          <section class="band">
-            <div class="wrap">
-              <ContactDetails variant="cards" />
-            </div>
-          </section>
+          <>
+            <section class="band">
+              <div class="wrap">
+                <ContactDetails variant="cards" />
+              </div>
+            </section>
+            {site.contactIncludeBody && (
+              <Section
+                eyebrow={site.contactIncludeEyebrow}
+                heading={site.contactIncludeHeading}
+              >
+                <p data-copy="contact_body">{site.contactIncludeBody}</p>
+                {hasRoute("/quote/") && site.contactFormLink && (
+                  <p class="section-more">
+                    <a class="more-link" href="/quote/">
+                      {site.contactFormLink}
+                    </a>
+                  </p>
+                )}
+              </Section>
+            )}
+          </>
         )
       case "quote_form":
         // The quote form sends by email until the platform has an endpoint

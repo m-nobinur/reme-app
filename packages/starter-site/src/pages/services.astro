@@ -3,7 +3,7 @@ import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
 import { layout, site } from "../site-config"
-import { faqPage, services } from "../structured-data"
+import { faqPage, services, servicesFaqItems } from "../structured-data"
 ---
 
 <Base
@@ -11,7 +11,9 @@ import { faqPage, services } from "../structured-data"
   description={site.servicesDescription || site.servicesIntro}
   jsonLd={[
     ...services(Astro.site),
-    ...(layout.services.some((s) => s.kind === "faq") ? faqPage() : []),
+    ...(layout.services.some((s) => s.kind === "faq")
+      ? faqPage(servicesFaqItems)
+      : []),
   ]}
 >
   <Sections page="services" />

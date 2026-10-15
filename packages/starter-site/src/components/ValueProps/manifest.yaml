@@ -2,10 +2,30 @@ component: ValueProps
 path: src/components/ValueProps/ValueProps.astro
 summary: Up to three reasons to choose the business, each an icon, a title and a
   sentence, on one panel.
-props: []
+props:
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2, where a page has its own; empty is
+      site.valuePropsEyebrow.
+  - name: heading
+    type: string
+    required: false
+    description: The h2, where a page has its own; empty is site.valuePropsHeading.
+  - name: items
+    type: "{ title: string; body: string; icon: string }[]"
+    required: false
+    description: The entries, where a page has its own; empty is the site's
+      valueProp1 to valueProp3.
+  - name: copy
+    type: string
+    required: false
+    description: The copy gate's data-copy mark on each body, where the page's brief
+      gives it a word range.
 constraints:
-  - Reads valueProp1Title to valueProp3Icon itself, in order; an entry renders
-    only when its title or body is set.
+  - Reads valueProp1Title to valueProp3Icon itself, in order, unless a page
+    passes its own items (the about page's approach1 to approach4); an entry
+    renders only when its title or body is set.
   - Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason;
     an empty or unknown one is picked from the reason's words.
   - Renders nothing when every title and body is empty.

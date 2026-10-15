@@ -143,6 +143,32 @@ export const FILLED: Record<string, string> = {
   faq3Answer: "Yes, by telephone.",
   ctaHeading: "Ready for a clean home?",
   ctaBody: "Tell us about the home and we take it from there.",
+  approachHeading: "How a BrightClean visit is run",
+  approach1Title: "Agree the rooms first",
+  approach1Body: "Before the first visit we agree which rooms matter most.",
+  approach1Icon: "clipboardText",
+  approach2Title: "Care for your things",
+  approach2Body: "Ornaments are lifted, never dusted around.",
+  approach3Title: "Leave it as agreed",
+  approach3Body: "Each visit ends with the rooms you listed done.",
+  aboutStepsHeading: "What happens on the day",
+  aboutStep1Title: "Your cleaner arrives",
+  aboutStep1Body: "They let themselves in the way you arranged.",
+  aboutStep2Title: "Rooms in your order",
+  aboutStep2Body: "The rooms you put first are cleaned first.",
+  aboutStep3Title: "A last look round",
+  aboutStep3Body: "Doors shut, lights off, keys back where agreed.",
+  aboutAreaHeading: "Fairhaven homes on our rounds",
+  servicesHelpHeading: "Which clean suits your home",
+  servicesHelpBody:
+    "A weekly clean keeps a lived-in home on top; a deep clean resets one that has slipped.",
+  servicesFaqHeading: "Choosing between the cleans",
+  servicesFaq1Question: "Should I start with a deep clean?",
+  servicesFaq1Answer: "If the home has slipped, a deep clean first helps.",
+  contactIncludeHeading: "What to tell us about the home",
+  contactIncludeBody:
+    "Say how many rooms, which clean you want and how the cleaner gets in.",
+  quotePrivacy: "Your details go only to BrightClean, to answer this request.",
 }
 
 /** The same business with no proof: no figures, reviews, proof or trust points. */
