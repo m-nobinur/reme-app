@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { checkCopy, copyFindings } from "../src/index.ts"
+import {
+  COPY_WORDS,
+  checkCopy,
+  copyFindings,
+  copyGateRules,
+  DESCRIPTION_CHARS,
+  HEADING_NEAR,
+  TITLE_CHARS,
+} from "../src/index.ts"
 
 const words = (n: number, w = "word") =>
   Array.from({ length: n }, (_, i) => `${w}${i}`).join(" ")
@@ -35,14 +43,14 @@ const GOOD = [
   ),
   page(
     "services/index.html",
-    "Garden design, planting and lawn care | Greenleaf",
+    "Garden design, planting and lawn care | Greenleaf Ltd",
     `<section><h1>Landscaping services for Bristol gardens</h1></section>
      <ul><li><h3><a href="/services/planting/">Planting</a></h3><p data-copy="service_body">${words(30)}</p></li></ul>
      ${cta("Plan the next season of your garden")}`
   ),
   page(
     "services/planting/index.html",
-    "Planting borders and beds in Bristol | Greenleaf",
+    "Planting borders and beds in Bristol | Greenleaf Gardens",
     `<section><h1>Borders and beds planted in Bristol</h1><p class="lede">${words(30)}</p></section>
      <article><h2>Planting</h2><p data-copy="service_detail">${words(80)}</p>${BLOCKS}</article>
      <section><h2>How a planting job runs</h2><ol><li><h3>Visit</h3><p data-copy="step_body">${words(25, "p")}</p></li></ol></section>
@@ -68,7 +76,7 @@ describe("the copy gate", () => {
       GOOD[0] as (typeof GOOD)[number],
       page(
         "about/index.html",
-        "About Greenleaf Garden Landscaping in Bristol",
+        "About Greenleaf Garden Landscaping in Bristol and Bath",
         "<h1>About Greenleaf</h1><h2>Bristol homes: garden work</h2>"
       ),
     ]
@@ -84,18 +92,22 @@ describe("the copy gate", () => {
     const found = copyFindings([
       page(
         "index.html",
-        "Greenleaf garden landscaping",
+        "Greenleaf garden landscaping in Bristol, Bath and Clevedon",
         "<h1>Gardens made for Bristol</h1><h2>Lawns we look after</h2><h2>Lawns we look after</h2>"
       ),
       page(
         "contact/index.html",
-        "Greenleaf Garden Landscaping",
+        "Greenleaf Garden Landscaping in Bristol, Bath and Clevedon",
         "<h1>Talk to Greenleaf about your garden</h1>"
       ),
     ])
     expect(found.map((f) => [f.file, f.problem, f.text])).toEqual([
       ["index.html", "duplicate", "Lawns we look after"],
-      ["contact/index.html", "duplicate", "Greenleaf Garden Landscaping"],
+      [
+        "contact/index.html",
+        "duplicate",
+        "Greenleaf Garden Landscaping in Bristol, Bath and Clevedon",
+      ],
     ])
   })
 
@@ -103,7 +115,7 @@ describe("the copy gate", () => {
     const found = copyFindings([
       page(
         "index.html",
-        "Greenleaf garden landscaping in Bristol",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
         `<h1>Gardens made for Bristol</h1><p class="eyebrow">Why choose us</p><h2>Why choose <span class="accent">us</span></h2><h2>Our Services</h2>`
       ),
     ])
@@ -117,7 +129,7 @@ describe("the copy gate", () => {
     const found = copyFindings([
       page(
         "index.html",
-        "Greenleaf garden landscaping in Bristol",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
         `<h1>Gardens made for Bristol</h1><p data-copy="hero_lede">${words(10)}</p><p data-copy="service_body">${words(14)}</p><p data-copy="service_body">${words(15)}</p><p data-copy="step_body">${words(5)}</p><p data-copy="faq_answer">${words(20)}</p><p data-copy="service_detail">${words(30)}</p>`
       ),
     ])
@@ -134,12 +146,12 @@ describe("the copy gate", () => {
     const pages = [
       page(
         "index.html",
-        "Greenleaf garden landscaping in Bristol",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
         `<h1>Gardens made for Bristol</h1>${cta("Book your first garden visit")}`
       ),
       page(
         "contact/index.html",
-        "Contact Greenleaf about a garden in Bath",
+        "Contact Greenleaf about a garden in Bristol or Bath",
         `<h1>Talk to Greenleaf about your garden</h1>${cta("Book your first garden visit")}`
       ),
     ]
@@ -158,18 +170,18 @@ describe("the copy gate", () => {
     const found = copyFindings([
       page(
         "index.html",
-        "Greenleaf garden landscaping in Bristol",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
         `<h1>Gardens made for Bristol</h1>${step(shared)}`
       ),
       // The same words in another order are the same step.
       page(
         "services/lawns/index.html",
-        "Lawn care in Bristol from Greenleaf gardeners",
+        "Lawn care in Bristol and Bath from Greenleaf gardeners",
         `<h1>Lawn care across Bristol</h1>${step("Before anything starts on site, we walk the garden with you, visit it and agree what the work covers.")}`
       ),
       page(
         "services/planting/index.html",
-        "Planting borders and beds in Bristol | Greenleaf",
+        "Planting borders and beds in Bristol | Greenleaf Gardens",
         `<h1>Borders and beds planted in Bristol</h1>${step("We choose plants for your soil and light, then set the beds out with you before a single hole is dug.")}`
       ),
     ])
@@ -185,7 +197,7 @@ describe("the copy gate", () => {
     const service = (file: string, faq: string) =>
       page(
         file,
-        `${file} garden work | Greenleaf`,
+        `${file} garden work | Greenleaf Gardens`,
         `<h1>${file} in Bristol</h1><section><h2>${faq}</h2></section>${BLOCKS}`
       )
     // Two service pages left on the site's own FAQ heading repeat it.
@@ -213,7 +225,7 @@ describe("the copy gate", () => {
       const found = copyFindings([
         page(
           "index.html",
-          "Greenleaf garden landscaping in Bristol",
+          "Greenleaf garden landscaping in Bristol and Bath homes",
           `<h1>Gardens made for Bristol</h1><p data-copy="faq_answer">${words(40)} ${note}</p>`
         ),
       ])
@@ -229,7 +241,7 @@ describe("the copy gate", () => {
           copyFindings([
             page(
               "index.html",
-              "Greenleaf garden landscaping",
+              "Greenleaf garden landscaping in Bristol, Bath and Clevedon",
               "<h1>Gardens</h1>",
               ld
             ),
@@ -240,7 +252,7 @@ describe("the copy gate", () => {
         copyFindings([
           page(
             "index.html",
-            "Greenleaf garden landscaping",
+            "Greenleaf garden landscaping in Bristol, Bath and Clevedon",
             "<h1>Gardens</h1>",
             meta(`${DESCRIPTION.slice(0, 100)} We don't know the rest.`)
           ),
@@ -260,7 +272,7 @@ describe("the copy gate", () => {
           copyFindings([
             page(
               "index.html",
-              "Greenleaf garden landscaping",
+              "Greenleaf garden landscaping in Bristol, Bath and Clevedon",
               `<h1>Gardens</h1><p>${text}</p>`
             ),
           ])
@@ -273,7 +285,7 @@ describe("the copy gate", () => {
         copyFindings([
           page(
             "index.html",
-            "Greenleaf garden landscaping",
+            "Greenleaf garden landscaping in Bristol, Bath and Clevedon",
             "<h1>Gardens</h1><p>Tell the owner of the property we are coming. If the shed isn't in use we clear it too.</p>"
           ),
         ])
@@ -287,7 +299,7 @@ describe("the copy gate", () => {
       const site = (main: string) => [
         page(
           "index.html",
-          "Brightside cleaning in Bristol",
+          "Brightside home cleaning in Bristol, Clifton and Filton",
           `<h1>Cleaning</h1>${main}`
         ),
       ]
@@ -323,7 +335,7 @@ describe("the copy gate", () => {
       const service = (blocks: string) =>
         page(
           "services/deep-cleaning/index.html",
-          "Deep cleaning in Bristol | Brightside",
+          "Deep cleaning in Bristol | Brightside Home Cleaning",
           `<h1>Deep cleaning for Bristol homes</h1><p data-copy="service_detail">${words(80)}</p>${blocks}`
         )
       expect(copyFindings([service(BLOCKS)])).toEqual([])
@@ -341,7 +353,7 @@ describe("the copy gate", () => {
         copyFindings([
           page(
             "services/index.html",
-            "Brightside cleaning services",
+            "Brightside home cleaning services in Bristol, Clifton",
             "<h1>Cleans</h1>"
           ),
         ])
@@ -366,7 +378,7 @@ describe("the copy gate", () => {
         copyFindings([
           {
             file: "services/deep-cleaning/index.html",
-            html: `<html><head><title>Deep cleaning in Bristol | Brightside</title><meta name="description" content="${"x".repeat(length)}"></head><body><main><h1>Deep cleaning</h1>${BLOCKS}</main></body></html>`,
+            html: `<html><head><title>Deep cleaning in Bristol | Brightside Home Cleaning</title><meta name="description" content="${"x".repeat(length)}"></head><body><main><h1>Deep cleaning</h1>${BLOCKS}</main></body></html>`,
           },
         ])
       expect(described(135).map((f) => [f.problem, f.detail])).toEqual([
@@ -385,7 +397,7 @@ describe("the copy gate", () => {
       const faqs = (n: number) =>
         page(
           "services/deep-cleaning/index.html",
-          "Deep cleaning in Bristol | Brightside",
+          "Deep cleaning in Bristol | Brightside Home Cleaning",
           `<h1>Deep cleaning</h1>${BLOCKS}${Array.from({ length: 4 }, () => `<p data-copy="faq_answer">${words(n)}</p>`).join("")}`
         )
       expect(copyFindings([faqs(42)])).toEqual([])
@@ -409,7 +421,7 @@ describe("the copy gate", () => {
       const pages = [
         page(
           "index.html",
-          "Brightside cleaning in Bristol",
+          "Brightside home cleaning in Bristol, Clifton and Filton",
           `<h1>Cleaning</h1><span data-copy="area_town">Fiton</span>`
         ),
       ]
@@ -418,6 +430,35 @@ describe("the copy gate", () => {
       })
       expect(checkCopy(pages, true)).toMatchObject({ passed: true })
     })
+  })
+
+  it("fails a title outside 50 to 60 characters, 62 included, and passes both ends", () => {
+    const titled = (length: number) =>
+      copyFindings([
+        page(
+          "index.html",
+          "x".repeat(length),
+          "<h1>Gardens made for Bristol</h1>"
+        ),
+      ])
+    expect(titled(62).map((f) => [f.problem, f.detail])).toEqual([
+      ["short", "the page title is 62 characters; write 50 to 60"],
+    ])
+    expect(titled(49)).toHaveLength(1)
+    expect(titled(50)).toEqual([])
+    expect(titled(60)).toEqual([])
+  })
+
+  it("states every threshold it enforces in the lines the writer's brief carries", () => {
+    const rules = copyGateRules().join("\n")
+    for (const range of [TITLE_CHARS, DESCRIPTION_CHARS])
+      expect(rules).toContain(`${range.min} to ${range.max} characters`)
+    for (const { aim, min } of Object.values(COPY_WORDS))
+      expect(rules).toContain(
+        `${aim[0]} to ${aim[1]} words, never under ${min}`
+      )
+    expect(rules).toContain(`${Math.round(HEADING_NEAR * 100)} percent`)
+    expect(rules).toContain("never the same as or close to its own page's h1")
   })
 
   it("passes a build that did not plan, whatever its copy", () => {

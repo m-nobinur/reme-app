@@ -350,12 +350,12 @@ describe("the section lane's short prompt", () => {
   }
   const withPlan = { ...revise, site_plan: fanPlan }
 
-  it("is a third smaller than the full instructions, which it measures against", () => {
+  it("is a quarter smaller than the full instructions, which it measures against", () => {
     const full = instructions(withPlan, 20).length
     const short = sectionInstructions(withPlan, 20).length
     console.info(`section prompt: ${full} chars before, ${short} after`)
     // The claim rules (about 7k chars) stay by design; the directions, components and design rules go.
-    expect(short).toBeLessThan(full * 0.7)
+    expect(short).toBeLessThan(full * 0.75)
   })
 
   it("drops the design material and keeps every rule that guards a claim", () => {

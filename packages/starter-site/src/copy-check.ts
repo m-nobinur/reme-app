@@ -37,7 +37,7 @@ export const BANNED_PHRASES = [
 /** U+2014, by code so this file holds none. */
 const EM_DASH = String.fromCharCode(0x2014)
 
-const TITLE_CHARS = { min: 45, max: 65 }
+const TITLE_CHARS = { min: 50, max: 60 }
 const DESCRIPTION_CHARS = { min: 140, max: 165 }
 
 type BuiltPage = { file: string; html: string }

@@ -19,7 +19,8 @@ import { parse } from "parse5"
  * - a town in the service-area chips, or a near-miss spelling of one in any
  *   copy, that the service-area fact does not name exactly;
  * - a service page without its "what is included" or "who it suits" block;
- * - a page description outside the writer's 140 to 165 characters.
+ * - a page title outside the writer's 50 to 60 characters, or a description
+ *   outside its 140 to 165.
  *
  * The starter marks what is checked with `data-copy="<kind>"` on the
  * elements whose words are counted. Every h1 and h2 inside <main> is
@@ -60,6 +61,9 @@ const LABEL: Record<CopyKind, string> = {
 
 /** A page's meta description, in characters: the brief's 140 to 160 with a few over. */
 export const DESCRIPTION_CHARS = { min: 140, max: 165 }
+
+/** A page's title, in characters: exactly the brief's range, so a long one fails the first time. */
+export const TITLE_CHARS = { min: 50, max: 60 }
 
 /**
  * Copy that talks about what the writer was told rather than to the visitor.
@@ -176,7 +180,7 @@ const stemsOf = (text: string) => {
  * homes: garden work" are one heading, "Garden design" and "Garden design
  * for Bath homes" are two.
  */
-const NEAR = 0.75
+export const NEAR = 0.75
 const alike = (a: Set<string>, b: Set<string>) => {
   const shared = [...a].filter((s) => b.has(s)).length
   return shared / (a.size + b.size - shared) >= NEAR
@@ -304,6 +308,16 @@ export function copyFindings(
       })
     else if (title) titles.set(title, file)
 
+    const titleLength = page.title.length
+    if (titleLength < TITLE_CHARS.min || titleLength > TITLE_CHARS.max)
+      found.push({
+        file,
+        node: "title",
+        problem: "short",
+        text: page.title,
+        detail: `the page title is ${titleLength} characters; write ${TITLE_CHARS.min} to ${TITLE_CHARS.max}`,
+      })
+
     const length = page.description.length
     if (length < DESCRIPTION_CHARS.min || length > DESCRIPTION_CHARS.max)
       found.push({
@@ -311,7 +325,7 @@ export function copyFindings(
         node: "meta[description]",
         problem: "short",
         text: page.description,
-        detail: `the meta description is ${length} characters; write one sentence of 140 to 160`,
+        detail: `the meta description is ${length} characters; write one sentence of ${DESCRIPTION_CHARS.min} to 160`,
       })
 
     const said = new Set<string>()
@@ -437,6 +451,22 @@ export function copyFindings(
     }
   }
   return found
+}
+
+/**
+ * The gate's rules as the lines the writer's brief carries, built from the
+ * constants above so a threshold changed here changes the brief with it.
+ */
+export function copyGateRules(): string[] {
+  const words = (Object.keys(COPY_WORDS) as CopyKind[]).map((kind) => {
+    const { aim, min } = COPY_WORDS[kind]
+    return `${LABEL[kind]} ${aim[0]} to ${aim[1]} words, never under ${min}`
+  })
+  return [
+    `- The copy gate runs after you, and each miss costs a repair round, so meet its numbers the first time. Every page title is ${TITLE_CHARS.min} to ${TITLE_CHARS.max} characters, and every meta description ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} characters; no two pages share either.`,
+    `- Words per section: ${words.join("; ")}.`,
+    `- Headings: no h1 or h2 on the site repeats another or is a stock label, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words.`,
+  ]
 }
 
 /** The findings as one message the Developer can act on, every item named. */
