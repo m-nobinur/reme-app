@@ -22,6 +22,8 @@ interface Props {
   note?: string
   /** Every page but home: with no photo the header is the plain page header, whatever the variant. */
   inner?: boolean
+  /** A page header with an `art` slot (the service area's drawing) is a cover: on the deep band when this is set. */
+  deep?: boolean
 }
 
 const {
@@ -34,6 +36,7 @@ const {
   highlights = [],
   note = "",
   inner = false,
+  deep = false,
 } = Astro.props
 const photo = variant && image?.alt && hasPhoto(image.src) ? image : null
 // The box each variant's photo renders in (src/styles/site.css), so the browser
@@ -65,6 +68,8 @@ const heroAvifQuality = (width: number) =>
           : 30
 // A header whose photo is missing is one text block, not a text column beside an empty one.
 const plainPage = !variant || (inner && !photo)
+// A plain page header with a drawing beside its text is the cover form.
+const cover = plainPage && Astro.slots.has("art")
 const listed = variant && !photo ? highlights.filter((h) => h.name) : []
 // A home hero sets its last word in the accent, never the whole line.
 const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
@@ -83,7 +88,10 @@ const actions = Astro.slots.has("default")
       class:list={[
         "hero",
         plainPage
-          ? "hero-page"
+          ? [
+              "hero-page",
+              cover && ["hero-cover", deep ? "area-deep" : "area-light"],
+            ]
           : [
               "hero-home",
               `hero-${variant}`,
@@ -108,6 +116,7 @@ const actions = Astro.slots.has("default")
           {actions && <div class="actions" set:html={actions} />}
           {note && <p class="hero-note">{note}</p>}
         </div>
+        {cover && <slot name="art" />}
         {photo && (
           <div class="hero-media">
             <Photo
