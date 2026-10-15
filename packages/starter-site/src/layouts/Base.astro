@@ -68,5 +68,32 @@ const mark = markColours(site.palette, site.brandColor)
       <slot />
     </main>
     <SiteFooter />
+    {/* The entrance reveal (site.css, "Fade-up on entry"). Without this script,
+        or with reduced motion, nothing is ever hidden. At the end of the body,
+        so the blocks are marked before the first paint. */}
+    <script is:inline>
+      if (
+        matchMedia("(prefers-reduced-motion: no-preference)").matches &&
+        "IntersectionObserver" in window
+      ) {
+        const seen = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue
+              entry.target.classList.add("is-in")
+              seen.unobserve(entry.target)
+            }
+          },
+          { rootMargin: "0px 0px -40px 0px" }
+        )
+        for (const block of document.querySelectorAll(
+          ".band :is(.section-head, .card, .service-rows li, .value-list li, .step-list li, .testimonials figure, .gallery-grid li, .gallery-single)"
+        )) {
+          block.classList.add("reveal")
+          seen.observe(block)
+        }
+        document.documentElement.dataset.reveal = ""
+      }
+    </script>
   </body>
 </html>
