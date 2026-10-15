@@ -80,9 +80,15 @@ import {
   takeWarm,
   whileHeld,
 } from "./sandbox.ts"
-import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
+import {
+  advance,
+  claim,
+  lastEventAt,
+  parkForBudget,
+  TransitionError,
+} from "./state.ts"
 import { GIT, runAxe } from "./tail.ts"
-import { logTiming, since, type ToolTimings } from "./timing.ts"
+import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
@@ -148,6 +154,7 @@ type DeveloperEvent =
     }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
   | { kind: "interrupted"; reason: string }
+  | { kind: "unreported"; reason: string }
 
 /**
  * How long a round waits for its answer, from the block, and how long one
@@ -589,16 +596,42 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         woke = { payload: pending }
         pending = null
       } else {
-        try {
-          woke = await step.waitForEvent<DeveloperEvent>(`developer ${round}`, {
-            type: "developer",
-            timeout: "2 hours",
-          })
-        } catch {
-          return fail(`timed out ${round}`, "developer.timed_out")
+        // The watchdog: a wait that times out looks at the build's log, and
+        // a build that has logged nothing for a whole lead turn is stalled.
+        // A lead still working logs every model call and tool, so it waits
+        // again for what is left of the window.
+        let wait = LEAD_TURN_MS
+        let got: { payload: DeveloperEvent } | null = null
+        for (let n = 1; !got; n++) {
+          try {
+            got = await step.waitForEvent<DeveloperEvent>(
+              n === 1 ? `developer ${round}` : `developer ${round}.${n}`,
+              { type: "developer", timeout: wait }
+            )
+          } catch {
+            const quiet = await step.do(`quiet ${round}.${n}`, async () => {
+              const at = await run((kit) =>
+                kit.withOrg({ orgId: ids.orgId }, (db) =>
+                  lastEventAt(db, ids.assignmentId)
+                )
+              )
+              return Date.now() - at
+            })
+            if (quiet >= LEAD_TURN_MS) {
+              return fail(`stalled ${round}`, "developer.stalled")
+            }
+            wait = LEAD_TURN_MS - quiet
+          }
         }
+        woke = got
       }
       const payload = woke.payload
+      // The lead ended its turn with no report the tool accepted, no
+      // question and no failure: it gave up, ran out of turns or was
+      // refused every time. Nothing will wake this build again.
+      if (payload.kind === "unreported") {
+        return fail(`unreported ${round}`, "developer.no_report")
+      }
       if (payload.kind === "interrupted") {
         const reason = GATE_REASONS.has(payload.reason)
           ? payload.reason

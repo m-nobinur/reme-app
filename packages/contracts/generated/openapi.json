@@ -117,6 +117,16 @@
                         "budget_parked",
                         "publish_rolled_back"
                       ]
+                    },
+                    "cause": {
+                      "type": "string",
+                      "enum": [
+                        "stalled",
+                        "unfinished",
+                        "unanswered",
+                        "service",
+                        "other"
+                      ]
                     }
                   },
                   "required": [
@@ -7841,6 +7851,16 @@
                   "budget_parked",
                   "publish_rolled_back"
                 ]
+              },
+              "cause": {
+                "type": "string",
+                "enum": [
+                  "stalled",
+                  "unfinished",
+                  "unanswered",
+                  "service",
+                  "other"
+                ]
               }
             },
             "required": [
@@ -9872,6 +9892,10 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 999
+                },
+                "now": {
+                  "type": "boolean",
+                  "const": true
                 },
                 "items": {
                   "maxItems": 9,
@@ -18306,6 +18330,10 @@
                                   "exclusiveMinimum": 0,
                                   "maximum": 999
                                 },
+                                "now": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
                                 "items": {
                                   "maxItems": 9,
                                   "type": "array",
@@ -25012,6 +25040,10 @@
                           "exclusiveMinimum": 0,
                           "maximum": 999
                         },
+                        "now": {
+                          "type": "boolean",
+                          "const": true
+                        },
                         "items": {
                           "maxItems": 9,
                           "type": "array",
@@ -29400,6 +29432,10 @@
                         "exclusiveMinimum": 0,
                         "maximum": 999
                       },
+                      "now": {
+                        "type": "boolean",
+                        "const": true
+                      },
                       "items": {
                         "maxItems": 9,
                         "type": "array",
@@ -31884,6 +31920,16 @@
                         "build_failed",
                         "budget_parked",
                         "publish_rolled_back"
+                      ]
+                    },
+                    "cause": {
+                      "type": "string",
+                      "enum": [
+                        "stalled",
+                        "unfinished",
+                        "unanswered",
+                        "service",
+                        "other"
                       ]
                     }
                   },

@@ -121,14 +121,40 @@
       "fail interrupted 3",
       "destroy sandbox"
     ],
-    "developer timed out": [
+    "developer went quiet": [
       "claim 1",
       "planning",
       "sandbox 1",
       "implementing",
       "developer",
       "developer 1",
-      "fail timed out 1",
+      "quiet 1.1",
+      "fail stalled 1",
+      "destroy sandbox"
+    ],
+    "developer still working past a wait": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "quiet 1.1",
+      "developer 1.2",
+      "validating 1",
+      "a11y 1",
+      "gates 1",
+      "screenshots",
+      "keep warm"
+    ],
+    "developer ended without a report": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "fail unreported 1",
       "destroy sandbox"
     ],
     "superseded a preview": [

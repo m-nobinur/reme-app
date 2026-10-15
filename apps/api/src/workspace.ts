@@ -7,6 +7,7 @@ import {
   type BuildActivity,
   type BuildLane,
   type BuildPhoto,
+  type BuildStopCause,
   type BuildSummary,
   type DerivedReminder,
   type FactRecord,
@@ -170,6 +171,7 @@ export function activityFor(
       label,
       done: done ? total : Math.min(count?.done ?? 0, total),
       total,
+      ...(id === at ? { now: true as const } : {}),
     }
   }
   const pagesDone = new Set(
@@ -486,6 +488,11 @@ async function readFeed(
       at: events.occurredAt,
       version: siteRevisions.version,
       revisionId: siteRevisions.id,
+      // A failed build's reason, from its transition row by
+      // `assignment_transitions_version_key`.
+      failure: sql<
+        string | null
+      >`(select t.reason from assignment_transitions t where ${events.type} = 'assignment.state_changed' and t.assignment_id = ${events.assignmentId} and t.version = (${events.payload}->>'version')::int)`,
     })
     .from(assignments)
     .innerJoin(
@@ -529,9 +536,35 @@ async function readFeed(
         : row.type === "budget.exhausted"
           ? "budget_parked"
           : "build_failed"
-    return [{ kind: "alert", ...logged, reason }]
+    return [
+      {
+        kind: "alert",
+        ...logged,
+        reason,
+        ...(reason === "build_failed" ? { cause: causeOf(row.failure) } : {}),
+      },
+    ]
   })
 }
+
+/** The orchestrator's failure reasons, by the cause the owner is told. */
+const CAUSES: Record<string, BuildStopCause> = {
+  "developer.stalled": "stalled",
+  "developer.timed_out": "stalled",
+  "developer.no_report": "unfinished",
+  "tool.repeating_failure": "unfinished",
+  "gates.failed": "unfinished",
+  "gates.repair_budget_exhausted": "unfinished",
+  "information.unanswered": "unanswered",
+  "blueprint.undecided": "unanswered",
+  "provider.unavailable": "service",
+  "sandbox.updating": "service",
+  "sandbox.site_lost": "service",
+}
+
+/** Why a build failed, in the owner's terms; `other` for a reason with no words of its own. */
+export const causeOf = (reason: string | null): BuildStopCause =>
+  (reason && CAUSES[reason]) || "other"
 
 /** The org's current facts, one per key. */
 export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {

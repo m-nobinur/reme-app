@@ -156,6 +156,8 @@ const script = {
     problem: string
     change: string
   }[][],
+  /** How long ago each stall check finds the build's newest event; none left is never. */
+  quiet: [] as number[],
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -224,6 +226,10 @@ vi.mock("../src/state.ts", () => ({
     return {}
   },
   parkForBudget: async () => ({}),
+  lastEventAt: async () => {
+    const ago = script.quiet.shift()
+    return ago === undefined ? 0 : Date.now() - ago
+  },
   claim: async () =>
     script.claims.shift() ?? { claimed: true, superseded: null },
 }))
@@ -394,6 +400,9 @@ const budget: Wake = { payload: { kind: "budget", cap_usd: 1, spent_usd: 1 } }
 const interrupted: Wake = {
   payload: { kind: "interrupted", reason: "stream" },
 }
+const unreported: Wake = {
+  payload: { kind: "unreported", reason: "developer.no_report" },
+}
 
 const expected: Record<string, string[]> = steps.AssignmentWorkflow
 
@@ -411,6 +420,7 @@ type Setup = {
   decisions?: typeof script.decisions
   skipReview?: boolean
   critic?: typeof script.critic
+  quiet?: number[]
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
@@ -510,7 +520,17 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     {},
     { outcome: "failed" },
   ],
-  ["developer timed out", ["timeout"], {}, { outcome: "failed" }],
+  // A whole lead turn with nothing in the log: the build is failed as stalled.
+  ["developer went quiet", ["timeout"], {}, { outcome: "failed" }],
+  // The lead logged ten minutes ago, so it is still at work: wait again.
+  [
+    "developer still working past a wait",
+    ["timeout", completion],
+    { quiet: [10 * 60 * 1000] },
+    { outcome: "preview_ready" },
+  ],
+  // The lead's turn ended with no accepted report: fail now, not later.
+  ["developer ended without a report", [unreported], {}, { outcome: "failed" }],
   [
     "superseded a preview",
     [completion],
@@ -618,6 +638,7 @@ describe("the assignment Workflow's step names", () => {
     script.skipReview = setup.skipReview ?? false
     script.planned = []
     script.critic = [...(setup.critic ?? [])]
+    script.quiet = [...(setup.quiet ?? [])]
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
@@ -828,7 +849,9 @@ describe("the assignment Workflow's step names", () => {
         "budget park",
         "interrupted then resumed",
         "interrupted past the resume budget",
-        "developer timed out",
+        "developer went quiet",
+        "developer still working past a wait",
+        "developer ended without a report",
         "superseded a preview",
         "site busy then claimed",
         "pool full then provisioned",
@@ -849,6 +872,27 @@ describe("the assignment Workflow's step names", () => {
         "nobody decided on the plan",
       ].sort()
     )
+  })
+})
+
+describe("a Developer that stops without a report", () => {
+  it("fails as developer.no_report when its turn ended with nothing that woke the build", async () => {
+    advanced.length = 0
+    expect(await drive([unreported]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.no_report"])
+  })
+
+  it("fails as developer.stalled only once a whole lead turn has nothing in the log", async () => {
+    advanced.length = 0
+    // Forty minutes quiet: still inside a turn, so it waits again; the next
+    // check finds the full window empty.
+    script.quiet = [40 * 60 * 1000, 45 * 60 * 1000]
+    const { names, run } = drive(["timeout", "timeout"])
+    expect(await run()).toMatchObject({ outcome: "failed" })
+    expect(names).toContain("developer 1.2")
+    expect(advanced.at(-1)).toEqual(["failed", "developer.stalled"])
   })
 })
 

@@ -522,6 +522,44 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention).toEqual([{ kind: "question", request: asked }])
   })
 
+  it("says why a build failed: its transition's reason, in the owner's terms", async () => {
+    const stopped = await owner(kit, url as string, "stopped")
+    const t = seed(kit, stopped)
+    const quiet = await t.assignment("implementing")
+    await t.transition(
+      quiet,
+      "implementing",
+      "failed",
+      4,
+      {},
+      "developer.stalled"
+    )
+    const gaveUp = await t.assignment("implementing")
+    await t.transition(
+      gaveUp,
+      "implementing",
+      "failed",
+      4,
+      {},
+      "developer.no_report"
+    )
+    const odd = await t.assignment("implementing")
+    await t.transition(odd, "implementing", "failed", 4, {}, "something.new")
+    const body = WorkspaceStatus.parse(await (await workspace(stopped)).json())
+    const causes = Object.fromEntries(
+      body.attention.flatMap((item) =>
+        item.kind === "alert" ? [[item.assignment_id, item.cause]] : []
+      )
+    )
+    expect(causes).toEqual({
+      [quiet]: "stalled",
+      [gaveUp]: "unfinished",
+      [odd]: "other",
+    })
+    // A failed build is not one being worked on: no step, no Stop.
+    expect(body.builds).toEqual([])
+  })
+
   it("drops the question once it is answered, while the build still waits", async () => {
     const waiting = await owner(kit, url as string, "answered")
     const w = seed(kit, waiting)
