@@ -6,6 +6,7 @@ import type { AttentionItem, Workspace } from "./api/types"
 import { askerOf, assistantOf, digestOf } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
+import { stoppedOf } from "./stopped"
 
 /**
  * What the floating panel says, from what the frame has already read: the
@@ -267,6 +268,10 @@ export function panelFor(input: PanelInput): Panel | null {
         ]
       : null
 
+  // A build that failed, while nothing has happened since: the owner is told
+  // why, and the suggestions below are how to try again or ask for changes.
+  const stopped = stoppedOf(workspace)
+
   const digest = () =>
     digestOf({ ...workspace, attention: waiting }, names, zone ? now : null)
 
@@ -275,6 +280,7 @@ export function panelFor(input: PanelInput): Panel | null {
       return [`Name your business and ${assistant} can start on its website.`]
     }
     if (page === "reminders" && reminders) return [reminders]
+    if (stopped) return stopped
     if (steps) {
       const intro = onboarding
         ? `Getting ${business} ready for its first website.`
@@ -406,6 +412,7 @@ export function panelFor(input: PanelInput): Panel | null {
     }
     if (!business)
       return { tone, lead: "Name your business", detail: "to get started" }
+    if (stopped) return { tone, lead: "The build stopped" }
     if (steps && onboarding) {
       return {
         tone,

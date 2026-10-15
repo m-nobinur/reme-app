@@ -1,6 +1,7 @@
 import type {
   ApprovalRequest,
   BlueprintReviewOutput,
+  BuildStopCause,
   BuildSummary,
   ChangeKind,
   Conversation,
@@ -78,7 +79,8 @@ type AttentionBase = {
 }
 
 export type AttentionItem =
-  | (AttentionBase & { kind: "report" | "alert" })
+  // A failed build's alert carries why it stopped.
+  | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
   // A question carries what answering it needs: the build it blocks, and the
   // inputs, derived on the server so the raw `answer_schema` never travels.
   | (AttentionBase & {
