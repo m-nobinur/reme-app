@@ -15,6 +15,7 @@ const {
   MAX_PER_DAY,
   NEVER,
   PHOTO_DISTINCT,
+  PHOTO_HERO,
   placeGenerated,
   QUALITY_MODELS,
 } = await import("../src/images.ts")
@@ -224,6 +225,7 @@ describe("the photo director", () => {
     const writer = calls.find((c) => c.url.endsWith("/chat/completions"))
     const messages = writer?.body.messages as { content: string }[]
     expect(messages[0]?.content).toContain(PHOTO_DISTINCT)
+    expect(messages[0]?.content).toContain(PHOTO_HERO)
     // The writer sees each slot's idea and alt, which name its service.
     expect(JSON.parse(messages[1]?.content ?? "{}").slots).toEqual(
       expect.arrayContaining([

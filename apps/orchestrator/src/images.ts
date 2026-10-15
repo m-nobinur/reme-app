@@ -200,6 +200,10 @@ const Prompts = z.object({
 export const PHOTO_DISTINCT =
   "Every slot gets a different subject, tied to the service or section its idea names: its own place, object and activity, so no two photos share a scene, a composition or a main prop. Only the style line repeats. Do not reuse the hero's scene in another slot. "
 
+/** A Bristol terrace street once drew the hero of a cleaning site: it said "Bristol", not "clean". */
+export const PHOTO_HERO =
+  "A hero shows the core service or its result, in the customer's own space: for a cleaning business, a bright, clean, lived-in interior, never a street, skyline or exterior, even when the idea names one. The place is a light touch at most, such as a window view or a regional detail, never the subject. "
+
 /** One Haiku call: a shared style line for the set and a subject line per slot. */
 async function writePrompts(
   { key, fetch }: Deps,
@@ -227,6 +231,7 @@ async function writePrompts(
               "`style` is one line shared by the whole set so the photos read as one shoot: light, colour grade, lens, one recurring prop in the palette. " +
               "Each subject is one concrete scene for its slot: a place, surface, object or hands at work. " +
               PHOTO_DISTINCT +
+              PHOTO_HERO +
               "Where a slot has a text side, ask for calm empty space on that side. Never ask for a face, text, a logo or a sign.",
           },
           {
