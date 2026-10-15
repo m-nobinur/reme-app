@@ -18,8 +18,8 @@ import Testimonials from "../components/Testimonials/Testimonials.astro"
 import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
 import { directionOf } from "../directions"
+import { headerPhoto } from "../header-photo"
 import { phoneText } from "../phone"
-import { hasPhoto } from "../photo-files"
 import { primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
 import { type ServiceItem, serviceItems } from "../structured-data"
@@ -55,10 +55,9 @@ const CTA: Record<LayoutPage, [string, string]> = {
   service: [service?.ctaHeading ?? "", service?.ctaBody ?? ""],
 }
 const [ctaHeading, ctaBody] = CTA[page]
-// A service page's header shows the service's photo when the build has it,
-// in the hero's photo form; without one it keeps the text header.
-const servicePhoto =
-  service?.image.alt && hasPhoto(service.image.src) ? service.image : undefined
+// An inner page's header shows its own photo when the build has one, in the
+// hero's photo form; without one it is the plain text header.
+const pagePhoto = headerPhoto(service ? `service:${service.id}` : page)
 // The h1 shares a field with a section heading elsewhere, and shows no accent marks.
 const heading = plain(marked)
 const home = page === "home"
@@ -90,14 +89,15 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "hero":
         return (
           <Hero
-            variant={servicePhoto ? (v ?? "split_frame") : v}
+            variant={pagePhoto ? (v ?? "split_frame") : v}
+            inner={!home}
             eyebrow={home ? site.industry : ""}
             heading={heading}
             lede={lede}
             image={
               home
                 ? { src: site.heroImage, alt: site.heroImageAlt }
-                : servicePhoto
+                : pagePhoto
             }
             caption={home ? site.heroCaption : ""}
             highlights={home ? serviceItems.slice(0, 3) : []}

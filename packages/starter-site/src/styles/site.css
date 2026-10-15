@@ -595,13 +595,29 @@ picture {
   .hero-page h1 {
     max-width: none;
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 2 / span 2;
   }
 
-  .hero-page .lede,
-  .hero-page .actions {
+  .hero-page .eyebrow {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .hero-page :is(.lede, .actions, .hero-note) {
     grid-column: 2;
     margin-block-end: 0;
+  }
+
+  .hero-page .lede {
+    grid-row: 2;
+  }
+
+  .hero-page .actions {
+    grid-row: 3;
+  }
+
+  .hero-page .hero-note {
+    grid-row: 4;
   }
 }
 
@@ -1254,6 +1270,31 @@ picture {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
+/* On a phone the number, icon and arrow share one line and the words take the
+   full width under it, so three fixed items never squeeze the text. */
+@media (max-width: 47.99rem) {
+  .services-numbered_rows .service-rows li {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    row-gap: var(--space-xs);
+  }
+
+  .services-numbered_rows .service-rows li::before {
+    grid-area: 1 / 1;
+  }
+
+  .services-numbered_rows .service-rows .card-icon {
+    grid-area: 1 / 2;
+  }
+
+  .services-numbered_rows .service-rows .row-arrow {
+    grid-area: 1 / 4;
+  }
+
+  .services-numbered_rows .service-rows .row-text {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+}
+
 .service-rows li::before {
   content: counter(row, decimal-leading-zero);
   min-width: 1.5rem;
@@ -1790,15 +1831,12 @@ picture {
   margin-block-end: var(--space-md);
 }
 
-/* The places on a card, a map pin in rings drawn faintly in its far corner. */
+/* The places on a card: the towns as chips, the map pin in rings beside them
+   on a wide screen at the card's own height. */
 .area-places {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   display: grid;
-  align-content: start;
+  align-content: center;
   gap: var(--space-md);
-  min-height: 13rem;
   padding: var(--space-lg) var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -1813,19 +1851,22 @@ picture {
 
 @media (min-width: 56rem) {
   .area-places {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-xl);
     padding: var(--space-xl) var(--space-lg);
-    padding-inline-end: 12rem;
+  }
+
+  .area-places > :not(.area-motif) {
+    grid-column: 1;
   }
 
   .area-places .area-motif {
-    position: absolute;
-    z-index: -1;
     display: block;
+    grid-column: 2;
+    grid-row: 1;
+    width: 10rem;
     height: auto;
-    inset-block: 50% auto;
-    translate: 0 -50%;
-    inset-inline-end: -1.5rem;
-    width: 16rem;
   }
 }
 
@@ -1847,7 +1888,7 @@ picture {
 .area-towns {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2xs) var(--space-md);
+  gap: var(--space-2xs);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1856,7 +1897,11 @@ picture {
 .area-towns li {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3xs);
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  background: var(--brand-soft);
 }
 
 .area-towns .mark {
