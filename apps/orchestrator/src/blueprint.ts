@@ -32,9 +32,20 @@ export function blueprintLayout(
   )
 }
 
+/** The site fields a page header's photo and its alt go in, where the slot is one. */
+function headerField(slot: ImageSlot): string {
+  const service = /^service_(\d)_hero$/.exec(slot.id)?.[1]
+  const field = service
+    ? `service${service}Image`
+    : slot.section === "hero" && ["about", "contact"].includes(slot.page)
+      ? `${slot.page}Image`
+      : ""
+  return field ? ` (site.${field} and site.${field}Alt)` : ""
+}
+
 /** Where each image slot's picture is, as its site field holds it. */
 function slotLine(slot: ImageSlot, files: readonly PhotoFile[]): string {
-  const where = `${slot.id}: ${slot.page} ${slot.section}, ${slot.aspect}`
+  const where = `${slot.id}: ${slot.page} ${slot.section}${headerField(slot)}, ${slot.aspect}`
   if (slot.source === "upload") {
     return `${where}, the owner's photo ${slot.asset_id}. Alt: ${slot.alt}`
   }

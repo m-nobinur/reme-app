@@ -6,7 +6,7 @@ import type {
 import { SECTION_VARIANTS } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 
-import { blueprintLayout } from "../src/blueprint.ts"
+import { blueprintLayout, blueprintLines } from "../src/blueprint.ts"
 import { loadDirections, STAND_IN_DIRECTIONS } from "../src/directions.ts"
 import {
   diversityNote,
@@ -331,6 +331,99 @@ describe("the photo shot list", () => {
     expect(
       plannerPrompt({ facts: CLEANING, recent: [], previous: null }).system
     ).toContain("one photographer's shot list")
+  })
+})
+
+describe("page header photos", () => {
+  const header = (id: string, page: string) => ({
+    id,
+    page,
+    section: "hero",
+    aspect: "16:9",
+    resolution: "1K",
+    subject: "x",
+    alt: "x",
+    source: "generated",
+  })
+  const fallback = (facts: FactRecord[]) =>
+    fallbackBlueprint({ facts, recent: [], library: LIBRARY })
+
+  it("plans a photo for each service page with no uploads, none with uploads", () => {
+    const made = fallback(CLEANING)
+    expect(made.images.map((s) => [s.id, s.page, s.section])).toEqual([
+      ["home_hero", "home", "hero"],
+      ["service_1_hero", "service", "hero"],
+      ["service_2_hero", "service", "hero"],
+    ])
+    expect(problems(made, { facts: CLEANING, library: LIBRARY })).toEqual([])
+    // The page's hero frames the photo it has, at the shape the slot is drawn.
+    const hero = made.pages
+      .find((p) => p.page === "service")
+      ?.sections.find((s) => s.kind === "hero")
+    expect(hero?.variant).toBe("split_frame")
+    expect(made.images[1]?.aspect).toBe("4:3")
+    const owned = fallback([
+      ...CLEANING,
+      fact("media.uploads", {
+        items: [
+          {
+            id: "20000000-0000-4000-8000-000000000009",
+            name: "kitchen.jpg",
+            content_type: "image/jpeg",
+            bytes: 1000,
+          },
+        ],
+      }),
+    ])
+    expect(owned.images.some((s) => s.page === "service")).toBe(false)
+  })
+
+  it("keeps a page with no photo as it was, and draws about and contact last", () => {
+    const made = fallback(CLEANING)
+    const ordered = withOwnerChoices(
+      {
+        ...made,
+        images: [
+          header("about_hero", "about"),
+          header("contact_hero", "contact"),
+          ...made.images,
+        ],
+      } as Blueprint,
+      CLEANING
+    )
+    expect(ordered.images.map((s) => s.id)).toEqual([
+      "home_hero",
+      "service_1_hero",
+      "service_2_hero",
+      "about_hero",
+      "contact_hero",
+    ])
+    const variantOf = (page: string) =>
+      ordered.pages
+        .find((p) => p.page === page)
+        ?.sections.find((s) => s.kind === "hero")?.variant
+    expect(variantOf("about")).toBe("split_frame")
+    expect(variantOf("quote")).toBe("text_led")
+  })
+
+  it("names the site fields a header photo goes in", () => {
+    const made = fallback(CLEANING)
+    const lines = blueprintLines({
+      ...made,
+      images: [...made.images, header("about_hero", "about")],
+    } as Blueprint).join("\n")
+    expect(lines).toContain("(site.service2Image and site.service2ImageAlt)")
+    expect(lines).toContain("(site.aboutImage and site.aboutImageAlt)")
+  })
+
+  it("tells the model about header photos", () => {
+    const { system } = plannerPrompt({
+      facts: CLEANING,
+      recent: [],
+      previous: null,
+    })
+    expect(system).toContain("service_<n>_hero")
+    expect(system).toContain("about_hero and contact_hero")
   })
 })
 

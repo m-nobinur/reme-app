@@ -200,6 +200,7 @@ export function withOwnerChoices(
 ): Blueprint {
   const owner = ownerChoices(facts)
   const notes = pickNotes(facts)
+  const pages = framedHeaders(blueprint)
   const features = [
     ...blueprint.features.filter((line) => !notes.includes(line)),
   ]
@@ -208,7 +209,8 @@ export function withOwnerChoices(
     ...(owner.direction ? { direction: owner.direction } : {}),
     ...(owner.palette ? { palette: owner.palette } : {}),
     ...(owner.fonts ? { fonts: owner.fonts } : {}),
-    images: fitImages(blueprint),
+    pages,
+    images: fitImages({ ...blueprint, pages }),
     features: [
       ...features.slice(0, BLUEPRINT_FEATURES_MAX - notes.length),
       ...notes,
@@ -434,22 +436,52 @@ function boxAspect(
 }
 
 /**
+ * An inner page whose header has a photo draws it in a frame beside the
+ * copy: text_led's portrait inset is too small to carry a header's photo.
+ */
+function framedHeaders(blueprint: Blueprint): Blueprint["pages"] {
+  return blueprint.pages.map((page) =>
+    page.page !== "home" &&
+    blueprint.images.some((s) => s.page === page.page && s.section === "hero")
+      ? {
+          ...page,
+          sections: page.sections.map((s) =>
+            s.kind === "hero" && s.variant === "text_led"
+              ? { ...s, variant: "split_frame" }
+              : s
+          ),
+        }
+      : page
+  ) as Blueprint["pages"]
+}
+
+/** About and Contact headers come last: a build draws eight photos and the hero and services matter more. */
+const lastRank = (slot: ImageSlot) =>
+  slot.source === "generated" &&
+  slot.section === "hero" &&
+  (slot.page === "about" || slot.page === "contact")
+    ? 1
+    : 0
+
+/**
  * Each generated slot at its box's aspect, whatever the model wrote, and a
  * text side only where copy sits on the photo: a hero other than dark_center
  * puts its copy beside the photo, so an empty third there is wasted frame.
  */
 function fitImages(blueprint: Blueprint): Blueprint["images"] {
-  return blueprint.images.map((slot) => {
-    if (slot.source !== "generated") return slot
-    const variant = blueprint.pages
-      .find((p) => p.page === slot.page)
-      ?.sections.find((s) => s.kind === slot.section)?.variant
-    const aspect = boxAspect(slot.section, variant) ?? slot.aspect
-    const { text_side: _side, ...rest } = slot
-    return slot.section === "hero" && variant !== "dark_center"
-      ? { ...rest, aspect }
-      : { ...slot, aspect }
-  })
+  return blueprint.images
+    .map((slot) => {
+      if (slot.source !== "generated") return slot
+      const variant = blueprint.pages
+        .find((p) => p.page === slot.page)
+        ?.sections.find((s) => s.kind === slot.section)?.variant
+      const aspect = boxAspect(slot.section, variant) ?? slot.aspect
+      const { text_side: _side, ...rest } = slot
+      return slot.section === "hero" && variant !== "dark_center"
+        ? { ...rest, aspect }
+        : { ...slot, aspect }
+    })
+    .sort((a, b) => lastRank(a) - lastRank(b))
 }
 
 /**
@@ -533,6 +565,23 @@ export function fallbackBlueprint(input: {
     subject: cap(direction.image_style, 300),
     alt: cap(upload?.alt ?? direction.image_style, 200),
   }
+  // With no uploads, each service's page header gets its own photo, drawn
+  // from its name in the direction's style (six at most, as a build draws eight).
+  const headerImages =
+    uploads.length === 0 && pages.some((p) => p.page === "service")
+      ? (factValue(facts, "business.offerings")?.items ?? [])
+          .slice(0, 6)
+          .map((name, i) => ({
+            id: `service_${i + 1}_hero`,
+            page: "service" as const,
+            section: "hero" as const,
+            aspect: "4:3" as const,
+            resolution: "1K" as const,
+            subject: cap(`${name}, done well. ${direction.image_style}`, 300),
+            alt: cap(`${name}, shown in a customer's space`, 200),
+            source: "generated" as const,
+          }))
+      : []
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
     kind: "preset" as const,
@@ -569,6 +618,7 @@ export function fallbackBlueprint(input: {
               : { ...slot, source: "generated" },
           ]
         : []),
+      ...headerImages,
       ...galleryImages,
     ],
     voice: direction.voice,
@@ -700,9 +750,10 @@ export function plannerPrompt(input: {
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
-    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for about, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
+    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
     "- Plan generated photos as one photographer's shot list for one shoot. The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: oven doors, hinges, ladders, hands holding tools.",
     "- With no uploads, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
+    "- Page headers, with no uploads: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. With photo_cards, a service's card slot is also its page's photo, so plan that one slot, not two. Then, if slots remain, About and Contact each get one (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. List the hero first, then the services, then the rest, because a build draws eight photos and drops the rest.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",
     "- features: four to ten lines the owner reads, each a plain sentence about what their site will have, under 140 characters, no jargon, no section or variant ids.",
