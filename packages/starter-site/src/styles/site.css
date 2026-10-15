@@ -2138,22 +2138,24 @@ picture {
 
 .next-list li {
   display: grid;
-  grid-template-columns: 2rem 1fr;
+  grid-template-columns: 2.25rem 1fr;
   gap: var(--space-xs);
+  align-items: center;
   counter-increment: next;
 }
 
+/* The reference's step number: a hairline circle in the brand, the numeral
+   in the ink, as the steps band draws it. */
 .next-list li::before {
   content: counter(next, decimal-leading-zero);
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--brand-text);
   border-radius: 50%;
-  background: var(--brand);
-  color: var(--brand-foreground);
-  font-size: var(--text-sm);
-  font-weight: 500;
+  color: var(--foreground);
+  font-size: 0.8125rem;
 }
 
 .quote-form {
