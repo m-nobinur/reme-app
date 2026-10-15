@@ -2390,6 +2390,21 @@ picture {
     center / 100% 100% no-repeat;
 }
 
+/* A phone cannot hold a long clause on one line, so it wraps and each line
+   takes a plain underline in place of the stroke. */
+@media (max-width: 39.9375rem) {
+  [data-direction="bright_local"] .accent {
+    white-space: normal;
+    text-decoration: underline var(--brand-accent) 0.12em;
+    text-underline-offset: 0.12em;
+    text-decoration-skip-ink: none;
+  }
+
+  [data-direction="bright_local"] .accent::after {
+    content: none;
+  }
+}
+
 /* bold_young: the step numbers set large, without their badge. */
 [data-direction="bold_young"] .step-list li::before {
   width: auto;

@@ -109,3 +109,39 @@ test("the eyebrow dot is the colour of the eyebrow", async () => {
   })
   expect(dot).toBe(text)
 })
+
+// bright_local sets its accent clause on one line for the stroke beneath it; a
+// long clause pushed the whole column wider than a phone.
+test("a long accent clause in the areas heading stays inside a 390 px phone", async () => {
+  const wide = await build({
+    site: {
+      ...FILLED,
+      direction: "bright_local",
+      serviceAreaHeading: "Gardens across *Bristol, Bath and Clevedon*",
+      areaTowns: "Bristol\nBath\nClevedon",
+      areaBody: "We work in Bristol, Bath and Clevedon.",
+    },
+  })
+  const { server: other, origin: base } = await serve(wide.dist)
+  try {
+    if (!browser) throw new Error("the browser did not start")
+    const page = await (
+      await browser.newContext({ viewport: { width: 390, height: 844 } })
+    ).newPage()
+    await page.goto(`${base}/`)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth)
+    ).toBeLessThanOrEqual(390)
+    const right = await page.evaluate(() =>
+      Math.max(
+        ...[...document.querySelectorAll(".area-section *")].map(
+          (el) => el.getBoundingClientRect().right
+        )
+      )
+    )
+    expect(right).toBeLessThanOrEqual(390)
+  } finally {
+    other.close()
+    clean(wide)
+  }
+}, 120_000)
