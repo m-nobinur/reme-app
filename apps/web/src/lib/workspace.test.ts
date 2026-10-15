@@ -2,7 +2,7 @@ import type { BuildSummary } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace, WorkspacePoll } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
-import { INTERVAL, type Poller, startPolling } from "./workspace"
+import { INTERVAL, type Poller, READ_LIMIT_MS, startPolling } from "./workspace"
 
 const BUILD: BuildSummary = {
   assignment_id: "00000000-0000-4000-8000-000000000003",
@@ -36,6 +36,9 @@ function tab() {
     },
     flip(hidden: boolean) {
       this.hidden = hidden
+      for (const listener of listeners) listener()
+    },
+    focus() {
       for (const listener of listeners) listener()
     },
   }
@@ -140,14 +143,50 @@ it("backs off to 60 s after a failed read, and keeps the last workspace", async 
   expect(tags).toHaveLength(3)
 })
 
-it("stops on a hidden tab and reads at once when it comes back", async () => {
-  start(building)
+it("stops on a hidden idle tab and reads at once when it comes back", async () => {
+  start(idle)
   page.flip(true)
   await wait(INTERVAL.idle * 4)
   expect(tags).toEqual([])
   page.flip(false)
   await wait(0)
   expect(tags).toHaveLength(1)
+})
+
+it("keeps its pace on a hidden tab while a build is in flight", async () => {
+  start(building)
+  page.flip(true)
+  await wait(INTERVAL.building * 3)
+  expect(tags).toHaveLength(3)
+})
+
+it("reads at once when the tab gains focus", async () => {
+  start(idle)
+  page.focus()
+  await wait(0)
+  expect(tags).toHaveLength(1)
+})
+
+it("does not let a read that never answers hold up the ones behind it", async () => {
+  let calls = 0
+  poller.stop()
+  poller = startPolling({
+    initial: building,
+    read: () => {
+      calls++
+      return calls === 1
+        ? new Promise<WorkspacePoll>(() => undefined)
+        : Promise.resolve(idle)
+    },
+    onChange: (workspace, failed) => changes.push({ workspace, failed }),
+    page,
+  })
+  await wait(INTERVAL.building)
+  expect(calls).toBe(1)
+  await wait(READ_LIMIT_MS)
+  expect(changes).toEqual([{ workspace: building, failed: true }])
+  await wait(INTERVAL.error)
+  expect(changes.at(-1)).toEqual({ workspace: idle, failed: false })
 })
 
 it("reads at once on refresh, after an owner action or a chat turn", async () => {
