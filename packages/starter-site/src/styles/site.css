@@ -981,6 +981,24 @@ picture {
   list-style: none;
 }
 
+/* Five or six cards wrap in rows of 3, a short last row centred. */
+.card-grid[data-balanced] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.card-grid[data-balanced] > .card {
+  flex: 0 0
+    min(
+      100%,
+      max(
+        17rem,
+        calc((100% - (var(--per-row) - 1) * var(--grid-gap)) / var(--per-row))
+      )
+    );
+}
+
 .card {
   position: relative;
   display: grid;
