@@ -368,6 +368,8 @@ export const BuildSummary = z.strictObject({
   photos: z.array(BuildPhoto).max(24).optional(),
   /** Milliseconds spent waiting on the owner's decided Blueprint reviews, which the panel's clock leaves out. */
   review_ms: z.int().nonnegative().optional(),
+  /** When the build last reached preview_ready, from its events: the panel's clock stops here, so a later approval does not move it. */
+  ready_at: Timestamp.optional(),
   created_at: Timestamp,
   updated_at: Timestamp,
 })

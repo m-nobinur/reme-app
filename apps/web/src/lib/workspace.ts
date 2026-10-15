@@ -11,17 +11,29 @@ import type { Workspace, WorkspacePoll } from "./api/types"
 
 /**
  * The panel polls `/workspace`, cheaply, until a push channel replaces it:
- * every 3 s while a build is queued or runs, 30 s otherwise, 60 s after a failed read. A
- * hidden tab does not poll, and a tab coming back reads at once. An owner
- * action or the end of a chat turn reads at once too. Each poll sends the
- * last tag, so an unchanged workspace answers 304 and keeps what is shown.
+ * every 3 s while a build is queued or runs (publishing included), 30 s
+ * otherwise, 60 s after a failed read. A hidden tab with nothing in flight
+ * does not poll; with a build in flight it keeps its pace, because a tab
+ * can be hidden to the page and still be the one the owner is watching. A
+ * tab coming back or gaining focus reads at once. An owner action or the
+ * end of a chat turn reads at once too. Each poll sends the last tag, so an
+ * unchanged workspace answers 304 and keeps what is shown.
  */
 export const INTERVAL = { building: 3_000, idle: 30_000, error: 60_000 }
 
+/** A read that has not answered by now counts as failed, so it cannot hold up every read behind it. */
+export const READ_LIMIT_MS = 20_000
+
 type Page = {
   readonly hidden: boolean
-  addEventListener: (type: "visibilitychange", listener: () => void) => void
-  removeEventListener: (type: "visibilitychange", listener: () => void) => void
+  addEventListener: (
+    type: "visibilitychange" | "focus",
+    listener: () => void
+  ) => void
+  removeEventListener: (
+    type: "visibilitychange" | "focus",
+    listener: () => void
+  ) => void
 }
 
 export type Poller = {
@@ -58,10 +70,12 @@ export function startPolling({
 
   const schedule = () => {
     clearTimeout(timer)
-    if (stopped || page.hidden) return
+    const busy =
+      current?.building || current?.builds.some((b) => b.state === "queued")
+    if (stopped || (page.hidden && !busy)) return
     const delay = failed
       ? INTERVAL.error
-      : current?.building || current?.builds.some((b) => b.state === "queued")
+      : busy
         ? INTERVAL.building
         : INTERVAL.idle
     timer = setTimeout(tick, delay)
@@ -81,8 +95,17 @@ export function startPolling({
     }
     const began = generation
     inFlight = (async () => {
+      let limit: ReturnType<typeof setTimeout> | undefined
       try {
-        const next = await read(current?.etag ?? null)
+        const next = await Promise.race([
+          read(current?.etag ?? null),
+          new Promise<never>((_, reject) => {
+            limit = setTimeout(
+              () => reject(new Error("read timed out")),
+              READ_LIMIT_MS
+            )
+          }),
+        ])
         if (began !== generation) return
         failed = false
         if (next !== "unchanged") {
@@ -93,6 +116,8 @@ export function startPolling({
         if (began !== generation) return
         failed = true
         onChange(current, true)
+      } finally {
+        clearTimeout(limit)
       }
     })().finally(() => {
       inFlight = null
@@ -102,14 +127,13 @@ export function startPolling({
     return inFlight
   }
 
-  const onVisibility = () => {
-    if (page.hidden) {
-      clearTimeout(timer)
-    } else {
-      void tick()
-    }
+  // Back in view or focused: read now, unless a read is already on its way.
+  const onWake = () => {
+    if (page.hidden) schedule()
+    else if (!inFlight) void tick()
   }
-  page.addEventListener("visibilitychange", onVisibility)
+  page.addEventListener("visibilitychange", onWake)
+  page.addEventListener("focus", onWake)
   schedule()
 
   return {
@@ -123,7 +147,8 @@ export function startPolling({
     stop: () => {
       stopped = true
       clearTimeout(timer)
-      page.removeEventListener("visibilitychange", onVisibility)
+      page.removeEventListener("visibilitychange", onWake)
+      page.removeEventListener("focus", onWake)
     },
   }
 }
@@ -158,7 +183,22 @@ export function useLiveWorkspaceState(
       initial,
       read,
       onChange: (workspace, failed) => setState({ workspace, failed }),
-      page: document,
+      page: {
+        get hidden() {
+          return document.hidden
+        },
+        // Focus fires on the window, visibility on the document.
+        addEventListener: (type, listener) =>
+          (type === "focus" ? window : document).addEventListener(
+            type,
+            listener
+          ),
+        removeEventListener: (type, listener) =>
+          (type === "focus" ? window : document).removeEventListener(
+            type,
+            listener
+          ),
+      },
     })
     poller.current = started
     return started.stop

@@ -455,6 +455,27 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     ])
     await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
+
+    // The clock stops where the build got ready, and a later move does not
+    // shift it.
+    const readyAt = async () => {
+      const [first] = WorkspaceStatus.parse(
+        await (await workspace(who)).json()
+      ).builds
+      return first?.ready_at
+    }
+    expect(await readyAt()).toBeUndefined()
+    await s.event(build, "assignment.state_changed", {
+      from: "validating",
+      to: "preview_ready",
+    })
+    const ready = await readyAt()
+    expect(ready).toBeDefined()
+    await s.event(build, "assignment.state_changed", {
+      from: "preview_ready",
+      to: "release_candidate",
+    })
+    expect(await readyAt()).toBe(ready)
   })
 
   it("lists an expired review the sweep parked, since a late decision counts", async () => {

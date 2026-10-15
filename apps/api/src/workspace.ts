@@ -299,6 +299,10 @@ export async function readBuilds(
       reviewMs: sql<
         number | null
       >`(select sum(extract(epoch from (d.occurred_at - p.occurred_at)) * 1000)::float8 from events d join events p on p.assignment_id = d.assignment_id and p.type = 'blueprint.proposed' and p.payload->>'review' = 'true' and p.payload->>'round' = d.payload->>'round' where d.assignment_id = assignments.id and d.type = 'blueprint.decided')`,
+      // When the build last became ready to look at, in epoch milliseconds.
+      readyMs: sql<
+        number | null
+      >`(select extract(epoch from max(e.occurred_at)) * 1000 from events e where e.assignment_id = assignments.id and e.type = 'assignment.state_changed' and e.payload->>'to' = 'preview_ready')::float8`,
     })
     .from(assignments)
     .where(
@@ -329,6 +333,7 @@ export async function readBuilds(
       ...planOf(row),
       ...(progress.photos ? { photos: photosOf(plan, settled) } : {}),
       ...(row.reviewMs ? { review_ms: Math.round(row.reviewMs) } : {}),
+      ...(row.readyMs ? { ready_at: new Date(row.readyMs).toISOString() } : {}),
       created_at: iso(row.createdAt),
       updated_at: iso(row.updatedAt),
     }

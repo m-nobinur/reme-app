@@ -3289,6 +3289,8 @@ export interface components {
       }[]
       review_ms?: number
       /** Format: date-time */
+      ready_at?: string
+      /** Format: date-time */
       created_at: string
       /** Format: date-time */
       updated_at: string
@@ -5606,6 +5608,8 @@ export interface components {
                   }[]
                   review_ms?: number
                   /** Format: date-time */
+                  ready_at?: string
+                  /** Format: date-time */
                   created_at: string
                   /** Format: date-time */
                   updated_at: string
@@ -7500,6 +7504,8 @@ export interface components {
             }[]
             review_ms?: number
             /** Format: date-time */
+            ready_at?: string
+            /** Format: date-time */
             created_at: string
             /** Format: date-time */
             updated_at: string
@@ -8678,6 +8684,8 @@ export interface components {
           thumbnail: string | null
         }[]
         review_ms?: number
+        /** Format: date-time */
+        ready_at?: string
         /** Format: date-time */
         created_at: string
         /** Format: date-time */

@@ -361,7 +361,7 @@ function Stoppable({
         awaitingReview: build.blueprint?.awaiting ?? false,
         photos: build.photos,
         reviewMs: build.review_ms,
-        endedAt: build.updated_at,
+        endedAt: build.ready_at ?? build.updated_at,
       }}
       error={stop.error}
       expectedSeconds={expected?.[build.lane ?? "full"]}

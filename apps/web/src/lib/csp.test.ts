@@ -42,7 +42,9 @@ describe("the content security policy header", () => {
       "default-src 'self'",
       `script-src 'self' 'nonce-${handed}'`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.remeai.co.uk",
+      expect.stringContaining(
+        "img-src 'self' data: blob: https://*.remeai.co.uk"
+      ),
       "font-src 'self' data:",
       "connect-src 'self'",
       "object-src 'none'",
@@ -50,6 +52,13 @@ describe("the content security policy header", () => {
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
+  })
+
+  it("allows the local preview host's images under vite dev, and only there", () => {
+    const img = (dev: boolean) =>
+      contentSecurityPolicy("n", dev).match(/img-src [^;]*/)?.[0]
+    expect(img(true)).toContain("http://*.reme.localhost:*")
+    expect(img(false)).not.toContain("localhost")
   })
 
   it("never lets inline script run without the nonce", async () => {
