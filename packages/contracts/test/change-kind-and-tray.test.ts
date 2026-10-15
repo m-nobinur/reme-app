@@ -11,6 +11,7 @@ import {
 } from "../src/chat.ts"
 import { SectionVariant } from "../src/design.ts"
 import {
+  BUILD_ACTIVITY_MAX,
   BuildSummary,
   ChangeKind,
   OwnerChangeRequest,
@@ -358,7 +359,7 @@ describe("lane and activity on a build", () => {
     }
   })
 
-  it("holds at most five activity rows", () => {
+  it("holds at most BUILD_ACTIVITY_MAX activity rows", () => {
     const row = (n: number) => ({
       id: `step_${n}`,
       label: `Step ${n}`,
@@ -367,10 +368,14 @@ describe("lane and activity on a build", () => {
     })
     const rows = (n: number) => Array.from({ length: n }, (_, i) => row(i))
     expect(
-      BuildSummary.safeParse({ ...build, activity: rows(5) }).success
+      BuildSummary.safeParse({ ...build, activity: rows(BUILD_ACTIVITY_MAX) })
+        .success
     ).toBe(true)
     expect(
-      BuildSummary.safeParse({ ...build, activity: rows(6) }).success
+      BuildSummary.safeParse({
+        ...build,
+        activity: rows(BUILD_ACTIVITY_MAX + 1),
+      }).success
     ).toBe(false)
     expect(BuildSummary.safeParse({ ...build, activity: [] }).success).toBe(
       true
