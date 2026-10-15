@@ -32,6 +32,12 @@ const HEADINGS = [
   "service1StepsHeading",
   "service1FaqHeading",
   "service1CtaHeading",
+  "approachHeading",
+  "aboutStepsHeading",
+  "aboutAreaHeading",
+  "contactIncludeHeading",
+  "servicesHelpHeading",
+  "servicesFaqHeading",
 ] as const
 const MARKED = {
   ...FILLED,
