@@ -7,7 +7,7 @@ constraints:
   - Reads valueProp1Title to valueProp3Icon itself, in order; an entry renders
     only when its title or body is set.
   - Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason;
-    an empty or unknown one shows checkCircle.
+    an empty or unknown one is picked from the reason's words.
   - Renders nothing when every title and body is empty.
 examples:
   - "<ValueProps />"

@@ -39,7 +39,7 @@ type PhotoModel = {
  */
 export const QUALITY_MODELS: readonly PhotoModel[] = [
   { id: "openai/gpt-image-2.5-flare", refs: true }, // 19.8 s, $0.012, 1536 px wide
-  { id: "openai/gpt-image-2.5-sunburst", refs: true }, // 21.6 s, $0.012, 1536 px wide
+  { id: "openai/gpt-image-2.5-sunburst", refs: true }, // 21.6 s, $0.012, 1536 px wide; 198 s at 2560 x 1440, so it times out to Muse
   { id: "meta/muse-image", refs: true }, // 25.3 s, $0.010; drew 3:2 when asked 16:9
 ]
 /** Every other slot, fastest and cheapest first. One draw each at 1K 4:3, 2026-10-15. */
@@ -48,6 +48,21 @@ export const FAST_MODELS: readonly PhotoModel[] = [
   { id: "google/gemini-3.1-flash-lite-image", refs: true }, // 4.8 s, $0.034
   { id: "bytedance-seed/seedream-5-0-flash", refs: true }, // 12.3 s, $0.018
 ]
+/**
+ * The hero's pixel size by aspect, 2560 px on the long edge in multiples of
+ * 16: sharp at 1440 to 1920 px wide on a 2x screen. "2K" alone gave GPT Image
+ * 2.5 Flare 1536 x 864 and "4K" the same; an explicit `size` it honours, also
+ * beside `resolution` (2560 x 1440 in 19.6 to 22.2 s, $0.0064; 3840 x 2160 in
+ * 29 s, $0.0113, twice the cost for pixels only a 4K screen fetches). Muse
+ * ignores it and draws 2048 x 1152. Probed 2026-10-15.
+ */
+const HERO_SIZE: Record<Slot["aspect"], string> = {
+  "16:9": "2560x1440",
+  "4:3": "2560x1920",
+  "3:4": "1920x2560",
+  "1:1": "2048x2048",
+  "21:9": "2560x1088",
+}
 /** Models a slot tries before it falls back. */
 const TRIES = 3
 
@@ -164,6 +179,8 @@ type Slot = Extract<ImageSlot, { source: "generated" }>
 type Planned = {
   slot: Slot
   resolution: "1K" | "2K"
+  /** The hero's pixel size, `HERO_SIZE` for its aspect; the rest take the model's own. */
+  size?: string
   /** Hash of everything that makes the picture, so a rebuild finds it again. */
   hash: string
   assetId: string
@@ -285,6 +302,7 @@ async function draw(
         prompt,
         resolution: planned.resolution,
         aspect_ratio: planned.slot.aspect,
+        ...(planned.size ? { size: planned.size } : {}),
         ...(references.length
           ? {
               input_references: references.map((r) => ({
@@ -433,9 +451,11 @@ export async function directPhotos(input: {
       settle(slot.id, fallback(slot.id, "build cap"))
     } else {
       const resolution = slot === hero ? "2K" : "1K"
+      const size = slot === hero ? HERO_SIZE[slot.aspect] : undefined
       const hash = await sha256(
         JSON.stringify([
           resolution,
+          ...(size ? [size] : []),
           slot.aspect,
           slot.subject,
           slot.text_side ?? "none",
@@ -443,7 +463,7 @@ export async function directPhotos(input: {
           ...(input.variation ? [input.variation] : []),
         ])
       )
-      planned.push({ slot, resolution, hash, assetId: uuidFrom(hash) })
+      planned.push({ slot, resolution, size, hash, assetId: uuidFrom(hash) })
     }
   }
 

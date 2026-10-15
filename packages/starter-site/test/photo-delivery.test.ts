@@ -54,12 +54,13 @@ describe("a generated photo", () => {
       )
         .split(",")
         .map((c) => c.trim().split(/\s+/)[1])
-    expect(widths("image/avif")).toEqual(["480w", "768w", "1152w"])
-    expect(widths("image/webp")).toEqual(["480w", "768w", "1152w"])
+    expect(widths("image/avif")).toEqual(["640w", "960w", "1152w"])
+    expect(widths("image/webp")).toEqual(["640w", "960w", "1152w"])
   })
 
   test("tells the browser the box the arch hero renders in, not 1280 px", () => {
     const sizes = (home()?.elements ?? [])
+      .filter((e) => e.tag !== "link" || e.attrs.rel === "preload")
       .map((e) => e.attrs.sizes ?? e.attrs.imagesizes)
       .filter(Boolean)
     expect(sizes.length).toBeGreaterThan(0)
@@ -91,7 +92,7 @@ test("a 1536 px full-bleed hero offers 1280 and its own 1536 width", async () =>
       )
     expect(
       (hero?.attrs.srcset ?? "").split(",").map((c) => c.trim().split(/\s+/)[1])
-    ).toEqual(["480w", "768w", "1280w", "1536w"])
+    ).toEqual(["640w", "960w", "1280w", "1536w"])
   } finally {
     clean(wide)
   }

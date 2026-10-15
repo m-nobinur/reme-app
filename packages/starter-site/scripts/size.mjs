@@ -47,6 +47,9 @@ const assets = [
       .filter((path) =>
         /\.(css|m?js|svg|png|jpe?g|webp|avif|ico|woff2?)$/.test(path)
       )
+      // The favicon set (src/favicon.ts) is fetched once per site, and the
+      // apple-touch-icon only when a phone saves the page; neither is the page.
+      .filter((path) => !/^(favicon[-.]|apple-touch-icon\.|icon-\d)/.test(path))
   ),
 ]
 

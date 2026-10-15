@@ -1,4 +1,5 @@
 ---
+import Motif from "../../layouts/Motif.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
@@ -38,6 +39,7 @@ const more =
           )}
         </div>
         <div class="area-places">
+          <Motif kind="pin" class="area-motif" />
           {place && (
             <p class="area-place">
               <Icon name="mapPin" />
