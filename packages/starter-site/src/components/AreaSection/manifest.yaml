@@ -1,6 +1,7 @@
 component: AreaSection
 path: src/components/AreaSection/AreaSection.astro
-summary: Where the business works, the places it names and a short local paragraph.
+summary: Where the business works, the places it names, a short local paragraph,
+  the hours, and the area drawn as a line map with a small card.
 props:
   - name: heading
     type: string
@@ -11,6 +12,16 @@ constraints:
     areaTowns lists only places service_area.text names, one to a line; empty
     shows service_area.text as given.
   - Off the service area page it links there with areaLink.
+  - Reads weekdayHours (its row shows only when given), areaPlaceLabel,
+    areaHoursLabel, areaCardLabel and areaCardLine; an empty areaCardLine shows
+    service_area.text on the card.
+  - The drawing is generated from areaTowns at build time, the first town in the
+    middle, and is hidden from assistive technology; the towns are also text. A
+    direction with one dark band draws the section on the deep band, any other
+    on the light one.
+  - On the service area page the drawing is the header's, and the section lists
+    the towns, each with its line from areaTownNotes (one to a line, the town, a
+    colon and its line, for towns in areaTowns only).
 examples:
   - "<AreaSection heading={site.serviceAreaHeading} />"
   - "<AreaSection />"

@@ -41,7 +41,7 @@
   {
     "component": "AreaSection",
     "path": "src/components/AreaSection/AreaSection.astro",
-    "summary": "Where the business works, the places it names and a short local paragraph.",
+    "summary": "Where the business works, the places it names, a short local paragraph, the hours, and the area drawn as a line map with a small card.",
     "props": [
       {
         "name": "heading",
@@ -52,7 +52,10 @@
     ],
     "constraints": [
       "Reads areaTowns, areaBody, areaLink, serviceAreaText and serviceArea. areaTowns lists only places service_area.text names, one to a line; empty shows service_area.text as given.",
-      "Off the service area page it links there with areaLink."
+      "Off the service area page it links there with areaLink.",
+      "Reads weekdayHours (its row shows only when given), areaPlaceLabel, areaHoursLabel, areaCardLabel and areaCardLine; an empty areaCardLine shows service_area.text on the card.",
+      "The drawing is generated from areaTowns at build time, the first town in the middle, and is hidden from assistive technology; the towns are also text. A direction with one dark band draws the section on the deep band, any other on the light one.",
+      "On the service area page the drawing is the header's, and the section lists the towns, each with its line from areaTownNotes (one to a line, the town, a colon and its line, for towns in areaTowns only)."
     ],
     "examples": [
       "<AreaSection heading={site.serviceAreaHeading} />",
@@ -232,6 +235,12 @@
         "type": "boolean",
         "required": false,
         "description": "Every page but home: with no photo the header is the plain page header, whatever the variant."
+      },
+      {
+        "name": "deep",
+        "type": "boolean",
+        "required": false,
+        "description": "A page header with an `art` slot (the service area's drawing) is a cover: on the deep band when this is set."
       }
     ],
     "constraints": [
@@ -243,6 +252,7 @@
       "With no photo the home hero shows highlights, the first three services with their icons, never an empty box.",
       "Renders nothing when the heading, the lede and the actions are all empty.",
       "eyebrow is for the home page, with site.industry.",
+      "An inner page header with no photo and an `art` slot is a cover, the drawing beside the text; the service area page fills it with the area drawing, and deep puts it on the deep band.",
       "image is the home page's, from site.heroImage and site.heroImageAlt; it renders only with both, and the same photo is not used again on the page."
     ],
     "examples": [
