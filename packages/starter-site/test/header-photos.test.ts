@@ -31,6 +31,7 @@ beforeAll(async () => {
     "src/assets/uploads/hero.jpg": await image(200, 60, 60),
     "src/assets/uploads/about.jpg": await image(60, 200, 60),
     "src/assets/uploads/weekly.jpg": await image(60, 60, 200),
+    "src/assets/photos/one.jpg": await image(200, 200, 60),
   }
   ;[bare, photos] = await Promise.all([
     build({
@@ -150,5 +151,15 @@ describe("the services page's offerings", () => {
     const list = /<ol class="offerings">([\s\S]*?)<\/ol>/.exec(html)?.[1] ?? ""
     expect(list).toContain("Oven cleaning")
     expect(list.toLowerCase()).not.toContain("weekly clean")
+  })
+})
+
+describe("the About story's photo", () => {
+  test("shows under a text header, and goes when the header opens on a photo", () => {
+    const about = (built: Built | undefined) =>
+      pagesOf(built).find((p) => p.file === "about/index.html")?.html ?? ""
+    expect(about(bare)).toContain("story-photo")
+    expect(headerOf(about(photos))).toContain("hero-media")
+    expect(about(photos)).not.toContain("story-photo")
   })
 })

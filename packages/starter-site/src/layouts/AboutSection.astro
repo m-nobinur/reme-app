@@ -1,6 +1,7 @@
 ---
 import Icon from "../components/Icon/Icon.astro"
 import Section from "../components/Section/Section.astro"
+import { headerPhoto } from "../header-photo"
 import { hasPhoto } from "../photo-files"
 import { hasRoute } from "../routes"
 import { site } from "../site-config"
@@ -23,9 +24,13 @@ const homeAudience =
   !hasRoute("/about/") && (site.audienceBody || site.audience)
 const homeAbout = site.aboutIntro || site.overviewBody || site.overview
 // The story's photo: the owner's first gallery photo or none. Never the home
-// hero's, which the home page already shows. Both halves or none.
+// hero's, which the home page already shows, and none on an About page whose
+// header already opens on a photo: two photos stacked read as one twice.
+// Both halves or none.
 const photo =
-  site.photo1Alt && hasPhoto(site.photo1Src)
+  site.photo1Alt &&
+  hasPhoto(site.photo1Src) &&
+  !(page === "about" && headerPhoto("about"))
     ? { src: site.photo1Src, alt: site.photo1Alt }
     : undefined
 // The record's items: the stated figures, then the points. A band with a lone
