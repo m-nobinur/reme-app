@@ -2185,6 +2185,7 @@ export interface components {
           | "service_area"
           | "contact"
           | "quote"
+          | "service"
         sections: (
           | {
               /** @constant */
@@ -2316,6 +2317,7 @@ export interface components {
               | "service_area"
               | "contact"
               | "quote"
+              | "service"
             /** @enum {string} */
             section:
               | "hero"
@@ -2357,6 +2359,7 @@ export interface components {
               | "service_area"
               | "contact"
               | "quote"
+              | "service"
             /** @enum {string} */
             section:
               | "hero"
@@ -2457,6 +2460,7 @@ export interface components {
             | "service_area"
             | "contact"
             | "quote"
+            | "service"
           sections: (
             | {
                 /** @constant */
@@ -2588,6 +2592,7 @@ export interface components {
                 | "service_area"
                 | "contact"
                 | "quote"
+                | "service"
               /** @enum {string} */
               section:
                 | "hero"
@@ -2629,6 +2634,7 @@ export interface components {
                 | "service_area"
                 | "contact"
                 | "quote"
+                | "service"
               /** @enum {string} */
               section:
                 | "hero"
@@ -2780,6 +2786,7 @@ export interface components {
               | "service_area"
               | "contact"
               | "quote"
+              | "service"
             sections: (
               | {
                   /** @constant */
@@ -2911,6 +2918,7 @@ export interface components {
                   | "service_area"
                   | "contact"
                   | "quote"
+                  | "service"
                 /** @enum {string} */
                 section:
                   | "hero"
@@ -2952,6 +2960,7 @@ export interface components {
                   | "service_area"
                   | "contact"
                   | "quote"
+                  | "service"
                 /** @enum {string} */
                 section:
                   | "hero"
@@ -3047,6 +3056,7 @@ export interface components {
               | "service_area"
               | "contact"
               | "quote"
+              | "service"
             sections: (
               | {
                   /** @constant */
@@ -3178,6 +3188,7 @@ export interface components {
                   | "service_area"
                   | "contact"
                   | "quote"
+                  | "service"
                 /** @enum {string} */
                 section:
                   | "hero"
@@ -3219,6 +3230,7 @@ export interface components {
                   | "service_area"
                   | "contact"
                   | "quote"
+                  | "service"
                 /** @enum {string} */
                 section:
                   | "hero"
@@ -5089,6 +5101,7 @@ export interface components {
                           | "service_area"
                           | "contact"
                           | "quote"
+                          | "service"
                         sections: (
                           | {
                               /** @constant */
@@ -5220,6 +5233,7 @@ export interface components {
                               | "service_area"
                               | "contact"
                               | "quote"
+                              | "service"
                             /** @enum {string} */
                             section:
                               | "hero"
@@ -5261,6 +5275,7 @@ export interface components {
                               | "service_area"
                               | "contact"
                               | "quote"
+                              | "service"
                             /** @enum {string} */
                             section:
                               | "hero"
@@ -5356,6 +5371,7 @@ export interface components {
                           | "service_area"
                           | "contact"
                           | "quote"
+                          | "service"
                         sections: (
                           | {
                               /** @constant */
@@ -5487,6 +5503,7 @@ export interface components {
                               | "service_area"
                               | "contact"
                               | "quote"
+                              | "service"
                             /** @enum {string} */
                             section:
                               | "hero"
@@ -5528,6 +5545,7 @@ export interface components {
                               | "service_area"
                               | "contact"
                               | "quote"
+                              | "service"
                             /** @enum {string} */
                             section:
                               | "hero"
@@ -6607,6 +6625,7 @@ export interface components {
             | "service_area"
             | "contact"
             | "quote"
+            | "service"
           /** @enum {string} */
           section:
             | "hero"
@@ -6648,6 +6667,7 @@ export interface components {
             | "service_area"
             | "contact"
             | "quote"
+            | "service"
           /** @enum {string} */
           section:
             | "hero"
@@ -6973,6 +6993,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   sections: (
                     | {
                         /** @constant */
@@ -7104,6 +7125,7 @@ export interface components {
                         | "service_area"
                         | "contact"
                         | "quote"
+                        | "service"
                       /** @enum {string} */
                       section:
                         | "hero"
@@ -7145,6 +7167,7 @@ export interface components {
                         | "service_area"
                         | "contact"
                         | "quote"
+                        | "service"
                       /** @enum {string} */
                       section:
                         | "hero"
@@ -7240,6 +7263,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   sections: (
                     | {
                         /** @constant */
@@ -7371,6 +7395,7 @@ export interface components {
                         | "service_area"
                         | "contact"
                         | "quote"
+                        | "service"
                       /** @enum {string} */
                       section:
                         | "hero"
@@ -7412,6 +7437,7 @@ export interface components {
                         | "service_area"
                         | "contact"
                         | "quote"
+                        | "service"
                       /** @enum {string} */
                       section:
                         | "hero"
@@ -8144,6 +8170,7 @@ export interface components {
                 | "service_area"
                 | "contact"
                 | "quote"
+                | "service"
               sections: (
                 | {
                     /** @constant */
@@ -8275,6 +8302,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   /** @enum {string} */
                   section:
                     | "hero"
@@ -8316,6 +8344,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   /** @enum {string} */
                   section:
                     | "hero"
@@ -8411,6 +8440,7 @@ export interface components {
                 | "service_area"
                 | "contact"
                 | "quote"
+                | "service"
               sections: (
                 | {
                     /** @constant */
@@ -8542,6 +8572,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   /** @enum {string} */
                   section:
                     | "hero"
@@ -8583,6 +8614,7 @@ export interface components {
                     | "service_area"
                     | "contact"
                     | "quote"
+                    | "service"
                   /** @enum {string} */
                   section:
                     | "hero"

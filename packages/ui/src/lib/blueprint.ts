@@ -1,8 +1,8 @@
 import {
   type Blueprint,
   FONT_PAIRS,
-  PAGES,
   PALETTES,
+  PLANNED_PAGES,
   type SectionKind,
 } from "@workspace/contracts"
 import { shade } from "@workspace/ui/lib/colour"
@@ -33,7 +33,8 @@ const SECTION_LABEL: Record<SectionKind, string> = {
   quote_form: "Quote form",
 }
 
-const pageLabel = (id: string) => PAGES.find((p) => p.id === id)?.label ?? id
+const pageLabel = (id: string) =>
+  PLANNED_PAGES.find((p) => p.id === id)?.label ?? id
 
 /** `calm_daylight` as "Calm daylight". */
 export const directionLabel = (id: string) =>
