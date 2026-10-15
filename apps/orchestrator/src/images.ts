@@ -51,10 +51,17 @@ export const FAST_MODELS: readonly PhotoModel[] = [
 /** Models a slot tries before it falls back. */
 const TRIES = 3
 
-/** With references to match, the models that read them go first. */
-const chainFor = (hero: boolean, withRefs: boolean): PhotoModel[] => [
+/**
+ * The hero's chain, then the fast one in its listed order. A slot with
+ * references to match does not reorder it: the cheapest model draws first
+ * without them (the shared style line keeps the set coherent), and a model
+ * further down gets them only if it takes them. A lone redraw has no style
+ * line and only its siblings to match, so there the models that read
+ * references go first.
+ */
+const chainFor = (hero: boolean, redraw: boolean): PhotoModel[] => [
   ...(hero ? QUALITY_MODELS : []),
-  ...(withRefs
+  ...(redraw
     ? [
         ...FAST_MODELS.filter((m) => m.refs),
         ...FAST_MODELS.filter((m) => !m.refs),
@@ -172,6 +179,10 @@ const Prompts = z.object({
   subjects: z.record(z.string(), z.string().min(1).max(500)),
 })
 
+/** Five service cards once drew the hero's patio and table five times. */
+export const PHOTO_DISTINCT =
+  "Every slot gets a different subject, tied to the service or section its idea names: its own place, object and activity, so no two photos share a scene, a composition or a main prop. Only the style line repeats. Do not reuse the hero's scene in another slot. "
+
 /** One Haiku call: a shared style line for the set and a subject line per slot. */
 async function writePrompts(
   { key, fetch }: Deps,
@@ -198,6 +209,7 @@ async function writePrompts(
               'Reply with JSON only: {"style": string, "subjects": {"<slot id>": string}}. ' +
               "`style` is one line shared by the whole set so the photos read as one shoot: light, colour grade, lens, one recurring prop in the palette. " +
               "Each subject is one concrete scene for its slot: a place, surface, object or hands at work. " +
+              PHOTO_DISTINCT +
               "Where a slot has a text side, ask for calm empty space on that side. Never ask for a face, text, a logo or a sign.",
           },
           {
@@ -212,6 +224,7 @@ async function writePrompts(
                 aspect: slot.aspect,
                 resolution,
                 idea: slot.subject,
+                alt: slot.alt,
                 text_side: slot.text_side ?? "none",
               })),
             }),
@@ -517,7 +530,7 @@ export async function directPhotos(input: {
       let tries = 0
       for (const model of chainFor(
         p.slot.section === "hero",
-        refs.length > 0
+        (input.siblings ?? []).length > 0
       )) {
         if (down.has(model.id)) continue
         if (tries++ === TRIES) break
