@@ -26,7 +26,8 @@ import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react"
  * The design questions of a build as one tray, a card of its own docked above
  * the composer at its width and radius, with a gap between the two. One
  * question shows at a time: the options as a native radio
- * group (arrow keys, Space and the screen reader come with it), Write your
+ * group, or checkboxes on a card that takes several (arrow keys or Tab,
+ * Space and the screen reader come with them), Write your
  * own, back and forward, Skip all and Next, which reads Build my site on the
  * last question. Collapsed it is one row, the question and "2 of 4". The
  * tray holds its own state and never touches the composer, so a message
@@ -439,6 +440,8 @@ function QuestionTray({
       const [first] = each.card.preselected
       const own = each.card.own
       if (own) return [[each.id, { own }]]
+      if (first && each.card.multiple)
+        return [[each.id, { choices: each.card.preselected }]]
       return first ? [[each.id, { choice: first }]] : []
     })
   )
@@ -537,8 +540,19 @@ function QuestionTray({
   }
 
   const own = answer && "own" in answer ? answer.own : ""
+  const multiple = question.card.multiple
+  const ticks = answer && "choices" in answer ? answer.choices : []
   const pick = (value: string) =>
     setAnswers((now) => ({ ...now, [question.id]: { choice: value } }))
+  // A tick toggles; the options keep their order, and none ticked is unanswered.
+  const toggle = (value: string) =>
+    setAnswers((now) => {
+      const { [question.id]: _, ...rest } = now
+      const choices = question.card.options
+        .map((each) => each.id)
+        .filter((each) => (each === value) !== ticks.includes(each))
+      return choices.length > 0 ? { ...now, [question.id]: { choices } } : rest
+    })
   const write = (words: string) =>
     setAnswers((now) => {
       const { [question.id]: _, ...rest } = now
@@ -611,6 +625,7 @@ function QuestionTray({
             >
               {question.visual === "font_pair" && <PreviewFaces />}
               {question.card.options.length > 0 ? (
+                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
                 <div
                   aria-labelledby={`${id}-question`}
                   className={cn(
@@ -622,13 +637,14 @@ function QuestionTray({
                       : "min-[380px]:grid-cols-2"
                   )}
                   key={question.id}
-                  role="radiogroup"
+                  role={multiple ? "group" : "radiogroup"}
                 >
                   {question.card.options.map((option) => {
-                    const checked =
-                      answer !== undefined &&
-                      "choice" in answer &&
-                      answer.choice === option.id
+                    const checked = multiple
+                      ? ticks.includes(option.id)
+                      : answer !== undefined &&
+                        "choice" in answer &&
+                        answer.choice === option.id
                     return (
                       <label
                         className={cn(
@@ -645,8 +661,10 @@ function QuestionTray({
                           checked={checked}
                           className="sr-only"
                           name={`${id}-${question.id}`}
-                          onChange={() => pick(option.id)}
-                          type="radio"
+                          onChange={() =>
+                            multiple ? toggle(option.id) : pick(option.id)
+                          }
+                          type={multiple ? "checkbox" : "radio"}
                           value={option.id}
                         />
                         <Picture option={option} stops={stops} />
