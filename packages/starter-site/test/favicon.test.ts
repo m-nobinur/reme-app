@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { PALETTES } from "@workspace/contracts"
 import sharp from "sharp"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { initialOf, markColours, markSvg } from "../src/favicon"
+import { initialOf, markColours, markSvg, siteMark } from "../src/favicon"
 import { type Built, build, clean, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -29,6 +29,21 @@ describe("the mark", () => {
     expect(markSvg("Neat", colours, "data:image/png;base64,AA")).toContain(
       "<image"
     )
+  })
+
+  test("reads no logo from outside src/assets", async () => {
+    // The tests run in the package root, where ../../package.json from
+    // src/assets is a real file the mark must not read.
+    for (const logo of ["../../package.json", "/../../package.json"]) {
+      const svg = await siteMark({
+        businessName: "Neat",
+        palette: "",
+        brandColor: "",
+        logo,
+      })
+      expect(svg, logo).not.toContain("<image")
+      expect(svg, logo).toContain("<path")
+    }
   })
 
   test("reads its colours from the palette, then the brand colour", () => {

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { resolve, sep } from "node:path"
 import sharp from "sharp"
 import { paletteFromBrand, paletteOf } from "./brand"
 import DEFAULT from "./favicon.json"
@@ -206,12 +206,11 @@ type MarkSite = {
  */
 async function logoUri(path: string): Promise<string | undefined> {
   if (!path) return undefined
-  const file = join(
-    process.cwd(),
-    "src/assets",
-    path.replace(/^\/?(?:src\/assets\/)?/, "")
-  )
-  if (!existsSync(file)) return undefined
+  const root = resolve(process.cwd(), "src/assets")
+  const file = resolve(root, path.replace(/^\/?(?:src\/assets\/)?/, ""))
+  // The field is written by the Developer, so a path that climbs out of the
+  // assets folder reads nothing rather than any file the build can see.
+  if (!file.startsWith(root + sep) || !existsSync(file)) return undefined
   const png = await sharp(readFileSync(file))
     .resize(128, 128, { fit: "inside" })
     .png()
