@@ -161,13 +161,14 @@ export const COPY_BRIEF = [
   `- Hero: heroHeading 4 to 9 words naming the main service or outcome and the place. homeIntro, the subhead, two or three sentences (${range("hero_lede")}): who the business serves, where, and what the customer gets. heroNote, under the buttons, one reassurance line under 12 words about how the next step works, never a promise no fact makes.`,
   "- Trust strip: trust1 to trust3, under six words each, from business.proof only.",
   `- Service cards: serviceNName as a customer would search for it; serviceNBody ${range("service_body")}, the result first, then what the work covers in general terms. serviceCardsLink is a short label for the link to the services page.`,
-  `- Services page, per service: serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service covers, from the facts and the trade's usual practice; serviceNFor one or two sentences on who it suits, from business.audience. The page's steps and closing band carry how it works and the call to action.`,
+  `- Each service's own page (/services/<slug>/, from serviceNName): serviceNHeading, its h1, 4 to 9 words naming the service and the area, never the bare name; serviceNTitle 50 to 60 characters and serviceNDescription 140 to 160, both its own; serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service covers, from the facts and the trade's usual practice; serviceNFor one or two sentences on who it suits, from business.audience; serviceNStepsHeading heads the site's steps on this page; two to four questions about this service only (serviceNFaq1Question to serviceNFaq4Answer, each answer ${range("faq_answer")}) under serviceNFaqHeading; serviceNCtaHeading and serviceNCtaBody its closing band.`,
+  "- The services page (servicesIntro and its cards) introduces every service and links each to its own page; it repeats no service page's words.",
   `- Steps: three or four (step1 to step4) from first contact to the finished job, each a title of 2 to 5 words and a body of ${range("step_body")}.`,
   "- About: overviewBody and audienceBody together 120 to 200 words in two paragraphs, rephrasing business.overview and business.audience only; shorter when those facts are short, never padded with history, people or numbers they do not give.",
   `- FAQ: five to eight questions this trade's customers ask before booking, in their words, each answer ${range("faq_answer")}.`,
   "- Areas: areaBody 40 to 80 words on serving the places service_area.text names; areaTowns lists them.",
   "- Testimonials: only the stored reviews, word for word; never written.",
-  "- Closing band: ctaHeading 4 to 9 words; ctaBody one sentence of 12 to 30 words with a reason to ask now and no deadline or offer.",
+  "- Closing band, one per page and each its own: ctaHeading and ctaBody on home, aboutCtaHeading, servicesCtaHeading, serviceAreaCtaHeading, contactCtaHeading (each with its Body) and serviceNCtaHeading on the others. The heading 4 to 9 words; the body one sentence of 12 to 30 words with a reason to ask now and no deadline or offer.",
   "- Page ledes (aboutIntro, servicesIntro, serviceAreaIntro, contactIntro, quoteIntro): two or three sentences, 30 to 60 words, on what that page offers.",
   "- Headings: every h1 and h2 on the site is its own, with no repeat or near-repeat on any page, and each names this business's service, customer or place. A stock label (Our services, Why choose us, How it works, About us, Common questions) is only ever an eyebrow. homeAboutHeading and homeAreaHeading are the home sections' own h2s, so they never repeat the about or service area page's h1.",
   "- A planned build runs a copy gate after yours: it fails a repeated or stock heading, a page title another page shares and a section under its range, and lists each one. Rewrite exactly those.",
@@ -346,9 +347,12 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   )
   const sections = extra?.filter((id) => id in SECTION_PICKS) ?? []
   const pagePicks = extra?.filter((id) => !(id in SECTION_PICKS))
+  // Each service's own page goes with the services page.
   const drop = Object.entries(STARTER_PAGES)
     .filter(([id]) => !pages?.ids.includes(id as never))
-    .map(([, file]) => file)
+    .flatMap(([id, file]) =>
+      id === "services" ? [file, "src/pages/services/[slug].astro"] : [file]
+    )
   return [
     // OI2's tray: a library direction is the owner's pick; `custom` is their
     // words; `builder` leaves it to the plan, so says nothing.

@@ -8,9 +8,9 @@ import {
   INDUSTRY_PACK,
   type IndustryPackId,
   LEGACY_FONT_PAIR,
-  PAGES,
   PALETTES,
   type PageId,
+  PLANNED_PAGES,
   SECTION_VARIANTS,
   type SectionKind,
 } from "@workspace/contracts"
@@ -136,6 +136,8 @@ export function wantedPages(facts: readonly FactRecord[]): PageId[] {
   const picked = factValue(facts, "site.pages")?.ids
   if (!picked) return STARTER_PAGES
   const want = new Set<PageId>([...picked, ...FIXED_PAGES])
+  // A page for each service comes with the services page; nobody picks it.
+  if (want.has("services")) want.add("service")
   return STARTER_PAGES.filter((page) => want.has(page))
 }
 
@@ -502,7 +504,7 @@ export function fallbackBlueprint(input: {
       ? (PALETTES.find((p) => p.id === palette.id)?.label ?? palette.id)
       : "your own"
   const pageLabel = (page: PageId) =>
-    PAGES.find((p) => p.id === page)?.label ?? page
+    PLANNED_PAGES.find((p) => p.id === page)?.label ?? page
   const features = [
     `The ${direction.label} look: ${pairLabel} type and ${colours} colours`,
     ...pages.map(({ page, sections }) =>

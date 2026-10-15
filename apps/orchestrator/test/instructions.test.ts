@@ -214,8 +214,24 @@ describe("the parallel first build", () => {
     expect(owned.length).toBeGreaterThan(0)
     expect(new Set(owned).size).toBe(owned.length)
     expect(copyFields(fanPlan)).toContain("homeTitle")
-    expect(pageTasks(fanPlan).map((t) => t.page)).toEqual(
+    expect(copyFields(fanPlan)).not.toContain("serviceTitle")
+    expect([...new Set(pageTasks(fanPlan).map((t) => t.page))]).toEqual(
       fanPlan.pages.map((p) => p.page)
+    )
+    // One task per service page, each owning only its own service's fields.
+    const services = pageTasks(fanPlan, 3).filter((t) => t.page === "service")
+    expect(services.map((t) => t.service)).toEqual([1, 2, 3])
+    expect(services[1]?.fields).toEqual(
+      expect.arrayContaining([
+        "service2Heading",
+        "service2Title",
+        "service2Detail",
+        "service2Faq4Answer",
+        "service2CtaBody",
+      ])
+    )
+    expect(services[1]?.fields.every((f) => f.startsWith("service2"))).toBe(
+      true
     )
   })
 
@@ -250,13 +266,28 @@ describe("the parallel first build", () => {
   })
 
   it("sends at most four tasks a turn, every page once and the copy writer once", () => {
-    const groups = taskGroups(fanPlan)
+    const groups = taskGroups(fanPlan, 5)
     expect(groups.every((g) => g.length <= FAN_OUT)).toBe(true)
     const all = groups.flat()
     expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
+    const pages = all
+      .filter((t) => t.agent === "page")
+      .map((t) => pageOfPrompt(t.prompt))
+    expect(pages.filter((p) => p !== "service")).toEqual(
+      fanPlan.pages.map((p) => p.page).filter((p) => p !== "service")
+    )
+    // Five service pages, in groups after every other task, so each reads
+    // the name the home page's builder wrote.
+    expect(pages.filter((p) => p === "service")).toHaveLength(5)
+    const firstService = groups.findIndex((g) =>
+      g.some((t) => pageOfPrompt(t.prompt) === "service")
+    )
     expect(
-      all.filter((t) => t.agent === "page").map((t) => pageOfPrompt(t.prompt))
-    ).toEqual(fanPlan.pages.map((p) => p.page))
+      groups
+        .slice(firstService)
+        .flat()
+        .every((t) => pageOfPrompt(t.prompt) === "service")
+    ).toBe(true)
   })
 
   it("tells a planned first build's lead to fan out, and no one else", () => {

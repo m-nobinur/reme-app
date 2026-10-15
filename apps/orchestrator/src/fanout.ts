@@ -49,9 +49,11 @@ const camel = (page: string) =>
 
 /** The copy writer's fields: each planned page's SEO title and description, and the FAQ entries. */
 export function copyFields(plan: Blueprint): string[] {
-  const faq = plan.pages.some((p) => p.sections.some((s) => s.kind === "faq"))
+  // Each service page's title, description and questions are its own task's.
+  const pages = plan.pages.filter((p) => p.page !== "service")
+  const faq = pages.some((p) => p.sections.some((s) => s.kind === "faq"))
   return [
-    ...plan.pages.flatMap(({ page }) => [
+    ...pages.flatMap(({ page }) => [
       `${camel(page)}Title`,
       `${camel(page)}Description`,
     ]),
@@ -65,21 +67,45 @@ export function copyFields(plan: Blueprint): string[] {
   ]
 }
 
+type PageTask = { page: PageId; fields: string[]; service?: number }
+
+/** The most services a site shows, so the most service pages. */
+export const SERVICES_MAX = 6
+
+/** How many service pages a build writes: one per offering, six at most. */
+export const serviceCount = (brief: Brief) =>
+  Math.min(
+    SERVICES_MAX,
+    (
+      brief.snapshot.facts.find((f) => f.key === "business.offerings")?.value as
+        | { items?: unknown[] }
+        | undefined
+    )?.items?.length ?? SERVICES_MAX
+  )
+
 /**
  * Each planned page and the site fields its builder owns: the recipe's
  * fields for that page, less the copy writer's and less any an earlier page
- * in the plan already owns. Disjoint by construction.
+ * in the plan already owns. Disjoint by construction. The `service` entry
+ * plans every service's page at once and is one task per service, each
+ * owning that service's fields (`service2Heading` and the rest).
  */
 export function pageTasks(
-  plan: Blueprint
-): { page: PageId; fields: string[] }[] {
+  plan: Blueprint,
+  services = SERVICES_MAX
+): PageTask[] {
   const taken = new Set(copyFields(plan))
-  return plan.pages.map(({ page }) => {
+  return plan.pages.flatMap(({ page }): PageTask[] => {
     const fields = (RECIPES.pages[page]?.fields ?? []).filter(
       (f) => !taken.has(f)
     )
     for (const f of fields) taken.add(f)
-    return { page, fields }
+    if (page !== "service") return [{ page, fields }]
+    return Array.from({ length: services }, (_, i) => ({
+      page,
+      service: i + 1,
+      fields: fields.filter((f) => new RegExp(`^service${i + 1}[A-Z]`).test(f)),
+    }))
   })
 }
 
@@ -87,25 +113,39 @@ export function pageTasks(
 export const pageOfPrompt = (prompt: string | undefined) =>
   /^Page ([a-z_]+)\./.exec(prompt ?? "")?.[1] ?? null
 
-/** The task prompts, in the groups the lead sends them: one turn per group. */
+/**
+ * The task prompts, in the groups the lead sends them: one turn per group.
+ * The service pages go last, in groups of their own, so each reads the
+ * service's name and card that the home page's builder wrote.
+ */
 export function taskGroups(
-  plan: Blueprint
+  plan: Blueprint,
+  services = SERVICES_MAX
 ): { agent: "page" | "copy"; prompt: string }[][] {
-  const tasks = [
-    ...pageTasks(plan).map(({ page, fields }) => ({
-      agent: "page" as const,
-      prompt: `Page ${page}. Your layout entry: layout.${page}. Your fields: ${fields.join(", ") || "none beyond the layout entry"}.`,
-    })),
+  const tasks = pageTasks(plan, services)
+  const first = [
+    ...tasks
+      .filter((t) => t.service === undefined)
+      .map(({ page, fields }) => ({
+        agent: "page" as const,
+        prompt: `Page ${page}. Your layout entry: layout.${page}. Your fields: ${fields.join(", ") || "none beyond the layout entry"}.`,
+      })),
     {
       agent: "copy" as const,
       prompt: `SEO and FAQ copy. Your fields: ${copyFields(plan).join(", ")}.`,
     },
   ]
-  const groups: (typeof tasks)[] = []
-  for (let i = 0; i < tasks.length; i += FAN_OUT) {
-    groups.push(tasks.slice(i, i + FAN_OUT))
-  }
-  return groups
+  const last = tasks
+    .filter((t) => t.service !== undefined)
+    .map(({ service, fields }) => ({
+      agent: "page" as const,
+      prompt: `Page service. Service ${service}'s own page, /services/<slug of service${service}Name>/, laid out by layout.service, which you leave as it is. If service${service}Name is empty, leave your fields empty and stop. Your fields: ${fields.join(", ")}.`,
+    }))
+  const chunk = <T>(list: T[]) =>
+    Array.from({ length: Math.ceil(list.length / FAN_OUT) }, (_, i) =>
+      list.slice(i * FAN_OUT, (i + 1) * FAN_OUT)
+    )
+  return [...chunk(first), ...chunk(last)]
 }
 
 /** The pack's CTA and headings from src/recipes.json, as this build reads them. */
@@ -131,7 +171,7 @@ const PARALLEL =
 
 /** The lead's plan of work for a planned first build, after the Blueprint. */
 export function leadLines(brief: Brief, plan: Blueprint): string[] {
-  const groups = taskGroups(plan)
+  const groups = taskGroups(plan, serviceCount(brief))
   return [
     "How you build it, in three steps:",
     "1. The shell, yourself. In src/site-config.ts set direction, font and colour and write the `layout` export exactly as the Blueprint says, then the fields every page shares: businessName, phone, email, logo, the nav labels and ctaLabel. Call checkpoint.",
