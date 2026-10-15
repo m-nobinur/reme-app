@@ -155,8 +155,8 @@ test("five service cards fill rows of 3 and 2, the last row centred", async () =
   }
 }, 120_000)
 
-// bright_local sets its accent clause on one line for the stroke beneath it; a
-// long clause pushed the whole column wider than a phone.
+// A long accent clause once pushed the whole column wider than a phone. The decorative motif
+// svg bleeds past the edge by design and is clipped, so only text and boxes count.
 test("a long accent clause in the areas heading stays inside a 390 px phone", async () => {
   const wide = await build({
     site: {
@@ -179,7 +179,7 @@ test("a long accent clause in the areas heading stays inside a 390 px phone", as
     ).toBeLessThanOrEqual(390)
     const right = await page.evaluate(() =>
       Math.max(
-        ...[...document.querySelectorAll(".area-section *")].map(
+        ...[...document.querySelectorAll(".area-section :not(svg, svg *)")].map(
           (el) => el.getBoundingClientRect().right
         )
       )
@@ -190,3 +190,53 @@ test("a long accent clause in the areas heading stays inside a 390 px phone", as
     clean(wide)
   }
 }, 120_000)
+
+// An accent clause once ran out of its column at 1440 and over the next one.
+// Every heading wraps inside the box that holds it, at any width.
+test.each(["bright_local", "calm_daylight"] as const)(
+  "long accented headings stay inside their column at 1440, 1024 and 390 (%s)",
+  async (direction) => {
+    const long = "*the careful cleaners of Bristol, Bath and Clevedon*"
+    const heavy = await build({
+      site: {
+        ...FILLED,
+        direction,
+        heroHeading: `Homes kept bright by ${long}`,
+        homeAboutHeading: `Why Bristol homes keep booking ${long}`,
+        valuePropsHeading: `Why Bristol homes keep booking ${long}`,
+        serviceCardsHeading: `Cleans for every room by ${long}`,
+        serviceAreaHeading: `Cleaners working in your Bristol ${long}`,
+        areaTowns: "Bristol\nBath\nClevedon",
+        areaBody: "We work in Bristol, Bath and Clevedon.",
+      },
+    })
+    const { server: other, origin: base } = await serve(heavy.dist)
+    try {
+      if (!browser) throw new Error("the browser did not start")
+      for (const width of [1440, 1024, 390]) {
+        const page = await (
+          await browser.newContext({ viewport: { width, height: 900 } })
+        ).newPage()
+        await page.goto(`${base}/`)
+        const overflowing = await page.evaluate(() =>
+          [...document.querySelectorAll("h1, h2")].flatMap((h) => {
+            const rect = h.getBoundingClientRect()
+            const parent = h.parentElement?.getBoundingClientRect()
+            const out =
+              h.scrollWidth > h.clientWidth + 1 ||
+              (parent !== undefined && rect.right > parent.right + 1)
+            return out ? [h.textContent?.trim().slice(0, 40) ?? ""] : []
+          })
+        )
+        expect(overflowing, `${direction} at ${width}`).toEqual([])
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth)
+        ).toBeLessThanOrEqual(width)
+      }
+    } finally {
+      other.close()
+      clean(heavy)
+    }
+  },
+  120_000
+)
