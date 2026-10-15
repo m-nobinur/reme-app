@@ -1,0 +1,84 @@
+---
+// The service area as a line drawing (src/area-map.ts): the towns placed
+// around the main one inside two rings and a loose loop, a filled pin on the
+// main town, and a small card naming the area. Decoration only, so it is
+// hidden from assistive technology; the towns are real text beside it. Drawn
+// in the palette's tokens (site.css), so it reads on a light or a deep band.
+import { AREA_BOX, areaMap } from "../area-map"
+
+interface Props {
+  towns: string[]
+  /** The area's own words, for the loop's shape when there are no towns. */
+  seed?: string
+  /** The card's small label and its line. No line, no card. */
+  label?: string
+  line?: string
+  class?: string
+}
+
+const {
+  towns,
+  seed = "",
+  label = "",
+  line = "",
+  class: className,
+} = Astro.props
+const map = areaMap(towns, seed)
+const { x, y } = map.centre
+---
+
+<div class:list={["area-art", className]} aria-hidden="true">
+  <svg
+    viewBox={`0 0 ${AREA_BOX.width} ${AREA_BOX.height}`}
+    fill="none"
+    focusable="false"
+  >
+    <circle class="area-ring" cx={x} cy={y} r="200"></circle>
+    <circle class="area-ring area-ring-dashed" cx={x} cy={y} r="150"></circle>
+    <path class="area-loop" d={map.loop}></path>
+    {map.links.map((d) => <path class="area-link" d={d} />)}
+    {
+      map.points.map((p) => (
+        <>
+          <circle class="area-point" cx={p.x} cy={p.y} r="4" />
+          <text
+            class="area-label"
+            x={p.x}
+            y={p.above ? p.y - 11 : p.y + 21}
+            text-anchor="middle"
+          >
+            {p.name}
+          </text>
+        </>
+      ))
+    }
+    <path
+      class="area-pin"
+      d={`M${x} ${y + 2}c-14-16-22-26-22-38a22 22 0 1 1 44 0c0 12-8 22-22 38Z`}
+    ></path>
+    <path
+      class="area-spark"
+      d={`M${x} ${y - 44}v16M${x - 8} ${y - 36}h16M${x - 5.7} ${y - 41.7}l11.4 11.4M${x + 5.7} ${y - 41.7}l-11.4 11.4`}
+    ></path>
+    {
+      map.centre.name && (
+        <text
+          class="area-label area-label-main"
+          x={x}
+          y={y + 26}
+          text-anchor="middle"
+        >
+          {map.centre.name}
+        </text>
+      )
+    }
+  </svg>
+  {
+    line && (
+      <div class="area-card">
+        {label && <p class="area-card-label">{label}</p>}
+        <p class="area-card-line">{line}</p>
+      </div>
+    )
+  }
+</div>

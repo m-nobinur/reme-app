@@ -1,5 +1,6 @@
 ---
-import Motif from "../../layouts/Motif.astro"
+import { areaDeep, areaTowns, townNotes } from "../../area-map"
+import AreaArt from "../../layouts/AreaArt.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
@@ -11,25 +12,72 @@ interface Props {
 }
 
 const { heading = "" } = Astro.props
-const towns = site.areaTowns
-  .split("\n")
-  .map((line) => line.trim())
-  .filter(Boolean)
-const place = towns.length > 0 ? "" : site.serviceAreaText
+const towns = areaTowns(site.areaTowns)
+const onPage = Astro.url.pathname === "/service-area/"
+// The area in its own words where no towns stand for it, and always on its page.
+const place = onPage || towns.length === 0 ? site.serviceAreaText : ""
 // Off the service area page, the section points to it.
-const more =
-  site.areaLink &&
-  hasRoute("/service-area/") &&
-  Astro.url.pathname !== "/service-area/"
+const more = site.areaLink && hasRoute("/service-area/") && !onPage
+// On its own page the drawing is the header's (Sections.astro), so the
+// section lists the towns, each with its line when the copy gives one.
+const deep = areaDeep(site.direction) && !onPage
+const notes = onPage ? townNotes(site.areaTownNotes) : new Map()
+const hours = site.weekdayHours
+  ? `${site.weekdayHoursLabel} ${site.weekdayHours}`.trim()
+  : ""
 ---
 
 {
   (towns.length > 0 || place || site.areaBody || site.serviceArea) && (
-    <section class="band area-section">
+    <section
+      class:list={[
+        "band area-section",
+        deep ? "area-deep" : "area-light",
+        onPage && "area-page",
+      ]}
+    >
       <div class="wrap area-inner">
         <div class="area-copy">
           <SectionHead eyebrow={site.areaEyebrow} heading={heading} />
           {site.areaBody && <p class="area-body">{site.areaBody}</p>}
+          <dl class="area-facts">
+            <div class="area-fact">
+              <dt>
+                <span class="area-fact-icon">
+                  <Icon name="mapPin" />
+                </span>
+                <span class="area-fact-label">{site.areaPlaceLabel}</span>
+              </dt>
+              <dd>
+                {place && <p class="area-place">{place}</p>}
+                {towns.length > 0 && !onPage && (
+                  <ul class="area-towns">
+                    {towns.map((town) => (
+                      <li>
+                        <span data-copy="area_town">{town}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {site.serviceArea && (
+                  <p class="area-radius">{site.serviceArea}</p>
+                )}
+              </dd>
+            </div>
+            {hours && (
+              <div class="area-fact">
+                <dt>
+                  <span class="area-fact-icon">
+                    <Icon name="clock" />
+                  </span>
+                  <span class="area-fact-label">{site.areaHoursLabel}</span>
+                </dt>
+                <dd>
+                  <p>{hours}</p>
+                </dd>
+              </div>
+            )}
+          </dl>
           {more && (
             <p class="section-more">
               <a class="more-link" href="/service-area/">
@@ -38,26 +86,41 @@ const more =
             </p>
           )}
         </div>
-        <div class="area-places">
-          <Motif kind="pin" class="area-motif" />
-          {place && (
-            <p class="area-place">
-              <Icon name="mapPin" />
-              <span>{place}</span>
-            </p>
-          )}
-          {towns.length > 0 && (
-            <ul class="area-towns">
-              {towns.map((town) => (
-                <li>
-                  <Icon name="mapPin" />
-                  <span data-copy="area_town">{town}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {site.serviceArea && <p class="area-radius">{site.serviceArea}</p>}
-        </div>
+        {onPage ? (
+          towns.length > 0 && (
+            <div class="area-index">
+              {site.areaEyebrow && (
+                <p class="eyebrow" id="area-index-label">
+                  {site.areaEyebrow}
+                </p>
+              )}
+              <ul
+                class="area-index-list"
+                aria-labelledby={site.areaEyebrow ? "area-index-label" : undefined}
+              >
+                {towns.map((town) => (
+                  <li>
+                    <span class="area-index-town" data-copy="area_town">
+                      {town}
+                    </span>
+                    {notes.get(town.toLowerCase()) && (
+                      <span class="area-index-note">
+                        {notes.get(town.toLowerCase())}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        ) : (
+          <AreaArt
+            towns={towns}
+            seed={site.serviceAreaText}
+            label={site.areaCardLabel}
+            line={site.areaCardLine || site.serviceAreaText}
+          />
+        )}
       </div>
     </section>
   )

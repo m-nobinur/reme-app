@@ -40,6 +40,11 @@ props:
     required: false
     description: "Every page but home: with no photo the header is the plain page
       header, whatever the variant."
+  - name: deep
+    type: boolean
+    required: false
+    description: "A page header with an `art` slot (the service area's drawing) is a
+      cover: on the deep band when this is set."
 constraints:
   - One per page, first inside the layout.
   - Children are ActionLink elements only.
@@ -57,6 +62,9 @@ constraints:
     their icons, never an empty box.
   - Renders nothing when the heading, the lede and the actions are all empty.
   - eyebrow is for the home page, with site.industry.
+  - An inner page header with no photo and an `art` slot is a cover, the drawing
+    beside the text; the service area page fills it with the area drawing, and
+    deep puts it on the deep band.
   - image is the home page's, from site.heroImage and site.heroImageAlt; it
     renders only with both, and the same photo is not used again on the page.
 examples:
