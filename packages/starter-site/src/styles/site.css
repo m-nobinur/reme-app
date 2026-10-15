@@ -136,6 +136,8 @@ p {
       :has(+ .band-tint)
     )
 ) {
+  /* What the band is painted, for a drawing's label halo (.area-label). */
+  --band-ground: var(--brand-soft);
   background: var(--brand-soft);
 }
 
@@ -1815,6 +1817,7 @@ picture {
    tint of the accent. The service area page's cover wears it too. */
 .area-deep {
   --background: color-mix(in oklch, var(--brand) 34%, var(--ink));
+  --band-ground: var(--background);
   --foreground: var(--paper);
   --muted-foreground: color-mix(in oklch, var(--paper) 76%, var(--ink));
   --border: color-mix(in oklch, var(--paper) 24%, var(--ink));
@@ -1976,11 +1979,21 @@ picture {
   fill: var(--foreground);
 }
 
+/* A label wears a halo in its band's own colour, painted under the glyphs,
+   so a link or ring that passes behind it never runs through the text. */
 .area-label {
   fill: var(--muted-foreground);
   font-family: var(--font-sans);
   font-size: 14px;
   letter-spacing: 0.02em;
+  paint-order: stroke;
+  stroke: var(--band-ground, var(--background));
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.hero-cover.area-light {
+  --band-ground: var(--brand-soft);
 }
 
 .area-label-main {
