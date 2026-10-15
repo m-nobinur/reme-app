@@ -453,6 +453,98 @@ export function copyFindings(
   return found
 }
 
+/** A site field's gated section, by its name in src/site-config.ts. */
+const FIELD_KINDS: [RegExp, CopyKind][] = [
+  [/^homeIntro$/, "hero_lede"],
+  [/^service\dBody$/, "service_body"],
+  [/^service\dDetail$/, "service_detail"],
+  [/^(?:step|service\dStep)\dBody$/, "step_body"],
+  [/^(?:faq|service\dFaq)\dAnswer$/, "faq_answer"],
+]
+/** A page's SEO title or description field: homeTitle, service2Description and the rest. */
+const PAGE_META =
+  /^(?:home|about|services|serviceArea|contact|quote|service\d)(Title|Description)$/
+/** Fields that render an h1 or h2 inside <main>: every heading but the h3 and the chrome's. */
+const headingField = (name: string) =>
+  /(?:Heading|^service\dName)$/.test(name) &&
+  !/^(?:audience|footer\w+|notFound)Heading$/.test(name)
+
+/**
+ * The copy gate's field rules for one writer's own fields, read from
+ * src/site-config.ts before anything is built, so a page builder fixes its
+ * page in its own session instead of the lead in a repair round. `values` is
+ * every field on the site, siblings' included, so a heading is held against
+ * every other heading already written. Only filled fields are checked, except
+ * a closing band whose body is written and heading is not, which would show
+ * the home page's. `page` is the writer's page: the about body is counted
+ * only on the about page, where the gate counts it.
+ */
+export function fieldFindings(
+  values: Readonly<Record<string, string>>,
+  owned: readonly string[],
+  page?: string
+): string[] {
+  const found: string[] = []
+  let repeats = false
+  const filled = (name: string) => (values[name] ?? "").trim()
+  const headings = Object.keys(values).filter(
+    (name) => headingField(name) && filled(name)
+  )
+  for (const name of owned) {
+    const text = filled(name)
+    if (!text) {
+      const body = name.replace(/Heading$/, "Body")
+      if (/.CtaHeading$/.test(name) && owned.includes(body) && filled(body))
+        found.push(
+          `${name} is empty, so this page's closing band shows the home page's ctaHeading, a repeat; write this page's own`
+        )
+      continue
+    }
+    const kind = FIELD_KINDS.find(([pattern]) => pattern.test(name))?.[1]
+    const count = wordsOf(text).length
+    if (kind && count < COPY_WORDS[kind].min)
+      found.push(
+        `${name} has ${count} words; write ${COPY_WORDS[kind].aim[0]} to ${COPY_WORDS[kind].aim[1]}`
+      )
+    const meta = PAGE_META.exec(name)?.[1]
+    const chars = meta === "Title" ? TITLE_CHARS : DESCRIPTION_CHARS
+    if (meta && (text.length < chars.min || text.length > chars.max))
+      found.push(
+        `${name} is ${text.length} characters; write ${chars.min} to ${meta === "Title" ? chars.max : 160}`
+      )
+    if (!headingField(name)) continue
+    if (STOCK_HEADINGS.includes(plainText(text))) {
+      found.push(
+        `${name} "${text}" is a stock label; name this business's service, customer or place`
+      )
+      continue
+    }
+    const stems = stemsOf(text)
+    const other = headings.find(
+      (each) => each !== name && alike(stemsOf(filled(each)), stems)
+    )
+    if (other) {
+      repeats = true
+      found.push(
+        `${name} "${text}" repeats ${other} "${filled(other)}"; give it its own words`
+      )
+    }
+  }
+  if (page === "about" && owned.includes("overviewBody")) {
+    const body = `${filled("overviewBody") || filled("overview")} ${filled("audienceBody") || filled("audience")}`
+    const count = wordsOf(body).length
+    if (count > 0 && count < COPY_WORDS.about_body.min)
+      found.push(
+        `overviewBody and audienceBody have ${count} words together; write ${COPY_WORDS.about_body.aim[0]} to ${COPY_WORDS.about_body.aim[1]}, rephrasing every part of business.overview and business.audience`
+      )
+  }
+  if (repeats)
+    found.push(
+      `Headings already on the site: ${headings.map((h) => `"${filled(h)}"`).join(", ")}.`
+    )
+  return found
+}
+
 /**
  * The gate's rules as the lines the writer's brief carries, built from the
  * constants above so a threshold changed here changes the brief with it.

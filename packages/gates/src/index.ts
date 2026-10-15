@@ -44,6 +44,7 @@ export {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  fieldFindings,
   NEAR as HEADING_NEAR,
   STOCK_HEADINGS,
   TITLE_CHARS,

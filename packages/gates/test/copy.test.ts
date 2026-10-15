@@ -5,6 +5,7 @@ import {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  fieldFindings,
   HEADING_NEAR,
   TITLE_CHARS,
 } from "../src/index.ts"
@@ -465,5 +466,83 @@ describe("the copy gate", () => {
     const bad = [page("index.html", "x", "<h1>Services</h1><h2>Services</h2>")]
     expect(copyFindings(bad).length).toBeGreaterThan(0)
     expect(checkCopy(bad, false)).toMatchObject({ passed: true })
+  })
+})
+
+describe("the copy gate's field check, per writer before the build", () => {
+  // The confirming run's first gate (2026-10-15), as the fields that made it.
+  const site = {
+    ctaHeading: "Ready for a tidier garden?",
+    service2Name: "Garden clearance",
+    service2Heading: "Garden clearance across Bristol",
+    service1Name: "Regular garden maintenance",
+    service1Heading: "Regular garden maintenance",
+    service1CtaHeading: "",
+    service1CtaBody:
+      "Tell us about the garden and we will plan the first visit.",
+    aboutCtaHeading: "Ready for a tidier garden",
+    overviewBody: words(15),
+    audienceBody: words(12),
+    homeTitle: "x".repeat(55),
+    aboutTitle: "x".repeat(62),
+    step1Title: "Hi",
+    servicesHeading: "Our services",
+  }
+
+  it("finds what the gate would, in the writer's own fields only", () => {
+    const about = fieldFindings(
+      site,
+      ["aboutCtaHeading", "overviewBody", "audienceBody"],
+      "about"
+    )
+    expect(about[0]).toContain(
+      'aboutCtaHeading "Ready for a tidier garden" repeats ctaHeading'
+    )
+    expect(about[1]).toContain("have 27 words together; write 120 to 200")
+    expect(about[2]).toContain('Headings already on the site: "Ready for')
+    expect(
+      fieldFindings(
+        site,
+        ["service1Heading", "service1CtaHeading", "service1CtaBody"],
+        "service"
+      )
+    ).toEqual([
+      expect.stringContaining(
+        'service1Heading "Regular garden maintenance" repeats service1Name'
+      ),
+      expect.stringContaining("service1CtaHeading is empty"),
+      expect.stringContaining("Headings already on the site"),
+    ])
+    expect(
+      fieldFindings(site, [
+        "aboutTitle",
+        "homeTitle",
+        "step1Title",
+        "servicesHeading",
+      ])
+    ).toEqual([
+      "aboutTitle is 62 characters; write 50 to 60",
+      expect.stringContaining(
+        'servicesHeading "Our services" is a stock label'
+      ),
+    ])
+  })
+
+  it("passes fields that meet the gate, and counts the about body only on the about page", () => {
+    expect(
+      fieldFindings(
+        site,
+        ["service2Heading", "homeTitle", "overviewBody"],
+        "home"
+      )
+    ).toEqual([])
+    expect(fieldFindings(site, ["overviewBody"], "about")).toHaveLength(1)
+    expect(
+      fieldFindings(
+        { ...site, overviewBody: words(130) },
+        ["overviewBody"],
+        "about"
+      )
+    ).toEqual([])
   })
 })
