@@ -50,10 +50,13 @@ beforeAll(async () => {
         // The home hero's photo again, and the about page's: both must be dropped.
         contactImage: "/uploads/hero.jpg",
         contactImageAlt: "The hero's living room",
-        service1Image: "/uploads/weekly.jpg",
-        service1ImageAlt: "A tidy kitchen",
-        service2Image: "/uploads/about.jpg",
-        service2ImageAlt: "The about page's hallway",
+        service1HeaderImage: "/uploads/weekly.jpg",
+        service1HeaderImageAlt: "A tidy kitchen",
+        service2HeaderImage: "/uploads/about.jpg",
+        service2HeaderImageAlt: "The about page's hallway",
+        // A card's photo is never the header's: service 3 has a card photo only.
+        service3Image: "/uploads/weekly.jpg",
+        service3ImageAlt: "A card photo",
       },
       layout: TEXT_LED,
       files,
@@ -121,6 +124,8 @@ describe("a page header with a photo", () => {
     for (const file of [
       "contact/index.html",
       "services/deep-clean/index.html",
+      // Only a card photo: the header is the text one, not the card's picture.
+      "services/end-of-tenancy/index.html",
     ]) {
       const header = headerOf(pages.find((p) => p.file === file)?.html ?? "")
       expect(header, file).toContain("hero-page")

@@ -6,9 +6,10 @@ type Photo = { src: string; alt: string }
 
 /**
  * The photo each inner page's header shows, by page: "about", "contact" or
- * "service:<id>". A header takes its photo only when the build has the file
- * and an alt for it, and never a photo the home hero or an earlier header
- * already shows: two pages' first screens must not be the same picture.
+ * "service:<id>". A service header takes its own photo, never its card's. A
+ * header takes its photo only when the build has the file and an alt for it,
+ * and never a photo the home hero or an earlier header already shows: two
+ * pages' first screens must not be the same picture.
  */
 const photos = new Map<string, Photo>()
 const shown = new Set([site.heroImage])
@@ -17,7 +18,7 @@ const candidates: [string, Photo][] = [
   ["contact", { src: site.contactImage, alt: site.contactImageAlt }],
   ...serviceItems.map((item): [string, Photo] => [
     `service:${item.id}`,
-    item.image,
+    item.headerImage,
   ]),
 ]
 for (const [key, photo] of candidates) {

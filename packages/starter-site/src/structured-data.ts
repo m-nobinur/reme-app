@@ -107,6 +107,10 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
       src: site[`service${n}Image`],
       alt: site[`service${n}ImageAlt`],
     },
+    headerImage: {
+      src: site[`service${n}HeaderImage`],
+      alt: site[`service${n}HeaderImageAlt`],
+    },
   }))
   .filter((item) => item.name || item.body)
   // An empty or unknown icon takes one from the service's own words, and no

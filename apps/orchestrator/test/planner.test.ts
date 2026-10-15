@@ -352,6 +352,8 @@ describe("page header photos", () => {
     const made = fallback(CLEANING)
     expect(made.images.map((s) => [s.id, s.page, s.section])).toEqual([
       ["home_hero", "home", "hero"],
+      ["service_1_card", "home", "service_cards"],
+      ["service_2_card", "home", "service_cards"],
       ["service_1_hero", "service", "hero"],
       ["service_2_hero", "service", "hero"],
     ])
@@ -361,7 +363,7 @@ describe("page header photos", () => {
       .find((p) => p.page === "service")
       ?.sections.find((s) => s.kind === "hero")
     expect(hero?.variant).toBe("split_frame")
-    expect(made.images[1]?.aspect).toBe("4:3")
+    expect(made.images[3]?.aspect).toBe("4:3")
     const owned = fallback([
       ...CLEANING,
       fact("media.uploads", {
@@ -393,6 +395,8 @@ describe("page header photos", () => {
     )
     expect(ordered.images.map((s) => s.id)).toEqual([
       "home_hero",
+      "service_1_card",
+      "service_2_card",
       "service_1_hero",
       "service_2_hero",
       "about_hero",
@@ -412,8 +416,51 @@ describe("page header photos", () => {
       ...made,
       images: [...made.images, header("about_hero", "about")],
     } as Blueprint).join("\n")
+    expect(lines).toContain(
+      "(site.service2HeaderImage and site.service2HeaderImageAlt)"
+    )
     expect(lines).toContain("(site.service2Image and site.service2ImageAlt)")
     expect(lines).toContain("(site.aboutImage and site.aboutImageAlt)")
+  })
+
+  it("spends eight photos on the hero and cards first, then headers, and a page past the budget has none", () => {
+    const six = fallback([
+      ...CLEANING.filter((f) => f.key !== "business.offerings"),
+      fact("business.offerings", {
+        items: ["One", "Two", "Three", "Four", "Five", "Six"],
+      }),
+    ])
+    const ordered = withOwnerChoices(
+      {
+        ...six,
+        images: [
+          ...six.images,
+          header("about_hero", "about"),
+          header("contact_hero", "contact"),
+        ],
+      } as Blueprint,
+      CLEANING
+    )
+    // Hero and six cards are seven photos; one header fits, nothing after it.
+    expect(ordered.images.map((s) => s.id)).toEqual([
+      "home_hero",
+      ...[1, 2, 3, 4, 5, 6].map((n) => `service_${n}_card`),
+      "service_1_hero",
+    ])
+    // Fewer services leave room for every header and then About.
+    const four = fallback([
+      ...CLEANING.filter((f) => f.key !== "business.offerings"),
+      fact("business.offerings", { items: ["One", "Two", "Three"] }),
+    ])
+    const kept = withOwnerChoices(
+      {
+        ...four,
+        images: [...four.images, header("about_hero", "about")],
+      } as Blueprint,
+      CLEANING
+    ).images.map((s) => s.id)
+    expect(kept).toHaveLength(8)
+    expect(kept.at(-1)).toBe("about_hero")
   })
 
   it("tells the model about header photos", () => {
@@ -423,6 +470,7 @@ describe("page header photos", () => {
       previous: null,
     })
     expect(system).toContain("service_<n>_hero")
+    expect(system).toContain("never reuses its card's photo")
     expect(system).toContain("about_hero and contact_hero")
   })
 })

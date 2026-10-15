@@ -309,10 +309,9 @@ const values = {
   service6For: "",
   /**
    * A photo for each service, by number: a path the build placed, as
-   * "/uploads/<id>.jpg", and its alt text. Shown only with both, on its card
-   * and in its own page's header, where it is never the home hero's photo. A fleet's
-   * photos are the owner's own uploads, never generated. Empty shows the
-   * service without a photo.
+   * "/uploads/<id>.jpg", and its alt text. Shown only with both, on its card.
+   * A fleet's photos are the owner's own uploads, never generated. Empty shows
+   * the service without a photo.
    */
   service1Image: "",
   service1ImageAlt: "",
@@ -326,6 +325,24 @@ const values = {
   service5ImageAlt: "",
   service6Image: "",
   service6ImageAlt: "",
+  /**
+   * A photo for each service page's header, by number, apart from its card's:
+   * a path the build placed and its alt text, shown only with both and never
+   * the home hero's photo. Empty gives the header its balanced text form; a
+   * header never takes the card's photo instead.
+   */
+  service1HeaderImage: "",
+  service1HeaderImageAlt: "",
+  service2HeaderImage: "",
+  service2HeaderImageAlt: "",
+  service3HeaderImage: "",
+  service3HeaderImageAlt: "",
+  service4HeaderImage: "",
+  service4HeaderImageAlt: "",
+  service5HeaderImage: "",
+  service5HeaderImageAlt: "",
+  service6HeaderImage: "",
+  service6HeaderImageAlt: "",
   /**
    * Each service's own page at /services/<slug>/, the slug made from its
    * name. Heading is its h1, naming the service and the area (never the bare
