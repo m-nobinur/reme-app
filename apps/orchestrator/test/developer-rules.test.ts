@@ -232,6 +232,15 @@ describe("the owner's onboarding choices in the rules", () => {
     }
   })
 
+  it("tells the Developer the starter's layouts and components are read-only, custom sections apart", () => {
+    for (const revising of [false, true]) {
+      const rules = text(revising)
+      expect(rules).toContain(
+        "Every file under src/layouts/ and src/components/, except your own custom sections in src/components/custom/, is the starter's and read-only"
+      )
+    }
+  })
+
   it("turns presets into values: the direction, the palette's roles, the font pair, the pages and the voice", () => {
     const rules = ownerChoices([
       fact("site.template", { id: "modern" }),
