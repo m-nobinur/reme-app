@@ -5,6 +5,7 @@ import {
   type FactRecord,
   FIXED_PAGES,
   FONT_PAIRS,
+  type ImageSlot,
   INDUSTRY_PACK,
   type IndustryPackId,
   LEGACY_FONT_PAIR,
@@ -190,7 +191,8 @@ const pickNotes = (facts: readonly FactRecord[]): string[] =>
 /**
  * The owner's answers applied over a plan, so the model cannot outvote them:
  * their design choices, and a card line for each picked page that became a
- * section or was left out, so nothing they picked goes without a word.
+ * section or was left out, so nothing they picked goes without a word. Code
+ * also sets each generated photo's aspect to its box (`fitImages`).
  */
 export function withOwnerChoices(
   blueprint: Blueprint,
@@ -206,6 +208,7 @@ export function withOwnerChoices(
     ...(owner.direction ? { direction: owner.direction } : {}),
     ...(owner.palette ? { palette: owner.palette } : {}),
     ...(owner.fonts ? { fonts: owner.fonts } : {}),
+    images: fitImages(blueprint),
     features: [
       ...features.slice(0, BLUEPRINT_FEATURES_MAX - notes.length),
       ...notes,
@@ -404,12 +407,49 @@ function variantFor(
 const cap = (text: string, max: number) =>
   text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}.`
 
-/** The hero takes a photo in every variant but `text_led`. */
-const PHOTO_HERO: Record<string, "16:9" | "4:3"> = {
-  wash: "16:9",
+/**
+ * The hero takes a photo in every variant but `text_led`, drawn at the shape
+ * of the box it renders in (starter `site.css`): wash's photo is the right
+ * half of the hero on a wide screen, about 1:1 to 5:4, and 5:4 under the copy
+ * on a phone; split_frame is 5:4; split_arch is 4:5; dark_center fills the
+ * hero behind the copy. A 16:9 wash photo lost 44% of its width to the crop.
+ */
+const PHOTO_HERO: Record<string, ImageSlot["aspect"]> = {
+  wash: "4:3",
   dark_center: "16:9",
-  split_arch: "4:3",
+  split_arch: "3:4",
   split_frame: "4:3",
+}
+
+/** The box a section's photo renders in, so a generated slot is drawn at the crop it shows. */
+function boxAspect(
+  kind: SectionKind,
+  variant: string | undefined
+): ImageSlot["aspect"] | undefined {
+  if (kind === "hero") return PHOTO_HERO[variant ?? ""]
+  // A fleet's 16:9 card is never generated: there a photo is a claim.
+  if (kind === "service_cards") return "4:3"
+  if (kind === "cta_band") return "21:9"
+  return undefined
+}
+
+/**
+ * Each generated slot at its box's aspect, whatever the model wrote, and a
+ * text side only where copy sits on the photo: a hero other than dark_center
+ * puts its copy beside the photo, so an empty third there is wasted frame.
+ */
+function fitImages(blueprint: Blueprint): Blueprint["images"] {
+  return blueprint.images.map((slot) => {
+    if (slot.source !== "generated") return slot
+    const variant = blueprint.pages
+      .find((p) => p.page === slot.page)
+      ?.sections.find((s) => s.kind === slot.section)?.variant
+    const aspect = boxAspect(slot.section, variant) ?? slot.aspect
+    const { text_side: _side, ...rest } = slot
+    return slot.section === "hero" && variant !== "dark_center"
+      ? { ...rest, aspect }
+      : { ...slot, aspect }
+  })
 }
 
 /**
@@ -660,7 +700,8 @@ export function plannerPrompt(input: {
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
-    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. The hero shows the core service or its result in the customer's space, never a street or skyline. Never generate one for about, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene; the alt says what it shows.",
+    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for about, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
+    "- Plan generated photos as one photographer's shot list for one shoot. The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: oven doors, hinges, ladders, hands holding tools.",
     "- With no uploads, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",

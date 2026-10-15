@@ -1,3 +1,4 @@
+import { PALETTES } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 import { applyPhotos } from "../src/photo-step.ts"
 
@@ -19,6 +20,8 @@ const {
   placeGenerated,
   QUALITY_MODELS,
 } = await import("../src/images.ts")
+const { accentOf, colourName, FRAMING, HOUSE_STYLE, STYLE_GUIDE } =
+  await import("../src/photo-style.ts")
 
 const ORG = "10000001-0000-4000-8000-000000000000"
 const PNG = btoa("not really a png")
@@ -54,6 +57,22 @@ function bucket(day = new Date()) {
 
 type Call = { url: string; body: Record<string, unknown> }
 
+const CLEAN = {
+  geometry: 0,
+  text: 0,
+  anatomy: 0,
+  clutter: 1,
+  grade: 0,
+  subject: 0,
+  style: 0,
+  note: "",
+}
+const WARPED = {
+  ...CLEAN,
+  geometry: 2,
+  note: "the oven door hangs off its side",
+}
+
 /** An OpenRouter that answers the prompt call and draws every image unless told to refuse. */
 function openrouter(
   options: {
@@ -61,12 +80,24 @@ function openrouter(
     /** Answers 429, the way a provider out of quota does. */
     down?: (body: Call["body"]) => boolean
     noPrompts?: boolean
+    /** The defect check's answers in turn, a clean one once they run out; null answers 503. */
+    verdicts?: (Record<string, unknown> | null)[]
   } = {}
 ) {
   const calls: Call[] = []
+  const verdicts = [...(options.verdicts ?? [])]
   const fetcher = (async (url: string, init: { body: string }) => {
     const body = JSON.parse(init.body) as Call["body"]
     calls.push({ url, body })
+    const messages = body.messages as { content: unknown }[] | undefined
+    if (messages && typeof messages[1]?.content !== "string") {
+      const verdict = verdicts.length ? verdicts.shift() : CLEAN
+      if (!verdict) return new Response("down", { status: 503 })
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify(verdict) } }],
+        usage: { cost: 0.0005 },
+      })
+    }
     if (url.endsWith("/chat/completions")) {
       if (options.noPrompts) return new Response("down", { status: 503 })
       const slots = JSON.parse(
@@ -131,6 +162,24 @@ const plan = (ids: [string, string][]) =>
 
 const BRIEF = { industry: "cleaning", imageStyle: "airy", palette: "sage" }
 const images = (calls: Call[]) => calls.filter((c) => c.url.endsWith("/images"))
+const checks = (calls: Call[]) =>
+  calls.filter(
+    (c) =>
+      c.url.endsWith("/chat/completions") &&
+      typeof (c.body.messages as { content: unknown }[])[1]?.content !==
+        "string"
+  )
+const drawLines = async (run: () => Promise<unknown>) => {
+  const log = vi.spyOn(console, "log").mockReturnValue(undefined)
+  try {
+    await run()
+    return log.mock.calls
+      .map(([line]) => JSON.parse(String(line)))
+      .filter((l) => l.type === "photos.draw")
+  } finally {
+    log.mockRestore()
+  }
+}
 
 describe("the photo director", () => {
   it("draws the hero at 2K first, the rest at 1K with the hero as a reference, and stores them", async () => {
@@ -178,16 +227,147 @@ describe("the photo director", () => {
     ])
     const [key] = [...sites.objects.keys()]
     expect(key).toMatch(new RegExp(`^generated/${ORG}/[0-9a-f-]{36}\\.png$`))
-    expect([...sites.objects.values()][0]?.meta).toMatchObject({
-      model: QUALITY_MODELS[0]?.id,
-      cost_usd: "0.034",
+    const meta = [...sites.objects.values()][0]?.meta
+    expect(meta?.model).toBe(QUALITY_MODELS[0]?.id)
+    // The draw and its defect check.
+    expect(Number(meta?.cost_usd)).toBeCloseTo(0.0345)
+    // GPT Image is asked for JPEG; a model that 400s on `size` gets neither.
+    expect(drawn[0]?.body).toMatchObject({ output_format: "jpeg" })
+    const second = openrouter({ down: (b) => b.model === FAST_MODELS[0]?.id })
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([["kitchen", "service_cards"]]),
+      brief: BRIEF,
+      fetch: second.fetcher,
     })
+    const recraft = images(second.calls)[1]?.body
+    expect(recraft?.model).toBe(FAST_MODELS[1]?.id)
+    expect(recraft?.size).toBeUndefined()
+    expect(recraft?.output_format).toBeUndefined()
   })
 
-  it("hands the hero reference only to a fast model that reads it, after the cheaper one is down", async () => {
-    const first = FAST_MODELS[0]?.id
+  it("names a brand colour in words a painter would use", () => {
+    const named = (id: string) =>
+      colourName(PALETTES.find((p) => p.id === id)?.primary ?? "")
+    expect(named("sage")).toBe("muted green")
+    expect(named("forest")).toBe("deep green")
+    expect(named("graphite")).toBe("muted blue")
+    expect(named("sunset")).toMatch(/^orange$/)
+    expect(named("onyx")).toBe("charcoal")
+    const midnight = PALETTES.find((p) => p.id === "midnight")?.primary
+    expect(accentOf(`the owner's brand colour ${midnight}`)).toMatch(/^blue$/)
+    expect(accentOf("forest")).toBeNull()
+  })
+
+  it("writes every prompt in the house style, framed for its slot", async () => {
+    const { calls, fetcher } = openrouter()
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["kitchen", "service_cards"],
+      ]),
+      brief: {
+        industry: "cleaning",
+        imageStyle: "airy",
+        palette: `Sage: primary ${PALETTES.find((p) => p.id === "sage")?.primary}`,
+      },
+      fetch: fetcher,
+    })
+    const writer = calls.find((c) => c.url.endsWith("/chat/completions"))
+    const system = String(
+      (writer?.body.messages as { content: string }[] | undefined)?.[0]?.content
+    )
+    expect(system).toContain(STYLE_GUIDE)
+    expect(system).toContain("homes and offices just cleaned")
+    const [hero, card] = images(calls).map((c) => String(c.body.prompt))
+    for (const prompt of [hero, card]) {
+      expect(prompt).toContain(HOUSE_STYLE)
+      expect(prompt).toContain("muted green only in a plant")
+    }
+    expect(hero).toContain(FRAMING.hero)
+    expect(card).toContain(FRAMING.card)
+    // The scene leads, where image models weigh words most.
+    expect(card?.startsWith("A bright room for kitchen")).toBe(true)
+  })
+
+  it("checks each photo and redraws a defect once on the next model, naming it", async () => {
+    const { calls, fetcher } = openrouter({ verdicts: [WARPED] })
+    const lines = await drawLines(async () => {
+      const out = await directPhotos({
+        env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+        orgId: ORG,
+        plan: plan([["oven", "service_cards"]]),
+        brief: BRIEF,
+        fetch: fetcher,
+      })
+      expect(out[0]).toMatchObject({ status: "generated" })
+      // Both draws and both checks were paid for.
+      expect(out[0]?.cost_usd).toBeCloseTo(0.069)
+    })
+    expect(images(calls).map((c) => c.body.model)).toEqual([
+      FAST_MODELS[0]?.id,
+      FAST_MODELS[1]?.id,
+    ])
+    expect(String(images(calls)[1]?.body.prompt)).toContain(
+      "avoid it: the oven door hangs off its side."
+    )
+    // The checker saw the picture and the scene it was meant to show.
+    const seen = (
+      checks(calls)[0]?.body.messages as { content: unknown }[] | undefined
+    )?.[1]?.content as {
+      type: string
+      text?: string
+      image_url?: { url: string }
+    }[]
+    expect(seen[0]?.text).toContain("A bright room for oven")
+    expect(seen[1]?.image_url?.url).toBe(`data:image/png;base64,${PNG}`)
+    expect(lines.map((l) => [l.model, l.defects, l.check?.geometry])).toEqual([
+      [FAST_MODELS[0]?.id, ["geometry"], 2],
+      [FAST_MODELS[1]?.id, [], 0],
+    ])
+  })
+
+  it("leaves the section its no-photo layout after a second defect", async () => {
+    const { calls, fetcher } = openrouter({ verdicts: [WARPED, WARPED] })
+    const sites = bucket()
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([["oven", "service_cards"]]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    expect(out[0]).toMatchObject({
+      status: "fallback",
+      reason: "defect: the oven door hangs off its side",
+    })
+    expect(images(calls)).toHaveLength(2)
+    expect(sites.objects.size).toBe(0)
+  })
+
+  it("ships a photo unchecked when the checker is down", async () => {
+    const { fetcher } = openrouter({ verdicts: [null] })
+    const lines = await drawLines(async () => {
+      const out = await directPhotos({
+        env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+        orgId: ORG,
+        plan: plan([["kitchen", "service_cards"]]),
+        brief: BRIEF,
+        fetch: fetcher,
+      })
+      expect(out[0]?.status).toBe("generated")
+    })
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ check: null, defects: null })
+  })
+
+  it("hands the hero reference only to a fast model that reads it, once those before it are down", async () => {
+    const blind = FAST_MODELS.filter((m) => !m.refs).map((m) => m.id)
     const { calls, fetcher } = openrouter({
-      down: (body) => body.model === first,
+      down: (body) => blind.includes(String(body.model)),
     })
     await directPhotos({
       env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
@@ -199,9 +379,13 @@ describe("the photo director", () => {
       brief: BRIEF,
       fetch: fetcher,
     })
-    const card = images(calls).slice(1)
+    // The hero's chain lost Flare too, so Muse drew it; the card skips Flare
+    // (down for the build), Recraft is down, and Gemini draws with the hero.
+    const card = images(calls).filter((c) =>
+      String(c.body.prompt).includes("kitchen")
+    )
     expect(card.map((c) => c.body.model)).toEqual([
-      first,
+      FAST_MODELS[1]?.id,
       FAST_MODELS.find((m) => m.refs)?.id,
     ])
     expect(card[0]?.body.input_references).toBeUndefined()
@@ -276,12 +460,11 @@ describe("the photo director", () => {
       ["hero", "fallback", "http 400"],
       ["team", "fallback", "claim section"],
     ])
-    // The hero tried three models (full subject, then the simplified one); the team never.
-    expect(images(calls).map((c) => c.body.model)).toEqual([
-      QUALITY_MODELS[0]?.id,
-      QUALITY_MODELS[1]?.id,
-      QUALITY_MODELS[2]?.id,
-    ])
+    // The hero tried its own chain only (full subject, then the simplified
+    // one), never a fast model that would draw it too small; the team never.
+    expect(images(calls).map((c) => c.body.model)).toEqual(
+      QUALITY_MODELS.map((m) => m.id)
+    )
     expect(String(images(calls)[1]?.body.prompt)).toContain("a sunlit hero")
     expect(String(images(calls)[1]?.body.prompt)).not.toContain("with a plant")
   })

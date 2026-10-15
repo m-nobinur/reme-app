@@ -2,14 +2,17 @@ import type { Blueprint, ImageSlot } from "@workspace/contracts"
 import { MODELS, ROLES } from "@workspace/facade"
 import { generatedImageFindings, limit } from "@workspace/gates"
 import { z } from "zod"
+import { framingOf, houseLine, STYLE_GUIDE, settingFor } from "./photo-style.ts"
 import { photoKey, SITE_ROOT } from "./revise.ts"
 
 /**
  * The photo director (ADR-039). Runs in this Worker, never in the sandbox,
  * whose egress is the npm registry only and which holds no key (ADR-031).
- * One Haiku call writes the prompts, a chain of image models draws each slot
- * through OpenRouter's images endpoint (`QUALITY_MODELS` for the hero,
- * `FAST_MODELS` for the rest), and the bytes land in the site bucket under
+ * One Haiku call writes the prompts under the house style (`photo-style.ts`),
+ * a chain of image models draws each slot through OpenRouter's images
+ * endpoint (`QUALITY_MODELS` for the hero, `FAST_MODELS` for the rest), a
+ * Haiku vision call checks each picture for defects (one redraw on the next
+ * model, then the fallback), and the bytes land in the site bucket under
  * `generated/{org}/{id}.{ext}`. A build never fails for a photo: every slot
  * that cannot be filled comes back `fallback` and the section takes its
  * no-image variant.
@@ -19,34 +22,49 @@ import { photoKey, SITE_ROOT } from "./revise.ts"
  * cost as metadata, and the day's generations are the objects uploaded today.
  *
  * ponytail: the daily count lists R2 and reads `uploaded`, so it is eventually
- * consistent and counts only photos that were kept. A counter row in
- * `packages/db` once a second Worker generates for the same org.
+ * consistent and counts only photos that were kept. A draw the defect check
+ * turned down is paid for and not counted, but a slot redraws once at most,
+ * so a build pays for at most 2 x MAX_PER_BUILD draws and a day 2 x
+ * MAX_PER_DAY. A counter row in `packages/db` once a second Worker
+ * generates for the same org, or paid draws need an exact cap.
  */
 
 type PhotoModel = {
   id: string
-  /** Takes `input_references`. */
+  /** Takes `input_references`, and is handed them. */
   refs: boolean
+  /** Honours `size` and `output_format` (GPT Image); Recraft answers 400 to `size`. */
+  sized: boolean
 }
 
 /**
- * The hero sets the grade the rest match, so it gets the best picture. One
- * draw each at 2K 16:9 with a reference, 2026-10-15, cheapest and fastest
- * first. Left out for cost and speed: Flux 3 (39.0 s, $0.10), Gemini 3.1 Flash
- * Image (22.6 s, $0.10) and, from the fast chain, Hunyuan Image 3.5 (11.1 s,
- * $0.024). Nano Banana 2.1 is out: its only provider, Google AI Studio,
- * answers 429.
+ * The hero sets the grade the rest match, so it gets the best picture, and
+ * only from a model that draws it at its rendered width x 2: a fast model's
+ * "2K" was 1344 x 768 (Recraft) or a 400 (Gemini Flash Lite), so a hero
+ * neither of these can draw takes the text layout instead of a blurry photo.
+ * Bake-off 2026-10-15 under the house style, one hero each, checked by the
+ * defect check and by eye beside spotless-templates.lovable.app: Flare was
+ * the closest to the reference and clean. Sunburst is out: 198 s at
+ * 2560 x 1440 timed out to Muse every time.
  */
 export const QUALITY_MODELS: readonly PhotoModel[] = [
-  { id: "openai/gpt-image-2.5-flare", refs: true }, // 19.8 s, $0.012, 1536 px wide
-  { id: "openai/gpt-image-2.5-sunburst", refs: true }, // 21.6 s, $0.012, 1536 px wide; 198 s at 2560 x 1440, so it times out to Muse
-  { id: "meta/muse-image", refs: true }, // 25.3 s, $0.010; drew 3:2 when asked 16:9
+  { id: "openai/gpt-image-2.5-flare", refs: true, sized: true }, // 20.2 to 23.3 s, $0.0079 at 2560 x 1440, $0.0118 at 2560 x 1920; no defect
+  { id: "meta/muse-image", refs: true, sized: false }, // 17.4 s, $0.010; draws 1920 x 1280 (3:2) whatever the aspect
 ]
-/** Every other slot, fastest and cheapest first. One draw each at 1K 4:3, 2026-10-15. */
+/**
+ * Every other slot. Same bake-off, three cards a model in a cleaning set and
+ * three in a landscaping set: Flare drew the cleanest, most reference-like
+ * set with no defect, for Recraft's price but slower; Recraft is the fast
+ * fallback (two cards with a minor flaw, none failing); Gemini Flash Lite
+ * drew clean cards at five times the cost and once the wrong subject. Muse
+ * drew one unbuildable basin and always 3:2. Flare takes references, but a
+ * card with the hero beside it cost $0.034 against $0.007: the shared style
+ * line keeps the set together, so it draws without.
+ */
 export const FAST_MODELS: readonly PhotoModel[] = [
-  { id: "recraft/recraft-v4.1-flash", refs: false }, // 5.4 s, $0.007
-  { id: "google/gemini-3.1-flash-lite-image", refs: true }, // 4.8 s, $0.034
-  { id: "bytedance-seed/seedream-5-0-flash", refs: true }, // 12.3 s, $0.018
+  { id: "openai/gpt-image-2.5-flare", refs: false, sized: true }, // 14.1 to 19.4 s (one 58 s), $0.0071 to $0.0073, 1536 x 1152
+  { id: "recraft/recraft-v4.1-flash", refs: false, sized: false }, // 2.1 to 15.4 s, $0.007, 1216 x 896
+  { id: "google/gemini-3.1-flash-lite-image", refs: true, sized: false }, // 4.0 to 6.0 s, $0.034, 1200 x 896; 1K only
 ]
 /**
  * The hero's pixel size by aspect, 2560 px on the long edge in multiples of
@@ -67,22 +85,22 @@ const HERO_SIZE: Record<Slot["aspect"], string> = {
 const TRIES = 3
 
 /**
- * The hero's chain, then the fast one in its listed order. A slot with
- * references to match does not reorder it: the cheapest model draws first
- * without them (the shared style line keeps the set coherent), and a model
- * further down gets them only if it takes them. A lone redraw has no style
- * line and only its siblings to match, so there the models that read
- * references go first.
+ * The hero draws on its own chain only (see `QUALITY_MODELS`); every other
+ * slot on the fast one in its listed order. A slot with references to match
+ * does not reorder it: the first model draws without them (the shared style
+ * line keeps the set coherent), and a model further down gets them only if
+ * it takes them. A lone redraw has no style line and only its siblings to
+ * match, so there the models that read references go first.
  */
-const chainFor = (hero: boolean, redraw: boolean): PhotoModel[] => [
-  ...(hero ? QUALITY_MODELS : []),
-  ...(redraw
-    ? [
-        ...FAST_MODELS.filter((m) => m.refs),
-        ...FAST_MODELS.filter((m) => !m.refs),
-      ]
-    : FAST_MODELS),
-]
+const chainFor = (hero: boolean, redraw: boolean): readonly PhotoModel[] =>
+  hero
+    ? QUALITY_MODELS
+    : redraw
+      ? [
+          ...FAST_MODELS.filter((m) => m.refs),
+          ...FAST_MODELS.filter((m) => !m.refs),
+        ]
+      : FAST_MODELS
 export const MAX_PER_BUILD = 8
 export const MAX_PER_DAY = 30
 const PARALLEL = 4
@@ -92,6 +110,9 @@ const OWNER_REFERENCES = 2
 const SIBLING_REFERENCES = 4
 const GENERATE_TIMEOUT_MS = 60_000
 const PROMPT_TIMEOUT_MS = 30_000
+const CHECK_TIMEOUT_MS = 30_000
+/** Bumped when the house style changes, so a fresh plan draws in the new style instead of reusing the old. */
+const STYLE_VERSION = "house-2026-10-15"
 /** Dollars, for a result whose response carried no cost. Verified 2026-10-14. */
 const ESTIMATE = { "1K": 0.034, "2K": 0.05 } as const
 const OPENROUTER = "https://openrouter.ai/api/v1"
@@ -228,10 +249,12 @@ async function writePrompts(
             content:
               "You are a photo director for a small business website. Write prompts for an image model. " +
               'Reply with JSON only: {"style": string, "subjects": {"<slot id>": string}}. ' +
-              "`style` is one line shared by the whole set so the photos read as one shoot: light, colour grade, lens, one recurring prop in the palette. " +
-              "Each subject is one concrete scene for its slot: a place, surface, object or hands at work. " +
+              "`style` is one line shared by the whole set so the photos read as one shoot: the kind of place, its materials and where the brand colour sits. " +
+              `Each subject is one concrete scene for its slot, set in ${settingFor(brief.industry)}: a place, surface or object, in plain words. ` +
+              STYLE_GUIDE +
               PHOTO_DISTINCT +
               PHOTO_HERO +
+              "A hero subject is a whole room or finished space; any other slot is one area or detail of its service; a cta_band slot is a plain, calm texture. " +
               "Where a slot has a text side, ask for calm empty space on that side. Never ask for a face, text, a logo or a sign.",
           },
           {
@@ -289,7 +312,7 @@ type Drawn =
 /** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
 async function draw(
   { key, fetch }: Deps,
-  model: string,
+  { id: model, sized }: PhotoModel,
   prompt: string,
   planned: Planned,
   references: Reference[]
@@ -307,7 +330,10 @@ async function draw(
         prompt,
         resolution: planned.resolution,
         aspect_ratio: planned.slot.aspect,
-        ...(planned.size ? { size: planned.size } : {}),
+        ...(sized && planned.size ? { size: planned.size } : {}),
+        // A 2560 x 1920 PNG was 9.4 MB, past the defect check's 5 MB image
+        // limit; the same draw as JPEG at 90 was 0.94 MB. Astro re-encodes it.
+        ...(sized ? { output_format: "jpeg", output_compression: 90 } : {}),
         ...(references.length
           ? {
               input_references: references.map((r) => ({
@@ -355,8 +381,123 @@ async function draw(
   }
 }
 
-/** One line per draw attempt, so a build's model choices and failures can be read off the log. */
-function logDraw(slot: string, model: string, drawn: Drawn, ms: number) {
+/**
+ * What the defect check scores, each 0 (none), 1 (minor, ships) or 2 (a
+ * visitor would notice, so the photo is redrawn).
+ */
+export const DEFECTS = {
+  geometry:
+    "warped, bent or impossible geometry: lines that should be straight, fittings that could not be built, objects melting into each other",
+  text: "garbled or readable text, logos, signage or labels",
+  anatomy: "malformed hands or fingers, or any face",
+  clutter: "clutter or mess where the scene should be clean and tidy",
+  grade:
+    "an oversaturated, HDR, CGI or 3D-render look, crushed blacks or a colour cast",
+  subject: "a picture that does not show the slot's scene",
+  style: "a mismatch with the set's style line",
+} as const
+type Defect = keyof typeof DEFECTS
+const score = z.coerce.number().int().min(0).max(2)
+const Check = z.object({
+  geometry: score,
+  text: score,
+  anatomy: score,
+  clutter: score,
+  grade: score,
+  subject: score,
+  style: score,
+  note: z.string().max(400).catch(""),
+})
+export type Check = z.infer<typeof Check>
+export const failedChecks = (check: Check) =>
+  (Object.keys(DEFECTS) as Defect[]).filter((k) => check[k] === 2)
+
+/**
+ * The defect check: one Haiku vision call per drawn photo, before it ships.
+ * Haiku 5.5 at low effort cost $0.0002 to $0.0007 a photo in 3.6 to 5.2 s
+ * (bake-off 2026-10-15). Fed our old photos it failed the warped oven
+ * (geometry) and the street hero (subject, style), and passed all four
+ * spotless-templates photos. A checker that is down or answers off
+ * contract returns null and the photo ships unchecked: the check guards
+ * quality, and an outage there must not empty the site of photos.
+ */
+async function inspect(
+  { key, fetch }: Deps,
+  drawn: Extract<Drawn, { ok: true }>,
+  scene: string,
+  style: string
+): Promise<{ check: Check; cost: number | null } | null> {
+  try {
+    const response = await fetch(`${OPENROUTER}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: MODELS.haiku.replace(/^openrouter\//, ""),
+        // Haiku 5.5 thinks by default: 400 tokens all went on reasoning and
+        // left no answer. Low effort spent about 300 and answered.
+        max_tokens: 2_000,
+        reasoning: { effort: ROLES.copy.effort },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You check generated photos for a small business website before they ship. Score each defect 0 (none), 1 (minor, fine to ship) or 2 (a visitor would notice). Be strict about geometry, text and anatomy: these are what make a photo look fake. " +
+              Object.entries(DEFECTS)
+                .map(([k, v]) => `${k}: ${v}.`)
+                .join(" ") +
+              ` Reply with JSON only: {${Object.keys(DEFECTS)
+                .map((k) => `"${k}": 0`)
+                .join(
+                  ", "
+                )}, "note": "the worst defect in a few words, or empty"}`,
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: JSON.stringify({ scene, style }) },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${drawn.contentType};base64,${drawn.b64}`,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string } }[]
+      usage?: { cost?: number }
+    }
+    const text = body.choices?.[0]?.message?.content ?? ""
+    const parsed = Check.safeParse(
+      JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1))
+    )
+    return parsed.success
+      ? {
+          check: parsed.data,
+          cost: typeof body.usage?.cost === "number" ? body.usage.cost : null,
+        }
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** One line per draw attempt, so a build's model choices, failures and defect scores can be read off the log. */
+function logDraw(
+  slot: string,
+  model: string,
+  drawn: Drawn,
+  ms: number,
+  checked?: { check: Check; cost: number | null } | null
+) {
   console.log(
     JSON.stringify({
       type: "photos.draw",
@@ -367,6 +508,13 @@ function logDraw(slot: string, model: string, drawn: Drawn, ms: number) {
       ms,
       cost_usd: drawn.ok ? drawn.cost : null,
       reason: drawn.ok ? null : drawn.reason,
+      ...(drawn.ok
+        ? {
+            check: checked?.check ?? null,
+            check_cost_usd: checked?.cost ?? null,
+            defects: checked ? failedChecks(checked.check) : null,
+          }
+        : {}),
     })
   )
 }
@@ -465,6 +613,7 @@ export async function directPhotos(input: {
           slot.subject,
           slot.text_side ?? "none",
           brief,
+          STYLE_VERSION,
           ...(input.variation ? [input.variation] : []),
         ])
       )
@@ -510,8 +659,11 @@ export async function directPhotos(input: {
 
   if (toDraw.length) {
     const written = await writePrompts(deps, brief, toDraw)
-    const promptFor = (p: Planned, subject: string) =>
-      `${written?.style ?? brief.imageStyle} ${subject}${SIDE_NOTE(p.slot.text_side)} ${NEVER}`
+    const style = written?.style ?? brief.imageStyle
+    const house = houseLine(brief.palette)
+    // The scene first, where image models weigh words most; the house style after.
+    const promptFor = (p: Planned, subject: string, avoid = "") =>
+      `${subject} ${framingOf(p.slot.section)}${SIDE_NOTE(p.slot.text_side)} ${style} ${house}${avoid} ${NEVER}`
     const subjectOf = (p: Planned) =>
       written?.subjects[p.slot.id] ?? p.slot.subject
 
@@ -544,7 +696,8 @@ export async function directPhotos(input: {
     // A model that is down for one slot is down for the rest of this build.
     const down = new Set<string>()
     const one = async (p: Planned, references: Reference[]) => {
-      let prompt = promptFor(p, subjectOf(p))
+      const subject = subjectOf(p)
+      let prompt = promptFor(p, subject)
       let refs = references
       let drawn: Drawn = {
         ok: false,
@@ -553,6 +706,9 @@ export async function directPhotos(input: {
         status: null,
       }
       let tries = 0
+      let redrawn = false
+      /** Every draw and check this slot paid for, a redrawn one too. */
+      let spent = 0
       for (const model of chainFor(
         p.slot.section === "hero",
         (input.siblings ?? []).length > 0
@@ -560,15 +716,39 @@ export async function directPhotos(input: {
         if (down.has(model.id)) continue
         if (tries++ === TRIES) break
         const started = Date.now()
-        drawn = await draw(deps, model.id, prompt, p, model.refs ? refs : [])
-        logDraw(p.slot.id, model.id, drawn, Date.now() - started)
-        if (drawn.ok) break
-        if (drawn.down) down.add(model.id)
-        else {
-          // A refused slot moves on with its simplest subject, no references.
-          prompt = promptFor(p, simplified(p.slot.subject) || p.slot.subject)
-          refs = []
+        drawn = await draw(deps, model, prompt, p, model.refs ? refs : [])
+        const ms = Date.now() - started
+        if (!drawn.ok) {
+          logDraw(p.slot.id, model.id, drawn, ms)
+          if (drawn.down) down.add(model.id)
+          else {
+            // A refused slot moves on with its simplest subject, no references.
+            prompt = promptFor(p, simplified(p.slot.subject) || p.slot.subject)
+            refs = []
+          }
+          continue
         }
+        const checked = await inspect(deps, drawn, subject, style)
+        logDraw(p.slot.id, model.id, drawn, ms, checked)
+        spent += (drawn.cost ?? 0) + (checked?.cost ?? 0)
+        const defects = checked ? failedChecks(checked.check) : []
+        if (defects.length === 0) break
+        // A defect is redrawn once, on the next model, with the defect named;
+        // a second one leaves the section its no-photo layout.
+        const named = checked?.check.note || defects.join(", ")
+        drawn = {
+          ok: false,
+          reason: `defect: ${named}`,
+          down: false,
+          status: 200,
+        }
+        if (redrawn) break
+        redrawn = true
+        prompt = promptFor(
+          p,
+          subject,
+          ` The last draw had this defect, so avoid it: ${named}.`
+        )
       }
       if (!drawn.ok) {
         settle(p.slot.id, fallback(p.slot.id, drawn.reason))
@@ -582,7 +762,9 @@ export async function directPhotos(input: {
             source: "generated",
             model: drawn.model,
             prompt_hash: p.hash,
-            cost_usd: String(drawn.cost ?? ESTIMATE[p.resolution]),
+            cost_usd: String(
+              drawn.cost === null ? ESTIMATE[p.resolution] : spent
+            ),
           },
         })
       } catch {
@@ -595,7 +777,7 @@ export async function directPhotos(input: {
         asset_id: p.assetId,
         key: objectKey,
         content_type: drawn.contentType,
-        cost_usd: drawn.cost,
+        cost_usd: drawn.cost === null ? null : spent,
         reason: null,
       })
       return { content_type: drawn.contentType, b64: drawn.b64 }
