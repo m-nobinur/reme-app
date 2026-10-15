@@ -5,9 +5,9 @@
     "paper": "#f7f9fa",
     "ink": "#131b20",
     "primary": "#0369a1",
-    "tint": "#dbebf5",
+    "tint": "#e0f0f9",
     "accent": "#3745be",
-    "line": "#c6dbe5"
+    "line": "#d0dbe0"
   },
   "classic_blue": {
     "label": "Classic blue",
@@ -15,9 +15,9 @@
     "paper": "#f7f9fa",
     "ink": "#131a20",
     "primary": "#0f4c81",
-    "tint": "#dbeaf5",
+    "tint": "#e0effa",
     "accent": "#3837be",
-    "line": "#c7d8e5"
+    "line": "#d2dae1"
   },
   "harbour": {
     "label": "Harbour",
@@ -25,9 +25,9 @@
     "paper": "#f7f8fa",
     "ink": "#131720",
     "primary": "#1b2a4a",
-    "tint": "#dfe5f4",
+    "tint": "#e7edfc",
     "accent": "#5537be",
-    "line": "#cad3e5"
+    "line": "#d5d9e2"
   },
   "lagoon": {
     "label": "Lagoon",
@@ -35,9 +35,9 @@
     "paper": "#f7fafa",
     "ink": "#13201f",
     "primary": "#0f766e",
-    "tint": "#dcf1ef",
+    "tint": "#ddf2f0",
     "accent": "#377fbe",
-    "line": "#c8e1df"
+    "line": "#d1dedd"
   },
   "forest": {
     "label": "Forest",
@@ -45,9 +45,9 @@
     "paper": "#f7faf9",
     "ink": "#13201a",
     "primary": "#1b4332",
-    "tint": "#def0e8",
+    "tint": "#e0f2ea",
     "accent": "#37aebe",
-    "line": "#cbe0d7"
+    "line": "#d2ddd8"
   },
   "sage": {
     "label": "Sage",
@@ -55,9 +55,9 @@
     "paper": "#f7f9f7",
     "ink": "#171c19",
     "primary": "#54705c",
-    "tint": "#e0f0e4",
+    "tint": "#e3f1e6",
     "accent": "#37bea6",
-    "line": "#caddd1"
+    "line": "#d2dcd6"
   },
   "sunset": {
     "label": "Sunset",
@@ -67,7 +67,7 @@
     "primary": "#c2410c",
     "tint": "#ffece6",
     "accent": "#bea737",
-    "line": "#e5d0c8"
+    "line": "#e1d6d2"
   },
   "mocha": {
     "label": "Mocha",
@@ -75,9 +75,9 @@
     "paper": "#faf8f8",
     "ink": "#1d1816",
     "primary": "#8b6452",
-    "tint": "#fbeee1",
+    "tint": "#fbeee2",
     "accent": "#beaa37",
-    "line": "#e5d1c8"
+    "line": "#e1d7d2"
   },
   "cardinal": {
     "label": "Cardinal",
@@ -85,9 +85,9 @@
     "paper": "#faf7f7",
     "ink": "#201314",
     "primary": "#b3262d",
-    "tint": "#f3dfe1",
+    "tint": "#fbe7e9",
     "accent": "#be7937",
-    "line": "#e3cccd"
+    "line": "#e2d6d6"
   },
   "berry": {
     "label": "Berry",
@@ -95,9 +95,9 @@
     "paper": "#faf7f8",
     "ink": "#201316",
     "primary": "#bb2649",
-    "tint": "#f3dfe4",
+    "tint": "#fae7ec",
     "accent": "#be6037",
-    "line": "#e2ccd1"
+    "line": "#e1d6d8"
   },
   "burgundy": {
     "label": "Burgundy",
@@ -105,9 +105,9 @@
     "paper": "#faf7f8",
     "ink": "#201315",
     "primary": "#722f37",
-    "tint": "#f3dfe2",
+    "tint": "#fbe7ea",
     "accent": "#be7037",
-    "line": "#e3cccf"
+    "line": "#e2d6d7"
   },
   "midnight": {
     "label": "Midnight",
@@ -115,9 +115,9 @@
     "paper": "#f7f7fa",
     "ink": "#141320",
     "primary": "#3730a3",
-    "tint": "#e2e1f1",
+    "tint": "#ecebfb",
     "accent": "#8837be",
-    "line": "#cecde0"
+    "line": "#d8d8e2"
   },
   "damson": {
     "label": "Damson",
@@ -125,9 +125,9 @@
     "paper": "#faf7fa",
     "ink": "#1e1320",
     "primary": "#953ea3",
-    "tint": "#ede1ef",
+    "tint": "#f4e8f6",
     "accent": "#be3788",
-    "line": "#ddcddf"
+    "line": "#ded6de"
   },
   "ultra_violet": {
     "label": "Ultra violet",
@@ -135,9 +135,9 @@
     "paper": "#f8f8fa",
     "ink": "#18151e",
     "primary": "#5f4b8b",
-    "tint": "#e7e2f2",
+    "tint": "#efeafa",
     "accent": "#aa37be",
-    "line": "#d5cfe1"
+    "line": "#dad7e1"
   },
   "graphite": {
     "label": "Graphite",
@@ -145,9 +145,9 @@
     "paper": "#f8f9fb",
     "ink": "#17191c",
     "primary": "#475569",
-    "tint": "#dde9f6",
+    "tint": "#e2eefb",
     "accent": "#4837be",
-    "line": "#c9d8e6"
+    "line": "#d2dae2"
   },
   "onyx": {
     "label": "Onyx",
@@ -155,9 +155,9 @@
     "paper": "#f9f9f7",
     "ink": "#1b1918",
     "primary": "#1c1917",
-    "tint": "#f3e6d9",
+    "tint": "#f7eade",
     "accent": "#beb637",
-    "line": "#e3d4c5"
+    "line": "#dfd8d0"
   },
   "mint": {
     "label": "Mint",
@@ -165,9 +165,9 @@
     "paper": "#fbfdfc",
     "ink": "#0d2b24",
     "primary": "#0b7a6a",
-    "tint": "#dcf3ea",
+    "tint": "#e0f2eb",
     "accent": "#2a9d8f",
-    "line": "#c6e2d8"
+    "line": "#d2ded9"
   },
   "royal": {
     "label": "Royal",
@@ -175,9 +175,9 @@
     "paper": "#fafbfe",
     "ink": "#0c1b3d",
     "primary": "#1d4ed8",
-    "tint": "#e3edfb",
+    "tint": "#e4eefc",
     "accent": "#5b8def",
-    "line": "#cbd8ee"
+    "line": "#d4d9e2"
   },
   "meadow": {
     "label": "Meadow",
@@ -185,9 +185,9 @@
     "paper": "#fcfdf9",
     "ink": "#14291c",
     "primary": "#1f5130",
-    "tint": "#f2f1dc",
+    "tint": "#f1f1e0",
     "accent": "#8cc63f",
-    "line": "#dedfc4"
+    "line": "#ddddd3"
   },
   "pebble": {
     "label": "Pebble",
@@ -195,9 +195,9 @@
     "paper": "#f9fbfa",
     "ink": "#262a28",
     "primary": "#4f6b58",
-    "tint": "#dcece1",
+    "tint": "#e2f1e7",
     "accent": "#9bb09f",
-    "line": "#c7d9cc"
+    "line": "#d3dcd5"
   },
   "counsel": {
     "label": "Counsel",
@@ -205,9 +205,9 @@
     "paper": "#faf7ef",
     "ink": "#111a2e",
     "primary": "#1f2f52",
-    "tint": "#efe9d8",
+    "tint": "#f2eddd",
     "accent": "#b08d3c",
-    "line": "#ddd5bf"
+    "line": "#dcd9cf"
   },
   "after_dark": {
     "label": "After dark",
