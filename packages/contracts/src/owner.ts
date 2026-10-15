@@ -280,6 +280,12 @@ export const BuildActivity = z.strictObject({
   label: Text(60),
   done: z.int().nonnegative().max(999),
   total: z.int().positive().max(999),
+  /**
+   * The step the build is on, from its own events. A row whose count is full
+   * is not over until the build moves past it: the lead still has to put the
+   * written pages together and report.
+   */
+  now: z.literal(true).optional(),
   /** What the row counts, by name, such as the plan's pages: fixed labels, never model text. */
   items: z
     .array(z.strictObject({ label: Text(60), done: z.boolean() }))
@@ -374,10 +380,25 @@ const ReportItem = z.strictObject({
   what: z.enum(["published"]),
   revision: RevisionRef,
 })
+/**
+ * Why a build stopped, for the owner's sentence: it went quiet, the lead
+ * could not finish a site that passes its checks, it waited too long on the
+ * owner, a service it needs kept failing, or anything else.
+ */
+export const BuildStopCause = z.enum([
+  "stalled",
+  "unfinished",
+  "unanswered",
+  "service",
+  "other",
+])
+
 const AlertItem = z.strictObject({
   kind: z.literal("alert"),
   ...Logged,
   reason: z.enum(["build_failed", "budget_parked", "publish_rolled_back"]),
+  /** Why a failed build stopped; absent on the other alerts. */
+  cause: BuildStopCause.optional(),
 })
 
 /**
@@ -538,6 +559,7 @@ export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>
 export type BuildSummary = z.infer<typeof BuildSummary>
 export type BuildBlueprint = z.infer<typeof BuildBlueprint>
+export type BuildStopCause = z.infer<typeof BuildStopCause>
 export type AttentionItem = z.infer<typeof AttentionItem>
 export type ActivityFeed = z.infer<typeof ActivityFeed>
 export type Reminder = z.infer<typeof Reminder>

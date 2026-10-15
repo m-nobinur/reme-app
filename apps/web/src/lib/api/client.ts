@@ -22,6 +22,7 @@ import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
+import { stoppedLines } from "../stopped"
 import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import type {
   AttentionItem,
@@ -229,7 +230,7 @@ function logged(item: Logged): { title: string; detail: string } {
     case "build_failed":
       return {
         title: "A build failed",
-        detail: "It stopped before it had a version to show you.",
+        detail: stoppedLines(item.cause).join(" "),
       }
     case "budget_parked":
       return {
@@ -344,6 +345,9 @@ function toAttention(
         kind: item.kind,
         id: item.event_id,
         ...logged(item),
+        ...(item.kind === "alert" && item.reason === "build_failed"
+          ? { stopped: item.cause ?? "other" }
+          : {}),
         raisedBy: SYSTEM,
         raisedById: null,
         raisedAt: item.at,

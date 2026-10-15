@@ -64,7 +64,7 @@ import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
 import { checksOf, finishRevision, GIT } from "../tail.ts"
-import { since } from "../timing.ts"
+import { LEAD_TURN_MS, since } from "../timing.ts"
 
 /**
  * The Developer (§8, ADR-031): one Durable Object conversation per
@@ -171,23 +171,32 @@ function interrupted(found: Session, observation: unknown) {
 /**
  * Wake the Workflow once per key with an `interrupted` reason: an operation
  * that failed, or the turn gate ending the turn on the model's behalf
- * (open item 55). The log gets the reason first, then the wake.
+ * (open item 55). Or with `unreported`: the lead's turn ended with nothing
+ * that woke it. The log gets the reason first, then the wake.
  */
-function wake(found: Session, key: string, reason: string) {
+function wake(
+  found: Session,
+  key: string,
+  reason: string,
+  kind: "interrupted" | "unreported" = "interrupted"
+) {
   if (found.interruptions.has(key)) return
   found.interruptions.add(key)
-  found.tee.emit("developer.interrupted", { reason })
+  found.tee.emit(`developer.${kind}`, { reason })
   found.tee
     .flush()
     .then(() => workflow(found.brief.snapshot.assignment_id))
     .then((instance) =>
       instance.sendEvent({
         type: "developer",
-        payload: { kind: "interrupted", reason },
+        payload: { kind, reason },
       })
     )
     .catch(() => undefined)
 }
+
+/** The tools that wake the Workflow themselves when they succeed. */
+const WAKING_TOOLS = new Set(["report_complete", "ask_chief"])
 
 /**
  * The sandbox SDK's own class for a container the platform replaced under a
@@ -542,15 +551,24 @@ export function Developer({ id }: AgentProps) {
   useTool(askChief(current))
   useTool(reportComplete(current))
 
-  useResponseFinish(() => {
-    current.tee.flush().catch(() => undefined)
+  useResponseFinish(({ response }) => {
+    // A turn that wakes the Workflow ends in an accepted report or a
+    // question, or woke it on the way (a failure, the budget). One that ends
+    // any other way, the lead giving up after refused reports or running out
+    // of turns, would leave the build waiting on a wake that never comes.
+    const reported = response.toolCalls.some(
+      (call) => !call.isError && WAKING_TOOLS.has(call.tool)
+    )
+    if (reported || current.budgetExhausted || current.interruptions.size > 0)
+      current.tee.flush().catch(() => undefined)
+    else wake(current, "unreported", "developer.no_report", "unreported")
   })
 
   return shown()
 }
 
 Developer.agentName = "developer"
-Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
+Developer.durability = { maxAttempts: 3, timeoutMs: LEAD_TURN_MS }
 
 /**
  * The only escalation (§7.2): name the fact, why, and the shape an answer

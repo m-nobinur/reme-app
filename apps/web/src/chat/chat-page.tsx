@@ -34,6 +34,7 @@ import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { usePlanCard } from "./blueprint-plan"
+import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { asked, missingConversations, startsNewChat } from "./history"
@@ -196,6 +197,7 @@ export function ChatPage() {
                     <>
                       {plan.card}
                       <SiteReadyCard />
+                      <BuildStopped />
                     </>
                   }
                   briefing={briefing.line}

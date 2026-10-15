@@ -179,6 +179,18 @@ export async function turnCount(
   return Number(row?.n ?? 0)
 }
 
+/** Epoch ms of the assignment's newest event, or 0 with none: the Workflow's stall check. */
+export async function lastEventAt(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ at: sql<Date | null>`max(${events.occurredAt})` })
+    .from(events)
+    .where(sql`${events.assignmentId} = ${assignmentId}`)
+  return row?.at ? new Date(row.at).getTime() : 0
+}
+
 export type TransitionInput = Ids & {
   to: AssignmentState
   expectedVersion: number

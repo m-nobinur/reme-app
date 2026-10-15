@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from "vitest"
 import {
   activityFor,
+  causeOf,
   EXPECTED_SECONDS,
   type Mark,
   photosOf,
@@ -175,6 +176,34 @@ describe("build activity rows", () => {
         (r) => r.id
       )
     ).toEqual(["planning", "writing", "checking"])
+  })
+
+  it("keeps the pages step current with every page written until a report is accepted", () => {
+    const plan = Blueprint.parse(PLAN)
+    const now = (marks: Mark[]) =>
+      activityFor(
+        "full",
+        "implementing",
+        { pages: { done: 2, total: 2 } },
+        { plan, marks }
+      ).filter((r) => r.now)
+    // Both pages counted and the lead's report refused, or not yet made.
+    expect(now([]).map((r) => [r.id, r.done, r.total])).toEqual([
+      ["writing", 2, 2],
+    ])
+    expect(now([{ type: "assignment.completion_reported" }])).toEqual([
+      expect.objectContaining({ id: "design" }),
+    ])
+    for (const row of now([])) BuildActivity.parse(row)
+  })
+
+  it("names why a build stopped from the Workflow's reason, other when it has no words", () => {
+    expect(causeOf("developer.stalled")).toBe("stalled")
+    expect(causeOf("developer.no_report")).toBe("unfinished")
+    expect(causeOf("information.unanswered")).toBe("unanswered")
+    expect(causeOf("provider.unavailable")).toBe("service")
+    expect(causeOf("something.new")).toBe("other")
+    expect(causeOf(null)).toBe("other")
   })
 
   it("shows none for a quick build or a state outside the stages", () => {

@@ -54,7 +54,8 @@ const REPORTS: Record<Report["what"], { title: string; detail: string }> = {
 const ALERTS: Record<Alert["reason"], { title: string; detail: string }> = {
   build_failed: {
     title: "A build failed",
-    detail: "It stopped before it had a version to show you.",
+    detail:
+      "The build stopped: it went quiet for too long. Try again or ask for changes.",
   },
   budget_parked: {
     title: "A build paused at its spending limit",

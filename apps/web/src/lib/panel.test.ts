@@ -488,6 +488,77 @@ describe("what is coming up and what just happened", () => {
   })
 })
 
+it("names the step the api marks, even one whose count is full", () => {
+  const rows = [
+    { id: "planning", label: "Planning the layout", done: 1, total: 1 },
+    { id: "writing", label: "Writing the pages", done: 6, total: 6, now: true },
+    { id: "design", label: "Looking over the design", done: 0, total: 1 },
+  ]
+  const working = {
+    ...build("implementing"),
+    lane: "full",
+    activity: rows,
+  } as Workspace["builds"][number]
+  const line = panelFor(
+    input({ workspace: workspace({ builds: [working], building: true }) })
+  )?.line
+  expect(line).toMatchObject({
+    detail: "writing the pages",
+    progress: { done: 2, total: 3 },
+  })
+})
+
+describe("a build that stopped", () => {
+  const failed = {
+    kind: "alert",
+    id: "fail",
+    title: "A build failed",
+    raisedAt: "2026-10-01T08:00:00.000Z",
+    stopped: "stalled",
+  } as unknown as AttentionItem
+  const published = {
+    kind: "report",
+    id: "v3",
+    title: "Published v3",
+    raisedAt: "2026-10-01T08:30:00.000Z",
+  } as unknown as AttentionItem
+  const STOPPED = [
+    "The build stopped: it went quiet for too long.",
+    "Try again or ask for changes.",
+  ]
+
+  it("says why and what to do, with the way to ask for changes", () => {
+    const panel = panelFor(
+      input({
+        route: ROUTES.chat,
+        conversation: CHAT,
+        workspace: live({ attention: [failed] }),
+      })
+    )
+    expect(panel?.headline).toEqual(STOPPED)
+    expect(panel?.line.lead).toBe("The build stopped")
+    expect(panel?.build).toBeNull()
+    expect(panel?.suggestions.map((s) => s.kind)).toContain("request-change")
+  })
+
+  it("says nothing of it once a build is open or something newer happened", () => {
+    const open = panelFor(
+      input({
+        workspace: live({
+          attention: [failed],
+          open: true,
+          builds: [build("implementing")],
+        }),
+      })
+    )
+    expect(open?.headline).not.toEqual(STOPPED)
+    const after = panelFor(
+      input({ workspace: live({ attention: [failed, published] }) })
+    )
+    expect(after?.headline).not.toEqual(STOPPED)
+  })
+})
+
 describe("the one line", () => {
   const line = (over: Partial<Workspace>, names = {}) =>
     panelFor(input({ workspace: workspace(over), names }))?.line

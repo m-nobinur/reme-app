@@ -266,14 +266,15 @@ export function seed(kit: Tenancy, who: Owner) {
      * A transition as `advance` writes it: the state change event, the
      * transition row citing it, and the assignment's row at the new state and
      * version. `extra` is the event's payload beyond from, to and version, as
-     * `request_id` for a block on a question.
+     * `request_id` for a block on a question; `reason` is the row's.
      */
     async transition(
       assignmentId: string,
       from: AssignmentState,
       to: AssignmentState,
       version: number,
-      extra: Record<string, unknown> = {}
+      extra: Record<string, unknown> = {},
+      reason: string | null = null
     ) {
       const eventId = await this.event(
         assignmentId,
@@ -293,6 +294,7 @@ export function seed(kit: Tenancy, who: Owner) {
           toState: to,
           version,
           eventId,
+          reason,
         })
         await db
           .update(assignments)

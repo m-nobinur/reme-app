@@ -33,6 +33,13 @@ export interface components {
             at: string
             /** @enum {string} */
             reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            /** @enum {string} */
+            cause?:
+              | "stalled"
+              | "unfinished"
+              | "unanswered"
+              | "service"
+              | "other"
           }
       )[]
     }
@@ -2126,6 +2133,8 @@ export interface components {
           at: string
           /** @enum {string} */
           reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          /** @enum {string} */
+          cause?: "stalled" | "unfinished" | "unanswered" | "service" | "other"
         }
     Blueprint: {
       direction: string
@@ -2717,6 +2726,8 @@ export interface components {
         label: string
         done: number
         total: number
+        /** @constant */
+        now?: true
         items?: {
           label: string
           done: boolean
@@ -5032,6 +5043,8 @@ export interface components {
                     label: string
                     done: number
                     total: number
+                    /** @constant */
+                    now?: true
                     items?: {
                       label: string
                       done: boolean
@@ -6924,6 +6937,8 @@ export interface components {
               label: string
               done: number
               total: number
+              /** @constant */
+              now?: true
               items?: {
                 label: string
                 done: boolean
@@ -8101,6 +8116,8 @@ export interface components {
           label: string
           done: number
           total: number
+          /** @constant */
+          now?: true
           items?: {
             label: string
             done: boolean
@@ -8779,6 +8796,13 @@ export interface components {
             at: string
             /** @enum {string} */
             reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            /** @enum {string} */
+            cause?:
+              | "stalled"
+              | "unfinished"
+              | "unanswered"
+              | "service"
+              | "other"
           }
       )[]
       missing_facts: (
