@@ -8014,6 +8014,7 @@ export interface components {
           | "structured_data"
           | "content"
           | "claims"
+          | "copy"
           | "a11y"
           | "size"
         passed: boolean

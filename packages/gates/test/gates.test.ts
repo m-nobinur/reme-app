@@ -457,6 +457,7 @@ describe("all the gates", () => {
       "build",
       "claims",
       "content",
+      "copy",
       "links",
       "read",
       "size",
@@ -469,6 +470,7 @@ describe("all the gates", () => {
       "structured_data",
       "content",
       "claims",
+      "copy",
       "a11y",
       "size",
     ])
@@ -507,6 +509,13 @@ describe("all the gates", () => {
     })
     expect(planned.find((r) => r.gate === "claims")?.offending_node).toContain(
       "images.team"
+    )
+    // The copy gate reads the pages only on a planned build.
+    expect(results.find((r) => r.gate === "copy")?.message).toContain(
+      "not a planned first build"
+    )
+    expect(planned.find((r) => r.gate === "copy")?.message).not.toContain(
+      "not a planned first build"
     )
   })
   it("reads every file once, a page the build gate hashes and the pages share included, a few at a time", async () => {

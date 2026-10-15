@@ -41,6 +41,7 @@ export const GateName = z.enum([
   "structured_data",
   "content",
   "claims",
+  "copy",
   "a11y",
   "size",
 ])

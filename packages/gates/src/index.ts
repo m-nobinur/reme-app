@@ -6,6 +6,7 @@ import {
 } from "@workspace/contracts"
 import { checkAxe, parseAxe } from "./axe.ts"
 import { claimFindings, generatedImageFindings } from "./claims.ts"
+import { checkCopy } from "./copy.ts"
 import {
   CUSTOM_CHECK,
   checkCustomSections,
@@ -34,6 +35,14 @@ export {
   generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
+export {
+  COPY_WORDS,
+  type CopyFinding,
+  type CopyKind,
+  checkCopy,
+  copyFindings,
+  STOCK_HEADINGS,
+} from "./copy.ts"
 export {
   CUSTOM_CHECK,
   type CustomFinding,
@@ -420,7 +429,7 @@ export function checkClaims(
 const READS = 8
 
 /**
- * All eight gates over one artifact, in the contract's order. Each file is
+ * All nine gates over one artifact, in the contract's order. Each file is
  * read once: the build gate hashes every file while the pages are read for
  * the other gates, and a page both need comes from the same read.
  */
@@ -437,7 +446,7 @@ export async function runGates(input: {
   evidence?: (key: string) => Promise<Uint8Array | null>
   /** Filled with milliseconds per gate, and `read` for the page reads. */
   timings?: Record<string, number>
-  /** The Blueprint's image slots and pages, so a generated photo in a claim section fails (ADR-039). */
+  /** The Blueprint's image slots and pages, so a generated photo in a claim section fails (ADR-039); the copy gate runs only with it. */
   plan?: Parameters<typeof generatedImageFindings>[0]
 }): Promise<GateResult[]> {
   const lap = <T>(name: string, fn: () => T): T => {
@@ -488,13 +497,14 @@ export async function runGates(input: {
       fail("structured_data", unreadable),
       fail("content", unreadable),
       fail("claims", unreadable),
+      fail("copy", unreadable),
       axe,
       fail("size", unreadable),
     ]
   }
   const decoder = new TextDecoder()
   const readStarted = Date.now()
-  const [build, pages] = await Promise.all([
+  const [build, built] = await Promise.all([
     (async () => {
       const started = Date.now()
       const result = await checkBuild(input.manifest, read)
@@ -508,13 +518,16 @@ export async function runGates(input: {
           .sort()
           .map(async (file) => {
             const bytes = await read(file)
-            return bytes ? parsePage(file, decoder.decode(bytes)) : null
+            if (!bytes) return null
+            const html = decoder.decode(bytes)
+            return { page: parsePage(file, html), html }
           })
       )
       if (input.timings) input.timings.read = Date.now() - readStarted
-      return found.filter((page): page is Page => page !== null)
+      return found.filter((each) => each !== null)
     })(),
   ])
+  const pages = built.map((each) => each.page)
   return [
     build,
     types,
@@ -522,6 +535,12 @@ export async function runGates(input: {
     lap("structured_data", () => checkStructuredData(pages)),
     lap("content", () => checkContent(pages, input.facts, input.hosts)),
     lap("claims", () => checkClaims(pages, input.facts, input.plan)),
+    lap("copy", () =>
+      checkCopy(
+        built.map(({ page, html }) => ({ file: page.file, html })),
+        input.plan !== undefined
+      )
+    ),
     axe,
     await (async () => {
       const started = Date.now()
