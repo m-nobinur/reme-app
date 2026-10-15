@@ -88,7 +88,7 @@ function phoneImages() {
 }
 
 describe("uploaded photos", () => {
-  test("go out as AVIF and WebP at 480, 768, 1280 and 1920, with width and height", () => {
+  test("go out as AVIF and WebP up to the source width, the hero from 640 to 2560, with width and height", () => {
     const hero = tags().find((e) =>
       (e.attrs.class ?? "").includes("hero-image")
     )
@@ -101,7 +101,7 @@ describe("uploaded photos", () => {
       const widths = (source?.attrs.srcset ?? "")
         .split(",")
         .map((c) => c.trim().split(/\s+/)[1])
-      expect(widths, type).toEqual(["480w", "768w", "1280w", "1920w"])
+      expect(widths, type).toEqual(["640w", "960w", "1280w", "1920w", "2400w"])
     }
   })
 
@@ -112,7 +112,7 @@ describe("uploaded photos", () => {
     )
     expect(preloads).toHaveLength(1)
     expect(preloads[0]?.attrs.fetchpriority).toBe("high")
-    expect(preloads[0]?.attrs.imagesrcset).toContain("480w")
+    expect(preloads[0]?.attrs.imagesrcset).toContain("640w")
     const imgs = tags().filter((e) => e.tag === "img")
     const hero = imgs.filter((e) => e.attrs.fetchpriority === "high")
     expect(hero).toHaveLength(1)

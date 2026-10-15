@@ -13,7 +13,8 @@ constraints:
   - A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data
     matches the questions on the page.
   - split sets the heading beside the questions, stacked above them in a narrow
-    column. The eyebrow is site.faqEyebrow.
+    column. The eyebrow is site.faqEyebrow; site.faqIntro and a site.faqLink to
+    the contact page sit under the heading.
 examples:
   - "<Faq />"
   - '<Faq variant="split" />'

@@ -1,4 +1,5 @@
 ---
+import Motif from "../../layouts/Motif.astro"
 import Photo from "../../layouts/Photo.astro"
 import Icon from "../Icon/Icon.astro"
 
@@ -32,13 +33,20 @@ const photo = variant && image?.src && image.alt ? image : null
 // The box each variant's photo renders in (src/styles/site.css), so the browser
 // does not fetch a 1280 px candidate for a 480 px frame.
 const SIZES = {
-  wash: "100vw",
+  wash: "(min-width: 56rem) 50vw, 100vw",
   dark_center: "100vw",
   split_frame: "(min-width: 80rem) 34rem, (min-width: 56rem) 42vw, 100vw",
   split_arch:
     "(min-width: 80rem) 30rem, (min-width: 56rem) 42vw, (min-width: 30rem) 30rem, 100vw",
   text_led: "17rem",
 }
+// Sharp at 1440 to 1920 px wide on a 2x screen: up to 2560 px (and the
+// source's own width under that), at a quality the other photos do not need.
+const HERO_WIDTHS = [640, 960, 1280, 1920, 2560]
+const HERO_QUALITY = 75
+// The framed and type-led heroes draw two soft arcs in the corner behind the
+// copy; the others leave the corner to the photo or the arch.
+const arcs = variant === "split_frame" || variant === "text_led"
 const listed = variant && !photo ? highlights.filter((h) => h.name) : []
 // A home hero sets its last word in the accent, never the whole line.
 const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
@@ -61,6 +69,7 @@ const actions = Astro.slots.has("default")
           : "hero-page",
       ]}
     >
+      {arcs && <Motif kind="arcs" class="hero-motif" />}
       <div class="wrap hero-inner">
         <div class="hero-text">
           {eyebrow && <p class="eyebrow">{eyebrow}</p>}
@@ -80,6 +89,8 @@ const actions = Astro.slots.has("default")
               src={photo.src}
               alt={photo.alt}
               sizes={SIZES[variant ?? "wash"]}
+              widths={HERO_WIDTHS}
+              quality={HERO_QUALITY}
               priority
             />
             {caption && <p class="hero-caption">{caption}</p>}

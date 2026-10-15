@@ -121,7 +121,7 @@
     "constraints": [
       "Reads faqItems from src/structured-data.ts, which reads faq1Question to faq8Answer; an entry needs both halves to render. Six to eight when the facts answer that many.",
       "A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data matches the questions on the page.",
-      "split sets the heading beside the questions, stacked above them in a narrow column. The eyebrow is site.faqEyebrow."
+      "split sets the heading beside the questions, stacked above them in a narrow column. The eyebrow is site.faqEyebrow; site.faqIntro and a site.faqLink to the contact page sit under the heading."
     ],
     "examples": [
       "<Faq />",
@@ -353,11 +353,11 @@
     ],
     "constraints": [
       "Reads serviceItems from src/structured-data.ts (service1Name to service6For); a service renders only with a name or a body.",
-      "photo_cards are cards with a 4:3 photo, the icon on it, and an arrow; numbered_rows are hairline rows with a number, an icon circle and a round arrow; practice_list is a numbered list with the name beside its sentence, for legal; fleet is 16:9 cards with Includes as spec pills, for limousine; alternating is photo and text rows with the Includes check list.",
+      "photo_cards are cards with a 4:3 photo, a pill with the icon and number on it, and serviceMoreLabel with an arrow; numbered_rows are hairline rows with a number, an icon circle and a round arrow; practice_list is a numbered list with the name beside its sentence, for legal; fleet is 16:9 cards with Includes as spec pills, for limousine; alternating is photo and text rows with the Includes check list.",
       "Every pattern but alternating links each name to its section, id service-N, on the services page. alternating adds Includes, one item to a line, For, and a quote link, and is what the services page uses.",
       "serviceNImage with serviceNImageAlt is the service's photo; without it a card shows its icon and a row its text. A fleet photo is an owner upload.",
       "The section's eyebrow is site.serviceCardsEyebrow.",
-      "Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice."
+      "Each serviceNIcon is a key of ICONS in src/icons.ts, no key twice; an empty or unknown one is picked from the service's words."
     ],
     "examples": [
       "<ServiceCards />",
@@ -479,7 +479,7 @@
       "Figures are composed fields (statYearsValue, statClientsValue, statRatingValue), each a number business.proof states; one with no value does not render.",
       "trust1 to trust3 restate business.proof in under six words each, and stay empty without it.",
       "Renders nothing when there are no figures and no points.",
-      "icons sets them in columns split by hairlines, a check beside each point; phrases sets them in one uppercase line with dots between."
+      "icons sets them in columns split by hairlines, each with the icon its words call for in a soft circle; phrases sets them in one uppercase line with dots between."
     ],
     "examples": [
       "<TrustStrip />",
@@ -496,7 +496,7 @@
     "props": [],
     "constraints": [
       "Reads valueProp1Title to valueProp3Icon itself, in order; an entry renders only when its title or body is set.",
-      "Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason; an empty or unknown one shows checkCircle.",
+      "Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason; an empty or unknown one is picked from the reason's words.",
       "Renders nothing when every title and body is empty."
     ],
     "examples": ["<ValueProps />"],
