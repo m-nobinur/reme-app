@@ -1,4 +1,5 @@
 import {
+  type Blueprint,
   type CompletionReport,
   DeploymentManifest,
   type FactRecord,
@@ -117,6 +118,32 @@ export async function checkBuild(
   return pass(
     "build",
     `${Object.keys(files).length} files match their manifest hashes`
+  )
+}
+
+/**
+ * The approved Blueprint's pages are fixed: each is in the build, at the path
+ * its starter file serves (`service_area` is `service-area/`), so a lead that
+ * deletes one fails the build gate and repairs it. Null when none is missing.
+ */
+export function checkPlannedPages(
+  plan: Pick<Blueprint, "pages">,
+  files: Record<string, string>
+): GateResult | null {
+  const slug = (page: string) =>
+    page === "home" ? "index" : page.replaceAll("_", "-")
+  const missing = plan.pages
+    .map(({ page }) => page)
+    .filter(
+      (page) =>
+        !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
+    )
+  const [first] = missing
+  if (!first) return null
+  return fail(
+    "build",
+    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}. Every planned page stays, whatever the facts`,
+    first
   )
 }
 
@@ -437,7 +464,10 @@ export async function runGates(input: {
   evidence?: (key: string) => Promise<Uint8Array | null>
   /** Filled with milliseconds per gate, and `read` for the page reads. */
   timings?: Record<string, number>
-  /** The Blueprint's image slots and pages, so a generated photo in a claim section fails (ADR-039). */
+  /**
+   * The Blueprint's image slots and pages, so a generated photo in a claim
+   * section fails (ADR-039), and so does a planned page the build lacks.
+   */
   plan?: Parameters<typeof generatedImageFindings>[0]
 }): Promise<GateResult[]> {
   const lap = <T>(name: string, fn: () => T): T => {
@@ -515,8 +545,11 @@ export async function runGates(input: {
       return found.filter((page): page is Page => page !== null)
     })(),
   ])
+  const gap = input.plan
+    ? checkPlannedPages(input.plan, parsed.data.files)
+    : null
   return [
-    build,
+    build.passed && gap ? gap : build,
     types,
     lap("links", () => checkLinks(pages, parsed.data.files)),
     lap("structured_data", () => checkStructuredData(pages)),

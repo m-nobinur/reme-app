@@ -476,21 +476,48 @@ const DESIGN = {
   pages: "site.pages",
 } as const satisfies Record<string, FactValueKey>
 
-/** The pages a choice on the tray's last question gives the site. */
-const PAGE_SETS = [
-  { id: "essentials", label: "The essentials", pages: DEFAULT_PAGES },
-  {
-    id: "answers",
-    label: "Answers first",
-    pages: [...DEFAULT_PAGES, "faq", "service_area"],
-  },
-  {
-    id: "showcase",
-    label: "Show your work",
-    pages: [...DEFAULT_PAGES, "gallery"],
-  },
-  { id: "everything", label: "Everything", pages: PAGES.map((p) => p.id) },
-] as const
+/** The pages the tray's last question offers: every page but the ones always built. */
+const PAGE_PICKS = PAGES.filter(
+  (p) => !(FIXED_PAGES as readonly string[]).includes(p.id)
+)
+
+/** Words that, before a page's name in its clause, mean the owner does not want it. */
+const NEGATIONS = new Set([
+  "no",
+  "not",
+  "without",
+  "dont",
+  "never",
+  "skip",
+  "nor",
+])
+
+/**
+ * The pages a typed answer names, by label or id, so "Gallery and FAQ" is
+ * honoured as a tick would be and "no gallery" or "don't need a FAQ" is not:
+ * a name counts unless a negation comes before it in its clause, the words
+ * between commas, "and", "but" or "plus". shortcut: no grammar past that, so
+ * "don't forget the gallery" drops it; hand the words to a model if owners
+ * write prose here.
+ */
+export const pagesNamed = (words: string) => {
+  const clauses = words.split(/[,.;:!?\n]|\b(?:and|but|plus)\b/i).map(plainly)
+  return PAGES.filter((p) =>
+    [p.label, p.id.replaceAll("_", " ")].some((name) => {
+      const named = new RegExp(`(?:^| )${plainly(name)}s?(?= |$)`)
+      return clauses.some((clause) => {
+        const at = clause.search(named)
+        return (
+          at >= 0 &&
+          !clause
+            .slice(0, at)
+            .split(" ")
+            .some((word) => NEGATIONS.has(word))
+        )
+      })
+    })
+  ).map((p) => p.id)
+}
 
 /** The directions whose industries list the business's; every direction when none does. */
 function directionsFor(o: Onboarding) {
@@ -566,11 +593,6 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     id: string | undefined,
     options: readonly { id: string }[]
   ) => (id !== undefined && options.some((each) => each.id === id) ? [id] : [])
-  const heldSet = PAGE_SETS.find(
-    (set) =>
-      JSON.stringify([...set.pages].sort()) ===
-      JSON.stringify([...(factValue(o.facts, "site.pages")?.ids ?? [])].sort())
-  )
   // The card's `step` names the old card the question stands in for.
   const card = (
     step: ChoiceStep,
@@ -616,13 +638,11 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
       visual: { kind: "layout", hero: d.hero, services: d.services },
     })
   )
-  const pageOptions = PAGE_SETS.map(
-    (set): Option => ({
-      id: set.id,
-      label: set.label,
-      hint: set.pages
-        .map((id) => PAGES.find((p) => p.id === id)?.label)
-        .join(", "),
+  const pageOptions = PAGE_PICKS.map(
+    (page): Option => ({
+      id: page.id,
+      label: page.label,
+      hint: page.hint,
       visual: null,
     })
   )
@@ -674,15 +694,28 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
         },
         {
           id: "pages",
-          question: "Which pages should the site have?",
+          question:
+            "Which pages should the site have, besides Home and Request a quote?",
           visual: "text",
-          card: card(
-            "pages",
-            pageOptions,
-            heldSet?.id,
-            "Name the pages you want and what goes on them",
-            pagesHeld?.custom
-          ),
+          card: {
+            ...card(
+              "pages",
+              pageOptions,
+              undefined,
+              "Name the pages you want and what goes on them",
+              pagesHeld?.custom
+            ),
+            // Any number of pages: the held pick, else the usual ones, ticked.
+            multiple: true,
+            preselected: pageOptions
+              .map((each) => each.id)
+              .filter((page) =>
+                (pagesHeld && !pagesHeld.custom
+                  ? (pagesHeld.ids as readonly string[])
+                  : DEFAULT_PAGES
+                ).includes(page)
+              ),
+          },
         },
       ],
     }),
@@ -750,13 +783,24 @@ export function designAnswer(
       if (!asked.card.skippable) return null
       continue
     }
+    const offered = (option: string) =>
+      asked.card.options.some((each) => each.id === option)
     if ("choice" in answer) {
-      if (!asked.card.options.some((each) => each.id === answer.choice)) {
-        return null
-      }
+      if (asked.card.multiple || !offered(answer.choice)) return null
+    } else if ("choices" in answer) {
+      if (!asked.card.multiple || !answer.choices.every(offered)) return null
     } else if (asked.card.other === null) return null
     const choice = "choice" in answer ? answer.choice : null
     const own = "own" in answer ? answer.own : ""
+    // The pages ticked, or named in their words. A tray from before pages
+    // were ticked one by one offers sets, which name no page: refused.
+    const pages =
+      "choices" in answer ? answer.choices : choice ? [choice] : pagesNamed(own)
+    if (
+      key === "site.pages" &&
+      !pages.every((page) => PAGES.some((p) => p.id === page))
+    )
+      return null
     const stated =
       key === "site.palette"
         ? state(key, choice === null ? ownPalette(own) : { id: choice })
@@ -765,13 +809,9 @@ export function designAnswer(
               ids: PAGES.map((p) => p.id).filter(
                 (page) =>
                   (FIXED_PAGES as readonly string[]).includes(page) ||
-                  (
-                    PAGE_SETS.find((set) => set.id === choice)?.pages as
-                      | readonly string[]
-                      | undefined
-                  )?.includes(page)
+                  pages.includes(page)
               ),
-              ...(choice === null ? { custom: own } : {}),
+              ...(own ? { custom: own } : {}),
             })
           : state(
               key,
@@ -1531,7 +1571,11 @@ export function decided(
       ? designAnswer(
           tray.data,
           {
-            answers: { [asked.id]: { choice: decision.option } },
+            answers: {
+              [asked.id]: asked.card.multiple
+                ? { choices: [decision.option] }
+                : { choice: decision.option },
+            },
             skip_all: false,
           },
           o.facts

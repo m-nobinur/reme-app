@@ -40,6 +40,44 @@ test("Escape collapses to one row and the row opens it again", async ({
   await expect(first.getByRole("radiogroup")).toHaveCount(1)
 })
 
+test("a card of many ticks several with Space, in order, and none is unanswered", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const pages = tray(page, 5)
+  const group = pages.getByRole("group", {
+    name: "Which pages should the site have, besides Home and Request a quote?",
+  })
+  await expect(group).toHaveCount(1)
+  // Said under the question and read with the group; a card of one has no such line.
+  await expect(group).toHaveAccessibleDescription("Pick any that fit")
+  await expect(pages.getByText("Pick any that fit")).toBeVisible()
+  await expect(tray(page, 0).getByText("Pick any that fit")).toHaveCount(0)
+  await expect(pages.getByRole("radio")).toHaveCount(0)
+  const box = (name: string) => group.getByRole("checkbox", { name })
+  await expect(box("Services What you offer")).toBeChecked()
+  await expect(
+    box("FAQ Common questions, as a home page section")
+  ).toBeChecked()
+  await box("About Who is behind the business").focus()
+  await page.keyboard.press("Space")
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Space")
+  await expect(box("About Who is behind the business")).toBeChecked()
+  await expect(
+    box("Gallery Photos of your work, as a home page section")
+  ).not.toBeChecked()
+  const build = pages.getByRole("button", { name: "Build my site" })
+  await expect(build).toBeEnabled()
+  // Untick every box from the keyboard: with none left the question is unanswered.
+  const ticked = group.getByRole("checkbox", { checked: true })
+  while ((await ticked.count()) > 0) {
+    await ticked.first().focus()
+    await page.keyboard.press("Space")
+  }
+  await expect(build).toBeDisabled()
+})
+
 test("the last question reads Build my site", async ({ page }) => {
   await open(page, "QuestionTray")
   await expect(

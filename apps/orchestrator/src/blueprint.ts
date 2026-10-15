@@ -62,6 +62,7 @@ export function blueprintLines(
     `- Voice: ${plan.voice}`,
     "- Set the `layout` export in src/site-config.ts to exactly this, every variant written out even where the direction would supply it, since the Blueprint already chose each one; a page not listed is not built:",
     JSON.stringify(blueprintLayout(plan)),
+    "- The pages are fixed: keep the file in src/pages for every page the layout lists, and delete only starter pages it does not list. Never delete a planned page, whatever the facts; when they are thin, write less on it. The build fails on a planned page it lacks.",
     "- What each section is for:",
     ...plan.pages.flatMap(({ page, sections }) =>
       sections.map(

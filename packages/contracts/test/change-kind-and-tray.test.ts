@@ -202,13 +202,14 @@ describe("AskDesignInput", () => {
 describe("AskDesignOutput", () => {
   const ok = (value: unknown) => AskDesignOutput.safeParse(value).success
 
-  it("takes a choice, the owner's own words and a skip, side by side", () => {
+  it("takes a choice, several on a multiple card, the owner's own words and a skip, side by side", () => {
     expect(
       ok({
         answers: {
           palette: { choice: "forest" },
           typeface: { own: "Something rounder" },
           layout: { skipped: true },
+          pages: { choices: ["about", "gallery", "faq"] },
         },
         skip_all: false,
       })
@@ -230,6 +231,8 @@ describe("AskDesignOutput", () => {
       { choice: "" },
       { own: "   " },
       { choice: "forest", skipped: true },
+      { choices: [] },
+      { choices: ["about"], own: "a blog" },
     ]) {
       expect(
         ok({ answers: { palette: answer }, skip_all: false }),

@@ -408,11 +408,14 @@ export function designText(
   const lines = (input?.questions ?? []).flatMap((each) => {
     const answer = output.answers[each.id]
     if (!answer || "skipped" in answer) return []
+    const label = (id: string) =>
+      each.card.options.find((option) => option.id === id)?.label ?? id
     const said =
       "own" in answer
         ? answer.own
-        : (each.card.options.find((option) => option.id === answer.choice)
-            ?.label ?? answer.choice)
+        : "choices" in answer
+          ? answer.choices.map(label).join(", ")
+          : label(answer.choice)
     return [`${each.question ?? each.id}: ${said}`]
   })
   if (lines.length > 0) return lines.join("\n")

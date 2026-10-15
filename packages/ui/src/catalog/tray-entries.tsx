@@ -1,6 +1,8 @@
 import {
   type AskChoiceInput,
   type AskDesignInput,
+  FIXED_PAGES,
+  PAGES,
   PALETTES,
 } from "@workspace/contracts"
 import {
@@ -50,13 +52,6 @@ const LAYOUTS = [
   ["type_list", "Type first and a list", "text_led", "practice_list"],
 ] as const
 
-const TONES = [
-  ["plain", "Plain and direct", "Short sentences"],
-  ["warm", "Warm and chatty", "Like a neighbour"],
-  ["crisp", "Crisp and formal", "Like a letter"],
-  ["playful", "Playful", "A little cheeky"],
-] as const
-
 export const INPUT: AskDesignInput = {
   questions: [
     {
@@ -103,12 +98,16 @@ export const INPUT: AskDesignInput = {
       ),
     },
     {
-      id: "tone",
-      question: "How should Mop & Pail Cleaning sound?",
+      id: "pages",
+      question:
+        "Which pages should the site have, besides Home and Request a quote?",
       visual: "text",
       card: card(
         "pages",
-        TONES.map(([id, label, hint]) => ({ id, label, hint, visual: null }))
+        PAGES.filter(
+          (page) => !(FIXED_PAGES as readonly string[]).includes(page.id)
+        ).map(({ id, label, hint }) => ({ id, label, hint, visual: null })),
+        { multiple: true }
       ),
     },
   ],
@@ -127,7 +126,14 @@ const STATES: [string, QuestionTrayStart | undefined, string?][] = [
   ],
   [
     "Last question, own words typed",
-    { index: 3, answers: { tone: { own: "Friendly, but never pushy" } } },
+    { index: 3, answers: { pages: { own: "A page for our prices" } } },
+  ],
+  [
+    "Pages, several ticked",
+    {
+      index: 3,
+      answers: { pages: { choices: ["services", "gallery", "faq"] } },
+    },
   ],
   ["Collapsed", { index: 1, collapsed: true }],
   ["Phone width", { index: 0 }, "max-w-[22.5rem]"],
