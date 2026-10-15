@@ -42,7 +42,11 @@ export {
   type CopyKind,
   checkCopy,
   copyFindings,
+  copyGateRules,
+  DESCRIPTION_CHARS,
+  NEAR as HEADING_NEAR,
   STOCK_HEADINGS,
+  TITLE_CHARS,
 } from "./copy.ts"
 export {
   CUSTOM_CHECK,

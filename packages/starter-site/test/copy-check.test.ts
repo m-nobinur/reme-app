@@ -3,7 +3,7 @@ import { copyFindings } from "../src/copy-check"
 
 const EM_DASH = String.fromCharCode(0x2014)
 
-const TITLE = "Weekly house cleaning in Fairhaven | BrightClean"
+const TITLE = "Weekly house cleaning in Fairhaven | BrightClean Ltd"
 const DESCRIPTION =
   "One cleaner keeps your home on the same day each week, across Fairhaven and the villages around it. Tell us about your home to get a quote today."
 const page = (body: string, title = TITLE, description = DESCRIPTION) =>
@@ -34,6 +34,19 @@ test("names each problem with the page it is on", () => {
     'index.html: says "look no further"; say what the business does instead',
     "services/index.html: shares its description with index.html",
   ])
+})
+
+test("holds a title to 50 to 60 characters, as the writer's brief says", () => {
+  const found = (length: number) =>
+    copyFindings([
+      { file: "index.html", html: page("<h1>A</h1>", "x".repeat(length)) },
+    ])
+  expect(found(62)).toEqual([
+    "index.html: title is 62 characters; write 50 to 60",
+  ])
+  expect(found(49)).toHaveLength(1)
+  expect(found(50)).toEqual([])
+  expect(found(60)).toEqual([])
 })
 
 test("leaves a noindex page's head alone", () => {

@@ -5,8 +5,12 @@ import {
 } from "@workspace/contracts"
 import {
   CLAIM_VOCABULARY,
+  COPY_WORDS,
+  DESCRIPTION_CHARS,
   factsToAsk,
+  HEADING_NEAR,
   HIDDEN_FACTS_KEY,
+  TITLE_CHARS,
 } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
@@ -145,7 +149,7 @@ describe("the Developer's site rules", () => {
 
   it("keeps the copy guidance short enough for the cached segment", () => {
     expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
-    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(600)
+    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(750)
   })
 })
 
@@ -376,10 +380,33 @@ describe("the owner's onboarding choices in the rules", () => {
       "Leave a question out rather than answer that you do not know"
     )
     expect(COPY_WRITER_RULES).toContain(
-      "the copy gate accepts 45 to 65 and 140 to 165"
+      "the copy gate accepts 50 to 60 and 140 to 165"
     )
     expect(rules).toContain("the copy gate fails under 100")
     expect(rules).toContain("the copy gate fails a service page without either")
+  })
+
+  it("carries every threshold the copy gate enforces, from the gate's own constants", () => {
+    const rules = text(false)
+    for (const range of [TITLE_CHARS, DESCRIPTION_CHARS])
+      expect(rules).toContain(`${range.min} to ${range.max} characters`)
+    for (const { aim, min } of Object.values(COPY_WORDS))
+      expect(rules).toContain(
+        `${aim[0]} to ${aim[1]} words, never under ${min}`
+      )
+    expect(rules).toContain(`${Math.round(HEADING_NEAR * 100)} percent`)
+    expect(rules).toContain("never the same as or close to its own page's h1")
+    expect(rules).toContain("no two steps on the site share their words")
+  })
+
+  it("keeps who the business is and what a service includes to the facts", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "Who the business is comes from a fact or not at all: local, family-run, independent, owner-run, years in business, team size"
+    )
+    expect(rules).toContain(
+      "in neutral wording: no guarantee, no named product or brand, no count or measure"
+    )
   })
 
   it("traces every service line to a fact and names the specifics a build once invented", () => {

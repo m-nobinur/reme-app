@@ -3,7 +3,12 @@ import {
   INDUSTRY_PACK,
   type PageId,
 } from "@workspace/contracts"
-import { COPY_WORDS, factsToAsk } from "@workspace/gates"
+import {
+  COPY_WORDS,
+  DESCRIPTION_CHARS,
+  factsToAsk,
+  TITLE_CHARS,
+} from "@workspace/gates"
 import { blueprintLines } from "./blueprint.ts"
 import type { Brief } from "./brief.ts"
 import {
@@ -258,12 +263,12 @@ export const pageInstructions = (brief: Brief) =>
  * values in a script (no python3 in the sandbox), counted characters in bash to
  * hit 50 to 60 and 140 to 155 exactly, redrafted, edited, then measured and
  * edited again. It owns a fixed list of empty fields and the build's copy check
- * (packages/starter-site/src/copy-check.ts) already passes 45 to 65 and 120 to
+ * (packages/starter-site/src/copy-check.ts) already passes 50 to 60 and 140 to
  * 165, so it is told to write once, by feel, and stop.
  */
 export const COPY_WRITER_RULES = [
   "- Write all your fields in one edit call as your first action, each edit anchored on the field's own empty line, for example `  homeTitle: \"\",`. Read a field's line only if an edit says it does not match. Use no other tool.",
-  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the copy gate accepts 45 to 65 and 140 to 165 and fails any line outside, so a description under 140 is a repair round. No two pages share a title or a description.",
+  `- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the copy gate accepts ${TITLE_CHARS.min} to ${TITLE_CHARS.max} and ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} and fails any line outside, so a title over ${TITLE_CHARS.max} or a description under ${DESCRIPTION_CHARS.min} is a repair round. No two pages share a title or a description.`,
   `- The FAQ follows the copy brief: up to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks. Ask only what you can answer in full from the facts or from how the trade usually works, promising nothing for this business that a fact does not. Leave a question out rather than answer that you do not know: never write "our facts don't say", "isn't set out", "not stated" or any note about what you were told. The copy gate fails it. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
   "- When the edit succeeds, stop and write the summary. Do not read the file back or check your work.",
 ].join("\n")

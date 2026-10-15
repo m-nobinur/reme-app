@@ -315,6 +315,35 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails who the business is unless a fact says it", () => {
+    const owner = [
+      ...PLAIN,
+      fact("business.overview", { text: "A friendly local team in Fairhaven" }),
+    ]
+    for (const main of [
+      "<h1>Fairhaven home cleaning, run by a local</h1>",
+      "<p>A family-run business</p>",
+      "<p>Independent and owner-run</p>",
+      "<p>Locally owned since the start</p>",
+      "<p>A small team you can trust</p>",
+    ]) {
+      const result = verdict(main, owner)
+      expect(result.passed, main).toBe(false)
+      expect(result.offending_node, main).toContain("index.html html>body>main")
+    }
+    // A fact's own phrase passes whatever its key; a bare "local" never claims.
+    for (const main of [
+      "<p>Meet the local team</p>",
+      "<p>Local cleaners for Fairhaven homes</p>",
+    ])
+      expect(verdict(main, owner).passed, main).toBe(true)
+    const stated = [
+      ...PLAIN,
+      fact("about.story", { text: "We are a family-run business" }),
+    ]
+    expect(verdict("<p>A family-run business</p>", stated).passed).toBe(true)
+  })
+
   it("publishes the vocabulary and the fact prefixes that support it", () => {
     const words = Object.values(CLAIM_VOCABULARY).flat()
     for (const word of ["best", "#1", "certified", "insured", "guaranteed"])

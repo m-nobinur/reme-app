@@ -53,7 +53,7 @@ const blurb = site.tagline || site.homeIntro
         {navLinks.length > 0 && (
           <nav aria-label={site.footerNavLabel}>
             {site.footerPagesHeading && (
-              <h2 class="footer-heading">{site.footerPagesHeading}</h2>
+              <p class="footer-heading">{site.footerPagesHeading}</p>
             )}
             <ul>
               {navLinks.map((link) => (
@@ -67,7 +67,7 @@ const blurb = site.tagline || site.homeIntro
         {hasContact && (
           <div class="footer-contact">
             {site.footerContactHeading && (
-              <h2 class="footer-heading">{site.footerContactHeading}</h2>
+              <p class="footer-heading">{site.footerContactHeading}</p>
             )}
             <ContactDetails />
           </div>

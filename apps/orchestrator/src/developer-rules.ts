@@ -22,6 +22,7 @@ import {
   CLAIM_VOCABULARY,
   COPY_WORDS,
   type CopyKind,
+  copyGateRules,
   factsToAsk,
 } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
@@ -39,6 +40,7 @@ const WORDS = [
   ...CLAIM_VOCABULARY.superlative,
   ...CLAIM_VOCABULARY.credential,
   ...CLAIM_VOCABULARY.guarantee,
+  ...CLAIM_VOCABULARY.identity,
 ].join(", ")
 const COUNTS = CLAIM_VOCABULARY.counted.join(", ")
 /**
@@ -141,6 +143,7 @@ export const COPY_RULES = [
   "- overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add, empty without the fact.",
   "- Each page's Title field (homeTitle, servicesTitle and so on) is 50 to 60 characters naming service, area and business; its Description field is 140 to 160 characters saying what the page offers and why to request a quote; both unique to the page. FAQ questions are what this trade's customers ask before booking, in their words.",
   `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. A widening word such as fully or comprehensive needs the fact to carry it too: "Insured up to $5 million" does not make "Fully insured". Write the line without the claim instead.`,
+  '- Who the business is comes from a fact or not at all: local, family-run, independent, owner-run, years in business, team size appear only when a fact says that very thing, in its words. Without one, write about the service and the place, never about who runs it ("Home cleaning in Bristol", not "run by a local"). A visit pattern the facts do not state, such as a weekly visit, is not written as the business\'s own.',
   "- Beyond the required facts, call ask_chief only when a missing fact would leave a core section empty or wrong, such as no detail on any service: once a build at most, as one plain question with an example answer. Never ask for a nice-to-have or for business.proof; leave its section out.",
   "- astro build ends with a copy check. Fix every line it prints about text you wrote; a fact shown as given may stay.",
 ]
@@ -161,7 +164,7 @@ export const COPY_BRIEF = [
   `- Hero: heroHeading 4 to 9 words naming the main service or outcome and the place. homeIntro, the subhead, two or three sentences (${range("hero_lede")}): who the business serves, where, and what the customer gets. heroNote, under the buttons, one reassurance line under 12 words about how the next step works, never a promise no fact makes.`,
   "- Trust strip: trust1 to trust3, under six words each, from business.proof only.",
   `- Service cards: serviceNName as a customer would search for it; serviceNBody ${range("service_body")}, the result first, then what the work covers in general terms. serviceCardsLink is a short label for the link to the services page.`,
-  `- Each service's own page (/services/<slug>/, from serviceNName): serviceNHeading, its h1, 4 to 9 words naming the service and the area, never the bare name; serviceNTitle 50 to 60 characters and serviceNDescription 140 to 160, both its own; serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service covers, from the facts and the trade's usual practice; serviceNFor one or two sentences on who it suits, from business.audience; both are required, and the copy gate fails a service page without either; three or four steps of this service alone (serviceNStep1Title to serviceNStep4Body, each a title of 2 to 5 words and a body of ${range("step_body")}) under serviceNStepsHeading, sharing no words with the home page's steps or another service's; two to four questions about this service only (serviceNFaq1Question to serviceNFaq4Answer, each answer ${range("faq_answer")}) under serviceNFaqHeading; serviceNCtaHeading and serviceNCtaBody its closing band.`,
+  `- Each service's own page (/services/<slug>/, from serviceNName): serviceNHeading, its h1, 4 to 9 words naming the service and the area, never the bare name; serviceNTitle 50 to 60 characters and serviceNDescription 140 to 160, both its own; serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service normally covers, in neutral wording: no guarantee, no named product or brand, no count or measure, nothing the facts rule out, and no promise about this business that a fact does not make; serviceNFor one or two sentences on who it suits, from business.audience; both are required, and the copy gate fails a service page without either; three or four steps of this service alone (serviceNStep1Title to serviceNStep4Body, each a title of 2 to 5 words and a body of ${range("step_body")}) under serviceNStepsHeading, sharing no words with the home page's steps or another service's; two to four questions about this service only (serviceNFaq1Question to serviceNFaq4Answer, each answer ${range("faq_answer")}) under serviceNFaqHeading; serviceNCtaHeading and serviceNCtaBody its closing band.`,
   "- The services page (servicesIntro and its cards) introduces every service and links each to its own page; it repeats no service page's words.",
   `- Steps: three or four (step1 to step4) from first contact to the finished job, each a title of 2 to 5 words and a body of ${range("step_body")}.`,
   "- About: overviewBody and audienceBody together 120 to 200 words in two paragraphs (the copy gate fails under 100), rephrasing every part of business.overview and business.audience and saying how such a visit usually works in the trade; never padded with history, people or numbers the facts do not give.",
@@ -171,7 +174,8 @@ export const COPY_BRIEF = [
   "- Closing band, one per page and each its own: ctaHeading and ctaBody on home, aboutCtaHeading, servicesCtaHeading, serviceAreaCtaHeading, contactCtaHeading (each with its Body) and serviceNCtaHeading on the others. The heading 4 to 9 words; the body one sentence of 12 to 30 words with a reason to ask now and no deadline or offer.",
   "- Page ledes (aboutIntro, servicesIntro, serviceAreaIntro, contactIntro, quoteIntro): two or three sentences, 30 to 60 words, on what that page offers.",
   "- Headings: every h1 and h2 on the site is its own, with no repeat or near-repeat on any page, and each names this business's service, customer or place. A stock label (Our services, Why choose us, How it works, About us, Common questions) is only ever an eyebrow. homeAboutHeading and homeAreaHeading are the home sections' own h2s, so they never repeat the about or service area page's h1.",
-  "- A planned build runs a copy gate after yours: it fails a repeated or stock heading, a page title another page shares and a section under its range, and lists each one. Rewrite exactly those.",
+  ...copyGateRules(),
+  "- A planned build runs a copy gate after yours and lists each miss. Rewrite exactly those.",
 ]
 
 /**

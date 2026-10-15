@@ -19,6 +19,10 @@ import { factsForContent, maskContentClaims } from "./text.ts"
  *   digits and cut to five characters, so "insured" traces to "insurance" and
  *   "certified" to "certification"; a phrase has to appear as consecutive
  *   stems, so "phone number" does not support "number one".
+ * - An **identity** phrase ("family-run", "independent", "local team", "run
+ *   by a local", "small team") passes when any non-`inferred` fact carries
+ *   the same phrase, whatever its key: who the business is comes from what
+ *   the owner said, never from the writer.
  * - An **absolute** word ("fully", "completely", "comprehensive", "full")
  *   directly before a claim word or a coverage word ("insured", "insurance",
  *   "covered") widens it past what a fact usually states: "Insured up to $5
@@ -96,6 +100,29 @@ export const CLAIM_VOCABULARY = {
     "trained",
     "registered with",
   ],
+  // Who the business is: true only when a fact says so. Phrases, not bare "local".
+  identity: [
+    "family-run",
+    "family-owned",
+    "family business",
+    "independent",
+    "independently owned",
+    "owner-run",
+    "owner-operated",
+    "locally owned",
+    "locally run",
+    "locally based",
+    "local team",
+    "local business",
+    "local company",
+    "local family",
+    "run by a local",
+    "small team",
+    "one-person",
+    "one-man",
+    "one-woman",
+    "two-person",
+  ],
   guarantee: [
     "guarantee",
     "guarantees",
@@ -158,6 +185,7 @@ export type ClaimKind =
   | "superlative"
   | "credential"
   | "guarantee"
+  | "identity"
   | "testimonial"
   | "generated_image"
 
@@ -229,7 +257,7 @@ const NUMBER_CLAIMS: {
 
 /** The three word lists, as one matcher each, longest phrases first. */
 const PHRASE_CLAIMS = (
-  ["superlative", "credential", "guarantee"] as const
+  ["superlative", "credential", "guarantee", "identity"] as const
 ).flatMap((kind) =>
   [...CLAIM_VOCABULARY[kind]]
     .sort((a, b) => b.length - a.length)
@@ -294,11 +322,18 @@ function claimsIn(text: string): Found[] {
 type Support = {
   numbers: Set<number>
   words: string[][]
+  /** Every fact's words: an identity phrase passes when any fact says it. */
+  anyWords: string[][]
   testimonials: string[]
 }
 
 function supportFrom(facts: readonly FactRecord[]): Support {
-  const support: Support = { numbers: new Set(), words: [], testimonials: [] }
+  const support: Support = {
+    numbers: new Set(),
+    words: [],
+    anyWords: [],
+    testimonials: [],
+  }
   for (const fact of factsForContent(facts)) {
     // A review the customer never agreed to have quoted supports nothing.
     if (
@@ -309,6 +344,7 @@ function supportFrom(facts: readonly FactRecord[]): Support {
     const text = JSON.stringify(fact.value) ?? ""
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))
+    support.anyWords.push(stems(text))
     if (
       SUPPORTING_FACT_PREFIXES.some((p) => fact.key.startsWith(p)) ||
       (SUPPORTING_FACT_KEYS as readonly string[]).includes(fact.key)
@@ -327,6 +363,8 @@ function isSupported(found: Found, support: Support): boolean {
     return support.testimonials.some((t) => t.includes(quote))
   }
   const phrase = stems(found.text)
+  if (found.kind === "identity")
+    return support.anyWords.some((fact) => holds(fact, phrase))
   return support.words.some((fact) => holds(fact, phrase))
 }
 
