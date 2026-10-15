@@ -259,6 +259,81 @@ describe("the fallback Blueprint", () => {
   })
 })
 
+describe("the photo shot list", () => {
+  const slot = (
+    id: string,
+    section: string,
+    aspect: string,
+    extra: Record<string, unknown> = {}
+  ) => ({
+    id,
+    page: "home",
+    section,
+    aspect,
+    resolution: "1K",
+    subject: "x",
+    alt: "x",
+    source: "generated",
+    ...extra,
+  })
+
+  it("draws each generated photo at the shape of its box, whatever the model wrote", () => {
+    const made = fallbackBlueprint({
+      facts: CLEANING,
+      recent: [],
+      library: LIBRARY,
+    })
+    // calm_daylight's wash photo is the right half of the hero, not a 16:9 strip.
+    expect(made.images[0]).toMatchObject({ section: "hero", aspect: "4:3" })
+    const withHero = (variant: string) =>
+      ({
+        ...made,
+        pages: made.pages.map((p) => ({
+          ...p,
+          sections: p.sections.map((s) =>
+            s.kind === "hero" ? { ...s, variant } : s
+          ),
+        })),
+      }) as Blueprint
+    const fitted = withOwnerChoices(
+      {
+        ...withHero("split_arch"),
+        images: [
+          slot("hero", "hero", "16:9", { text_side: "left" }),
+          slot("card", "service_cards", "16:9"),
+          slot("band", "cta_band", "4:3"),
+          slot("own", "service_cards", "16:9", {
+            source: "upload",
+            asset_id: "20000000-0000-4000-8000-000000000009",
+          }),
+        ],
+      } as Blueprint,
+      CLEANING
+    ).images
+    expect(fitted.map((s) => [s.id, s.aspect, s.text_side])).toEqual([
+      // An arch is portrait, and its copy sits beside it, not on it.
+      ["hero", "3:4", undefined],
+      ["card", "4:3", undefined],
+      ["band", "21:9", undefined],
+      // An owner's photo is placed as it is.
+      ["own", "16:9", undefined],
+    ])
+    // dark_center's copy sits on the photo, so its text side stays.
+    expect(
+      withOwnerChoices(
+        {
+          ...withHero("dark_center"),
+          images: [slot("hero", "hero", "4:3", { text_side: "left" })],
+        } as Blueprint,
+        CLEANING
+      ).images[0]
+    ).toMatchObject({ aspect: "16:9", text_side: "left" })
+    expect(
+      plannerPrompt({ facts: CLEANING, recent: [], previous: null }).system
+    ).toContain("one photographer's shot list")
+  })
+})
+
 describe("pages the starter has no file for", () => {
   const photo = (n: number) => ({
     id: `20000000-0000-4000-8000-00000000000${n}`,
