@@ -556,6 +556,20 @@ describe("the one line", () => {
       detail: "writing the pages",
       progress: { done: 3, total: 5 },
     })
+    // The gates sent it back: the pill says so, in a sixth step.
+    const repairing = [
+      ...activity.slice(0, 2).map((r) => ({ ...r, done: r.total })),
+      row("writing", "Writing the pages", 6, 6),
+      row("design", "Looking over the design", 1),
+      row("fixing", "Fixing what the checks found", 0),
+      row("checking", "Checking the site", 0),
+    ]
+    expect(
+      line({ builds: [{ ...build("implementing"), activity: repairing }] })
+    ).toMatchObject({
+      detail: "fixing what the checks found",
+      progress: { done: 5, total: 6 },
+    })
     // The plan waiting on the owner is not the team planning.
     const waiting = {
       ...build("planning"),

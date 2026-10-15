@@ -653,7 +653,11 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
 
   return (
     <Tabs onValueChange={(value: Tab) => setTab(value)} value={shown}>
-      <TabsList className="sticky top-0 z-10 bg-popover" ref={tabList}>
+      {/* Reaches up over the scroller's 1rem padding, so nothing scrolls through the gap above it. */}
+      <TabsList
+        className="sticky -top-4 z-10 -mt-4 bg-popover pt-4"
+        ref={tabList}
+      >
         <TabsTrigger value="activity">Activity</TabsTrigger>
         {upcoming.length ? (
           <TabsTrigger value="reminders">

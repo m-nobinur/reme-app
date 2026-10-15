@@ -549,7 +549,7 @@ function QuestionTray({
     <section
       aria-label="Design questions"
       className={cn(
-        "@container flex max-h-[min(36rem,72dvh)] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground",
+        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground",
         className
       )}
       data-slot="question-tray"

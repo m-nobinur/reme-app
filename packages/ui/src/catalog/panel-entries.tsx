@@ -173,10 +173,17 @@ const pages = (done: number) =>
 
 /** A full build's steps as the api lists them, at `step` with these counts. */
 const steps = (
-  at: "planning" | "photos" | "writing" | "checking",
+  at: "planning" | "photos" | "writing" | "design" | "fixing" | "checking",
   counts: { photos?: number; pages?: number } = {}
 ) => {
-  const order = ["planning", "photos", "writing", "design", "checking"]
+  const order = [
+    "planning",
+    "photos",
+    "writing",
+    "design",
+    "fixing",
+    "checking",
+  ]
   const passed = (id: string) => order.indexOf(id) < order.indexOf(at)
   const whole = (id: string, label: string) =>
     row(id, label, passed(id) ? 1 : 0)
@@ -198,6 +205,10 @@ const steps = (
       items: pages(passed("writing") ? 6 : (counts.pages ?? 0)),
     },
     whole("design", "Looking over the design"),
+    // The gates sent it back once: the row stays, before the checks it comes back to.
+    ...(at === "fixing"
+      ? [whole("fixing", "Fixing what the checks found")]
+      : []),
     whole("checking", "Checking the site"),
   ]
 }
@@ -529,6 +540,32 @@ const panelCatalog: Entry[] = [
           photo("slot_3", "made", PHOTOS.kitchen),
           photo("slot_4", "made", PHOTOS.bath),
           photo("slot_5", "fallback", null, null),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn design look",
+    render: () =>
+      building("implementing", steps("design"), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "made", PHOTOS.hero),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn repair",
+    render: () =>
+      building("implementing", steps("fixing"), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "made", PHOTOS.hero),
         ],
       }),
   },
