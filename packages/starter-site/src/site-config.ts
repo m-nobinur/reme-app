@@ -606,6 +606,20 @@ const values = {
   homeAreaHeading: "",
   /** The link from the home page's area section to the service area page. */
   areaLink: "See the areas we cover",
+  /** The labels on the area section's two rows: the place, and hours when hours.weekday is given. */
+  areaPlaceLabel: "Service area",
+  areaHoursLabel: "Hours",
+  /** The small label on the card over the area drawing. */
+  areaCardLabel: "Where we work",
+  /** The card's line, 3 to 7 words on being local, as "Right around the corner". Empty shows service_area.text. */
+  areaCardLine: "",
+  /**
+   * The service area page's line under a town, one to a line as "Oakley:
+   * weekly cleans for the terraces by the green", for towns in areaTowns
+   * only, spelled as there. A town with no line is listed alone; empty lists
+   * every town alone.
+   */
+  areaTownNotes: "",
   faqEyebrow: "Questions",
   faqHeading: "Common questions",
   /** One or two sentences under the FAQ heading, beside the questions. Empty leaves the heading alone. */

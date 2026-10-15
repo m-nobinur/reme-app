@@ -3,6 +3,7 @@
 // is its own (title, description, structured data); the order and variants of
 // its sections are data.
 import { plain } from "../accent"
+import { areaDeep, areaTowns } from "../area-map"
 import ActionLink from "../components/ActionLink/ActionLink.astro"
 import AreaSection from "../components/AreaSection/AreaSection.astro"
 import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
@@ -28,6 +29,7 @@ import {
   servicesFaqItems,
 } from "../structured-data"
 import AboutSection from "./AboutSection.astro"
+import AreaArt from "./AreaArt.astro"
 import SectionHead from "./SectionHead.astro"
 
 interface Props {
@@ -65,6 +67,8 @@ const pagePhoto = headerPhoto(service ? `service:${service.id}` : page)
 // The h1 shares a field with a section heading elsewhere, and shows no accent marks.
 const heading = plain(marked)
 const home = page === "home"
+// The service area page's header is a cover with the area drawn beside it.
+const areaCover = page === "service_area" && !pagePhoto
 // Offerings are work beyond the service rows; a line that only repeats a
 // service's name would list the same services twice on one page.
 const named = new Set(
@@ -128,7 +132,18 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
             caption={home ? site.heroCaption : ""}
             highlights={home ? serviceItems.slice(0, 3) : []}
             note={home ? site.heroNote : ""}
+            deep={areaCover && areaDeep(site.direction)}
           >
+            {areaCover && (
+              <AreaArt
+                slot="art"
+                class="area-art-cover"
+                towns={areaTowns(site.areaTowns)}
+                seed={site.serviceAreaText}
+                label={site.areaCardLabel}
+                line={site.areaCardLine || site.serviceAreaText}
+              />
+            )}
             {home && primaryAction && (
               <ActionLink href={primaryAction.href} label={primaryAction.label} />
             )}
