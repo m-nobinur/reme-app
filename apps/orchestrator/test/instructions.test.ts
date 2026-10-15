@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs"
 import type { FactRecord } from "@workspace/contracts"
+import { COPY_WORDS } from "@workspace/gates"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it, vi } from "vitest"
 import { blueprintLayout } from "../src/blueprint.ts"
 import type { Brief } from "../src/brief.ts"
 import {
+  COPY_BRIEF,
   DESIGN_RULES,
   DIRECTION_LIBRARY,
   industryOf,
@@ -214,6 +216,36 @@ describe("the parallel first build", () => {
     expect(pageTasks(fanPlan).map((t) => t.page)).toEqual(
       fanPlan.pages.map((p) => p.page)
     )
+  })
+
+  it("gives every section heading the copy gate reads to a writer, and the brief to all of them", () => {
+    const owned = new Set([
+      ...pageTasks(fanPlan).flatMap((t) => t.fields),
+      ...copyFields(fanPlan),
+    ])
+    const home = fanPlan.pages.find((p) => p.page === "home")
+    const kinds = new Set(home?.sections.map((s) => s.kind))
+    const heads: Record<string, string> = {
+      service_cards: "serviceCardsHeading",
+      value_props: "valuePropsHeading",
+      steps: "stepsHeading",
+      about: "homeAboutHeading",
+      service_area: "homeAreaHeading",
+      faq: "faqHeading",
+    }
+    for (const [kind, field] of Object.entries(heads))
+      if (kinds.has(kind as never)) expect(owned, field).toContain(field)
+    for (const text of [
+      pageInstructions(planned),
+      copyInstructions(planned),
+      instructions(planned, 20),
+    ]) {
+      for (const line of COPY_BRIEF) expect(text).toContain(line)
+    }
+    // The brief quotes the gate's ranges, so the two cannot drift.
+    const joined = COPY_BRIEF.join(" ")
+    for (const { aim } of Object.values(COPY_WORDS))
+      expect(joined).toContain(`${aim[0]} to ${aim[1]} words`)
   })
 
   it("sends at most four tasks a turn, every page once and the copy writer once", () => {

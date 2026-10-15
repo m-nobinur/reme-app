@@ -3,7 +3,7 @@ import {
   INDUSTRY_PACK,
   type PageId,
 } from "@workspace/contracts"
-import { factsToAsk } from "@workspace/gates"
+import { COPY_WORDS, factsToAsk } from "@workspace/gates"
 import { blueprintLines } from "./blueprint.ts"
 import type { Brief } from "./brief.ts"
 import {
@@ -55,6 +55,7 @@ export function copyFields(plan: Blueprint): string[] {
       `${camel(page)}Title`,
       `${camel(page)}Description`,
     ]),
+    ...(faq ? ["faqEyebrow", "faqHeading"] : []),
     ...(faq
       ? Array.from({ length: 8 }, (_, i) => [
           `faq${i + 1}Question`,
@@ -222,8 +223,8 @@ export const pageInstructions = (brief: Brief) =>
  */
 export const COPY_WRITER_RULES = [
   "- Write all your fields in one edit call as your first action, each edit anchored on the field's own empty line, for example `  homeTitle: \"\",`. Read a field's line only if an edit says it does not match. Use no other tool.",
-  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 145; the build's copy check accepts 45 to 65 and 120 to 165 and reports any line outside to the lead, who fixes it.",
-  "- FAQ answers say only what a fact says; a question no fact answers is left out, its fields empty.",
+  "- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the build's copy check accepts 45 to 65 and 120 to 165 and reports any line outside to the lead, who fixes it. No two pages share a title or a description.",
+  `- The FAQ follows the copy brief: five to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks and as true as the facts allow. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
   "- When the edit succeeds, stop and write the summary. Do not read the file back or check your work.",
 ].join("\n")
 

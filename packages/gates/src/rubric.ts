@@ -39,7 +39,7 @@ export const RULES = [
   },
   {
     id: "brevity",
-    text: "Headlines 3 to 7 words, paragraphs 1 to 2 sentences, one CTA wording repeated",
+    text: "Headlines 4 to 9 words, none repeated on the site; body copy as full as the brief asks; one CTA wording repeated",
   },
   {
     id: "no_invented_proof",
