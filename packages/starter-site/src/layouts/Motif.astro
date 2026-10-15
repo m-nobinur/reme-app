@@ -1,11 +1,11 @@
 ---
-// A line-art ornament a section may draw beside its copy: orbit rings round a
-// soft blob with a spark, a map pin in rings, or two soft arcs. Decoration
-// only, so it is hidden from assistive technology, and drawn in the palette:
-// lines in currentColor (site.css sets it from the brand line), the blob in
-// a tint of the brand, the spark and the pin in the accent.
+// A line-art ornament a section may draw beside its copy, only where it
+// means something: a map pin in rings beside the service area. Decoration
+// only, so it is hidden from assistive technology, and drawn in hairlines of
+// the palette: currentColor (site.css sets it from the brand line), the pin in
+// the brand's text colour.
 interface Props {
-  kind: "orbit" | "pin" | "arcs"
+  kind: "pin"
   class?: string
 }
 
@@ -22,24 +22,6 @@ const { kind, class: className } = Astro.props
   focusable="false"
 >
   {
-    kind === "orbit" && (
-      <>
-        <circle cx="120" cy="120" r="100" />
-        <ellipse cx="120" cy="124" rx="108" ry="88" transform="rotate(-24 120 124)" />
-        <path
-          class="motif-blob"
-          d="M122 70c26 0 46 18 48 44 2 28-18 54-48 56-30 2-52-20-52-48s22-52 52-52Z"
-        />
-        <path
-          class="motif-spark"
-          d="M196 44v24M184 56h24M187.5 47.5l17 17M204.5 47.5l-17 17"
-          stroke-linecap="round"
-          stroke-width="1.5"
-        />
-      </>
-    )
-  }
-  {
     kind === "pin" && (
       <>
         <circle cx="120" cy="128" r="104" stroke-dasharray="2 6" />
@@ -50,15 +32,6 @@ const { kind, class: className } = Astro.props
           d="M120 76c-17.7 0-32 14.3-32 32 0 24 32 52 32 52s32-28 32-52c0-17.7-14.3-32-32-32Z"
         />
         <circle class="motif-pin-dot" cx="120" cy="108" r="10" />
-      </>
-    )
-  }
-  {
-    kind === "arcs" && (
-      <>
-        <path d="M8 232A224 224 0 0 1 232 8" />
-        <path d="M64 232A168 168 0 0 1 232 64" />
-        <circle class="motif-spark-dot" cx="232" cy="8" r="4" />
       </>
     )
   }

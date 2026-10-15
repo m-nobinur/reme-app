@@ -1,6 +1,5 @@
 ---
 import { iconFor } from "../../icons"
-import Motif from "../../layouts/Motif.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
@@ -16,14 +15,13 @@ const items = ([1, 2, 3] as const)
 
 {
   items.length > 0 && (
-    <section class="band band-tint value-props">
+    <section class="band value-props">
       <div class="wrap value-inner">
         <div class="value-head">
           <SectionHead
             eyebrow={site.valuePropsEyebrow}
             heading={site.valuePropsHeading}
           />
-          <Motif kind="orbit" class="value-motif" />
         </div>
         <ul class="value-list">
           {items.map((item) => (

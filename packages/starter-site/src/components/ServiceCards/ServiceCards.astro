@@ -52,7 +52,6 @@ const headed = !onServices && !only
 // Cards per row on a wide screen: four in one row, otherwise rows of three,
 // a short last row centred (site.css counts the cards itself).
 const perRow = items.length === 4 ? 4 : 3
-const number = (i: number) => String(i + 1).padStart(2, "0")
 // A linked card's name is the link, stretched over the card; the words and
 // arrow at its foot repeat it for the eye, so they are hidden from readers.
 ---
@@ -75,7 +74,7 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
         )}
         {(variant === "photo_cards" || variant === "fleet") && (
           <ul class="card-grid">
-            {items.map((item, i) => (
+            {items.map((item) => (
               <li class:list={["card", linked && "card-linked"]}>
                 {item.photo ? (
                   <div class="card-media">
@@ -85,12 +84,6 @@ const number = (i: number) => String(i + 1).padStart(2, "0")
                       alt={item.photo.alt}
                       sizes={`(min-width: 80rem) ${perRow === 4 ? 19 : 26}rem, (min-width: 64rem) ${Math.floor(100 / perRow)}vw, (min-width: 40rem) 50vw, calc(100vw - 2rem)`}
                     />
-                    {variant === "photo_cards" && (
-                      <span class="card-tag">
-                        <Icon name={item.icon} />
-                        <span>{number(i)}</span>
-                      </span>
-                    )}
                   </div>
                 ) : (
                   variant === "photo_cards" && (
