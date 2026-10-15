@@ -1,4 +1,5 @@
 ---
+import Icon from "../components/Icon/Icon.astro"
 import Section from "../components/Section/Section.astro"
 import { hasPhoto } from "../photo-files"
 import { hasRoute } from "../routes"
@@ -20,12 +21,24 @@ const proof = site.proofBody || site.proof
 const homeAudience =
   !hasRoute("/about/") && (site.audienceBody || site.audience)
 const homeAbout = site.aboutIntro || site.overviewBody || site.overview
-// The story's photo: the first gallery photo, else the home hero's, since
-// neither shows on the about page. Both halves or none.
-const photo = [
-  { src: site.photo1Src, alt: site.photo1Alt },
-  { src: site.heroImage, alt: site.heroImageAlt },
-].find((each) => each.alt && hasPhoto(each.src))
+// The story's photo: the owner's first gallery photo or none. Never the home
+// hero's, which the home page already shows. Both halves or none.
+const photo =
+  site.photo1Alt && hasPhoto(site.photo1Src)
+    ? { src: site.photo1Src, alt: site.photo1Alt }
+    : undefined
+// The record's items: the stated figures, then the points. A band with a lone
+// sentence says nothing the trust strip does not, so it needs two items.
+const proofItems = [
+  ...[
+    [site.statYearsValue, site.statYearsLabel],
+    [site.statClientsValue, site.statClientsLabel],
+    [site.statRatingValue, site.statRatingLabel],
+  ]
+    .filter(([value]) => value)
+    .map(([value, label]) => `${value} ${label?.toLowerCase()}`.trim()),
+  ...[site.trust1, site.trust2, site.trust3].filter(Boolean),
+]
 const storyHeading = story ? site.overviewHeading : site.audienceHeading
 ---
 
@@ -83,9 +96,19 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
           </div>
         </section>
       )}
-      {proof && (
+      {proofItems.length >= 2 && (
         <Section eyebrow={site.proofEyebrow} heading={site.proofHeading}>
-          <p>{proof}</p>
+          <div class="proof-record">
+            {proof && <p>{proof}</p>}
+            <ul class="check-list">
+              {proofItems.map((item) => (
+                <li>
+                  <Icon name="checkCircle" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </Section>
       )}
     </>

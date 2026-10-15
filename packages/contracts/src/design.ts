@@ -114,6 +114,7 @@ export const PALETTE_AA_PAIRS = [
  */
 export const SECTION_VARIANTS = {
   hero: ["wash", "split_arch", "split_frame", "dark_center", "text_led"],
+  // "phrases" is kept so a stored plan that names it parses; the strip draws icons for both.
   trust_strip: ["icons", "phrases"],
   service_cards: [
     "photo_cards",

@@ -34,12 +34,15 @@ export function blueprintLayout(
 
 /** The site fields a page header's photo and its alt go in, where the slot is one. */
 function headerField(slot: ImageSlot): string {
-  const service = /^service_(\d)_hero$/.exec(slot.id)?.[1]
-  const field = service
-    ? `service${service}Image`
-    : slot.section === "hero" && ["about", "contact"].includes(slot.page)
-      ? `${slot.page}Image`
-      : ""
+  const header = /^service_(\d)_hero$/.exec(slot.id)?.[1]
+  const card = /^service_(\d)_card$/.exec(slot.id)?.[1]
+  const field = header
+    ? `service${header}HeaderImage`
+    : card
+      ? `service${card}Image`
+      : slot.section === "hero" && ["about", "contact"].includes(slot.page)
+        ? `${slot.page}Image`
+        : ""
   return field ? ` (site.${field} and site.${field}Alt)` : ""
 }
 

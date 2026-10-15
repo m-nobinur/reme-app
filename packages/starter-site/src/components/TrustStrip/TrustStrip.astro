@@ -6,14 +6,12 @@ import { servicePages } from "../../structured-data"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
-  /** icons in columns split by hairlines, phrases in one tracked line. */
+  /** Kept so a stored plan that says "phrases" still builds; both draw the icon columns. */
   variant?: "icons" | "phrases"
 }
 
-const { variant = "icons" } = Astro.props
 // Figures are fact fields; a figure with no value does not render, label or
-// no label. The points restate business.proof and are empty without it. So
-// with no proof and no figures there is no strip at all.
+// no label. The points restate business.proof and are empty without it.
 const figures = [
   {
     value: site.statYearsValue,
@@ -37,49 +35,48 @@ const points: { text: string; icon: string }[] = [
     return { text, icon }
   })
 const towns = site.areaTowns.split("\n").filter((line) => line.trim())
-if (figures.length + points.length === 0) {
-  const plain = [
-    {
-      text:
-        site.serviceArea ||
-        (towns.length > 1 ? `Covering ${towns.length} local areas` : ""),
-      icon: "mapPin",
-    },
-    {
-      text: site.weekdayHours ? `Open weekdays ${site.weekdayHours}` : "",
-      icon: "clock",
-    },
-    {
-      text: hasRoute("/quote/") ? "Request a quote online" : "",
-      icon: "clipboardText",
-    },
-    {
-      text:
-        servicePages.length > 1
-          ? `${servicePages.length} services to choose from`
-          : "",
-      icon: "listChecks",
-    },
-  ].filter((item) => item.text)
-  if (plain.length >= 2) points.push(...plain)
+// Plain facts the site already states, claiming nothing: they fill the strip
+// to four columns after the proof, or stand alone when there is no proof.
+const plain = [
+  {
+    text:
+      site.serviceArea ||
+      (towns.length > 1 ? `Covering ${towns.length} local areas` : ""),
+    icon: "mapPin",
+  },
+  {
+    text: site.weekdayHours ? `Open weekdays ${site.weekdayHours}` : "",
+    icon: "clock",
+  },
+  {
+    text: hasRoute("/quote/") ? "Request a quote online" : "",
+    icon: "clipboardText",
+  },
+  {
+    text:
+      servicePages.length > 1
+        ? `${servicePages.length} services to choose from`
+        : "",
+    icon: "listChecks",
+  },
+].filter((item) => item.text)
+const proof = figures.length + points.length
+if (proof > 0 || plain.length >= 2) {
+  points.push(...plain.slice(0, Math.max(0, 4 - proof)))
 }
 const count = figures.length + points.length
-// Columns on a wide screen: one row up to four items, rows of three past that.
-const columns = count <= 4 ? count : 3
 ---
 
 {
   count > 0 && (
-    <section class:list={["trust-strip", `trust-${variant}`]}>
+    <section class="trust-strip">
       <div class="wrap">
-        <ul class="trust-list" style={`--trust-cols: ${columns}`}>
+        <ul class="trust-list" style={`--trust-cols: ${count <= 4 ? count : 3}`}>
           {figures.map((item) => (
             <li>
-              {variant === "icons" && (
-                <span class="trust-icon">
-                  <Icon name={item.icon} />
-                </span>
-              )}
+              <span class="trust-icon">
+                <Icon name={item.icon} />
+              </span>
               <span class="trust-text">
                 <span class="trust-value">{item.value}</span>
                 {item.label && <span class="trust-label">{item.label}</span>}
@@ -88,11 +85,9 @@ const columns = count <= 4 ? count : 3
           ))}
           {points.map((point) => (
             <li>
-              {variant === "icons" && (
-                <span class="trust-icon">
-                  <Icon name={point.icon} />
-                </span>
-              )}
+              <span class="trust-icon">
+                <Icon name={point.icon} />
+              </span>
               <span class="trust-text">{point.text}</span>
             </li>
           ))}

@@ -785,7 +785,7 @@
           },
           {
             "kind": "trust_strip",
-            "variant": "phrases"
+            "variant": "icons"
           },
           {
             "kind": "service_cards",
@@ -984,7 +984,7 @@
           },
           {
             "kind": "trust_strip",
-            "variant": "phrases"
+            "variant": "icons"
           },
           {
             "kind": "service_cards",

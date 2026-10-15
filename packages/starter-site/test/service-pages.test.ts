@@ -42,8 +42,8 @@ beforeAll(async () => {
     build({
       site: {
         ...FILLED,
-        service1Image: "/uploads/weekly.jpg",
-        service1ImageAlt: "A tidy kitchen after a weekly clean",
+        service1HeaderImage: "/uploads/weekly.jpg",
+        service1HeaderImageAlt: "A tidy kitchen after a weekly clean",
       },
       files: {
         "src/assets/uploads/logo.png": await sharp(await image(320, 120))

@@ -73,14 +73,8 @@ const heroes = HEROES.flatMap((variant) => [
       </>
     ))
   }
-  {
-    (["icons", "phrases"] as const).map((variant) => (
-      <>
-        <p class="catalog-label">TrustStrip · {variant}</p>
-        <TrustStrip variant={variant} />
-      </>
-    ))
-  }
+  <p class="catalog-label">TrustStrip</p>
+  <TrustStrip />
   {
     SERVICES.map((variant) => (
       <>

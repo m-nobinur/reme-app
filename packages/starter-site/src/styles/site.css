@@ -931,8 +931,7 @@ picture {
   }
 }
 
-/* Trust strip. icons: the figures and points in columns split by hairlines.
-   phrases: one tracked line, the items between dots. */
+/* Trust strip: the figures and points as icon columns split by hairlines. */
 
 .trust-strip {
   border-bottom: 1px solid var(--border);
@@ -941,7 +940,6 @@ picture {
 
 .trust-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   gap: var(--space-md) 0;
   margin: 0;
   padding: 2.25rem 0;
@@ -977,32 +975,32 @@ picture {
   color: inherit;
 }
 
-/* Two columns on a phone; on a wide screen one row of up to four, rows of
-   three past that (TrustStrip sets --trust-cols). Every item draws a hairline
+/* Two columns on a phone, so four items sit 2 by 2; on a wide screen one row
+   of up to four, rows of three past that (TrustStrip sets --trust-cols). Every item draws a hairline
    on its start edge and the list clips the first column's, so the dividers
    sit only between neighbours whatever the count. */
-.trust-icons .trust-list {
+.trust-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   overflow: hidden;
 }
 
-.trust-icons .trust-list li {
+.trust-list li {
   margin-inline-start: -1px;
   border-inline-start: 1px solid var(--border);
 }
 
 @media (max-width: 29.99rem) {
-  .trust-icons .trust-list li {
+  .trust-list li {
     padding-inline: var(--space-sm);
   }
 }
 
 @media (min-width: 56rem) {
-  .trust-icons .trust-list {
+  .trust-list {
     grid-template-columns: repeat(var(--trust-cols, 4), minmax(0, 1fr));
   }
 
-  .trust-icons .trust-list li {
+  .trust-list li {
     padding-inline: var(--space-lg);
   }
 }
@@ -1017,34 +1015,6 @@ picture {
 
 .trust-label {
   color: var(--muted-foreground);
-}
-
-.trust-phrases .trust-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.trust-phrases .trust-list li {
-  gap: 0.4em;
-  font-size: 0.75rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.trust-phrases :is(.trust-value, .trust-label) {
-  color: inherit;
-  font: inherit;
-}
-
-.trust-phrases .trust-list li + li::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: -0.1875rem;
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 50%;
-  background: var(--brand);
 }
 
 /* Cards */
@@ -1819,6 +1789,25 @@ picture {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
+}
+
+/* About's record: the paragraph beside the proof items on a wide screen. */
+
+.proof-record {
+  display: grid;
+  gap: var(--space-lg) var(--space-2xl);
+  align-items: start;
+}
+
+.proof-record > p,
+.proof-record .check-list {
+  margin: 0;
+}
+
+@media (min-width: 56rem) {
+  .proof-record:has(> p) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 /* Service area */
