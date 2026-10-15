@@ -156,7 +156,10 @@ const perRow = items.length === 4 ? 4 : 3
                 {site.serviceCardsEyebrow && (
                   <p class="eyebrow">{site.serviceCardsEyebrow}</p>
                 )}
-                {item.name && <h2>{item.name}</h2>}
+                {/* The page's h1 names the service on its own page, and a
+                    headed section's h2 sits above its cards: the bare name as
+                    an h2 there repeats another page's heading. */}
+                {item.name && !only && (headed ? <h3>{item.name}</h3> : <h2>{item.name}</h2>)}
                 {(item.detail || item.body) && (
                   <p class="service-detail-body" data-copy="service_detail">
                     {item.detail || item.body}

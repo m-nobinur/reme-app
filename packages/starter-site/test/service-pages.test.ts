@@ -99,6 +99,18 @@ describe("a service page's included and who-it-suits blocks", () => {
         ?.html ?? ""
     expect(html).toContain(FILLED.service1For)
   })
+
+  // The confirming run's first copy gate: every service page's h2 was its
+  // bare name, a repeat of the home page's and the services page's.
+  test("never repeat the service's name as an h2 under the h1 that names it", () => {
+    const html =
+      pagesOf(bare).find((p) => p.file === "services/weekly-clean/index.html")
+        ?.html ?? ""
+    expect(html).toContain(`<h1`)
+    expect(html).not.toMatch(
+      new RegExp(`<h2[^>]*>\\s*${FILLED.service1Name}\\s*</h2>`)
+    )
+  })
 })
 
 describe("built images", () => {

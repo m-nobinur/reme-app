@@ -1464,7 +1464,7 @@ picture {
   font-variant-numeric: tabular-nums;
 }
 
-.service-detail-main h2 {
+.service-detail-main :is(h2, h3) {
   margin-block-end: var(--space-sm);
 }
 
