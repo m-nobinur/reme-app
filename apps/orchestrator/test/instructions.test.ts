@@ -227,6 +227,8 @@ describe("the parallel first build", () => {
         "service2Title",
         "service2Detail",
         "service2Faq4Answer",
+        "service2Step1Title",
+        "service2Step4Body",
         "service2CtaBody",
       ])
     )
