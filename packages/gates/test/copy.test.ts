@@ -28,6 +28,10 @@ const page = (file: string, title: string, main: string, head = "") => ({
 /** The two blocks a service page must carry. */
 const BLOCKS = `<ul data-copy="service_includes"><li>Beds weeded</li></ul><p data-copy="service_for">Suits busy households.</p>`
 
+/** The blocks an about page and a contact page must carry. */
+const ABOUT_BLOCKS = `<p data-copy="approach_body">${words(30, "a")}</p><p data-copy="step_body">${words(25, "v")}</p>`
+const CONTACT_BLOCKS = `<p data-copy="contact_body">${words(30, "c")}</p>`
+
 const cta = (heading: string) =>
   `<section class="cta-band"><h2>${heading}</h2><p>${words(14)}</p></section>`
 
@@ -78,7 +82,7 @@ describe("the copy gate", () => {
       page(
         "about/index.html",
         "About Greenleaf Garden Landscaping in Bristol and Bath",
-        "<h1>About Greenleaf</h1><h2>Bristol homes: garden work</h2>"
+        `<h1>About Greenleaf</h1><h2>Bristol homes: garden work</h2>${ABOUT_BLOCKS}`
       ),
     ]
     const result = checkCopy(site, true)
@@ -99,7 +103,7 @@ describe("the copy gate", () => {
       page(
         "contact/index.html",
         "Greenleaf Garden Landscaping in Bristol, Bath and Clevedon",
-        "<h1>Talk to Greenleaf about your garden</h1>"
+        `<h1>Talk to Greenleaf about your garden</h1>${CONTACT_BLOCKS}`
       ),
     ])
     expect(found.map((f) => [f.file, f.problem, f.text])).toEqual([
@@ -153,7 +157,7 @@ describe("the copy gate", () => {
       page(
         "contact/index.html",
         "Contact Greenleaf about a garden in Bristol or Bath",
-        `<h1>Talk to Greenleaf about your garden</h1>${cta("Book your first garden visit")}`
+        `<h1>Talk to Greenleaf about your garden</h1>${CONTACT_BLOCKS}${cta("Book your first garden visit")}`
       ),
     ]
     const found = copyFindings(pages)
@@ -366,7 +370,7 @@ describe("the copy gate", () => {
         page(
           "about/index.html",
           "About Brightside Home Cleaning, your Bristol cleaners",
-          `<h1>Home cleaners for Bristol</h1><p data-copy="about_body">${words(n / 2)}</p><p data-copy="about_body">${words(n / 2, "b")}</p>`
+          `<h1>Home cleaners for Bristol</h1><p data-copy="about_body">${words(n / 2)}</p><p data-copy="about_body">${words(n / 2, "b")}</p>${ABOUT_BLOCKS}`
         )
       const found = copyFindings([about(70)])
       expect(found.map((f) => f.problem)).toEqual(["short"])
@@ -544,5 +548,124 @@ describe("the copy gate's field check, per writer before the build", () => {
         "about"
       )
     ).toEqual([])
+  })
+})
+
+describe("the about, services and contact pages' own blocks", () => {
+  it("fails an about page without its principles or visit steps, and a contact page without its note", () => {
+    const found = copyFindings([
+      page(
+        "about/index.html",
+        "About Greenleaf Garden Landscaping in Bristol and Bath",
+        "<h1>Garden care for Bristol homes</h1>"
+      ),
+      page(
+        "contact/index.html",
+        "Contact Greenleaf about a garden in Bristol or Bath",
+        "<h1>Talk to Greenleaf about your garden</h1>"
+      ),
+    ])
+    expect(found.map((f) => [f.file, f.problem, f.detail])).toEqual([
+      [
+        "about/index.html",
+        "missing",
+        expect.stringContaining("approach1Title"),
+      ],
+      [
+        "about/index.html",
+        "missing",
+        expect.stringContaining("aboutStep1Title"),
+      ],
+      [
+        "contact/index.html",
+        "missing",
+        expect.stringContaining("contactIncludeBody"),
+      ],
+    ])
+  })
+
+  it("fails a services page of two services without its helper, and passes one service", () => {
+    const services = (cards: number, extra = "") =>
+      page(
+        "services/index.html",
+        "Garden design, planting and lawn care | Greenleaf Ltd",
+        `<h1>Landscaping services for Bristol gardens</h1>${Array.from(
+          { length: cards },
+          (_, i) => `<p data-copy="service_body">${words(30, `s${i}`)}</p>`
+        ).join("")}${extra}`
+      )
+    expect(copyFindings([services(2)]).map((f) => f.detail)).toEqual([
+      expect.stringContaining("servicesHelpBody"),
+    ])
+    expect(copyFindings([services(1)])).toEqual([])
+    expect(
+      copyFindings([
+        services(2, `<p data-copy="services_help">${words(50, "h")}</p>`),
+      ])
+    ).toEqual([])
+  })
+
+  it("fails each new block under its minimum", () => {
+    const found = copyFindings([
+      page(
+        "about/index.html",
+        "About Greenleaf Garden Landscaping in Bristol and Bath",
+        `<h1>Garden care for Bristol homes</h1><p data-copy="approach_body">${words(10, "a")}</p><p data-copy="step_body">${words(25, "v")}</p><p data-copy="proof_body">${words(8, "p")}</p>`
+      ),
+      page(
+        "contact/index.html",
+        "Contact Greenleaf about a garden in Bristol or Bath",
+        `<h1>Talk to Greenleaf about your garden</h1><p data-copy="contact_body">${words(9, "c")}</p>`
+      ),
+    ])
+    expect(found.map((f) => f.detail)).toEqual([
+      "an about page principle (approachNBody) has 10 words; write 25 to 45",
+      "the about page's record (proofBody) has 8 words; write 30 to 60",
+      "the contact page's note on what to send (contactIncludeBody) has 9 words; write 25 to 60",
+    ])
+  })
+
+  it("asks the page's writer for the blocks it owns and left thin", () => {
+    const about = [
+      "approach1Title",
+      "approach1Body",
+      "approach2Body",
+      "approach3Body",
+      "aboutStep1Title",
+      "aboutStep1Body",
+      "aboutStep2Body",
+      "aboutStep3Body",
+    ]
+    const thin = { approach1Body: words(30), aboutStep1Body: words(5) }
+    expect(fieldFindings(thin, about, "about")).toEqual([
+      "aboutStep1Body has 5 words; write 20 to 35",
+      expect.stringContaining("three or four principles"),
+      expect.stringContaining("three or four steps of what happens on a visit"),
+    ])
+    const full = Object.fromEntries(
+      about.map((name) => [name, name.endsWith("Body") ? words(30) : "Title"])
+    )
+    expect(fieldFindings(full, about, "about")).toEqual([])
+    expect(fieldFindings({}, ["contactIncludeBody"], "contact")).toEqual([
+      expect.stringContaining("contactIncludeBody, 25 to 60 words"),
+    ])
+    expect(fieldFindings({}, ["servicesHelpBody"], "services")).toEqual([
+      expect.stringContaining("servicesHelpBody, 40 to 80 words"),
+    ])
+    // A page whose task does not hold the block is never held to it.
+    expect(fieldFindings({}, ["aboutTitle"], "about")).toEqual([])
+  })
+
+  it("briefs the writer on every new range", () => {
+    const rules = copyGateRules().join("\n")
+    for (const kind of [
+      "approach_body",
+      "proof_body",
+      "services_help",
+      "contact_body",
+    ] as const)
+      expect(rules).toContain(
+        `${COPY_WORDS[kind].aim[0]} to ${COPY_WORDS[kind].aim[1]} words, never under ${COPY_WORDS[kind].min}`
+      )
   })
 })

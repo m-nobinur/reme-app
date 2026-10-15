@@ -137,8 +137,23 @@ describe("the Developer's site rules", () => {
       "overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add"
     )
     expect(rules).toContain(
-      "overviewHeading, audienceHeading and proofHeading name this business's service or area, never one bare word or a stock label"
+      "proofHeading, approachHeading, aboutStepsHeading, aboutAreaHeading, servicesHelpHeading, servicesFaqHeading and contactIncludeHeading name this business's service or area, never one bare word or a stock label"
     )
+  })
+
+  it("briefs each inner page's blocks with the gate's ranges and the truth rules", () => {
+    const rules = text(false)
+    for (const line of [
+      "The approach: three or four principles of how the work is done (approach1Title to approach4Body, a title of 2 to 5 words and a body of 25 to 45 words",
+      "never a credential, guarantee, count or response time no fact states",
+      "What to expect on a visit: three or four steps of the visit itself",
+      "proofBody 30 to 60 words on what each point means for the customer, beside the points themselves, never a lone sentence",
+      "servicesHelpBody (40 to 80 words) under servicesHelpHeading helps a visitor not sure which service they need",
+      "contactIncludeBody (25 to 60 words) under contactIncludeHeading says what to put in a message",
+      "A reply time only when a fact states one; without it, promise neither a time nor a reply to every message.",
+      "quotePrivacy is one sentence on what happens to the details sent",
+    ])
+      expect(rules).toContain(line)
   })
 
   it("asks for an eyebrow and an accent clause in every section heading", () => {

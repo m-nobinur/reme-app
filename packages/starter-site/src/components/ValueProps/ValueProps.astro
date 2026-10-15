@@ -4,34 +4,49 @@ import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
 
-const items = ([1, 2, 3] as const)
-  .map((n) => ({
+interface Props {
+  /** The short label above the h2, where a page has its own; empty is site.valuePropsEyebrow. */
+  eyebrow?: string
+  /** The h2, where a page has its own; empty is site.valuePropsHeading. */
+  heading?: string
+  /** The entries, where a page has its own; empty is the site's valueProp1 to valueProp3. */
+  items?: { title: string; body: string; icon: string }[]
+  /** The copy gate's data-copy mark on each body, where the page's brief gives it a word range. */
+  copy?: string
+}
+
+const {
+  eyebrow = site.valuePropsEyebrow,
+  heading = site.valuePropsHeading,
+  items = ([1, 2, 3] as const).map((n) => ({
     title: site[`valueProp${n}Title`],
     body: site[`valueProp${n}Body`],
     icon: site[`valueProp${n}Icon`],
-  }))
-  .filter((item) => item.title || item.body)
+  })),
+  copy,
+} = Astro.props
+const shown = items.filter((item) => item.title || item.body)
 ---
 
 {
-  items.length > 0 && (
+  shown.length > 0 && (
     <section class="band value-props">
       <div class="wrap value-inner">
         <div class="value-head">
           <SectionHead
-            eyebrow={site.valuePropsEyebrow}
-            heading={site.valuePropsHeading}
+            eyebrow={eyebrow}
+            heading={heading}
           />
         </div>
         <ul class="value-list">
-          {items.map((item) => (
+          {shown.map((item) => (
             <li>
               <span class="card-icon">
                 <Icon name={iconFor(item.icon, `${item.title} ${item.body}`)} />
               </span>
               <div>
                 {item.title && <h3>{item.title}</h3>}
-                {item.body && <p>{item.body}</p>}
+                {item.body && <p data-copy={copy}>{item.body}</p>}
               </div>
             </li>
           ))}

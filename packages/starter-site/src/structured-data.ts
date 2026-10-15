@@ -1,5 +1,5 @@
 import { iconFor } from "./icons"
-import { site } from "./site-config"
+import { layout, site } from "./site-config"
 
 /**
  * The JSON-LD the starter emits. Only LocalBusiness, WebSite, Service and
@@ -48,6 +48,22 @@ export const faqItems = ([1, 2, 3, 4, 5, 6, 7, 8] as const)
     answer: site[`faq${n}Answer`],
   }))
   .filter((item) => item.question && item.answer)
+
+const ownServicesFaqs = ([1, 2, 3, 4] as const)
+  .map((n) => ({
+    question: site[`servicesFaq${n}Question`],
+    answer: site[`servicesFaq${n}Answer`],
+  }))
+  .filter((item) => item.question && item.answer)
+/**
+ * The services page's questions: its own, apart from the home page's, or the
+ * site's FAQ when the home page shows none, so a Blueprint that moved the
+ * FAQ to the services page still shows it.
+ */
+export const servicesFaqItems =
+  ownServicesFaqs.length > 0 || layout.home.some((s) => s.kind === "faq")
+    ? ownServicesFaqs
+    : faqItems
 
 const lines = (text: string) =>
   text

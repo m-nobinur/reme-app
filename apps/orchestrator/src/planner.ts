@@ -202,7 +202,7 @@ export function withOwnerChoices(
   const owner = ownerChoices(facts)
   const notes = pickNotes(facts)
   const budgeted = withinBudget(blueprint)
-  const pages = framedHeaders(budgeted)
+  const pages = withContentBlocks(framedHeaders(budgeted))
   const features = [
     ...blueprint.features.filter((line) => !notes.includes(line)),
   ]
@@ -435,6 +435,46 @@ function boxAspect(
   if (kind === "service_cards") return "4:3"
   if (kind === "cta_band") return "21:9"
   return undefined
+}
+
+/**
+ * The sections a page's content needs whatever the model planned: the about
+ * page's story, principles and visit steps, which the copy gate fails it
+ * without. A missing one goes in before the closing band.
+ */
+const CONTENT_BLOCKS: Partial<Record<string, [SectionKind, string][]>> = {
+  about: [
+    ["about", "Who the business serves and how it works, then its record"],
+    ["value_props", "Three or four principles of how the work is done"],
+    ["steps", "What to expect on a visit, from arrival to the finished job"],
+  ],
+}
+export function withContentBlocks(
+  pages: Blueprint["pages"]
+): Blueprint["pages"] {
+  const home = pages.find((p) => p.page === "home")?.sections ?? []
+  return pages.map((page) => {
+    const missing = (CONTENT_BLOCKS[page.page] ?? []).filter(
+      ([kind]) => !page.sections.some((s) => s.kind === kind)
+    )
+    if (missing.length === 0) return page
+    const sections = [...page.sections]
+    const at = sections.findIndex((s) => s.kind === "cta_band")
+    sections.splice(
+      at < 0 ? sections.length : at,
+      0,
+      ...missing.map(([kind, purpose]) => ({
+        kind,
+        // The home page's variant of the kind, so the site keeps one look.
+        variant:
+          home.find((s) => s.kind === kind)?.variant ??
+          SECTION_VARIANTS[kind][0],
+        purpose,
+        content_notes: null,
+      }))
+    )
+    return { ...page, sections }
+  }) as Blueprint["pages"]
 }
 
 /**
