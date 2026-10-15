@@ -459,10 +459,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     // The clock stops where the build got ready, and a later move does not
     // shift it.
     const readyAt = async () => {
-      const [shown] = WorkspaceStatus.parse(
+      const [first] = WorkspaceStatus.parse(
         await (await workspace(who)).json()
       ).builds
-      return shown?.ready_at
+      return first?.ready_at
     }
     expect(await readyAt()).toBeUndefined()
     await s.event(build, "assignment.state_changed", {
