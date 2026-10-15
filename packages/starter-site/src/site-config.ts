@@ -201,6 +201,24 @@ const values = {
   aboutImageAlt: "",
   contactImage: "",
   contactImageAlt: "",
+  /**
+   * The contact page's note beside the details: what to put in a message so
+   * the reply can be useful (the job, the place, the timing, access), 25 to
+   * 60 words, under contactIncludeHeading. When a fact gives a reply time it
+   * may say so; otherwise it promises no reply time and no reply to every
+   * message.
+   */
+  contactIncludeEyebrow: "Before you write",
+  contactIncludeHeading: "",
+  contactIncludeBody: "",
+  /** The link from that note to the quote form. */
+  contactFormLink: "Use the quote form",
+  /**
+   * The quote page's privacy line under the form: what happens to the
+   * details sent, only as true of how the form works (it goes to
+   * business.email) or as a fact states. Empty shows nothing.
+   */
+  quotePrivacy: "",
   /** The subject line of a request sent by email. */
   quoteEmailSubject: "Quote request",
   bookingIntro: "",
@@ -219,8 +237,50 @@ const values = {
   overviewBody: "",
   /** business.audience in the site's voice, in one or two sentences: rephrase it, never add to it. Empty shows audience as given. */
   audienceBody: "",
-  /** business.proof in the site's voice, in two to four sentences. Empty shows proof as given. */
+  /**
+   * business.proof in the site's voice, two to four sentences and 30 to 60
+   * words, beside the record's items: what each point means for the
+   * customer, never a point the fact does not make. Empty shows proof as given.
+   */
   proofBody: "",
+  /**
+   * The about page's approach: three or four principles of how the work is
+   * done, each a title of 2 to 5 words and a body of 25 to 45 words, drawn
+   * from the facts and the trade's normal good practice. Never a credential,
+   * a guarantee or a number no fact states. An icon is a key of ICONS in
+   * src/icons.ts; empty is picked from the words.
+   */
+  approachEyebrow: "Our approach",
+  approachHeading: "",
+  approach1Title: "",
+  approach1Body: "",
+  approach1Icon: "",
+  approach2Title: "",
+  approach2Body: "",
+  approach2Icon: "",
+  approach3Title: "",
+  approach3Body: "",
+  approach3Icon: "",
+  approach4Title: "",
+  approach4Body: "",
+  approach4Icon: "",
+  /**
+   * The about page's "what to expect" steps: three or four, from arriving to
+   * leaving the job finished, each a title of 2 to 5 words and a body of 20
+   * to 35, sharing no words with the home page's steps or a service's. No
+   * time, duration or promise a fact does not state.
+   */
+  aboutStepsHeading: "",
+  aboutStep1Title: "",
+  aboutStep1Body: "",
+  aboutStep2Title: "",
+  aboutStep2Body: "",
+  aboutStep3Title: "",
+  aboutStep3Body: "",
+  aboutStep4Title: "",
+  aboutStep4Body: "",
+  /** The about page's area section h2, its own words. Empty shows the section without one. */
+  aboutAreaHeading: "",
   /**
    * The trust strip under the home hero: up to three short points, under six
    * words each, each restating part of business.proof ("Fully insured",
@@ -229,6 +289,29 @@ const values = {
   trust1: "",
   trust2: "",
   trust3: "",
+  /**
+   * The services page's helper for a visitor not sure which service they
+   * need: 40 to 80 words on which service suits which home, job or
+   * situation, from the services and business.audience, ending with the
+   * offer to describe the job instead. No price or promise.
+   */
+  servicesHelpEyebrow: "Not sure?",
+  servicesHelpHeading: "",
+  servicesHelpBody: "",
+  /**
+   * The services page's own questions: two to four about choosing between
+   * the services or what each covers, never one the home page's FAQ asks,
+   * each answer 40 to 90 words, under servicesFaqHeading.
+   */
+  servicesFaqHeading: "",
+  servicesFaq1Question: "",
+  servicesFaq1Answer: "",
+  servicesFaq2Question: "",
+  servicesFaq2Answer: "",
+  servicesFaq3Question: "",
+  servicesFaq3Answer: "",
+  servicesFaq4Question: "",
+  servicesFaq4Answer: "",
   offeringsEyebrow: "The full list",
   offeringsHeading: "Everything we offer",
   valuePropsEyebrow: "Why us",
@@ -624,7 +707,7 @@ const values = {
   quoteChoose: "Choose one",
   quoteOptional: "optional",
   quoteSubmit: "Send quote request",
-  quoteNextSteps: "We read every request and reply by email or phone.",
+  quoteNextSteps: "Your request comes straight to us.",
   phoneLabel: "Phone",
   emailLabel: "Email",
   weekdayHoursLabel: "Weekdays",
@@ -726,13 +809,16 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
   ],
   about: [
     { kind: "hero" },
-    { kind: "trust_strip", variant: "icons" },
     { kind: "about" },
+    { kind: "value_props" },
+    { kind: "steps" },
+    { kind: "service_area" },
     { kind: "cta_band" },
   ],
   services: [
     { kind: "hero" },
     { kind: "service_cards", variant: "photo_cards" },
+    { kind: "faq" },
     { kind: "cta_band" },
   ],
   service: [

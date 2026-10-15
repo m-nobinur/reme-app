@@ -284,6 +284,33 @@ describe("the parallel first build", () => {
     }
   })
 
+  it("gives each inner page's own blocks to that page's builder, and asks for the ones left empty", () => {
+    const owner = (field: string) =>
+      pageTasks(fanPlan).find((t) => t.fields.includes(field))?.page
+    for (const [field, page] of [
+      ["approach1Body", "about"],
+      ["approach4Icon", "about"],
+      ["aboutStep3Body", "about"],
+      ["aboutAreaHeading", "about"],
+      ["servicesHelpBody", "services"],
+      ["servicesFaq4Answer", "services"],
+      ["contactIncludeBody", "contact"],
+      ["quotePrivacy", "quote"],
+      // The home page's reasons stay the home page's.
+      ["valueProp1Body", "home"],
+    ])
+      if (fanPlan.pages.some((p) => p.page === page))
+        expect(owner(field as string), field).toBe(page)
+    const [about] = taskGroups(fanPlan)
+      .flat()
+      .filter((t) => pageOfPrompt(t.prompt) === "about")
+    const message =
+      pageCheck('const values = {\n  approach1Body: "",\n}', about?.prompt) ??
+      ""
+    expect(message).toContain("three or four principles")
+    expect(message).toContain("what happens on a visit")
+  })
+
   it("checks a writer's own fields after its edit and names what to fix", () => {
     const [about] = taskGroups(fanPlan)
       .flat()

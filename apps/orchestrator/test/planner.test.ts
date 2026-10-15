@@ -380,6 +380,36 @@ describe("page header photos", () => {
     expect(owned.images.some((s) => s.page === "service")).toBe(false)
   })
 
+  it("puts back the about page's principles and visit steps when a plan drops them", () => {
+    const made = fallback(CLEANING)
+    const dropped = {
+      ...made,
+      pages: made.pages.map((p) =>
+        p.page === "about"
+          ? {
+              ...p,
+              sections: p.sections.filter(
+                (s) => s.kind !== "value_props" && s.kind !== "steps"
+              ),
+            }
+          : p
+      ),
+    } as Blueprint
+    const about = (shown: Blueprint) =>
+      shown.pages.find((p) => p.page === "about")?.sections ?? []
+    expect(about(dropped).map((s) => s.kind)).not.toContain("steps")
+    const kept = about(withOwnerChoices(dropped, CLEANING))
+    const kinds = kept.map((s) => s.kind)
+    expect(kinds.slice(-3)).toEqual(["value_props", "steps", "cta_band"])
+    // The home page's variant, so the site keeps one look.
+    const home = made.pages.find((p) => p.page === "home")?.sections
+    expect(kept.find((s) => s.kind === "steps")?.variant).toBe(
+      home?.find((s) => s.kind === "steps")?.variant
+    )
+    // A plan that has them is left as it is.
+    expect(about(withOwnerChoices(made, CLEANING))).toEqual(about(made))
+  })
+
   it("keeps a page with no photo as it was, and draws about and contact last", () => {
     const made = fallback(CLEANING)
     const ordered = withOwnerChoices(

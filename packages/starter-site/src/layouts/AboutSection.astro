@@ -15,6 +15,7 @@ interface Props {
 const { page } = Astro.props
 const story = site.overviewBody || site.overview
 const audience = site.audienceBody || site.audience
+// The copy gate counts proofBody, the writer's paragraph, never proof as given.
 const proof = site.proofBody || site.proof
 // Without an about page, the home page's section says who the business
 // serves too.
@@ -99,7 +100,11 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
       {proofItems.length >= 2 && (
         <Section eyebrow={site.proofEyebrow} heading={site.proofHeading}>
           <div class="proof-record">
-            {proof && <p>{proof}</p>}
+            {proof && (
+              <p data-copy={site.proofBody ? "proof_body" : undefined}>
+                {proof}
+              </p>
+            )}
             <ul class="check-list">
               {proofItems.map((item) => (
                 <li>

@@ -18,7 +18,9 @@ import { parse } from "parse5"
  *   anywhere a visitor or a search engine reads it, JSON-LD included;
  * - a town in the service-area chips, or a near-miss spelling of one in any
  *   copy, that the service-area fact does not name exactly;
- * - a service page without its "what is included" or "who it suits" block;
+ * - a service page without its "what is included" or "who it suits" block,
+ *   an about page without its principles or its visit steps, or a contact
+ *   page without its note on what to send;
  * - a page title outside the writer's 50 to 60 characters, or a description
  *   outside its 140 to 165.
  *
@@ -41,6 +43,14 @@ export const COPY_WORDS = {
   faq_answer: { aim: [40, 90], min: 36 },
   // The about page's two paragraphs together, the brief's 120 to 200 words.
   about_body: { aim: [120, 200], min: 100 },
+  // An about page principle: how the work is done, title and body.
+  approach_body: { aim: [25, 45], min: 18 },
+  // The about page's record: a short paragraph beside the proof items.
+  proof_body: { aim: [30, 60], min: 20 },
+  // The services page's "not sure which you need" paragraph.
+  services_help: { aim: [40, 80], min: 30 },
+  // The contact page's note on what a message should say.
+  contact_body: { aim: [25, 60], min: 18 },
 } as const satisfies Record<
   string,
   { aim: readonly [number, number]; min: number }
@@ -57,6 +67,10 @@ const LABEL: Record<CopyKind, string> = {
   faq_answer:
     "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page)",
   about_body: "the about page's body (overviewBody and audienceBody together)",
+  approach_body: "an about page principle (approachNBody)",
+  proof_body: "the about page's record (proofBody)",
+  services_help: "the services page's helper (servicesHelpBody)",
+  contact_body: "the contact page's note on what to send (contactIncludeBody)",
 }
 
 /** A page's meta description, in characters: the brief's 140 to 160 with a few over. */
@@ -273,6 +287,34 @@ function read(html: string): Read {
   return out
 }
 
+/** The blocks a page fails without, by built file: the `data-copy` mark and its fields. */
+const BLOCKS: [RegExp, [string, string][]][] = [
+  [
+    /^services\/[^/]+\/index\.html$/,
+    [
+      ["service_includes", "serviceNIncludes (what is included)"],
+      ["service_for", "serviceNFor (who it suits)"],
+    ],
+  ],
+  [
+    /^about\/index\.html$/,
+    [
+      [
+        "approach_body",
+        "approach1Title to approach4Body (how the work is done)",
+      ],
+      [
+        "step_body",
+        "aboutStep1Title to aboutStep4Body (what to expect on a visit)",
+      ],
+    ],
+  ],
+  [
+    /^contact\/index\.html$/,
+    [["contact_body", "contactIncludeBody (what to put in a message)"]],
+  ],
+]
+
 /** Edit distance one: a letter dropped, added or swapped for another. */
 const oneOff = (a: string, b: string) => {
   if (Math.abs(a.length - b.length) > 1 || a === b) return false
@@ -346,19 +388,31 @@ export function copyFindings(
       })
     }
 
-    if (/^services\/[^/]+\/index\.html$/.test(file))
-      for (const [mark, field] of [
-        ["service_includes", "serviceNIncludes (what is included)"],
-        ["service_for", "serviceNFor (who it suits)"],
-      ] as const)
-        if (!page.marks.has(mark))
-          found.push({
-            file,
-            node: "main",
-            problem: "missing",
-            text: "",
-            detail: `the service page has no ${field} block; fill it for this service`,
-          })
+    for (const [mark, field] of BLOCKS.find(([pattern]) =>
+      pattern.test(file)
+    )?.[1] ?? [])
+      if (!page.marks.has(mark))
+        found.push({
+          file,
+          node: "main",
+          problem: "missing",
+          text: "",
+          detail: `the page has no ${field} block; fill it for this page`,
+        })
+    // With two services or more, the services page helps a visitor choose.
+    if (
+      file === "services/index.html" &&
+      page.copy.filter((c) => c.kind === "service_body").length > 1 &&
+      !page.marks.has("services_help")
+    )
+      found.push({
+        file,
+        node: "main",
+        problem: "missing",
+        text: "",
+        detail:
+          "the page has no servicesHelpBody block (which service suits whom); fill it for this page",
+      })
 
     if (places) {
       for (const town of page.towns)
@@ -458,9 +512,54 @@ const FIELD_KINDS: [RegExp, CopyKind][] = [
   [/^homeIntro$/, "hero_lede"],
   [/^service\dBody$/, "service_body"],
   [/^service\dDetail$/, "service_detail"],
-  [/^(?:step|service\dStep)\dBody$/, "step_body"],
-  [/^(?:faq|service\dFaq)\dAnswer$/, "faq_answer"],
+  [/^(?:step|service\dStep|aboutStep)\dBody$/, "step_body"],
+  [/^(?:faq|service\dFaq|servicesFaq)\dAnswer$/, "faq_answer"],
+  [/^approach\dBody$/, "approach_body"],
+  [/^proofBody$/, "proof_body"],
+  [/^servicesHelpBody$/, "services_help"],
+  [/^contactIncludeBody$/, "contact_body"],
 ]
+
+/**
+ * The blocks a page's writer must fill, by page: the field pattern, how many
+ * entries at least, and what to write. Only checked when the writer owns the
+ * first field, so a page whose recipe does not hold the block is never held to it.
+ */
+const PAGE_BLOCKS: Record<
+  string,
+  { first: string; fields: RegExp; least: number; ask: string }[]
+> = {
+  about: [
+    {
+      first: "approach1Title",
+      fields: /^approach\dBody$/,
+      least: 3,
+      ask: `three or four principles of how the work is done (approach1Title to approach4Body, each body ${COPY_WORDS.approach_body.aim[0]} to ${COPY_WORDS.approach_body.aim[1]} words) under approachHeading`,
+    },
+    {
+      first: "aboutStep1Title",
+      fields: /^aboutStep\dBody$/,
+      least: 3,
+      ask: `three or four steps of what happens on a visit (aboutStep1Title to aboutStep4Body, each body ${COPY_WORDS.step_body.aim[0]} to ${COPY_WORDS.step_body.aim[1]} words) under aboutStepsHeading`,
+    },
+  ],
+  services: [
+    {
+      first: "servicesHelpBody",
+      fields: /^servicesHelpBody$/,
+      least: 1,
+      ask: `servicesHelpBody, ${COPY_WORDS.services_help.aim[0]} to ${COPY_WORDS.services_help.aim[1]} words on which service suits whom, under servicesHelpHeading`,
+    },
+  ],
+  contact: [
+    {
+      first: "contactIncludeBody",
+      fields: /^contactIncludeBody$/,
+      least: 1,
+      ask: `contactIncludeBody, ${COPY_WORDS.contact_body.aim[0]} to ${COPY_WORDS.contact_body.aim[1]} words on what to put in a message, under contactIncludeHeading`,
+    },
+  ],
+}
 /** A page's SEO title or description field: homeTitle, service2Description and the rest. */
 const PAGE_META =
   /^(?:home|about|services|serviceArea|contact|quote|service\d)(Title|Description)$/
@@ -536,6 +635,16 @@ export function fieldFindings(
     if (count > 0 && count < COPY_WORDS.about_body.min)
       found.push(
         `overviewBody and audienceBody have ${count} words together; write ${COPY_WORDS.about_body.aim[0]} to ${COPY_WORDS.about_body.aim[1]}, rephrasing every part of business.overview and business.audience`
+      )
+  }
+  for (const block of PAGE_BLOCKS[page ?? ""] ?? []) {
+    if (!owned.includes(block.first)) continue
+    const written = owned.filter(
+      (name) => block.fields.test(name) && filled(name)
+    ).length
+    if (written < block.least)
+      found.push(
+        `the ${page} page needs ${block.ask}; write it from the facts and this trade's usual practice`
       )
   }
   if (repeats)

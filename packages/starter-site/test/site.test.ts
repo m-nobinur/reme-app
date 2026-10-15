@@ -373,7 +373,9 @@ describe("proof", () => {
     const record = about(filled).match(
       /<div class="proof-record">[\s\S]*?<\/ul>/
     )?.[0]
-    expect(record).toContain(`<p>${FILLED.proofBody}</p>`)
+    expect(record).toContain(
+      `<p data-copy="proof_body">${FILLED.proofBody}</p>`
+    )
     expect(record?.match(/<li>/g)?.length).toBeGreaterThanOrEqual(2)
     expect(about(bare)).not.toContain("proof-record")
   })
@@ -408,6 +410,49 @@ describe("the about page", () => {
     )
     expect(photo?.attrs.src).toMatch(/^\/_astro\//)
     expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
+  })
+
+  test("says how the work is done, what a visit is like and where, in its own words", () => {
+    const about = page(filled, "about/index.html")
+    for (const text of [
+      FILLED.approachHeading,
+      FILLED.approach1Title,
+      FILLED.approach3Body,
+      FILLED.aboutStepsHeading,
+      FILLED.aboutStep2Body,
+      FILLED.aboutAreaHeading,
+      FILLED.areaBody,
+    ])
+      expect(about.texts, text).toContain(text)
+    // The home page's reasons and steps stay on the home page.
+    for (const text of [FILLED.valueProp1Body, FILLED.step1Body])
+      expect(about.texts, text).not.toContain(text)
+    expect(about.html.match(/data-copy="approach_body"/g)).toHaveLength(3)
+    expect(about.html.match(/data-copy="step_body"/g)).toHaveLength(3)
+    // The record says each fact once: no trust strip beside it.
+    expect(about.html).not.toContain("trust-strip")
+  })
+
+  test("the services page helps a visitor choose and asks its own questions", () => {
+    const services = page(filled, "services/index.html")
+    expect(services.texts).toContain(FILLED.servicesHelpBody)
+    expect(services.texts).toContain(FILLED.servicesFaq1Question)
+    expect(services.texts).not.toContain(FILLED.faq1Question)
+    const faq = services.scripts
+      .filter((s) => s.type === "application/ld+json")
+      .map((s) => s.body)
+      .join("")
+    expect(faq).toContain(FILLED.servicesFaq1Question)
+    expect(faq).not.toContain(FILLED.faq1Question)
+  })
+
+  test("the contact page says what to send and links the form; the quote page says where details go", () => {
+    const contact = page(filled, "contact/index.html")
+    expect(contact.texts).toContain(FILLED.contactIncludeBody)
+    expect(contact.elements.map((el) => el.attrs.href)).toContain("/quote/")
+    expect(page(filled, "quote/index.html").texts).toContain(
+      FILLED.quotePrivacy
+    )
   })
 
   test("without one, the home page says who the business serves and links nowhere", () => {

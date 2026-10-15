@@ -108,12 +108,14 @@
     },
     "about": {
       "page": "src/pages/about.astro",
-      "purpose": "Who runs the business, how it works and for whom, and what sets it apart, from business.overview, business.audience and business.proof: the story beside the owner's photo, then the proof. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
+      "purpose": "Who the business serves and how it works, from business.overview and business.audience (two paragraphs, 120 to 200 words); how the work is done, as three or four principles from the facts and the trade's good practice (a title and 25 to 45 words each, never a credential no fact states); what to expect on a visit, as three or four steps of the visit itself; the record from business.proof, a short paragraph beside its items and only when the fact exists; the places served; the closing band. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
       "kinds": [
         "hero",
-        "trust_strip",
         "about",
         "value_props",
+        "steps",
+        "service_area",
+        "trust_strip",
         "testimonials",
         "gallery",
         "faq",
@@ -133,22 +135,37 @@
         "proofHeading",
         "proof",
         "proofBody",
-        "valueProp1Title",
-        "valueProp1Body",
-        "valueProp1Icon",
-        "valueProp2Title",
-        "valueProp2Body",
-        "valueProp2Icon",
-        "valueProp3Title",
-        "valueProp3Body",
-        "valueProp3Icon",
+        "approachEyebrow",
+        "approachHeading",
+        "approach1Title",
+        "approach1Body",
+        "approach1Icon",
+        "approach2Title",
+        "approach2Body",
+        "approach2Icon",
+        "approach3Title",
+        "approach3Body",
+        "approach3Icon",
+        "approach4Title",
+        "approach4Body",
+        "approach4Icon",
+        "aboutStepsHeading",
+        "aboutStep1Title",
+        "aboutStep1Body",
+        "aboutStep2Title",
+        "aboutStep2Body",
+        "aboutStep3Title",
+        "aboutStep3Body",
+        "aboutStep4Title",
+        "aboutStep4Body",
+        "aboutAreaHeading",
         "aboutCtaHeading",
         "aboutCtaBody"
       ]
     },
     "services": {
       "page": "src/pages/services.astro",
-      "purpose": "Each service in full: what it is, what is included, who it suits and a quote link, then how it works and the questions.",
+      "purpose": "Every service in brief: an intro of two or three sentences, each service's summary linking to its own page, a helper paragraph for the visitor not sure which service they need, the page's own questions about choosing and scope, and the closing band.",
       "kinds": [
         "hero",
         "trust_strip",
@@ -185,6 +202,18 @@
         "offerings",
         "offeringsEyebrow",
         "offeringsHeading",
+        "servicesHelpEyebrow",
+        "servicesHelpHeading",
+        "servicesHelpBody",
+        "servicesFaqHeading",
+        "servicesFaq1Question",
+        "servicesFaq1Answer",
+        "servicesFaq2Question",
+        "servicesFaq2Answer",
+        "servicesFaq3Question",
+        "servicesFaq3Answer",
+        "servicesFaq4Question",
+        "servicesFaq4Answer",
         "servicesCtaHeading",
         "servicesCtaBody"
       ]
@@ -373,7 +402,7 @@
     },
     "contact": {
       "page": "src/pages/contact.astro",
-      "purpose": "How to reach the business, with nothing in the way.",
+      "purpose": "How to reach the business, with nothing in the way: phone, email and the quote form; what to put in a message so the reply can be useful; hours and the area served as the facts give them; a reply time only when a fact states one.",
       "kinds": ["hero", "contact", "faq", "cta_band"],
       "fields": [
         "contactTitle",
@@ -384,13 +413,17 @@
         "email",
         "weekdayHours",
         "serviceArea",
+        "contactIncludeEyebrow",
+        "contactIncludeHeading",
+        "contactIncludeBody",
+        "contactFormLink",
         "contactCtaHeading",
         "contactCtaBody"
       ]
     },
     "quote": {
       "page": "src/pages/quote.astro",
-      "purpose": "How a visitor asks for a quote: the form, and beside it what happens next and the phone and email.",
+      "purpose": "How a visitor asks for a quote: the form, and beside it what happens after sending, the details that help, the phone and email, and under the form a privacy line true of how it sends.",
       "kinds": ["hero", "quote_form", "trust_strip"],
       "fields": [
         "quoteTitle",
@@ -402,6 +435,7 @@
         "quoteNext3",
         "quoteSubmit",
         "quoteNextSteps",
+        "quotePrivacy",
         "phone",
         "email"
       ]
@@ -453,11 +487,16 @@
             "kind": "hero"
           },
           {
-            "kind": "trust_strip",
-            "variant": "icons"
+            "kind": "about"
           },
           {
-            "kind": "about"
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
           },
           {
             "kind": "cta_band"
@@ -470,6 +509,9 @@
           {
             "kind": "service_cards",
             "variant": "photo_cards"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -645,11 +687,16 @@
             "kind": "hero"
           },
           {
-            "kind": "trust_strip",
-            "variant": "icons"
+            "kind": "about"
           },
           {
-            "kind": "about"
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
           },
           {
             "kind": "cta_band"
@@ -662,6 +709,9 @@
           {
             "kind": "service_cards",
             "variant": "photo_cards"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -822,11 +872,16 @@
             "kind": "hero"
           },
           {
-            "kind": "trust_strip",
-            "variant": "icons"
+            "kind": "about"
           },
           {
-            "kind": "about"
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
           },
           {
             "kind": "cta_band"
@@ -839,6 +894,9 @@
           {
             "kind": "service_cards",
             "variant": "practice_list"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -1021,11 +1079,16 @@
             "kind": "hero"
           },
           {
-            "kind": "trust_strip",
-            "variant": "icons"
+            "kind": "about"
           },
           {
-            "kind": "about"
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
           },
           {
             "kind": "cta_band"
@@ -1038,6 +1101,9 @@
           {
             "kind": "service_cards",
             "variant": "fleet"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
