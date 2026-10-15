@@ -11,7 +11,8 @@ import { parse } from "parse5"
  *   "Our garden service");
  * - an h1 or h2 that is a stock label ("Our services", "Why choose us"),
  *   which may only be an eyebrow;
- * - two pages with the same title;
+ * - two pages with the same title, or a process step whose words another
+ *   step on the site already uses;
  * - a section's copy under its minimum word count.
  *
  * The starter marks what is checked with `data-copy="<kind>"` on the
@@ -202,6 +203,7 @@ export function copyFindings(
 ): CopyFinding[] {
   const found: CopyFinding[] = []
   const headings: { file: string; text: string; stems: Set<string> }[] = []
+  const steps: { file: string; text: string; stems: Set<string> }[] = []
   const titles = new Map<string, string>()
   for (const { file, html } of pages) {
     const page = read(html)
@@ -256,6 +258,19 @@ export function copyFindings(
           text: c.text,
           detail: `${LABEL[c.kind]} has ${count} words; write ${aim[0]} to ${aim[1]}`,
         })
+      if (c.kind !== "step_body") continue
+      // No two pages share a step: each service page has its own.
+      const stems = stemsOf(c.text)
+      const first = steps.find((each) => alike(each.stems, stems))
+      if (first)
+        found.push({
+          file,
+          node: c.node,
+          problem: "duplicate",
+          text: c.text,
+          detail: `the step repeats "${first.text}" from ${first.file}; write this page's own steps (serviceNStep1Title to serviceNStep4Body on a service page)`,
+        })
+      else steps.push({ file, text: c.text, stems })
     }
   }
   return found

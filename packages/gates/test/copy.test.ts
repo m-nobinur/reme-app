@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { checkCopy, copyFindings } from "../src/index.ts"
 
-const words = (n: number) =>
-  Array.from({ length: n }, (_, i) => `word${i}`).join(" ")
+const words = (n: number, w = "word") =>
+  Array.from({ length: n }, (_, i) => `${w}${i}`).join(" ")
 
 const page = (file: string, title: string, main: string, head = "") => ({
   file,
@@ -35,7 +35,7 @@ const GOOD = [
     "Planting borders and beds in Bristol | Greenleaf",
     `<section><h1>Borders and beds planted in Bristol</h1><p class="lede">${words(30)}</p></section>
      <article><h2>Planting</h2><p data-copy="service_detail">${words(80)}</p></article>
-     <section><h2>How a planting job runs</h2><ol><li><h3>Visit</h3><p data-copy="step_body">${words(25)}</p></li></ol></section>
+     <section><h2>How a planting job runs</h2><ol><li><h3>Visit</h3><p data-copy="step_body">${words(25, "p")}</p></li></ol></section>
      <section><h2>Planting questions from Bristol gardeners</h2><details><summary>When is the best time to plant?</summary><p data-copy="faq_answer">${words(50)}</p></details></section>
      ${cta("Get your borders planted this spring")}`
   ),
@@ -138,6 +138,35 @@ describe("the copy gate", () => {
       ["contact/index.html", "Book your first garden visit"],
     ])
     expect(found[0]?.detail).toContain("each page has its own closing band")
+  })
+
+  it("fails a step whose words another page's step already uses", () => {
+    const step = (body: string) =>
+      `<ol><li><h3>Visit</h3><p data-copy="step_body">${body}</p></li></ol>`
+    const shared =
+      "We visit the garden, walk it with you and agree what the work covers before anything starts on site."
+    const found = copyFindings([
+      page(
+        "index.html",
+        "Greenleaf garden landscaping in Bristol",
+        `<h1>Gardens made for Bristol</h1>${step(shared)}`
+      ),
+      // The same words in another order are the same step.
+      page(
+        "services/lawns/index.html",
+        "Lawn care in Bristol from Greenleaf gardeners",
+        `<h1>Lawn care across Bristol</h1>${step("Before anything starts on site, we walk the garden with you, visit it and agree what the work covers.")}`
+      ),
+      page(
+        "services/planting/index.html",
+        "Planting borders and beds in Bristol | Greenleaf",
+        `<h1>Borders and beds planted in Bristol</h1>${step("We choose plants for your soil and light, then set the beds out with you before a single hole is dug.")}`
+      ),
+    ])
+    expect(found.map((f) => [f.file, f.problem])).toEqual([
+      ["services/lawns/index.html", "duplicate"],
+    ])
+    expect(found[0]?.detail).toContain("serviceNStep1Title")
   })
 
   it("holds a service page's headings to the rest of the site's", () => {
