@@ -1,6 +1,7 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { hasPhoto } from "../../photo-files"
 import { hasRoute, primaryAction, serviceHref } from "../../routes"
 import { site } from "../../site-config"
 import { serviceItems } from "../../structured-data"
@@ -24,7 +25,7 @@ const items = serviceItems
   .filter((item) => !only || item.id === only)
   .map((item) => ({
     ...item,
-    photo: item.image.src && item.image.alt ? item.image : null,
+    photo: item.image.alt && hasPhoto(item.image.src) ? item.image : null,
   }))
 const onServices = Astro.url.pathname === "/services/"
 // A pattern built on pictures, with none to show, is one icon card three times

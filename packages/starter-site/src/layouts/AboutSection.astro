@@ -1,5 +1,6 @@
 ---
 import Section from "../components/Section/Section.astro"
+import { hasPhoto } from "../photo-files"
 import { hasRoute } from "../routes"
 import { site } from "../site-config"
 import Photo from "./Photo.astro"
@@ -24,7 +25,7 @@ const homeAbout = site.aboutIntro || site.overviewBody || site.overview
 const photo = [
   { src: site.photo1Src, alt: site.photo1Alt },
   { src: site.heroImage, alt: site.heroImageAlt },
-].find((each) => each.src && each.alt)
+].find((each) => each.alt && hasPhoto(each.src))
 const storyHeading = story ? site.overviewHeading : site.audienceHeading
 ---
 

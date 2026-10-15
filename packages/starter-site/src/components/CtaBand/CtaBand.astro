@@ -2,6 +2,7 @@
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { phoneText } from "../../phone"
+import { hasPhoto } from "../../photo-files"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
@@ -20,7 +21,8 @@ const {
   heading = site.ctaHeading,
   body = site.ctaBody,
 } = Astro.props
-const image = variant === "photo" ? site.ctaImage : ""
+const image =
+  variant === "photo" && hasPhoto(site.ctaImage) ? site.ctaImage : ""
 ---
 
 {

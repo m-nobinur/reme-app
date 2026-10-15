@@ -1,6 +1,7 @@
 ---
 import Motif from "../../layouts/Motif.astro"
 import Photo from "../../layouts/Photo.astro"
+import { hasPhoto } from "../../photo-files"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
@@ -32,7 +33,7 @@ const {
   highlights = [],
   note = "",
 } = Astro.props
-const photo = variant && image?.src && image.alt ? image : null
+const photo = variant && image?.alt && hasPhoto(image.src) ? image : null
 // The box each variant's photo renders in (src/styles/site.css), so the browser
 // does not fetch a 1280 px candidate for a 480 px frame.
 const SIZES = {

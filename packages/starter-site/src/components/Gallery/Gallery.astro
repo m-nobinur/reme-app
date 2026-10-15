@@ -1,13 +1,14 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { hasPhoto } from "../../photo-files"
 import { site } from "../../site-config"
 
 // The path names a file a gallery image slot placed and the alt text says what
 // it shows. A photo with no alt text does not render.
 const items = ([1, 2, 3] as const)
   .map((n) => ({ src: site[`photo${n}Src`], alt: site[`photo${n}Alt`] }))
-  .filter((item) => item.src && item.alt)
+  .filter((item) => item.alt && hasPhoto(item.src))
 ---
 
 {

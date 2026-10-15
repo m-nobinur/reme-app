@@ -39,8 +39,11 @@ const emitted = () => readdirSync(join(built.dist, "_astro")).sort()
 describe("a generated photo", () => {
   test("ships only its resized variants, never the original", () => {
     expect(emitted().filter((f) => f.endsWith(".png"))).toEqual([])
-    // Every emitted image is one a page names.
-    const html = home()?.html ?? ""
+    // Every emitted image is one a page names: the home hero, and the about
+    // story, which shows the hero's photo when the gallery has none.
+    const html = readPages(built.dist)
+      .map((p) => p.html)
+      .join("\n")
     for (const f of emitted().filter((name) => /\.(avif|webp)$/.test(name))) {
       expect(html, f).toContain(f)
     }
