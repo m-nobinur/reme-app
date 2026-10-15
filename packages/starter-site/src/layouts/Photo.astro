@@ -1,5 +1,5 @@
 ---
-import { getImage, Picture } from "astro:assets"
+import { getImage } from "astro:assets"
 import { photoFile } from "../photo-files"
 
 // An image from the owner's uploads (src/assets/uploads/) or the photo
@@ -18,8 +18,10 @@ interface Props {
   sizes?: string
   /** The one image above the fold: eager, high priority, preloaded. */
   priority?: boolean
-  /** Encoding quality, 1 to 100. The hero asks for more than the rest. */
+  /** Encoding quality, 1 to 100, of the WebP and, without `avifQuality`, the AVIF. */
   quality?: number
+  /** AVIF quality by candidate width: a bigger candidate can take a lower one, since a screen that fetches it is dense. */
+  avifQuality?: (width: number) => number
 }
 
 const {
@@ -30,6 +32,7 @@ const {
   sizes = "(min-width: 64rem) 50vw, 100vw",
   priority = false,
   quality = 55,
+  avifQuality = () => quality,
 } = Astro.props
 const load = photoFile(src)
 const meta = load ? (await load()).default : undefined
@@ -43,38 +46,59 @@ const emitted = meta
     ].sort((a, b) => a - b)
   : []
 if (meta && emitted.length === 0) emitted.push(meta.width)
-const preload =
-  meta && priority
-    ? await getImage({ src: meta, widths: emitted, format: "avif", quality })
-    : null
+// One getImage a width: Picture takes a single quality for every candidate.
+const avif = meta
+  ? await Promise.all(
+      emitted.map((w) =>
+        getImage({
+          src: meta,
+          width: w,
+          format: "avif",
+          quality: avifQuality(w),
+        })
+      )
+    )
+  : []
+const avifSet = avif.map((image, i) => `${image.src} ${emitted[i]}w`).join(", ")
+const webp = meta
+  ? await getImage({
+      src: meta,
+      alt,
+      widths: emitted,
+      sizes,
+      format: "webp",
+      quality,
+      loading: priority ? "eager" : "lazy",
+      decoding: "async",
+      fetchpriority: priority ? "high" : undefined,
+    })
+  : null
+const imgAttributes = {
+  srcset: webp?.srcSet.attribute,
+  ...webp?.attributes,
+}
+// Picture's own: the picture takes the caller's scoped-style class.
+const scoped = className?.match(/\bastro-\w{8}\b/)?.[0]
 ---
 
 {
-  preload && (
+  meta && priority && (
     <link
       rel="preload"
       as="image"
       type="image/avif"
-      imagesrcset={preload.srcSet.attribute}
+      imagesrcset={avifSet}
       imagesizes={sizes}
       fetchpriority="high"
     />
   )
 }
 {
-  meta && (
-    <Picture
-      src={meta}
-      alt={alt}
-      class={className}
-      widths={emitted}
-      sizes={sizes}
-      formats={["avif", "webp"]}
-      fallbackFormat="webp"
-      quality={quality}
-      loading={priority ? "eager" : "lazy"}
-      decoding="async"
-      fetchpriority={priority ? "high" : undefined}
-    />
+  webp && (
+    <picture class={scoped}>
+      <source srcset={avifSet} type="image/avif" sizes={sizes} />
+      <source srcset={webp.srcSet.attribute} type="image/webp" sizes={sizes} />
+      <img src={webp.src} {...imgAttributes} class={className} />
+    </picture>
   )
 }
