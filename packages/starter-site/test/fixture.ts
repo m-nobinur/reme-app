@@ -38,6 +38,12 @@ export const FILLED: Record<string, string> = {
   heroHeading: "A home you come back to",
   tagline: "Weekly cleaning for homes in Fairhaven",
   homeIntro: "We clean homes on a schedule the household picks.",
+  heroNote: "Tell us about the home and we reply with a quote.",
+  homeAboutHeading: "The cleaners behind *Fairhaven homes*",
+  service1Detail:
+    "A weekly visit from the same cleaner, who learns the home and keeps the kitchen, bathrooms and floors in order.",
+  step4Title: "Keep the day",
+  step4Body: "The visit repeats on the day you chose.",
   servicesIntro: "Three ways we clean, and what each one covers.",
   serviceAreaIntro: "Where a cleaner can reach you.",
   contactIntro: "Call, write, or ask for a quote.",

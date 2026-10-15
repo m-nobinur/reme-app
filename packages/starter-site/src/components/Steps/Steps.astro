@@ -8,7 +8,7 @@ interface Props {
 }
 
 const { variant = "timeline" } = Astro.props
-const items = ([1, 2, 3] as const)
+const items = ([1, 2, 3, 4] as const)
   .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
   .filter((item) => item.title || item.body)
 ---
@@ -28,7 +28,7 @@ const items = ([1, 2, 3] as const)
           {items.map((item) => (
             <li>
               {item.title && <h3>{item.title}</h3>}
-              {item.body && <p>{item.body}</p>}
+              {item.body && <p data-copy="step_body">{item.body}</p>}
             </li>
           ))}
         </ol>

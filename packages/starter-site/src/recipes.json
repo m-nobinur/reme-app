@@ -24,9 +24,13 @@
         "heroHeading",
         "tagline",
         "homeIntro",
+        "heroNote",
         "trust1",
         "trust2",
         "trust3",
+        "serviceCardsEyebrow",
+        "serviceCardsHeading",
+        "serviceCardsLink",
         "service1Name",
         "service1Body",
         "service1Icon",
@@ -45,6 +49,8 @@
         "service6Name",
         "service6Body",
         "service6Icon",
+        "valuePropsEyebrow",
+        "valuePropsHeading",
         "valueProp1Title",
         "valueProp1Body",
         "valueProp1Icon",
@@ -54,16 +60,28 @@
         "valueProp3Title",
         "valueProp3Body",
         "valueProp3Icon",
+        "stepsEyebrow",
+        "stepsHeading",
         "step1Title",
         "step1Body",
         "step2Title",
         "step2Body",
         "step3Title",
         "step3Body",
+        "step4Title",
+        "step4Body",
+        "aboutEyebrow",
+        "homeAboutHeading",
         "overview",
         "overviewBody",
         "audience",
         "audienceBody",
+        "testimonialsEyebrow",
+        "testimonialsHeading",
+        "galleryEyebrow",
+        "galleryHeading",
+        "areaEyebrow",
+        "homeAreaHeading",
         "areaTowns",
         "areaBody",
         "faq1Question",
@@ -83,6 +101,7 @@
         "faq8Question",
         "faq8Answer",
         "ctaHeading",
+        "ctaEyebrow",
         "ctaBody"
       ]
     },
@@ -144,35 +163,43 @@
         "servicesIntro",
         "service1Name",
         "service1Body",
+        "service1Detail",
         "service1Icon",
         "service1Includes",
         "service1For",
         "service2Name",
         "service2Body",
+        "service2Detail",
         "service2Icon",
         "service2Includes",
         "service2For",
         "service3Name",
         "service3Body",
+        "service3Detail",
         "service3Icon",
         "service3Includes",
         "service3For",
         "service4Name",
         "service4Body",
+        "service4Detail",
         "service4Icon",
         "service4Includes",
         "service4For",
         "service5Name",
         "service5Body",
+        "service5Detail",
         "service5Icon",
         "service5Includes",
         "service5For",
         "service6Name",
         "service6Body",
+        "service6Detail",
         "service6Icon",
         "service6Includes",
         "service6For",
-        "offerings"
+        "offerings",
+        "offeringsEyebrow",
+        "offeringsHeading"
       ]
     },
     "service_area": {
@@ -277,13 +304,6 @@
             "kind": "about"
           },
           {
-            "kind": "value_props"
-          },
-          {
-            "kind": "testimonials",
-            "variant": "wall"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -294,12 +314,6 @@
           {
             "kind": "service_cards",
             "variant": "alternating"
-          },
-          {
-            "kind": "steps"
-          },
-          {
-            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -464,13 +478,6 @@
             "kind": "about"
           },
           {
-            "kind": "value_props"
-          },
-          {
-            "kind": "testimonials",
-            "variant": "wall"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -481,12 +488,6 @@
           {
             "kind": "service_cards",
             "variant": "alternating"
-          },
-          {
-            "kind": "steps"
-          },
-          {
-            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -636,13 +637,6 @@
             "kind": "about"
           },
           {
-            "kind": "value_props"
-          },
-          {
-            "kind": "testimonials",
-            "variant": "wall"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -653,12 +647,6 @@
           {
             "kind": "service_cards",
             "variant": "practice_list"
-          },
-          {
-            "kind": "steps"
-          },
-          {
-            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -830,13 +818,6 @@
             "kind": "about"
           },
           {
-            "kind": "value_props"
-          },
-          {
-            "kind": "testimonials",
-            "variant": "wall"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -847,12 +828,6 @@
           {
             "kind": "service_cards",
             "variant": "fleet"
-          },
-          {
-            "kind": "steps"
-          },
-          {
-            "kind": "faq"
           },
           {
             "kind": "cta_band"

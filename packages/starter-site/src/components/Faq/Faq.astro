@@ -20,7 +20,7 @@ const { variant = "split" } = Astro.props
           {items.map((item) => (
             <details>
               <summary>{item.question}</summary>
-              <p>{item.answer}</p>
+              <p data-copy="faq_answer">{item.answer}</p>
             </details>
           ))}
         </div>

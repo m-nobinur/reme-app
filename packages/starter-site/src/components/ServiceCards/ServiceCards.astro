@@ -85,7 +85,7 @@ const href = (id: string) => `/services/#${id}`
                     {linked ? <a href={href(item.id)}>{item.name}</a> : item.name}
                   </h3>
                 )}
-                {item.body && <p>{item.body}</p>}
+                {item.body && <p data-copy="service_body">{item.body}</p>}
                 {variant === "fleet" && item.includes.length > 0 && (
                   <ul class="spec-pills">
                     {item.includes.map((line) => (
@@ -117,7 +117,7 @@ const href = (id: string) => `/services/#${id}`
                       )}
                     </h3>
                   )}
-                  {item.body && <p>{item.body}</p>}
+                  {item.body && <p data-copy="service_body">{item.body}</p>}
                 </div>
                 {linked && <span class="row-arrow" aria-hidden="true" />}
               </li>
@@ -141,7 +141,11 @@ const href = (id: string) => `/services/#${id}`
                   <p class="eyebrow">{site.serviceCardsEyebrow}</p>
                 )}
                 {item.name && <h2>{item.name}</h2>}
-                {item.body && <p class="service-detail-body">{item.body}</p>}
+                {(item.detail || item.body) && (
+                  <p class="service-detail-body" data-copy="service_detail">
+                    {item.detail || item.body}
+                  </p>
+                )}
                 {primaryAction && (
                   <ActionLink
                     href={primaryAction.href}

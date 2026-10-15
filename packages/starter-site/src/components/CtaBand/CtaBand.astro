@@ -19,6 +19,7 @@ const image = variant === "photo" ? site.ctaImage : ""
   (site.ctaHeading || site.ctaBody) && (
     <section
       class:list={["band band-tint cta-band", image && "cta-photo"]}
+      data-repeats
     >
       {image && (
         <Photo class="cta-image" src={image} alt="" sizes="100vw" />

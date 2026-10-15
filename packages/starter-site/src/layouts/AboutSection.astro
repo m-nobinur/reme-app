@@ -31,9 +31,12 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
 {
   page === "home" ? (
     (homeAbout || homeAudience) && (
-      <Section eyebrow={site.aboutEyebrow} heading={site.aboutHeading}>
-        {site.tagline && site.homeIntro && (
-          <p class="section-lede">{site.homeIntro}</p>
+      <Section
+        eyebrow={site.aboutEyebrow}
+        heading={site.homeAboutHeading || site.aboutHeading}
+      >
+        {site.homeIntro && site.tagline && (
+          <p class="section-lede">{site.tagline}</p>
         )}
         {homeAbout && <p>{homeAbout}</p>}
         {homeAudience && <p>{homeAudience}</p>}

@@ -32,7 +32,7 @@ interface Props {
 const { page } = Astro.props
 // The page's h1 and lede, which are its own fields.
 const HEAD = {
-  home: [site.heroHeading || site.businessName, site.tagline || site.homeIntro],
+  home: [site.heroHeading || site.businessName, site.homeIntro || site.tagline],
   about: [site.aboutHeading, site.aboutIntro],
   services: [site.servicesHeading, site.servicesIntro],
   service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
@@ -80,6 +80,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
             }
             caption={home ? site.heroCaption : ""}
             highlights={home ? serviceItems.slice(0, 3) : []}
+            note={home ? site.heroNote : ""}
           >
             {home && primaryAction && (
               <ActionLink href={primaryAction.href} label={primaryAction.label} />
@@ -125,7 +126,11 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return <Gallery />
       case "service_area":
         return (
-          <AreaSection heading={home ? site.serviceAreaHeading : undefined} />
+          <AreaSection
+            heading={
+              home ? site.homeAreaHeading || site.serviceAreaHeading : undefined
+            }
+          />
         )
       case "faq":
         return <Faq variant={v} />

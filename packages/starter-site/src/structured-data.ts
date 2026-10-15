@@ -63,6 +63,7 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     id: `service-${n}`,
     name: site[`service${n}Name`],
     body: site[`service${n}Body`],
+    detail: site[`service${n}Detail`],
     icon: site[`service${n}Icon`],
     includes: lines(site[`service${n}Includes`]),
     for: site[`service${n}For`],

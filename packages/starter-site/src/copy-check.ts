@@ -95,7 +95,7 @@ export function copyFindings(pages: readonly BuiltPage[]): string[] {
     if (indexed) {
       for (const [name, value, range, aim] of [
         ["title", title, TITLE_CHARS, "50 to 60"],
-        ["meta description", description, DESCRIPTION_CHARS, "140 to 155"],
+        ["meta description", description, DESCRIPTION_CHARS, "140 to 160"],
       ] as const) {
         if (!value) say(`has no ${name}`)
         else if (value.length < range.min || value.length > range.max)

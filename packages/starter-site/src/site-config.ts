@@ -151,12 +151,22 @@ const values = {
    * cleaning in Fairhaven". Falls back to the business name.
    */
   heroHeading: "",
-  /** One sentence: what a customer gets. Under the h1 when there is no tagline. */
+  /**
+   * The hero's subhead under the h1: two or three sentences, 25 to 55 words,
+   * on who the business serves, where, and what the customer gets. Wins over
+   * the tagline, which then shows in the home about section.
+   */
   homeIntro: "",
+  /**
+   * A short reassurance line under the hero's buttons, under twelve words,
+   * about how easy the next step is ("Tell us about your home and we reply
+   * with a quote"). Never a claim no fact holds. Empty shows nothing.
+   */
+  heroNote: "",
   /**
    * Each page's <title> and meta description. A title is 50 to 60
    * characters with the service, the area and the business name; a
-   * description is 140 to 155 characters with a reason to request a quote.
+   * description is 140 to 160 characters with a reason to request a quote.
    * Empty falls back to the page's heading and intro.
    */
   homeTitle: "",
@@ -171,7 +181,7 @@ const values = {
   contactDescription: "",
   quoteTitle: "",
   quoteDescription: "",
-  /** Each page's lede under its h1: one or two sentences for that page. */
+  /** Each page's lede under its h1: two or three sentences, 30 to 60 words, for that page. */
   aboutIntro: "",
   servicesIntro: "",
   serviceAreaIntro: "",
@@ -187,6 +197,8 @@ const values = {
   bookingIntro: "",
   aboutEyebrow: "About",
   aboutHeading: "About us",
+  /** The home page's about section h2, so it never repeats the about page's h1. Empty uses aboutHeading. */
+  homeAboutHeading: "",
   /** The link from the home page's about section to the about page. */
   aboutLink: "More about us",
   overviewEyebrow: "Our story",
@@ -194,7 +206,7 @@ const values = {
   audienceHeading: "Who we work with",
   proofEyebrow: "Our record",
   proofHeading: "What sets us apart",
-  /** business.overview in the site's voice, in two to four sentences: rephrase it, never add to it. Empty shows overview as given. */
+  /** business.overview in the site's voice, up to 200 words in one or two paragraphs: rephrase it, never add to it. Empty shows overview as given. */
   overviewBody: "",
   /** business.audience in the site's voice, in one or two sentences: rephrase it, never add to it. Empty shows audience as given. */
   audienceBody: "",
@@ -240,7 +252,9 @@ const values = {
   serviceForLabel: "Who it is for",
   /**
    * Up to six services, one per business.offerings item that a fact
-   * describes. Name; Body, one benefit-led sentence; Icon, a key of ICONS in
+   * describes. Name; Body, 25 to 45 words, benefit first, then what it
+   * covers; Detail, the services page's intro to it, 60 to 100 words on what
+   * the job involves and the result; Icon, a key of ICONS in
    * src/icons.ts, no key twice; Includes, what the service covers, one item
    * to a line, from the facts; For, one sentence on who it suits, from
    * business.audience. A card shows Name, Body and Icon; the services page
@@ -248,31 +262,37 @@ const values = {
    */
   service1Name: "",
   service1Body: "",
+  service1Detail: "",
   service1Icon: "",
   service1Includes: "",
   service1For: "",
   service2Name: "",
   service2Body: "",
+  service2Detail: "",
   service2Icon: "",
   service2Includes: "",
   service2For: "",
   service3Name: "",
   service3Body: "",
+  service3Detail: "",
   service3Icon: "",
   service3Includes: "",
   service3For: "",
   service4Name: "",
   service4Body: "",
+  service4Detail: "",
   service4Icon: "",
   service4Includes: "",
   service4For: "",
   service5Name: "",
   service5Body: "",
+  service5Detail: "",
   service5Icon: "",
   service5Includes: "",
   service5For: "",
   service6Name: "",
   service6Body: "",
+  service6Detail: "",
   service6Icon: "",
   service6Includes: "",
   service6For: "",
@@ -296,13 +316,15 @@ const values = {
   service6ImageAlt: "",
   stepsEyebrow: "Process",
   stepsHeading: "How it works",
-  /** Three steps from first contact to the finished job. */
+  /** Three or four steps from first contact to the finished job: a title and 20 to 35 words each. */
   step1Title: "",
   step1Body: "",
   step2Title: "",
   step2Body: "",
   step3Title: "",
   step3Body: "",
+  step4Title: "",
+  step4Body: "",
   statYearsLabel: "Years in business",
   statClientsLabel: "Clients served",
   statRatingLabel: "Average rating",
@@ -316,16 +338,19 @@ const values = {
    * not name. Empty shows service_area.text as given.
    */
   areaTowns: "",
-  /** A short paragraph on working in the area, with no landmark, venue or time the facts do not give. */
+  /** A paragraph of 40 to 80 words on working in the area, with no landmark, venue or time the facts do not give. */
   areaBody: "",
+  /** The home page's area section h2, so it never repeats the service area page's h1. Empty uses serviceAreaHeading. */
+  homeAreaHeading: "",
   /** The link from the home page's area section to the service area page. */
   areaLink: "See the areas we cover",
   faqEyebrow: "Questions",
   faqHeading: "Common questions",
   /**
-   * Six to eight questions a customer of this trade asks before booking,
-   * each answered from a fact in one or two sentences. Fewer when the facts
-   * answer fewer; never a price.
+   * Five to eight questions a customer of this trade asks before booking,
+   * each answered in 40 to 90 words: the trade's usual practice in general
+   * terms, and this business's own policy only as a fact states it. Never a
+   * price.
    */
   faq1Question: "",
   faq1Answer: "",
@@ -344,6 +369,7 @@ const values = {
   faq8Question: "",
   faq8Answer: "",
   ctaEyebrow: "Next step",
+  /** The closing band on every page: a headline of 4 to 9 words and one sentence of 12 to 30 words. */
   ctaHeading: "",
   ctaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
@@ -492,15 +518,11 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
     { kind: "hero" },
     { kind: "trust_strip", variant: "icons" },
     { kind: "about" },
-    { kind: "value_props" },
-    { kind: "testimonials", variant: "wall" },
     { kind: "cta_band" },
   ],
   services: [
     { kind: "hero" },
     { kind: "service_cards", variant: "alternating" },
-    { kind: "steps" },
-    { kind: "faq" },
     { kind: "cta_band" },
   ],
   service_area: [

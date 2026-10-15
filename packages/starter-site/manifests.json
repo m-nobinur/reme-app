@@ -196,6 +196,12 @@
         "type": "{ name: string; icon: string }[]",
         "required": false,
         "description": "Services shown when there is no photo."
+      },
+      {
+        "name": "note",
+        "type": "string",
+        "required": false,
+        "description": "A short reassurance line under the actions, as site.heroNote."
       }
     ],
     "constraints": [

@@ -232,6 +232,27 @@ describe("a component with its fields filled", () => {
       'A home you come back <span class="accent">to</span></h1>'
     )
   })
+
+  test("marks the copy the copy gate reads (packages/gates/src/copy.ts)", () => {
+    const html = (file: string) =>
+      pagesOf(filled).find((p) => p.file === file)?.html ?? ""
+    const home = html("index.html")
+    // The subhead is homeIntro; the owner's tagline moves to the about section.
+    expect(home).toMatch(
+      new RegExp(`data-copy="hero_lede"[^>]*>\\s*${FILLED.homeIntro}`)
+    )
+    expect(home).toContain(`<p class="hero-note">${FILLED.heroNote}</p>`)
+    expect(home).toContain(FILLED.tagline)
+    expect(home).toContain('<span class="accent">Fairhaven homes</span>')
+    for (const kind of ["service_body", "step_body", "faq_answer"])
+      expect(home, kind).toContain(`data-copy="${kind}"`)
+    expect(home).toContain(FILLED.step4Body)
+    expect(home).toMatch(/class="[^"]*cta-band[^"]*"[^>]*data-repeats/)
+    const services = html("services/index.html")
+    expect(services).toMatch(
+      new RegExp(`data-copy="service_detail"[^>]*>\\s*${FILLED.service1Detail}`)
+    )
+  })
 })
 
 describe("proof", () => {
