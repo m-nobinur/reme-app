@@ -149,9 +149,11 @@ describe("neutrals lean toward the hue (rule 5)", () => {
       const [primary, accent] = [palette.primary, palette.accent].map(
         oklch
       ) as [ReturnType<typeof oklch>, ReturnType<typeof oklch>]
+      // The line's floor is the reference's own border, oklch(89% .012 150):
+      // at 0.022 a warm hue's hairline read as a coloured rule, not a neutral.
       for (const [role, floor] of [
         ["tint", 0.02],
-        ["line", 0.022],
+        ["line", 0.012],
         ["paper", 0.002],
       ] as const) {
         const got = oklch(palette[role])
@@ -180,8 +182,23 @@ describe("neutrals lean toward the hue (rule 5)", () => {
         0.02
       )
       expect(oklch(palette?.line ?? brand).C, brand).toBeGreaterThanOrEqual(
-        0.02
+        0.012
       )
+    }
+  })
+
+  // The ceiling: the reference's band is oklch(94% .021 146) and its border
+  // .012. A crimson's derived tint at C 0.035 and L 0.91 read as a pink band.
+  test("a tint and a line stay quiet, preset or derived", () => {
+    const light = PALETTES.filter((each) => oklch(each.paper).L > 0.5)
+    const derived = PALETTES.map((each) => paletteFromBrand(each.accent))
+    for (const palette of [...light, ...derived]) {
+      const [tint, line] = [palette?.tint, palette?.line].map((hex) =>
+        oklch(hex as string)
+      ) as [ReturnType<typeof oklch>, ReturnType<typeof oklch>]
+      expect(tint.L, palette?.tint).toBeGreaterThanOrEqual(0.94)
+      expect(tint.C, palette?.tint).toBeLessThanOrEqual(0.0235)
+      expect(line.C, palette?.line).toBeLessThanOrEqual(0.015)
     }
   })
 

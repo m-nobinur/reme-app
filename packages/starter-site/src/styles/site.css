@@ -570,11 +570,11 @@ picture {
   line-height: 1.07;
 }
 
+/* An inner page's header is type on the page, as on the reference: 70 px
+   above and 50 below at 1440, 50 and 30 at 390, no band and no rule. */
 .hero-page {
-  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem)
-    clamp(2.5rem, 1.75rem + 3vw, 4.5rem);
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
+  padding-block: clamp(3.125rem, 2.66rem + 1.905vw, 4.375rem)
+    clamp(1.875rem, 1.41rem + 1.905vw, 3.125rem);
 }
 
 .hero-page h1 {
@@ -692,8 +692,8 @@ picture {
   border-top: 1px solid var(--border);
 }
 
-/* The one overlay on the photo that carries copy: a pill by default, a stamp
-   card on the split heroes. */
+/* The one overlay on the photo that carries copy: a small pill in the page's
+   colours on every variant, as the reference's caption. */
 .hero-caption {
   position: absolute;
   z-index: 1;
@@ -715,37 +715,9 @@ picture {
   }
 }
 
-/* split_frame: the photo in a plain frame, a stamp card over its corner. */
-:is(.hero-split_frame, .hero-wash.hero-plain) {
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
-}
-
-.hero-split_frame .hero-image {
-  padding: var(--space-2xs);
-  border: 1px solid var(--brand-line);
-  background: var(--card);
-}
-
-:is(.hero-split_frame, .hero-split_arch) .hero-caption {
-  inset-block-end: calc(var(--space-md) * -1);
-  inset-inline: var(--space-sm) auto;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--brand-line);
-  border-radius: var(--radius-card);
-  background: var(--card);
-  color: var(--card-foreground);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--display-weight);
-  letter-spacing: var(--display-tracking);
-}
-
-@media (min-width: 56rem) {
-  :is(.hero-split_frame, .hero-split_arch) .hero-caption {
-    inset-inline-start: calc(var(--space-xl) * -1);
-  }
-}
+/* split_frame: the reference's split. The copy on the page, the photo a crisp
+   panel beside it with only the media radius: no mat, no border, no tinted
+   band, and the caption pill is the one thing on the photo. */
 
 /* split_arch: the photo under an arch, a hairline arch offset behind it. */
 .hero-split_arch .hero-media {
@@ -832,7 +804,7 @@ picture {
   text-align: center;
 }
 
-.hero-dark_center :is(.hero-text, .lede) {
+.hero-dark_center :is(.hero-text, .lede, .hero-note) {
   margin-inline: auto;
 }
 
@@ -1172,7 +1144,7 @@ picture {
   aspect-ratio: 3 / 2;
   object-fit: cover;
   background: var(--brand-soft);
-  transition: transform 200ms ease;
+  transition: transform var(--motion-zoom) var(--motion-ease);
 }
 
 @media (min-width: 64rem) {
@@ -1717,7 +1689,7 @@ picture {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
-  transition: transform 200ms ease;
+  transition: transform var(--motion-zoom) var(--motion-ease);
 }
 
 /* Three photos: one large, two stacked beside it. */
@@ -1748,7 +1720,7 @@ picture {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
-  transition: transform 200ms ease;
+  transition: transform var(--motion-zoom) var(--motion-ease);
 }
 
 :is(.gallery-grid li, .gallery-single):hover img {
@@ -2166,22 +2138,24 @@ picture {
 
 .next-list li {
   display: grid;
-  grid-template-columns: 2rem 1fr;
+  grid-template-columns: 2.25rem 1fr;
   gap: var(--space-xs);
+  align-items: center;
   counter-increment: next;
 }
 
+/* The reference's step number: a hairline circle in the brand, the numeral
+   in the ink, as the steps band draws it. */
 .next-list li::before {
   content: counter(next, decimal-leading-zero);
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--brand-text);
   border-radius: 50%;
-  background: var(--brand);
-  color: var(--brand-foreground);
-  font-size: var(--text-sm);
-  font-weight: 500;
+  color: var(--foreground);
+  font-size: 0.8125rem;
 }
 
 .quote-form {
@@ -2672,42 +2646,40 @@ picture {
   }
 }
 
-/* Fade-up on view. A browser with no scroll-driven animations, or a visitor
-   who asked for less motion, never enters this block and sees the final state
-   at once. Opacity and a translate only, so nothing shifts layout. */
-@media (prefers-reduced-motion: no-preference) {
-  @supports (animation-timeline: view()) {
-    .band
-      :is(
-        .section-head,
-        .card,
-        .service-rows li,
-        .value-list li,
-        .step-list li,
-        .testimonials figure,
-        .gallery-grid li,
-        .gallery-single
-      ) {
-      /* Longhands on purpose: the minifier folds `animation` plus
-         `animation-timeline` into one shorthand, and Chrome treats the
-         timeline as reset-only there and drops the whole declaration. */
-      animation-name: fade-up;
-      animation-timing-function: linear;
-      /* `forwards`, not `both`: before it nears the viewport an element is
-         plain and visible, so a full-page screenshot, a print and an
-         accessibility scan from the top of the page all see the finished
-         page. The jump to the first frame happens at the viewport's edge. */
-      animation-fill-mode: forwards;
-      animation-timeline: view();
-      animation-range: entry 0% entry 35%;
-    }
+/* Fade-up on entry. src/layouts/Base.astro marks each block .reveal and the
+   root [data-reveal] only when motion is allowed and the script runs, so with
+   no script, with reduced motion (as the build's axe scan and screenshots
+   set it) and in print, every block is plain and visible. Each block rises
+   0.75rem and fades in once as it enters, siblings a beat apart; opacity and
+   a translate only, so nothing shifts layout. A block holding focus shows at
+   once, so a keyboard never lands on something invisible. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-reveal] .reveal:not(.is-in, :focus-within) {
+    opacity: 0;
+  }
+
+  [data-reveal] .reveal.is-in {
+    animation: fade-up var(--motion-reveal) var(--motion-ease)
+      var(--reveal-delay, 0ms) backwards;
+  }
+
+  [data-reveal] .reveal:nth-child(2) {
+    --reveal-delay: 70ms;
+  }
+
+  [data-reveal] .reveal:nth-child(3) {
+    --reveal-delay: 140ms;
+  }
+
+  [data-reveal] .reveal:nth-child(n + 4) {
+    --reveal-delay: 210ms;
   }
 }
 
 @keyframes fade-up {
   from {
     opacity: 0;
-    translate: 0 1.5rem;
+    translate: 0 0.75rem;
   }
 }
 
@@ -2755,8 +2727,8 @@ picture {
 }
 
 /* Ornaments: each direction's one signature, beyond what its variants draw.
-   calm_daylight's pill captions and fresh_modern's stamp card are the wash
-   and split_frame heroes' own. */
+   calm_daylight's and fresh_modern's pill captions are the wash and
+   split_frame heroes' own. */
 
 /* warm_editorial: an eight-spoked mark leads the eyebrow. */
 [data-direction="warm_editorial"] .eyebrow::before {

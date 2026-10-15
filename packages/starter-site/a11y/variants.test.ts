@@ -92,3 +92,41 @@ for (const width of [1440, 390]) {
     ).toEqual([])
   }, 120_000)
 }
+
+test("every hero photo is crisp on the page: no mat, no frame, no tinted band, a pill caption", async () => {
+  if (!browser) throw new Error("the browser did not start")
+  const page = await (
+    await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  ).newPage()
+  await page.goto(`${origin}/catalog/`)
+  const heroes = await page.locator(".hero-photo").evaluateAll((all) => {
+    // A plain div's background: what a hero with no band of its own computes.
+    const probe = document.body.appendChild(document.createElement("div"))
+    const unpainted = getComputedStyle(probe).backgroundColor
+    return all.map((hero) => {
+      const image = getComputedStyle(
+        hero.querySelector(".hero-image") as Element
+      )
+      const caption = hero.querySelector(".hero-caption")
+      return {
+        variant: [...hero.classList].find((c) =>
+          /^hero-(wash|split_arch|split_frame|dark_center|text_led)$/.test(c)
+        ),
+        band: getComputedStyle(hero).backgroundColor === unpainted,
+        padding: image.padding,
+        border: image.borderTopWidth,
+        caption: caption ? getComputedStyle(caption).borderRadius : "999px",
+      }
+    })
+  })
+  expect(heroes.map((hero) => hero.variant)).toEqual(
+    expect.arrayContaining(["hero-split_frame", "hero-split_arch", "hero-wash"])
+  )
+  for (const hero of heroes) {
+    expect(hero.padding, hero.variant).toBe("0px")
+    expect(hero.border, hero.variant).toBe("0px")
+    expect(hero.caption, hero.variant).toBe("999px")
+    // The page's own ground: dark_center's scrim lies on the photo, not the band.
+    expect(hero.band, hero.variant).toBe(true)
+  }
+}, 60_000)

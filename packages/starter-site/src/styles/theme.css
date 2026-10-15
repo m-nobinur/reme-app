@@ -78,6 +78,14 @@
   --grid-gap: clamp(1rem, 0.75rem + 0.8vw, 1.5rem);
   --header-h: 4.5rem;
 
+  /* Motion, after the reference: colour and arrow changes at 160 ms, a photo
+     zoom of 1.035 over 400 ms, and the entrance reveal at 560 ms, all on one
+     gentle ease-out. Off under prefers-reduced-motion (site.css). */
+  --motion-quick: 160ms;
+  --motion-zoom: 400ms;
+  --motion-reveal: 560ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
   --radius-sm: calc(var(--radius) - 0.15rem);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) * 2.5);

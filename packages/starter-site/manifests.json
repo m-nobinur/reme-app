@@ -246,7 +246,7 @@
     "constraints": [
       "One per page, first inside the layout.",
       "Children are ActionLink elements only.",
-      "variant is the home page's; another page names one only to show its own photo beside the copy, and with no photo (inner) it is the plain page header, one text block with no empty half. wash is the photo full-bleed with a pale wash under the copy; split_arch the photo under an arch beside the copy; split_frame the photo in a frame with a stamp card on its corner; dark_center the photo full-bleed under a dark gradient with the copy centred; text_led large type with the photo as a portrait inset.",
+      "variant is the home page's; another page names one only to show its own photo beside the copy, and with no photo (inner) it is the plain page header, one text block with no empty half. wash is the photo full-bleed with a pale wash under the copy; split_arch the photo under an arch beside the copy; split_frame the photo a crisp rounded panel beside the copy, no frame; dark_center the photo full-bleed under a dark gradient with the copy centred; text_led large type with the photo as a portrait inset.",
       "The home hero sets the h1's last word in the accent colour.",
       "caption is the one piece of copy on the photo, site.heroCaption, and shows only with the photo.",
       "With no photo the home hero shows highlights, the first three services with their icons, never an empty box.",

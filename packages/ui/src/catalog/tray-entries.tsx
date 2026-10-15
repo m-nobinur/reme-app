@@ -48,7 +48,7 @@ const PAIRS = [
 const LAYOUTS = [
   ["arch_cards", "Arch and photo cards", "split_arch", "photo_cards"],
   ["dark_rows", "Dark centre and rows", "dark_center", "numbered_rows"],
-  ["frame_alt", "Framed photo and stories", "split_frame", "alternating"],
+  ["frame_alt", "Split photo and stories", "split_frame", "alternating"],
   ["type_list", "Type first and a list", "text_led", "practice_list"],
 ] as const
 

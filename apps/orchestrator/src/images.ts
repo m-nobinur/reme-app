@@ -114,7 +114,7 @@ const GENERATE_TIMEOUT_MS = 60_000
 const PROMPT_TIMEOUT_MS = 30_000
 const CHECK_TIMEOUT_MS = 30_000
 /** Bumped when the house style changes, so a fresh plan draws in the new style instead of reusing the old. */
-const STYLE_VERSION = "house-2026-10-15"
+const STYLE_VERSION = "house-2026-10-16"
 /** Dollars, for a result whose response carried no cost. Verified 2026-10-14. */
 const ESTIMATE = { "1K": 0.034, "2K": 0.05 } as const
 const OPENROUTER = "https://openrouter.ai/api/v1"
@@ -395,6 +395,8 @@ export const DEFECTS = {
   clutter: "clutter or mess where the scene should be clean and tidy",
   grade:
     "an oversaturated, HDR, CGI or 3D-render look, crushed blacks or a colour cast",
+  texture:
+    "painterly, smeared or mushy texture (foliage, grass, stone or fabric that dissolves into blobs or brush strokes), over-sharpened halos, or too little fine detail for a photo shown large",
   subject: "a picture that does not show the slot's scene",
   style: "a mismatch with the set's style line",
 } as const
@@ -406,6 +408,7 @@ const Check = z.object({
   anatomy: score,
   clutter: score,
   grade: score,
+  texture: score,
   subject: score,
   style: score,
   note: z.string().max(400).catch(""),
@@ -447,7 +450,7 @@ async function inspect(
           {
             role: "system",
             content:
-              "You check generated photos for a small business website before they ship. Score each defect 0 (none), 1 (minor, fine to ship) or 2 (a visitor would notice). Be strict about geometry, text and anatomy: these are what make a photo look fake. " +
+              "You check generated photos for a small business website before they ship. Score each defect 0 (none), 1 (minor, fine to ship) or 2 (a visitor would notice). Be strict about geometry, text, anatomy and texture: these are what make a photo look fake. " +
               Object.entries(DEFECTS)
                 .map(([k, v]) => `${k}: ${v}.`)
                 .join(" ") +
