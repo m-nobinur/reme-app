@@ -260,17 +260,12 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("a professional tone")
   })
 
-  it("keeps the About page only with an overview or proof to show", () => {
+  it("never deletes a page the owner picked, however thin its facts", () => {
     const rules = ownerChoices([
       fact("site.pages", { ids: ["home", "about", "quote"] }),
     ]).join("\n")
-    expect(rules).toContain(
-      "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience."
-    )
-    const without = ownerChoices([
-      fact("site.pages", { ids: ["home", "quote"] }),
-    ]).join("\n")
-    expect(without).not.toContain("if business.overview and business.proof")
+    expect(rules).not.toContain("src/pages/about.astro")
+    expect(rules).toContain("Delete src/pages/services.astro")
   })
 
   it("names the design tray's direction and font pair", () => {
