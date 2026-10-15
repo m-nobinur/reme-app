@@ -476,7 +476,8 @@ describe("the photo director", () => {
     })
     const sites = bucket()
     const log = vi.spyOn(console, "log").mockReturnValue(undefined)
-    // Two hero-section slots: the first is drawn alone, the second after it.
+    // Two hero-section slots: the first is the home hero on its own chain, the
+    // second a header on the fast one, drawn after it.
     const out = await directPhotos({
       env: { OPENROUTER_API_KEY: "k", SITES: sites },
       orgId: ORG,
@@ -508,7 +509,7 @@ describe("the photo director", () => {
       },
       {
         slot: "banner",
-        model: QUALITY_MODELS[1]?.id,
+        model: FAST_MODELS[1]?.id,
         outcome: "drawn",
         status: 200,
       },
@@ -523,11 +524,11 @@ describe("the photo director", () => {
     expect(images(calls).map((c) => c.body.model)).toEqual([
       out429,
       QUALITY_MODELS[1]?.id,
-      QUALITY_MODELS[1]?.id,
+      FAST_MODELS[1]?.id,
     ])
     expect([...sites.objects.values()].map((o) => o.meta.model)).toEqual([
       QUALITY_MODELS[1]?.id,
-      QUALITY_MODELS[1]?.id,
+      FAST_MODELS[1]?.id,
     ])
   })
 

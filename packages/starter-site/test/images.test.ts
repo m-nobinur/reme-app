@@ -12,13 +12,18 @@ const HOME = 700 * 1024
 /** A phone: 390 css px at 2x asks for a 780 px candidate. */
 const PHONE = 390 * 2
 
-/** A soft, grained 2400 x 1600 frame: the weight of a real photo is owed to the final pass. */
-async function photo(seed: number): Promise<Uint8Array> {
+/**
+ * A soft, grained 2400 x 1600 frame: the weight of a real photo is owed to the
+ * final pass. `detail` is the width of the noise it is scaled up from: 120 is
+ * a card, 480 a lawn or a tiled floor, whose 1280 px AVIF was 341 KiB at the
+ * hero's old quality 75 (366 KiB here) against the 180 KiB line.
+ */
+async function photo(seed: number, detail = 120): Promise<Uint8Array> {
   const [w, h] = [2400, 1600]
   const low = await sharp({
     create: {
-      width: 120,
-      height: 80,
+      width: detail,
+      height: detail * (2 / 3),
       channels: 3,
       background: { r: 120 + seed * 20, g: 130, b: 140 },
       noise: { type: "gaussian", mean: 128, sigma: 40 },
@@ -39,7 +44,9 @@ async function photo(seed: number): Promise<Uint8Array> {
 
 let built: Built
 beforeAll(async () => {
-  const [hero, one, two, three] = await Promise.all([1, 2, 3, 4].map(photo))
+  const [hero, one, two, three] = await Promise.all(
+    [1, 2, 3, 4].map((seed) => photo(seed, seed === 1 ? 480 : 120))
+  )
   built = await build({
     site: {
       ...FILLED,
