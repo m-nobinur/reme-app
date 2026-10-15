@@ -481,17 +481,41 @@ const PAGE_PICKS = PAGES.filter(
   (p) => !(FIXED_PAGES as readonly string[]).includes(p.id)
 )
 
+/** Words that, before a page's name in its clause, mean the owner does not want it. */
+const NEGATIONS = new Set([
+  "no",
+  "not",
+  "without",
+  "dont",
+  "never",
+  "skip",
+  "nor",
+])
+
 /**
  * The pages a typed answer names, by label or id, so "Gallery and FAQ" is
- * honoured as a tick would be. shortcut: whole words only, so "no gallery"
- * still names it; hand the words to a model if owners write prose here.
+ * honoured as a tick would be and "no gallery" or "don't need a FAQ" is not:
+ * a name counts unless a negation comes before it in its clause, the words
+ * between commas, "and", "but" or "plus". shortcut: no grammar past that, so
+ * "don't forget the gallery" drops it; hand the words to a model if owners
+ * write prose here.
  */
 export const pagesNamed = (words: string) => {
-  const said = ` ${plainly(words)} `
+  const clauses = words.split(/[,.;:!?\n]|\b(?:and|but|plus)\b/i).map(plainly)
   return PAGES.filter((p) =>
-    [p.label, p.id.replaceAll("_", " ")].some((name) =>
-      new RegExp(` ${plainly(name)}s? `).test(said)
-    )
+    [p.label, p.id.replaceAll("_", " ")].some((name) => {
+      const named = new RegExp(`(?:^| )${plainly(name)}s?(?= |$)`)
+      return clauses.some((clause) => {
+        const at = clause.search(named)
+        return (
+          at >= 0 &&
+          !clause
+            .slice(0, at)
+            .split(" ")
+            .some((word) => NEGATIONS.has(word))
+        )
+      })
+    })
   ).map((p) => p.id)
 }
 

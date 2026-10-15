@@ -1470,6 +1470,27 @@ describe("the design tray", () => {
     expect(pagesNamed("a blog and a price list")).toEqual([])
   })
 
+  it("leaves out a page the owner's words turn down", () => {
+    expect(pagesNamed("Home, no gallery, FAQ")).toEqual(["home", "faq"])
+    expect(pagesNamed("Services but not FAQ")).toEqual(["services"])
+    expect(pagesNamed("Contact, without a gallery")).toEqual(["contact"])
+    expect(pagesNamed("We don't need FAQ")).toEqual([])
+    expect(pagesNamed("no need for a gallery or FAQs")).toEqual([])
+    expect(pagesNamed("I don't need a gallery, but add FAQs")).toEqual(["faq"])
+    expect(pagesNamed("Gallery and FAQ")).toEqual(["gallery", "faq"])
+    expect(pick({ pages: { own: "About us, no gallery" } })).toMatchObject({
+      facts: [
+        {
+          key: "site.pages",
+          value: {
+            ids: ["home", "about", "quote"],
+            custom: "About us, no gallery",
+          },
+        },
+      ],
+    })
+  })
+
   it("keeps the owner's own words, a colour code as the brand colour", () => {
     const brand = PALETTES[3]?.brand ?? ""
     expect(pick({ palette: { own: brand.toUpperCase() } })).toMatchObject({
