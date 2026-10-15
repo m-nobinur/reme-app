@@ -205,6 +205,56 @@ async function holdStarterFiles(
   )
 }
 
+/**
+ * The photos the pipeline placed are read-only to the Developer too: the lead
+ * once swapped the hero for an 800 px file to pass the size gate and the site
+ * shipped soft on a 2x screen. A photo over a line is the image pipeline's to
+ * fix (`Photo.astro` encodes the larger widths lighter), never the lead's. A
+ * revision draws new photos, so the starter's first commit is no baseline:
+ * the baseline is a tree sealed right after they are placed, kept in a ref and
+ * a private index that HEAD and the lead's commits never touch.
+ */
+const PHOTO_DIRS = "src/assets/generated src/assets/uploads"
+const PHOTO_INDEX = "GIT_INDEX_FILE=.git/reme-photos.idx"
+const SEALED = "refs/reme/photos"
+const PHOTO_TREE = `rm -f .git/reme-photos.idx && ${PHOTO_INDEX} ${GIT} add -f -A -- ${PHOTO_DIRS}`
+
+/** The shell that records the photos on disk as the baseline `holdPhotos` compares with. */
+export const SEAL_PHOTOS =
+  `mkdir -p ${PHOTO_DIRS} && ${PHOTO_TREE} && ` +
+  `${GIT} update-ref ${SEALED} $(${GIT} commit-tree -m photos $(${PHOTO_INDEX} ${GIT} write-tree))`
+
+/** Fails the report, after putting the sealed photos back, when one was replaced, removed or added. */
+async function holdPhotos(
+  run: (command: string) => Promise<{ exitCode: number; stdout: string }>
+) {
+  if ((await run(`${GIT} rev-parse -q --verify ${SEALED}`)).exitCode !== 0)
+    return
+  const diff = await run(
+    `${PHOTO_TREE} && ${PHOTO_INDEX} ${GIT} diff --cached --name-status ${SEALED} -- ${PHOTO_DIRS}`
+  )
+  if (diff.exitCode !== 0)
+    throw new Error(
+      `could not compare the photos with the pipeline's:\n${diff.stdout}`
+    )
+  const changed = diff.stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [status = "", file = ""] = line.split("\t")
+      return { status, file }
+    })
+  if (changed.length === 0) return
+  const added = changed.filter((c) => c.status === "A").map((c) => c.file)
+  const kept = changed.filter((c) => c.status !== "A").map((c) => c.file)
+  if (added.length > 0) await run(`rm -f ${added.join(" ")}`)
+  if (kept.length > 0)
+    await run(`${GIT} checkout ${SEALED} -- ${kept.join(" ")}`)
+  throw new Error(
+    `${changed.map((c) => c.file).join(", ")} belong to the photo pipeline and are read-only: never replace, resize, remove or add a file under src/assets/generated or src/assets/uploads. They are back as they were. A photo that fails a gate is the pipeline's to fix: leave it, and report again.`
+  )
+}
+
 const SECURITY_HEADERS = {
   "content-security-policy":
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
@@ -265,12 +315,15 @@ export async function finishRevision(input: {
   orgId: string
   assignmentId: string
   facts: readonly FactRecord[]
+  /** The Developer's report holds the photos as the pipeline placed them; a quick edit draws its own. */
+  holdPhotos?: boolean
 }) {
   const { steps, sandbox, kit, sites, orgId, assignmentId } = input
   const run = (command: string) =>
     sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
 
   await holdStarterFiles(run)
+  if (input.holdPhotos) await holdPhotos(run)
   // The quote questions are the owner's, never the Developer's: the
   // build renders the facts' list whatever happened to the file.
   await sandbox.writeFile(

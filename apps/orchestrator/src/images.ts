@@ -85,9 +85,11 @@ const HERO_SIZE: Record<Slot["aspect"], string> = {
 const TRIES = 3
 
 /**
- * The hero draws on its own chain only (see `QUALITY_MODELS`); every other
- * slot on the fast one in its listed order. A slot with references to match
- * does not reorder it: the first model draws without them (the shared style
+ * The home hero draws on its own chain only (see `QUALITY_MODELS`); every other
+ * slot on the fast one in its listed order, the About and Contact headers
+ * too: their box is one a card's 1536 px covers, and on the quality chain
+ * they drew with the hero as a reference at 2.6 to 3.6 times a card. A slot
+ * with references to match does not reorder it: the first model draws without them (the shared style
  * line keeps the set coherent), and a model further down gets them only if
  * it takes them. A lone redraw has no style line and only its siblings to
  * match, so there the models that read references go first.
@@ -710,7 +712,7 @@ export async function directPhotos(input: {
       /** Every draw and check this slot paid for, a redrawn one too. */
       let spent = 0
       for (const model of chainFor(
-        p.slot.section === "hero",
+        p.slot === hero && p.slot.section === "hero",
         (input.siblings ?? []).length > 0
       )) {
         if (down.has(model.id)) continue
