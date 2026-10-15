@@ -42,6 +42,18 @@ export const FILLED: Record<string, string> = {
   homeAboutHeading: "The cleaners behind *Fairhaven homes*",
   service1Detail:
     "A weekly visit from the same cleaner, who learns the home and keeps the kitchen, bathrooms and floors in order.",
+  service1Heading: "Weekly house cleaning in Fairhaven",
+  service1Title: "Weekly house cleaning in Fairhaven | BrightClean",
+  service1Description:
+    "A weekly clean from the same cleaner, who learns your home and keeps the kitchen, bathrooms and floors in order. Ask BrightClean for a quote.",
+  service1StepsHeading: "How a weekly clean gets going",
+  service1FaqHeading: "Questions about a weekly clean",
+  service1Faq1Question: "Is it the same cleaner every week?",
+  service1Faq1Answer: "Yes. One cleaner keeps each home.",
+  service1CtaHeading: "Book your first weekly clean",
+  service1CtaBody: "Tell us about the home and pick the day.",
+  aboutCtaHeading: "Meet the cleaners in person",
+  aboutCtaBody: "Ask for a quote and we come round first.",
   step4Title: "Keep the day",
   step4Body: "The visit repeats on the day you chose.",
   servicesIntro: "Three ways we clean, and what each one covers.",

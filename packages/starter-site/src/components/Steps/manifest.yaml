@@ -6,6 +6,10 @@ props:
     type: '"circles" | "dark_band" | "timeline"'
     required: false
     description: circles on a tint band, dark_band beside its heading, timeline on a line.
+  - name: heading
+    type: string
+    required: false
+    description: The h2, where a page has its own; empty is site.stepsHeading.
 constraints:
   - Reads step1Title to step3Body itself; a step renders only when one of its
     two fields is set. The numbers, 01 to 03, are drawn by CSS, not written into

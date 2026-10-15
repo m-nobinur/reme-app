@@ -6,6 +6,14 @@ props:
     type: '"split" | "stacked"'
     required: false
     description: split puts the heading beside the questions, stacked above them.
+  - name: items
+    type: "{ question: string; answer: string }[]"
+    required: false
+    description: The questions, where a page has its own; empty is the site's FAQ.
+  - name: heading
+    type: string
+    required: false
+    description: The h2, where a page has its own; empty is site.faqHeading.
 constraints:
   - Reads faqItems from src/structured-data.ts, which reads faq1Question to
     faq8Answer; an entry needs both halves to render. Six to eight when the

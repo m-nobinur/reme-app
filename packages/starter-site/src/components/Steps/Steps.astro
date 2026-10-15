@@ -5,9 +5,11 @@ import { site } from "../../site-config"
 interface Props {
   /** circles on a tint band, dark_band beside its heading, timeline on a line. */
   variant?: "circles" | "dark_band" | "timeline"
+  /** The h2, where a page has its own; empty is site.stepsHeading. */
+  heading?: string
 }
 
-const { variant = "timeline" } = Astro.props
+const { variant = "timeline", heading = site.stepsHeading } = Astro.props
 const items = ([1, 2, 3, 4] as const)
   .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
   .filter((item) => item.title || item.body)
@@ -23,7 +25,7 @@ const items = ([1, 2, 3, 4] as const)
       ]}
     >
       <div class="wrap steps-inner">
-        <SectionHead eyebrow={site.stepsEyebrow} heading={site.stepsHeading} />
+        <SectionHead eyebrow={site.stepsEyebrow} heading={heading} />
         <ol class="step-list">
           {items.map((item) => (
             <li>

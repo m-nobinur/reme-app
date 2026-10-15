@@ -140,7 +140,9 @@
         "valueProp2Icon",
         "valueProp3Title",
         "valueProp3Body",
-        "valueProp3Icon"
+        "valueProp3Icon",
+        "aboutCtaHeading",
+        "aboutCtaBody"
       ]
     },
     "services": {
@@ -163,43 +165,142 @@
         "servicesIntro",
         "service1Name",
         "service1Body",
-        "service1Detail",
         "service1Icon",
-        "service1Includes",
-        "service1For",
         "service2Name",
         "service2Body",
-        "service2Detail",
         "service2Icon",
-        "service2Includes",
-        "service2For",
         "service3Name",
         "service3Body",
-        "service3Detail",
         "service3Icon",
-        "service3Includes",
-        "service3For",
         "service4Name",
         "service4Body",
-        "service4Detail",
         "service4Icon",
-        "service4Includes",
-        "service4For",
         "service5Name",
         "service5Body",
-        "service5Detail",
         "service5Icon",
-        "service5Includes",
-        "service5For",
         "service6Name",
         "service6Body",
-        "service6Detail",
         "service6Icon",
-        "service6Includes",
-        "service6For",
         "offerings",
         "offeringsEyebrow",
-        "offeringsHeading"
+        "offeringsHeading",
+        "servicesCtaHeading",
+        "servicesCtaBody"
+      ]
+    },
+    "service": {
+      "page": "src/pages/services/[slug].astro",
+      "purpose": "One page for each service, at /services/<slug>/, so each can be found on its own: what the job involves, what is included, who it suits, how it goes, questions about it and the call to action. One plan entry builds every service page.",
+      "kinds": ["hero", "service_cards", "steps", "faq", "cta_band"],
+      "fields": [
+        "service1Heading",
+        "service1Title",
+        "service1Description",
+        "service1Detail",
+        "service1Includes",
+        "service1For",
+        "service1StepsHeading",
+        "service1FaqHeading",
+        "service1Faq1Question",
+        "service1Faq1Answer",
+        "service1Faq2Question",
+        "service1Faq2Answer",
+        "service1Faq3Question",
+        "service1Faq3Answer",
+        "service1Faq4Question",
+        "service1Faq4Answer",
+        "service1CtaHeading",
+        "service1CtaBody",
+        "service2Heading",
+        "service2Title",
+        "service2Description",
+        "service2Detail",
+        "service2Includes",
+        "service2For",
+        "service2StepsHeading",
+        "service2FaqHeading",
+        "service2Faq1Question",
+        "service2Faq1Answer",
+        "service2Faq2Question",
+        "service2Faq2Answer",
+        "service2Faq3Question",
+        "service2Faq3Answer",
+        "service2Faq4Question",
+        "service2Faq4Answer",
+        "service2CtaHeading",
+        "service2CtaBody",
+        "service3Heading",
+        "service3Title",
+        "service3Description",
+        "service3Detail",
+        "service3Includes",
+        "service3For",
+        "service3StepsHeading",
+        "service3FaqHeading",
+        "service3Faq1Question",
+        "service3Faq1Answer",
+        "service3Faq2Question",
+        "service3Faq2Answer",
+        "service3Faq3Question",
+        "service3Faq3Answer",
+        "service3Faq4Question",
+        "service3Faq4Answer",
+        "service3CtaHeading",
+        "service3CtaBody",
+        "service4Heading",
+        "service4Title",
+        "service4Description",
+        "service4Detail",
+        "service4Includes",
+        "service4For",
+        "service4StepsHeading",
+        "service4FaqHeading",
+        "service4Faq1Question",
+        "service4Faq1Answer",
+        "service4Faq2Question",
+        "service4Faq2Answer",
+        "service4Faq3Question",
+        "service4Faq3Answer",
+        "service4Faq4Question",
+        "service4Faq4Answer",
+        "service4CtaHeading",
+        "service4CtaBody",
+        "service5Heading",
+        "service5Title",
+        "service5Description",
+        "service5Detail",
+        "service5Includes",
+        "service5For",
+        "service5StepsHeading",
+        "service5FaqHeading",
+        "service5Faq1Question",
+        "service5Faq1Answer",
+        "service5Faq2Question",
+        "service5Faq2Answer",
+        "service5Faq3Question",
+        "service5Faq3Answer",
+        "service5Faq4Question",
+        "service5Faq4Answer",
+        "service5CtaHeading",
+        "service5CtaBody",
+        "service6Heading",
+        "service6Title",
+        "service6Description",
+        "service6Detail",
+        "service6Includes",
+        "service6For",
+        "service6StepsHeading",
+        "service6FaqHeading",
+        "service6Faq1Question",
+        "service6Faq1Answer",
+        "service6Faq2Question",
+        "service6Faq2Answer",
+        "service6Faq3Question",
+        "service6Faq3Answer",
+        "service6Faq4Question",
+        "service6Faq4Answer",
+        "service6CtaHeading",
+        "service6CtaBody"
       ]
     },
     "service_area": {
@@ -214,7 +315,9 @@
         "areaTowns",
         "areaBody",
         "serviceAreaText",
-        "serviceArea"
+        "serviceArea",
+        "serviceAreaCtaHeading",
+        "serviceAreaCtaBody"
       ]
     },
     "contact": {
@@ -229,7 +332,9 @@
         "phone",
         "email",
         "weekdayHours",
-        "serviceArea"
+        "serviceArea",
+        "contactCtaHeading",
+        "contactCtaBody"
       ]
     },
     "quote": {
@@ -313,7 +418,25 @@
           },
           {
             "kind": "service_cards",
+            "variant": "photo_cards"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
             "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -487,7 +610,25 @@
           },
           {
             "kind": "service_cards",
+            "variant": "photo_cards"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
             "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -647,6 +788,24 @@
           {
             "kind": "service_cards",
             "variant": "practice_list"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"
@@ -828,6 +987,24 @@
           {
             "kind": "service_cards",
             "variant": "fleet"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
           },
           {
             "kind": "cta_band"

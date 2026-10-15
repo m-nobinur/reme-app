@@ -54,16 +54,40 @@ const lines = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean)
 
+/** A service name as its page's path segment: "End of tenancy" is "end-of-tenancy". */
+export const slugOf = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
 /**
- * The services the cards, the hero and the services page show, numbered so a
- * card can link to its own section. An entry needs a name or a body.
+ * The services the cards, the hero, the services page and each service's
+ * own page show, numbered so a card can link to its page. An entry needs a
+ * name or a body; its page needs a name, and two names that make one slug
+ * keep the first's and number the second's.
  */
 export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
   .map((n) => ({
     id: `service-${n}`,
+    n,
     name: site[`service${n}Name`],
     body: site[`service${n}Body`],
     detail: site[`service${n}Detail`],
+    heading: site[`service${n}Heading`],
+    title: site[`service${n}Title`],
+    description: site[`service${n}Description`],
+    stepsHeading: site[`service${n}StepsHeading`],
+    faqHeading: site[`service${n}FaqHeading`],
+    faqs: ([1, 2, 3, 4] as const)
+      .map((m) => ({
+        question: site[`service${n}Faq${m}Question`],
+        answer: site[`service${n}Faq${m}Answer`],
+      }))
+      .filter((item) => item.question && item.answer),
+    ctaHeading: site[`service${n}CtaHeading`],
+    ctaBody: site[`service${n}CtaBody`],
     icon: site[`service${n}Icon`],
     includes: lines(site[`service${n}Includes`]),
     for: site[`service${n}For`],
@@ -73,18 +97,31 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     },
   }))
   .filter((item) => item.name || item.body)
+  .map((item, i, all) => {
+    const base = slugOf(item.name) || item.id
+    const taken = all.slice(0, i).some((o) => (slugOf(o.name) || o.id) === base)
+    return { ...item, slug: taken ? `${base}-${item.n}` : base }
+  })
+
+export type ServiceItem = (typeof serviceItems)[number]
+
+/** The services that get a page of their own: those with a name. */
+export const servicePages = serviceItems.filter((item) => item.name)
 
 /** Each named service as a Service the business provides. */
-export function services(origin: URL | undefined): Thing[] {
+export function services(
+  origin: URL | undefined,
+  items: readonly ServiceItem[] = servicePages
+): Thing[] {
   if (!site.businessName) return []
-  return serviceItems
+  return items
     .filter((item) => item.name)
     .map((item) =>
       present({
         "@type": "Service",
         name: item.name,
-        description: item.body,
-        url: origin ? new URL(`/services/#${item.id}`, origin).href : "",
+        description: item.detail || item.body,
+        url: origin ? new URL(`/services/${item.slug}/`, origin).href : "",
         provider: { "@type": "LocalBusiness", name: site.businessName },
         areaServed: site.areaServed || site.serviceAreaText,
       })
@@ -92,12 +129,12 @@ export function services(origin: URL | undefined): Thing[] {
 }
 
 /** The same questions as FAQPage, so the markup and the page cannot differ. */
-export function faqPage(): Thing[] {
-  if (faqItems.length === 0) return []
+export function faqPage(items: typeof faqItems = faqItems): Thing[] {
+  if (items.length === 0) return []
   return [
     {
       "@type": "FAQPage",
-      mainEntity: faqItems.map((item) => ({
+      mainEntity: items.map((item) => ({
         "@type": "Question",
         name: item.question,
         acceptedAnswer: { "@type": "Answer", text: item.answer },

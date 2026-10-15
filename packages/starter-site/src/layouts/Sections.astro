@@ -21,15 +21,17 @@ import { directionOf } from "../directions"
 import { phoneText } from "../phone"
 import { primaryAction } from "../routes"
 import { type LayoutPage, layout, site } from "../site-config"
-import { serviceItems } from "../structured-data"
+import { type ServiceItem, serviceItems } from "../structured-data"
 import AboutSection from "./AboutSection.astro"
 import SectionHead from "./SectionHead.astro"
 
 interface Props {
   page: LayoutPage
+  /** On a service's own page (page "service"), the service it is about. */
+  service?: ServiceItem
 }
 
-const { page } = Astro.props
+const { page, service } = Astro.props
 // The page's h1 and lede, which are its own fields.
 const HEAD = {
   home: [site.heroHeading || site.businessName, site.homeIntro || site.tagline],
@@ -38,8 +40,20 @@ const HEAD = {
   service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
   contact: [site.contactHeading, site.contactIntro],
   quote: [site.quoteHeading, site.quoteIntro],
+  service: [service?.heading || service?.name || "", service?.body ?? ""],
 } as const
 const [marked, lede] = HEAD[page]
+// Each page's closing band, the home page's where a page has none of its own.
+const CTA: Record<LayoutPage, [string, string]> = {
+  home: [site.ctaHeading, site.ctaBody],
+  about: [site.aboutCtaHeading, site.aboutCtaBody],
+  services: [site.servicesCtaHeading, site.servicesCtaBody],
+  service_area: [site.serviceAreaCtaHeading, site.serviceAreaCtaBody],
+  contact: [site.contactCtaHeading, site.contactCtaBody],
+  quote: ["", ""],
+  service: [service?.ctaHeading ?? "", service?.ctaBody ?? ""],
+}
+const [ctaHeading, ctaBody] = CTA[page]
 // The h1 shares a field with a section heading elsewhere, and shows no accent marks.
 const heading = plain(marked)
 const home = page === "home"
@@ -99,7 +113,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "service_cards":
         return (
           <>
-            <ServiceCards variant={v} />
+            <ServiceCards variant={v} only={service?.id} />
             {page === "services" && offerings.length > 0 && (
               <Section
                 eyebrow={site.offeringsEyebrow}
@@ -117,7 +131,9 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "value_props":
         return <ValueProps />
       case "steps":
-        return <Steps variant={v} />
+        return (
+          <Steps variant={v} heading={service?.stepsHeading || undefined} />
+        )
       case "about":
         return <AboutSection page={home ? "home" : "about"} />
       case "testimonials":
@@ -133,9 +149,21 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
           />
         )
       case "faq":
-        return <Faq variant={v} />
+        return (
+          <Faq
+            variant={v}
+            items={service?.faqs}
+            heading={service?.faqHeading || undefined}
+          />
+        )
       case "cta_band":
-        return <CtaBand variant={v} />
+        return (
+          <CtaBand
+            variant={v}
+            heading={ctaHeading || site.ctaHeading}
+            body={ctaBody || site.ctaBody}
+          />
+        )
       case "contact":
         return (
           <section class="band">

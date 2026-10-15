@@ -1,21 +1,29 @@
 ---
 import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
-import { faqItems as items } from "../../structured-data"
+import { faqItems } from "../../structured-data"
 
 interface Props {
   /** split puts the heading beside the questions, stacked above them. */
   variant?: "split" | "stacked"
+  /** The questions, where a page has its own; empty is the site's FAQ. */
+  items?: { question: string; answer: string }[]
+  /** The h2, where a page has its own; empty is site.faqHeading. */
+  heading?: string
 }
 
-const { variant = "split" } = Astro.props
+const {
+  variant = "split",
+  items = faqItems,
+  heading = site.faqHeading,
+} = Astro.props
 ---
 
 {
   items.length > 0 && (
     <section class:list={["band faq", `faq-${variant}`]}>
       <div class="wrap faq-inner">
-        <SectionHead eyebrow={site.faqEyebrow} heading={site.faqHeading} />
+        <SectionHead eyebrow={site.faqEyebrow} heading={heading} />
         <div class="faq-list">
           {items.map((item) => (
             <details>

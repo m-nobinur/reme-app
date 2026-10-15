@@ -253,12 +253,12 @@ const values = {
   /**
    * Up to six services, one per business.offerings item that a fact
    * describes. Name; Body, 25 to 45 words, benefit first, then what it
-   * covers; Detail, the services page's intro to it, 60 to 100 words on what
+   * covers; Detail, the intro on its own page, 60 to 100 words on what
    * the job involves and the result; Icon, a key of ICONS in
    * src/icons.ts, no key twice; Includes, what the service covers, one item
-   * to a line, from the facts; For, one sentence on who it suits, from
-   * business.audience. A card shows Name, Body and Icon; the services page
-   * shows them all.
+   * to a line, four to six, from the facts; For, one or two sentences on who it suits, from
+   * business.audience. A card shows Name, Body and Icon and links to the
+   * service's own page, which shows them all.
    */
   service1Name: "",
   service1Body: "",
@@ -314,6 +314,106 @@ const values = {
   service5ImageAlt: "",
   service6Image: "",
   service6ImageAlt: "",
+  /**
+   * Each service's own page at /services/<slug>/, the slug made from its
+   * name. Heading is its h1, naming the service and the area (never the bare
+   * name, which is the page's h2); Title (50 to 60 characters) and
+   * Description (140 to 160) are its own; the hero's lede is Body, the intro
+   * is Detail, and Includes and For follow. StepsHeading heads the site's
+   * steps on this page; Faq1 to Faq4 are two to four questions about this
+   * service only, under FaqHeading; CtaHeading and CtaBody are its closing
+   * band. Every heading is the site's only one of its words.
+   */
+  service1Heading: "",
+  service1Title: "",
+  service1Description: "",
+  service1StepsHeading: "",
+  service1FaqHeading: "",
+  service1Faq1Question: "",
+  service1Faq1Answer: "",
+  service1Faq2Question: "",
+  service1Faq2Answer: "",
+  service1Faq3Question: "",
+  service1Faq3Answer: "",
+  service1Faq4Question: "",
+  service1Faq4Answer: "",
+  service1CtaHeading: "",
+  service1CtaBody: "",
+  service2Heading: "",
+  service2Title: "",
+  service2Description: "",
+  service2StepsHeading: "",
+  service2FaqHeading: "",
+  service2Faq1Question: "",
+  service2Faq1Answer: "",
+  service2Faq2Question: "",
+  service2Faq2Answer: "",
+  service2Faq3Question: "",
+  service2Faq3Answer: "",
+  service2Faq4Question: "",
+  service2Faq4Answer: "",
+  service2CtaHeading: "",
+  service2CtaBody: "",
+  service3Heading: "",
+  service3Title: "",
+  service3Description: "",
+  service3StepsHeading: "",
+  service3FaqHeading: "",
+  service3Faq1Question: "",
+  service3Faq1Answer: "",
+  service3Faq2Question: "",
+  service3Faq2Answer: "",
+  service3Faq3Question: "",
+  service3Faq3Answer: "",
+  service3Faq4Question: "",
+  service3Faq4Answer: "",
+  service3CtaHeading: "",
+  service3CtaBody: "",
+  service4Heading: "",
+  service4Title: "",
+  service4Description: "",
+  service4StepsHeading: "",
+  service4FaqHeading: "",
+  service4Faq1Question: "",
+  service4Faq1Answer: "",
+  service4Faq2Question: "",
+  service4Faq2Answer: "",
+  service4Faq3Question: "",
+  service4Faq3Answer: "",
+  service4Faq4Question: "",
+  service4Faq4Answer: "",
+  service4CtaHeading: "",
+  service4CtaBody: "",
+  service5Heading: "",
+  service5Title: "",
+  service5Description: "",
+  service5StepsHeading: "",
+  service5FaqHeading: "",
+  service5Faq1Question: "",
+  service5Faq1Answer: "",
+  service5Faq2Question: "",
+  service5Faq2Answer: "",
+  service5Faq3Question: "",
+  service5Faq3Answer: "",
+  service5Faq4Question: "",
+  service5Faq4Answer: "",
+  service5CtaHeading: "",
+  service5CtaBody: "",
+  service6Heading: "",
+  service6Title: "",
+  service6Description: "",
+  service6StepsHeading: "",
+  service6FaqHeading: "",
+  service6Faq1Question: "",
+  service6Faq1Answer: "",
+  service6Faq2Question: "",
+  service6Faq2Answer: "",
+  service6Faq3Question: "",
+  service6Faq3Answer: "",
+  service6Faq4Question: "",
+  service6Faq4Answer: "",
+  service6CtaHeading: "",
+  service6CtaBody: "",
   stepsEyebrow: "Process",
   stepsHeading: "How it works",
   /** Three or four steps from first contact to the finished job: a title and 20 to 35 words each. */
@@ -372,6 +472,18 @@ const values = {
   /** The closing band on every page: a headline of 4 to 9 words and one sentence of 12 to 30 words. */
   ctaHeading: "",
   ctaBody: "",
+  /**
+   * The closing band of each other page, so no two pages share its heading.
+   * Empty falls back to ctaHeading and ctaBody, the home page's.
+   */
+  aboutCtaHeading: "",
+  aboutCtaBody: "",
+  servicesCtaHeading: "",
+  servicesCtaBody: "",
+  serviceAreaCtaHeading: "",
+  serviceAreaCtaBody: "",
+  contactCtaHeading: "",
+  contactCtaBody: "",
   /** The band's button text. Empty uses the label of the page it links to. */
   ctaLabel: "",
   /** A photo behind the closing band, under the brand colour; decoration, so no alt. */
@@ -496,6 +608,7 @@ export type LayoutPage =
   | "home"
   | "about"
   | "services"
+  | "service"
   | "service_area"
   | "contact"
   | "quote"
@@ -522,7 +635,14 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
   ],
   services: [
     { kind: "hero" },
+    { kind: "service_cards", variant: "photo_cards" },
+    { kind: "cta_band" },
+  ],
+  service: [
+    { kind: "hero" },
     { kind: "service_cards", variant: "alternating" },
+    { kind: "steps" },
+    { kind: "faq" },
     { kind: "cta_band" },
   ],
   service_area: [
