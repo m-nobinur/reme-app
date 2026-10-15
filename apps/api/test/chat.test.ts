@@ -301,7 +301,12 @@ const answerFor = (card: ToolPart): unknown => {
     const { questions } = AskDesignInput.parse(card.input)
     return {
       answers: Object.fromEntries(
-        questions.map((q) => [q.id, { choice: q.card.options[0]?.id }])
+        questions.map((q) => [
+          q.id,
+          q.card.multiple
+            ? { choices: [q.card.options[0]?.id] }
+            : { choice: q.card.options[0]?.id },
+        ])
       ),
       skip_all: false,
     }
@@ -2229,7 +2234,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         const picks = Object.fromEntries(
           done.tray.questions.map((q) => [
             q.id,
-            { choice: q.card.options[0]?.id },
+            q.card.multiple
+              ? { choices: [q.card.options[0]?.id] }
+              : { choice: q.card.options[0]?.id },
           ])
         )
         const built = await talker(done.who).turn(

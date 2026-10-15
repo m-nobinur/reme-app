@@ -9,6 +9,7 @@ import {
   checkBuild,
   checkContent,
   checkLinks,
+  checkPlannedPages,
   checkStructuredData,
   checkTypes,
   factsForContent,
@@ -384,6 +385,37 @@ describe("the build gate", () => {
   })
 })
 
+describe("the planned pages", () => {
+  const plan = (...ids: string[]) =>
+    ({ pages: ids.map((page) => ({ page, sections: [] })) }) as never
+
+  it("passes with every planned page built at its starter path", () => {
+    expect(
+      checkPlannedPages(plan("home", "service_area", "quote"), {
+        "index.html": "x",
+        "service-area/index.html": "x",
+        "quote/index.html": "x",
+      })
+    ).toBeNull()
+  })
+
+  it("fails the build gate naming each planned page the build lacks and its file", () => {
+    const result = checkPlannedPages(
+      plan("home", "services", "contact", "service_area"),
+      FILES
+    )
+    expect(result).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "services",
+    })
+    expect(result?.message).toContain(
+      "restore src/pages/services.astro, src/pages/service-area.astro"
+    )
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+})
+
 describe("the types gate", () => {
   const report = (checks: CompletionReport["checks"]) =>
     ({ checks }) as CompletionReport
@@ -517,6 +549,24 @@ describe("all the gates", () => {
     expect(planned.find((r) => r.gate === "copy")?.message).not.toContain(
       "not a planned first build"
     )
+    // The Blueprint reaches the build gate too: a planned page the lead
+    // deleted fails it, so the repair puts it back.
+    expect(planned[0]).toMatchObject({ gate: "build", passed: true })
+    const deleted = await runGates({
+      ...input,
+      plan: {
+        images: [],
+        pages: ["home", "contact", "about"].map((page) => ({
+          page,
+          sections: [],
+        })),
+      } as never,
+    })
+    expect(deleted[0]).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "about",
+    })
   })
   it("reads every file once, a page the build gate hashes and the pages share included, a few at a time", async () => {
     const bodies: Record<string, Uint8Array> = {

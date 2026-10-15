@@ -6,8 +6,7 @@ import { type Built, build, clean, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 /** The hero a real build drew: a 3:4 PNG, 1152 px wide, in a split_arch hero. */
-async function generated(): Promise<Uint8Array> {
-  const [w, h] = [1152, 1536]
+async function generated(w = 1152, h = 1536): Promise<Uint8Array> {
   const raw = Buffer.alloc(w * h * 3)
   let state = 7
   for (let i = 0; i < raw.length; i++) {
@@ -70,3 +69,30 @@ describe("a generated photo", () => {
     }
   })
 })
+
+// A 1536 px hero at 1512 css px and 2x asks for its own width. The Developer
+// once trimmed Photo.astro to pass the size gate and left it the 768 px one.
+test("a 1536 px full-bleed hero offers 1280 and its own 1536 width", async () => {
+  const wide = await build({
+    site: {
+      ...FILLED,
+      logo: "",
+      heroImage: "src/assets/generated/home_hero_garden.png",
+    },
+    files: {
+      "src/assets/generated/home_hero_garden.png": await generated(1536, 864),
+    },
+  })
+  try {
+    const hero = readPages(wide.dist)
+      .find((p) => p.file === "index.html")
+      ?.elements.find(
+        (e) => e.tag === "source" && e.attrs.type === "image/avif"
+      )
+    expect(
+      (hero?.attrs.srcset ?? "").split(",").map((c) => c.trim().split(/\s+/)[1])
+    ).toEqual(["480w", "768w", "1280w", "1536w"])
+  } finally {
+    clean(wide)
+  }
+}, 180_000)

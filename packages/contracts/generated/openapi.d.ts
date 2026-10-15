@@ -696,6 +696,9 @@ export interface components {
               choice: string
             }
           | {
+              choices: string[]
+            }
+          | {
               own: string
             }
           | {
@@ -3958,6 +3961,9 @@ export interface components {
                           [key: string]:
                             | {
                                 choice: string
+                              }
+                            | {
+                                choices: string[]
                               }
                             | {
                                 own: string

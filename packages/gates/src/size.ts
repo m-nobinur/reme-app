@@ -21,9 +21,35 @@ export const FONT_FAMILIES = 2
 export const HERO_BYTES = 180 * 1024
 export const IMAGE_BYTES = 90 * 1024
 export const IMAGES_BYTES = 700 * 1024
-/** A phone: 390 css px at 2x asks for a 780 px candidate. */
-const PHONE = 390 * 2
+/** A phone: 390 css px wide, at 2x. */
+const PHONE_VIEWPORT = 390
+const PHONE_DPR = 2
 const HERO_WIDTH = 1280
+const REM = 16
+
+/**
+ * The css width a phone gives an image, from its `sizes`: the first entry
+ * whose min-width the phone meets, in vw, px, rem or `calc(100vw - Nrem|px)`.
+ * No `sizes`, or one this cannot read, is the whole viewport, the browser's
+ * own default. A box narrower than the viewport asks for a smaller candidate,
+ * which is what the phone downloads.
+ */
+export function phoneBox(sizes = ""): number {
+  const px = (v: string) => Number.parseFloat(v) * (v.endsWith("rem") ? REM : 1)
+  for (const entry of sizes.split(/,(?![^(]*\))/)) {
+    const [, query, value = ""] =
+      /^\s*(?:\(([^)]*)\)\s+)?(.+?)\s*$/.exec(entry) ?? []
+    const min = /^min-width:\s*([\d.]+(?:rem|px))$/.exec(query ?? "")?.[1]
+    if (query && !(min && PHONE_VIEWPORT >= px(min))) continue
+    const calc = /^calc\(100vw\s*-\s*([\d.]+(?:rem|px))\)$/.exec(value)?.[1]
+    if (calc) return PHONE_VIEWPORT - px(calc)
+    if (/^[\d.]+vw$/.test(value))
+      return (Number.parseFloat(value) / 100) * PHONE_VIEWPORT
+    if (/^[\d.]+(?:rem|px)$/.test(value)) return px(value)
+    break
+  }
+  return PHONE_VIEWPORT
+}
 
 type El = {
   tagName?: string
@@ -175,7 +201,7 @@ export async function checkSize(
       const next = tags.slice(i + 1).find((e) => e.tag === "img")
       const all = candidates(t.attrs.srcset)
       const isHero = next?.attrs.fetchpriority === "high"
-      const want = isHero ? HERO_WIDTH : PHONE
+      const want = isHero ? HERO_WIDTH : phoneBox(t.attrs.sizes) * PHONE_DPR
       const pick = all.find((c) => c.width >= want) ?? all.at(-1)
       const file = pick && fileOf(pick.url)
       if (file) images.push({ file, bytes: await size(file), hero: isHero })

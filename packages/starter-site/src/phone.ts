@@ -11,7 +11,10 @@ export function phoneText(e164: string): string {
   if (!e164.startsWith("+44")) return e164
   const national = `0${e164.slice(3)}`
   if (national.length !== 11) return national
-  return national.startsWith("02")
-    ? `${national.slice(0, 3)} ${national.slice(3, 7)} ${national.slice(7)}`
+  // 02x: 3+4+4. 011x, 01x1 and 03, 05, 08: 4+3+4. Other 01xxx and 07: 5+6.
+  if (national.startsWith("02"))
+    return `${national.slice(0, 3)} ${national.slice(3, 7)} ${national.slice(7)}`
+  return /^0(?:11\d|1\d1|[358])/.test(national)
+    ? `${national.slice(0, 4)} ${national.slice(4, 7)} ${national.slice(7)}`
     : `${national.slice(0, 5)} ${national.slice(5)}`
 }

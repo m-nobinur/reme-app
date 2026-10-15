@@ -226,9 +226,28 @@ describe("the build at the end of a report", () => {
    * whose `astro` exits and writes as the case says. The steps after the
    * build are not reached here: the first one stops the run.
    */
-  const finish = async (build: string) => {
+  const finish = async (build: string, edit?: (site: string) => void) => {
     const site = mkdtempSync(join(tmpdir(), "reme-tail-"))
     mkdirSync(join(site, "node_modules/.bin"), { recursive: true })
+    // The site as seeded: the starter's files in the first commit.
+    for (const file of [
+      "src/layouts/Photo.astro",
+      "src/components/Hero/Hero.astro",
+      "src/components/custom/Mine.astro",
+    ]) {
+      mkdirSync(dirname(join(site, file)), { recursive: true })
+      writeFileSync(join(site, file), `starter ${file}\n`)
+    }
+    const vcs = (...args: string[]) =>
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t.invalid", ...args],
+        { cwd: site }
+      )
+    vcs("init", "-q")
+    vcs("add", "-A")
+    vcs("commit", "-qm", "starter")
+    edit?.(site)
     const astro = join(site, "node_modules/.bin/astro")
     writeFileSync(
       astro,
@@ -289,6 +308,33 @@ describe("the build at the end of a report", () => {
     const { outcome, ran } = await finish("mkdir -p dist/_astro; exit 0")
     await expect(outcome).rejects.toThrow(/wrote no pages/)
     expect(ran).not.toContain("revision")
+  })
+
+  it("fails the report when a starter layout changed, and puts the file back", async () => {
+    let photo = ""
+    const { outcome, ran } = await finish("exit 0", (site) => {
+      photo = join(site, "src/layouts/Photo.astro")
+      writeFileSync(photo, "the lead's rewrite\n")
+    })
+    await expect(outcome).rejects.toThrow(
+      /src\/layouts\/Photo\.astro belong to the starter and are read-only/
+    )
+    expect(readFileSync(photo, "utf8")).toBe(
+      "starter src/layouts/Photo.astro\n"
+    )
+    expect(ran).toEqual([])
+  })
+
+  it("leaves custom sections and the pages writable", async () => {
+    const { outcome } = await finish(
+      "mkdir -p dist && echo '<html></html>' > dist/index.html",
+      (site) => {
+        writeFileSync(join(site, "src/components/custom/Mine.astro"), "mine\n")
+        mkdirSync(join(site, "src/pages"), { recursive: true })
+        writeFileSync(join(site, "src/pages/index.astro"), "a page\n")
+      }
+    )
+    await expect(outcome).rejects.toThrow("reached the revision")
   })
 
   it("goes on to the revision when the build wrote its pages", async () => {

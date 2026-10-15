@@ -178,6 +178,33 @@ const sha256 = async (bytes: Uint8Array) =>
 
 export const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
 
+/**
+ * The starter's own layouts and components are read-only to the Developer: a
+ * model that rewrote `Photo.astro` to pass the size gate dropped the hero's
+ * widths. Custom sections live beside them and stay writable. Compared with
+ * the site's first commit, the starter as it was seeded or restored.
+ */
+export const PROTECTED =
+  "src/layouts src/components ':(exclude)src/components/custom'"
+
+/** Fails the report, after putting back the starter's copy, when a protected file changed. */
+async function holdStarterFiles(
+  run: (command: string) => Promise<{ exitCode: number; stdout: string }>
+) {
+  const root = "$(git rev-list --max-parents=0 HEAD | tail -1)"
+  const diff = await run(`${GIT} diff --name-only ${root} -- ${PROTECTED}`)
+  if (diff.exitCode !== 0)
+    throw new Error(
+      `could not compare the starter's files with the starter:\n${diff.stdout}`
+    )
+  const changed = diff.stdout.split("\n").filter(Boolean)
+  if (changed.length === 0) return
+  await run(`${GIT} checkout ${root} -- ${changed.join(" ")}`)
+  throw new Error(
+    `${changed.join(", ")} belong to the starter and are read-only. They are back as they were. Build with the components' own fields and variants, and report again.`
+  )
+}
+
 const SECURITY_HEADERS = {
   "content-security-policy":
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
@@ -243,6 +270,7 @@ export async function finishRevision(input: {
   const run = (command: string) =>
     sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
 
+  await holdStarterFiles(run)
   // The quote questions are the owner's, never the Developer's: the
   // build renders the facts' list whatever happened to the file.
   await sandbox.writeFile(

@@ -149,6 +149,7 @@ describe("the instructions' cache order", () => {
     ].map((needle) => at(text, needle))
     expect(order).toEqual([...order].sort((a, b) => a - b))
     expect(text).toContain(JSON.stringify(blueprintLayout(plan)))
+    expect(text).toContain("Never delete a planned page, whatever the facts")
     expect(instructions(brief([cleaning]), 20)).not.toContain("Blueprint,")
   })
 

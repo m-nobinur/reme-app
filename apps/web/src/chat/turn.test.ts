@@ -795,6 +795,17 @@ it("a finished design tray sends its answers, and reads back as the owner's word
       })
     )
   ).toBe("Which pages should the site have?: The essentials")
+  // Several ticked read as their labels, in the order given.
+  expect(
+    replyText(
+      tray("output-available", {
+        output: {
+          answers: { pages: { choices: ["everything", "essentials"] } },
+          skip_all: false,
+        },
+      })
+    )
+  ).toBe("Which pages should the site have?: Everything, The essentials")
   expect(replyText(tray("input-available"))).toBeNull()
 })
 

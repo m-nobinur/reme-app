@@ -232,6 +232,15 @@ describe("the owner's onboarding choices in the rules", () => {
     }
   })
 
+  it("tells the Developer the starter's layouts and components are read-only, custom sections apart", () => {
+    for (const revising of [false, true]) {
+      const rules = text(revising)
+      expect(rules).toContain(
+        "Every file under src/layouts/ and src/components/, except your own custom sections in src/components/custom/, is the starter's and read-only"
+      )
+    }
+  })
+
   it("turns presets into values: the direction, the palette's roles, the font pair, the pages and the voice", () => {
     const rules = ownerChoices([
       fact("site.template", { id: "modern" }),
@@ -260,17 +269,12 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("a professional tone")
   })
 
-  it("keeps the About page only with an overview or proof to show", () => {
+  it("never deletes a page the owner picked, however thin its facts", () => {
     const rules = ownerChoices([
       fact("site.pages", { ids: ["home", "about", "quote"] }),
     ]).join("\n")
-    expect(rules).toContain(
-      "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience."
-    )
-    const without = ownerChoices([
-      fact("site.pages", { ids: ["home", "quote"] }),
-    ]).join("\n")
-    expect(without).not.toContain("if business.overview and business.proof")
+    expect(rules).not.toContain("src/pages/about.astro")
+    expect(rules).toContain("Delete src/pages/services.astro")
   })
 
   it("names the design tray's direction and font pair", () => {

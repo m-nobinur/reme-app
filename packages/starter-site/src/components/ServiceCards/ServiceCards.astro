@@ -37,6 +37,10 @@ const variant =
 const detail = variant === "alternating"
 const linked = !detail && hasRoute("/services/")
 const href = (id: string) => `/services/#${id}`
+// Cards per row on a wide screen. Five fill 3 and 2 and six 3 and 3, instead of
+// four and a short row; a short last row sits centred (site.css). At most six
+// services exist, so 4 is the grid's own count for the rest.
+const perRow = items.length === 5 || items.length === 6 ? 3 : undefined
 ---
 
 {
@@ -56,7 +60,11 @@ const href = (id: string) => `/services/#${id}`
           />
         )}
         {(variant === "photo_cards" || variant === "fleet") && (
-          <ul class="card-grid">
+          <ul
+            class="card-grid"
+            data-balanced={perRow ? "" : undefined}
+            style={perRow ? `--per-row: ${perRow}` : undefined}
+          >
             {items.map((item) => (
               <li class:list={["card", linked && "card-linked"]}>
                 {item.photo ? (
@@ -65,7 +73,7 @@ const href = (id: string) => `/services/#${id}`
                       class="card-photo"
                       src={item.photo.src}
                       alt={item.photo.alt}
-                      sizes="(min-width: 64rem) 25vw, (min-width: 40rem) 50vw, 100vw"
+                      sizes={`(min-width: 64rem) ${Math.floor(100 / (perRow ?? 4))}vw, (min-width: 40rem) 50vw, calc(100vw - 2rem)`}
                     />
                     {variant === "photo_cards" && (
                       <span class="card-tag">

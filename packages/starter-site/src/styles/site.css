@@ -988,6 +988,24 @@ picture {
   list-style: none;
 }
 
+/* Five or six cards wrap in rows of 3, a short last row centred. */
+.card-grid[data-balanced] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.card-grid[data-balanced] > .card {
+  flex: 0 0
+    min(
+      100%,
+      max(
+        17rem,
+        calc((100% - (var(--per-row) - 1) * var(--grid-gap)) / var(--per-row))
+      )
+    );
+}
+
 .card {
   position: relative;
   display: grid;
@@ -2395,6 +2413,21 @@ picture {
   mask:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'%3E%3Cpath d='M2 8.5C28 3 62 2.5 98 6' fill='none' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E")
     center / 100% 100% no-repeat;
+}
+
+/* A phone cannot hold a long clause on one line, so it wraps and each line
+   takes a plain underline in place of the stroke. */
+@media (max-width: 39.9375rem) {
+  [data-direction="bright_local"] .accent {
+    white-space: normal;
+    text-decoration: underline var(--brand-accent) 0.12em;
+    text-underline-offset: 0.12em;
+    text-decoration-skip-ink: none;
+  }
+
+  [data-direction="bright_local"] .accent::after {
+    content: none;
+  }
 }
 
 /* bold_young: the step numbers set large, without their badge. */

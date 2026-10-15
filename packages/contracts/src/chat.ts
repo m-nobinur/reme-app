@@ -217,7 +217,8 @@ export const DESIGN_QUESTIONS_MAX = 8
  * `AskChoiceInput`, so its limits, `other` and `skippable` mean what they do
  * there; `visual` says how the tray draws it. The api builds every card from
  * the contracts' lists, so an option is never the model's, and checks that
- * question ids are distinct and that no card takes several answers.
+ * question ids are distinct and that only a `multiple` card takes several
+ * answers.
  */
 export const AskDesignInput = z.strictObject({
   questions: z
@@ -234,9 +235,13 @@ export const AskDesignInput = z.strictObject({
     .max(DESIGN_QUESTIONS_MAX),
 })
 
-/** One answer in the tray: an option's id, the owner's own words, or a skip. */
+/**
+ * One answer in the tray: an option's id, several on a `multiple` card, the
+ * owner's own words, or a skip.
+ */
 const DesignAnswer = z.union([
   z.strictObject({ choice: Text(40) }),
+  z.strictObject({ choices: z.array(Text(40)).min(1).max(16) }),
   z.strictObject({ own: Text(200) }),
   z.strictObject({ skipped: z.literal(true) }),
 ])

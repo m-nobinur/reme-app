@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { checkAxe, checkSize, parseAxe } from "../src/index.ts"
 import { RULES, scoreRubric, TELLS } from "../src/rubric.ts"
+import { phoneBox } from "../src/size.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const KB = 1024
@@ -96,6 +97,48 @@ describe("the size gate", () => {
       passed: false,
       offending_node: "_astro/p0-780.avif",
     })
+  })
+
+  it("measures a card at the box its sizes give a phone, not the whole viewport", async () => {
+    const files: Record<string, Uint8Array> = {
+      "_astro/card-768.avif": bytes(40),
+      "_astro/card-1200.avif": bytes(101),
+    }
+    const home = (sizes: string) =>
+      enc(
+        `<!doctype html><html><body><picture><source type="image/avif" sizes="${sizes}" srcset="/_astro/card-768.avif 768w, /_astro/card-1200.avif 1200w"><img src="/_astro/card-768.avif" loading="lazy"></picture></body></html>`
+      )
+    const run = (sizes: string) => {
+      const all: Record<string, Uint8Array> = {
+        ...files,
+        "index.html": home(sizes),
+      }
+      return checkSize(
+        Object.fromEntries(Object.keys(all).map((f) => [f, "x"])),
+        async (f) => all[f] ?? null,
+        BUDGET
+      )
+    }
+    // 390 - 32 = 358 css px, 716 px at 2x: the 768 candidate.
+    expect(
+      await run("(min-width: 64rem) 25vw, calc(100vw - 2rem)")
+    ).toMatchObject({ passed: true })
+    // A full-width image asks for 780 px and gets the 1200 one.
+    expect(await run("100vw")).toMatchObject({
+      passed: false,
+      offending_node: "_astro/card-1200.avif",
+    })
+  })
+
+  it("reads a phone's box from sizes", () => {
+    expect(phoneBox()).toBe(390)
+    expect(phoneBox("100vw")).toBe(390)
+    expect(phoneBox("(min-width: 64rem) 25vw, 100vw")).toBe(390)
+    expect(phoneBox("(min-width: 20rem) 50vw, 100vw")).toBe(195)
+    expect(phoneBox("(min-width: 64rem) 25vw, calc(100vw - 2rem)")).toBe(358)
+    expect(phoneBox("17rem")).toBe(272)
+    expect(phoneBox("160px")).toBe(160)
+    expect(phoneBox("nonsense")).toBe(390)
   })
 
   it("fails a phone's images that together pass 700 KB", async () => {

@@ -287,6 +287,39 @@ describe("pages the starter has no file for", () => {
     )
   })
 
+  it("plans the pages an owner typed, with FAQ on the home page and a word on the gallery", () => {
+    // The 2026-10-15 run's words, as the tray now stores them.
+    const words =
+      "Home, Services, About, Gallery, FAQ, Contact, Request a quote"
+    const made = plan([
+      ...CLEANING,
+      fact("site.pages", {
+        ids: [
+          "home",
+          "services",
+          "about",
+          "gallery",
+          "faq",
+          "contact",
+          "quote",
+        ],
+        custom: words,
+      }),
+    ])
+    expect(made.pages.map((p) => p.page)).toEqual([
+      "home",
+      "about",
+      "services",
+      "contact",
+      "quote",
+    ])
+    expect(home(made)).toContain("faq")
+    expect(made.features).toContain("Your FAQ is a section on the home page.")
+    expect(made.features.join("\n")).toMatch(
+      /gallery needs photos of your work/
+    )
+  })
+
   it("leaves the gallery out without photos and says so", () => {
     const made = plan(picking(["home", "gallery"]))
     expect(home(made)).not.toContain("gallery")
