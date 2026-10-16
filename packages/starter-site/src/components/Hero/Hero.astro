@@ -74,8 +74,12 @@ const heroAvifQuality = (width: number) =>
           : 30
 // A header whose photo is missing is one text block, not a text column beside an empty one.
 const plainPage = !variant || (inner && !photo)
+// Rendered, because Astro counts a slot as passed even when its child is a false conditional.
+const art = Astro.slots.has("art")
+  ? (await Astro.slots.render("art")).trim()
+  : ""
 // A plain page header with a drawing beside its text is the cover form.
-const cover = plainPage && Astro.slots.has("art")
+const cover = plainPage && art !== ""
 const listed = variant && !photo ? highlights.filter((h) => h.name) : []
 // A home hero sets its last word in the accent, never the whole line.
 const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
@@ -122,7 +126,7 @@ const actions = Astro.slots.has("default")
           {actions && <div class="actions" set:html={actions} />}
           {note && <p class="hero-note">{note}</p>}
         </div>
-        {cover && <slot name="art" />}
+        {cover && <Fragment set:html={art} />}
         {photo && (
           <div class="hero-media">
             <Photo

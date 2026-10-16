@@ -16,6 +16,24 @@ const withVariant = (variant: string) =>
     ])
   ) as unknown as typeof layout
 const TEXT_LED = withVariant("text_led")
+/** Every hero variant on a page of its own, so one build covers them all with no photo. */
+const EACH_VARIANT = Object.fromEntries(
+  Object.entries(TEXT_LED).map(([page, sections]) => {
+    const variant = {
+      about: "wash",
+      services: "split_arch",
+      service: "split_frame",
+      contact: "dark_center",
+      quote: "text_led",
+    }[page]
+    return [
+      page,
+      variant
+        ? sections.map((s) => (s.kind === "hero" ? { ...s, variant } : s))
+        : sections,
+    ]
+  })
+) as unknown as typeof layout
 
 const image = (r: number, g: number, b: number) =>
   sharp({
@@ -57,7 +75,7 @@ beforeAll(async () => {
         // One line repeats a service's name, one is new work.
         offerings: "weekly CLEAN\nOven cleaning",
       },
-      layout: TEXT_LED,
+      layout: EACH_VARIANT,
     }),
     build({
       site: withPhotos,
@@ -98,6 +116,10 @@ describe("a page header with no photo", () => {
       expect(header, page.file).toContain("hero-page")
       expect(header, page.file).not.toContain("hero-home")
       expect(header, page.file).not.toContain("hero-media")
+      // A cover is a header with a drawing; one with nothing in its second column is half empty.
+      expect(header.includes("hero-cover"), page.file).toBe(
+        header.includes("area-art-cover")
+      )
     }
   })
 
