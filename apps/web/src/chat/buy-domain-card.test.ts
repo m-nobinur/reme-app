@@ -38,7 +38,7 @@ vi.mock("@assistant-ui/react", async (original) => ({
 // Stripe.js is Stripe's to load; the card's part is mounting it with the
 // client secret the api returned.
 const stripe = vi.hoisted(() => ({
-  mount: vi.fn(async () => stripe.unmount),
+  mount: vi.fn(async (..._args: unknown[]) => stripe.unmount),
   unmount: vi.fn(),
 }))
 vi.mock("@workspace/ui/lib/stripe", () => ({ mountCheckout: stripe.mount }))
