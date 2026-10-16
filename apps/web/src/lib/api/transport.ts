@@ -1,6 +1,10 @@
 import { getCookie } from "@tanstack/react-start/server"
 import { sessionEncryption } from "@workos/authkit-session"
-import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
+import {
+  type AuthKitContext,
+  getAuthKitContextOrNull,
+  getAuthkit,
+} from "@workos/authkit-tanstack-react-start"
 import type { ErrorEnvelope } from "@workspace/contracts"
 
 /**
@@ -21,6 +25,14 @@ export const COOKIE = "wos-session"
  */
 const sealed = new WeakMap<Request, Promise<string>>()
 
+/**
+ * Seconds a forwarded access token must have left, AuthKit's own "expiring"
+ * buffer. The middleware refreshes only a token already expired, and both
+ * workers verify with no clock tolerance, so one accepted here in its last
+ * moments could expire before `apps/api` checks it: a 401 mid-session.
+ */
+const TOKEN_LEFT_S = 10
+
 export async function forwardedSession(): Promise<string | undefined> {
   const context = getAuthKitContextOrNull()
   if (!context) return getCookie(COOKIE)
@@ -28,23 +40,50 @@ export async function forwardedSession(): Promise<string | undefined> {
   if (!auth.user) return undefined
   let seal = sealed.get(context.request)
   if (!seal) {
-    const password = process.env.WORKOS_COOKIE_PASSWORD
-    if (!password) {
-      throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
-    }
-    // The fields `AuthKitCore.encryptSession` seals, from the same session.
-    seal = sessionEncryption.sealData(
-      {
-        accessToken: auth.accessToken,
-        refreshToken: auth.refreshToken,
-        user: auth.user,
-        impersonator: auth.impersonator,
-      },
-      { password, ttl: 0 }
-    )
+    seal = sealFor(auth)
     sealed.set(context.request, seal)
   }
   return await seal
+}
+
+async function sealFor(
+  auth: Extract<ReturnType<AuthKitContext["auth"]>, { user: object }>
+): Promise<string> {
+  const password = process.env.WORKOS_COOKIE_PASSWORD
+  if (!password) {
+    throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
+  }
+  // The fields `AuthKitCore.encryptSession` seals, from the same session.
+  const session = {
+    accessToken: auth.accessToken,
+    refreshToken: auth.refreshToken,
+    user: auth.user,
+    impersonator: auth.impersonator,
+  }
+  const exp = auth.claims.exp ?? Number.POSITIVE_INFINITY
+  if (exp - Date.now() / 1000 < TOKEN_LEFT_S) {
+    try {
+      // Concurrent refreshes of one token share one WorkOS call in this
+      // isolate, and WorkOS answers a replay within 30 s with the same tokens.
+      const authkit = await getAuthkit()
+      const { encryptedSession } = await authkit.refreshSession(
+        session,
+        auth.organizationId
+      )
+      // Through the middleware's pending headers, onto this response.
+      await authkit.saveSession(undefined, encryptedSession)
+      return encryptedSession
+    } catch (error) {
+      // The token is still valid: forward it rather than end the session.
+      console.warn(
+        JSON.stringify({
+          at: "session.refresh_early",
+          message: error instanceof Error ? error.message : "unknown",
+        })
+      )
+    }
+  }
+  return await sessionEncryption.sealData(session, { password, ttl: 0 })
 }
 
 /**
