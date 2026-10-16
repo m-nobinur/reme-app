@@ -20,6 +20,7 @@ import { Decision, Done } from "@workspace/ui/components/assistant/decision"
 import {
   ConnectDomain,
   domainStatusText,
+  RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import {
   Collapsible,
@@ -430,4 +431,5 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   create_reminder: CreateReminder,
   record_review: RecordReview,
   connect_domain: ConnectDomain,
+  remove_domain: RemoveDomain,
 }

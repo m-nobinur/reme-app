@@ -4324,6 +4324,7 @@ export interface components {
         | "record_review"
         | "check_domain"
         | "connect_domain"
+        | "remove_domain"
       )[]
       text: string
       reserved_usd: number
@@ -4661,6 +4662,7 @@ export interface components {
           | "record_review"
           | "check_domain"
           | "connect_domain"
+          | "remove_domain"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -5999,6 +6001,35 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "remove_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "removed"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -6021,6 +6052,7 @@ export interface components {
             | "record_review"
             | "check_domain"
             | "connect_domain"
+            | "remove_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6048,6 +6080,7 @@ export interface components {
             | "record_review"
             | "check_domain"
             | "connect_domain"
+            | "remove_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6073,6 +6106,7 @@ export interface components {
             | "record_review"
             | "check_domain"
             | "connect_domain"
+            | "remove_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6098,6 +6132,7 @@ export interface components {
             | "record_review"
             | "check_domain"
             | "connect_domain"
+            | "remove_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6123,6 +6158,7 @@ export interface components {
             | "record_review"
             | "check_domain"
             | "connect_domain"
+            | "remove_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7279,6 +7315,32 @@ export interface components {
     ReminderPatch: {
       done: boolean
     }
+    RemoveDomainInput: {
+      name: string
+    }
+    RemoveDomainOutput:
+      | {
+          /** @constant */
+          outcome: "removed"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     RequestChangeOutput:
       | {
           /** @constant */

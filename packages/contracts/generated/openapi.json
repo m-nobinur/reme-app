@@ -15798,7 +15798,8 @@
                 "create_reminder",
                 "record_review",
                 "check_domain",
-                "connect_domain"
+                "connect_domain",
+                "remove_domain"
               ]
             }
           },
@@ -17015,7 +17016,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 },
                 "description": {
@@ -21685,6 +21687,94 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "remove_domain"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "removed"
+                      }
+                    },
+                    "required": [
+                      "outcome"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -21749,7 +21839,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 }
               },
@@ -21849,7 +21940,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 }
               },
@@ -21942,7 +22034,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 }
               },
@@ -22034,7 +22127,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 }
               },
@@ -22126,7 +22220,8 @@
                     "create_reminder",
                     "record_review",
                     "check_domain",
-                    "connect_domain"
+                    "connect_domain",
+                    "remove_domain"
                   ]
                 }
               },
@@ -26309,6 +26404,86 @@
           "done"
         ],
         "additionalProperties": false
+      },
+      "RemoveDomainInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "RemoveDomainOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "removed"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "RequestChangeOutput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

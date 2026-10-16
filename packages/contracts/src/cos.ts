@@ -194,6 +194,18 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/** `remove_domain`'s input: a domain connected to the business. */
+export const RemoveDomainInput = z.strictObject({ name: DomainName })
+
+/**
+ * `remove_domain`'s output once the owner said yes. A no is `output-denied`.
+ * The site is back on its own address.
+ */
+export const RemoveDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("removed") }),
+  Refused,
+])
+
 const Empty = z.strictObject({})
 
 /**
@@ -214,6 +226,7 @@ export const COS_TOOLS = {
   record_review: { input: RecordReviewInput, output: RecordReviewOutput },
   check_domain: { input: CheckDomainInput, output: CheckDomainOutput },
   connect_domain: { input: ConnectDomainInput, output: ConnectDomainOutput },
+  remove_domain: { input: RemoveDomainInput, output: RemoveDomainOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -354,6 +367,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("connect_domain"),
     output: COS_TOOLS.connect_domain.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("remove_domain"),
+    output: COS_TOOLS.remove_domain.output,
   }),
 ])
 

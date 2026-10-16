@@ -15,6 +15,7 @@ import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
@@ -39,7 +40,6 @@ import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
-import { ServerButtonUI } from "./server-button"
 import { SiteReadyCard } from "./site-ready"
 import { uploadPhotos } from "./upload"
 

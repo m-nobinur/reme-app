@@ -29,6 +29,7 @@ import {
   SiteNameProvider,
 } from "@workspace/ui/components/assistant/blueprint-card"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
@@ -61,7 +62,7 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
 import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
@@ -112,7 +113,10 @@ function FixtureThread({
   bare = false,
   rates = false,
   stored,
+  children,
 }: {
+  /** Mounted beside the thread, as the app mounts what registers a part's card. */
+  children?: ReactNode
   /** The thread is this stored conversation, as at `/app/c/$id`. */
   stored?: string
   height?: string
@@ -162,6 +166,7 @@ function FixtureThread({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      {children}
       <div
         className={
           bare
@@ -1326,6 +1331,168 @@ const RECORD_REVIEW_STATES = decisionStates(
   refusal("review.unconfirmed", "The review could not be confirmed.")
 )
 
+const DOMAIN = "sparkleclean.co.uk"
+const WWW = { type: "CNAME", name: "www", value: "domains.remeai.co.uk" }
+const GODADDY = {
+  name: "GoDaddy",
+  settings_url: "https://dcc.godaddy.com/manage/dns",
+}
+
+/** A connect_domain call whose yes is in: the records to add, by case. */
+const connecting = (id: string, output: unknown, name = DOMAIN) =>
+  cosCall("connect_domain", `connect_${id}`, {
+    args: { name },
+    approval: { id: `approval_connect_${id}`, approved: true },
+    result: output,
+  })
+
+// The records a domain needs, as the orchestrator answers: with the provider
+// named and its own link, with only the bare-address alias, a subdomain's one
+// record, one that may touch email, and one with no records to show.
+const CONNECT_DOMAIN_STATES = [
+  ...decisionStates(
+    "connect_domain",
+    { name: DOMAIN },
+    { name: 7 },
+    {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      apex: "forward",
+      provider: GODADDY,
+      steps: [
+        WWW,
+        { type: "TXT", name: "_acme-challenge.www", value: "k3j9x2m1q8w7e6r5" },
+      ],
+    },
+    refusal("domain.in_use", "That domain belongs to another business.")
+  ),
+  connecting("alias", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "alias",
+    provider: { name: "Namecheap" },
+    steps: [WWW],
+  }),
+  connecting("email", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: true,
+    apex: "forward",
+    steps: [WWW],
+  }),
+  connecting("no_steps", {
+    outcome: "connecting",
+    method: "domain_connect",
+    email_affected: false,
+  }),
+  connecting(
+    "subdomain",
+    {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      provider: GODADDY,
+      steps: [{ type: "CNAME", name: "book", value: "domains.remeai.co.uk" }],
+    },
+    `book.${DOMAIN}`
+  ),
+]
+
+const REMOVE_DOMAIN_STATES = decisionStates(
+  "remove_domain",
+  { name: DOMAIN },
+  { name: 7 },
+  { outcome: "removed" },
+  refusal("domain.not_found", "That domain is not connected.")
+)
+
+/** A check_domain call by where the domain stands; one message each. */
+const check = (id: string, status: unknown, state = "verifying") =>
+  cosCall("check_domain", `check_${id}`, {
+    args: { name: DOMAIN },
+    result: {
+      outcome: "checked",
+      state,
+      status,
+      next_step: "Tell the owner where the domain stands.",
+    },
+  })
+
+const CHECK_DOMAIN_STATES: ThreadMessageLike[] = [
+  cosCall(
+    "check_domain",
+    "check_running",
+    { args: { name: DOMAIN } },
+    IN_FLIGHT
+  ),
+  check("waiting", { status: "pending_verification" }),
+  check("not_found", { status: "not_found" }),
+  check("invalid", { status: "invalid_configuration" }),
+  check("certificate", { status: "pending_certificate" }),
+  check("live", { status: "valid" }, "active"),
+  check("conflict", {
+    status: "conflicting_record",
+    conflicts: [{ type: "A", name: `www.${DOMAIN}`, value: "192.0.2.10" }],
+  }),
+  check("unknown", { status: "unknown_error" }),
+  cosCall("check_domain", "check_refused", {
+    args: { name: DOMAIN },
+    result: refusal("domain.not_found", "That domain is not connected."),
+  }),
+  cosCall("check_domain", "check_cancelled", {
+    args: { name: DOMAIN },
+    isError: true,
+    result: { error: TOOL_CALL_CANCELLED },
+  }),
+]
+
+/** Messages the assistant posted on its own, each with the button it can carry. */
+const POSTED: ThreadMessageLike[] = [
+  ask("Is my domain connected?"),
+  {
+    content: [
+      { text: "Not yet. I'll message you the moment it is.", type: "text" },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      {
+        text: `${DOMAIN} points at your website, and the certificate is ready.`,
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Open GoDaddy DNS settings",
+          action: { kind: "open", url: GODADDY.settings_url },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      { text: "Your website is live on the new address.", type: "text" },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Show me what changed",
+          action: { kind: "ask", text: "Show me what changed." },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** Two replies with words: one the owner rated up, one not yet rated. */
 const RATED: ThreadMessageLike[] = [
   ask("What is live now?"),
@@ -2061,6 +2228,32 @@ const assistantCatalog = [
     name: "RecordReview",
     render: () => (
       <FixtureThread height="h-[180rem]" messages={RECORD_REVIEW_STATES} />
+    ),
+  },
+  {
+    name: "ConnectDomain",
+    render: () => (
+      <FixtureThread height="h-[230rem]" messages={CONNECT_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "RemoveDomain",
+    render: () => (
+      <FixtureThread height="h-[180rem]" messages={REMOVE_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "DomainCheck",
+    render: () => (
+      <FixtureThread height="h-[100rem]" messages={CHECK_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "ServerButtonUI",
+    render: () => (
+      <FixtureThread height="h-[34rem]" messages={POSTED}>
+        <ServerButtonUI />
+      </FixtureThread>
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },
