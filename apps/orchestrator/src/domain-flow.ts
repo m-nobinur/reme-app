@@ -48,6 +48,7 @@ import {
   dropDomainPointers,
   writePointer,
 } from "./publish.ts"
+import { detachHostname, type RegistrarEnv } from "./registrar.ts"
 
 /**
  * Connecting an owner's existing domain (records path): the step bodies of
@@ -183,10 +184,21 @@ export async function moveTo(
   return true
 }
 
-/** A claim's custom hostnames deleted; one already gone is done. */
-async function dropHostnames(env: CloudflareEnv, cfIds: unknown) {
-  for (const id of Object.values(cfIds as CfIds)) {
+/**
+ * A claim's custom hostnames deleted, and a bought domain's Workers Custom
+ * Domains; one already gone is done. A bought zone stays: the domain is the
+ * owner's.
+ */
+async function dropHostnames(
+  env: CloudflareEnv & RegistrarEnv,
+  cfIds: unknown
+) {
+  const ids = cfIds as CfIds & { worker_apex?: string; worker_www?: string }
+  for (const id of [ids.apex, ids.www]) {
     if (id) await deleteHostname(env, id)
+  }
+  for (const id of [ids.worker_apex, ids.worker_www]) {
+    if (id) await detachHostname(env, id)
   }
 }
 
@@ -213,10 +225,13 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
  * the shape of `events.idempotency_key` (a ULID), as `eventKey` in
  * apps/api/src/http.ts makes them, so the org's unique index refuses a repeat.
  */
-async function eventKey(key: string): Promise<string> {
+export async function eventKey(
+  key: string,
+  kind = "domain.status"
+): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`domain.status:${key}`)
+    new TextEncoder().encode(`${kind}:${key}`)
   )
   // 128 bits as 26 base-32 digits: the first is at most 3, inside a ULID's 0 to 7.
   let n = new Uint8Array(digest)
@@ -760,7 +775,9 @@ export async function connect(
       const [pending] = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(domains)
-        .where(sql`${domains.state} in ('awaiting_dns', 'verifying')`)
+        .where(
+          sql`${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected'`
+        )
       if ((pending?.n ?? 0) >= MAX_PENDING)
         return refuse(
           409,
@@ -943,6 +960,12 @@ export async function remove(
   if (!name) return invalid()
   const found = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.name, name))
+    // A purchase being paid for or registered holds money: it finishes first.
+    if (
+      claim?.row.origin === "purchased" &&
+      ["awaiting_payment", "verifying"].includes(claim.row.state)
+    )
+      return "buying" as const
     // From any state, so a removal racing an activation still removes it.
     if (claim)
       await moveTo(
@@ -958,6 +981,13 @@ export async function remove(
       )
     return claim
   })
+  if (found === "buying")
+    return refuse(
+      409,
+      "resource",
+      "domain.purchase_in_progress",
+      `${name} is still being bought. Remove it once it's live.`
+    )
   if (!found)
     return refuse(
       404,
@@ -1044,7 +1074,7 @@ export async function sweepDomains(
       .select()
       .from(domains)
       .where(
-        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.createdAt} < ${stale}::timestamptz)`
+        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected' and ${domains.createdAt} < ${stale}::timestamptz)`
       )
   )
   const says: Say[] = []

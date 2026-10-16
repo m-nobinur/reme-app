@@ -60,6 +60,7 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
+import { buy, checkoutSession, find, paymentEvent } from "./domain-buy.ts"
 import {
   checkNow,
   connect,
@@ -808,6 +809,50 @@ ownerOnly.post("/domains", async (c) => {
   const result = await connect(c.env, c.get("kit"), c.get("orgId"), body)
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result.output, result.status)
+})
+
+/**
+ * Buying a domain (domain-buy.ts): find names, open a purchase, record the
+ * Checkout Session the api made, and apply a Stripe event the api verified.
+ */
+ownerOnly.post("/domains/find", async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const result = await find(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.post("/domains/buy", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const result = await buy(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result.output, result.status)
+})
+
+ownerOnly.post("/domains/:id/checkout-session", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const refusal = await checkoutSession(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("id"),
+    body
+  )
+  if (refusal) return domainRefused(c, refusal)
+  return c.body(null, 204)
+})
+
+ownerOnly.post("/domains/:id/stripe", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const refusal = await paymentEvent(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("id"),
+    body
+  )
+  if (refusal) return domainRefused(c, refusal)
+  return c.body(null, 204)
 })
 
 ownerOnly.post("/domains/:name/check", async (c) => {

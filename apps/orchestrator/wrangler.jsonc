@@ -34,7 +34,13 @@
     "CONSOLE_APPROVALS": "allow",
     // The Cloudflare for SaaS zone custom hostnames live in (src/domains.ts).
     // Staging shares it with production; `CF_DOMAINS_TOKEN` is the secret.
-    "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3"
+    "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
+    // Buying a domain (src/registrar.ts): the account the registrar bills,
+    // Cloudflare's sandbox registrar here and locally (no money, never
+    // served), and the Worker a bought domain is served by.
+    "CF_ACCOUNT_ID": "f161d624d34c45dd59579f9ee45c4396",
+    "REGISTRAR_API": "registrar-sandbox",
+    "ROUTER_SERVICE": "reme-router"
   },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
@@ -118,6 +124,11 @@
         "SANDBOX_TRANSPORT": "rpc",
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
         "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
+        // The live registrar: real, non-refundable registrations, so buying
+        // stays off until STRIPE_SECRET_KEY is set here.
+        "CF_ACCOUNT_ID": "f161d624d34c45dd59579f9ee45c4396",
+        "REGISTRAR_API": "registrar",
+        "ROUTER_SERVICE": "reme-router-production",
         // What the five-minute uptime check fetches (src/uptime.ts). Not the
         // orchestrator's own hostname: a Worker fetching itself through its
         // custom domain gets 522 (measured 2026-09-29), and the check running

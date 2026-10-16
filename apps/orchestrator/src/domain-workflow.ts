@@ -5,6 +5,23 @@ import {
   type WorkflowStepConfig,
 } from "cloudflare:workers"
 import {
+  abandonUnpaid,
+  boughtReady,
+  captureRegistered,
+  finishSandbox,
+  HOLD_MS,
+  PAYMENT_ROUNDS,
+  PAYMENT_WAIT,
+  paymentState,
+  readRegistration,
+  registrationFailed,
+  registrationWait,
+  serveBought,
+  servingStalled,
+  startRegistration,
+  subscribeRenewal,
+} from "./domain-buy.ts"
+import {
   activateDomain,
   claimHostnames,
   DEADLINE_MS,
@@ -20,8 +37,11 @@ import {
   SETTLE,
   withKit,
 } from "./domain-flow.ts"
+import { registrarLive } from "./registrar.ts"
 
 const MINUTE = 60 * 1000
+/** How long a bought domain may take to answer through the router before we flag it. */
+export const SERVE_DEADLINE_MS = 24 * 60 * MINUTE
 
 /**
  * How many `check` nudges a claim honours. With the schedule's ~110 looks a
@@ -86,6 +106,107 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
     if (event.payload.settle) {
       await settle()
       return { outcome: "removed" }
+    }
+
+    if (event.payload.buy) {
+      // The payment: the row says paid before the event is sent, so a look
+      // after each wait catches an event that came between them.
+      for (let n = 1; ; n++) {
+        const state = await step.do(`payment ${n}`, () =>
+          withKit(env, (k) => paymentState(k, orgId, domainId))
+        )
+        if (state === "gone") return { outcome: "abandoned" }
+        if (state === "paid") break
+        if (n > PAYMENT_ROUNDS) {
+          await step.do("abandon", () =>
+            withKit(env, (k) => abandonUnpaid(k, orgId, domainId))
+          )
+          return { outcome: "abandoned" }
+        }
+        try {
+          await step.waitForEvent(`paid ${n}`, {
+            type: "paid",
+            timeout: PAYMENT_WAIT,
+          })
+        } catch {
+          // No payment in this round: look again.
+        }
+      }
+
+      const begun = await step.do("register", () =>
+        withKit(env, (k) => startRegistration(env, k, orgId, domainId))
+      )
+      if (begun.gone) return { outcome: "removed" }
+      await say("say refused", begun.say)
+      if (!begun.status) return { outcome: "failed" }
+      let status = begun.status
+      for (let n = 1; !status.completed; n++) {
+        await step.sleep(`registering ${n}`, registrationWait(n))
+        const read = await step.do(`registration ${n}`, () =>
+          withKit(env, (k) => readRegistration(env, k, orgId, domainId))
+        )
+        if (read.gone) return { outcome: "removed" }
+        status = read.status
+        // The hold lapses at 7 days; release it before then.
+        if (!status.completed && read.at >= started + HOLD_MS) break
+      }
+      if (status.state !== "succeeded") {
+        const message = await step.do("not registered", () =>
+          withKit(env, (k) =>
+            registrationFailed(
+              env,
+              k,
+              orgId,
+              domainId,
+              status.error?.code ?? status.state
+            )
+          )
+        )
+        await say("say failed", message)
+        return { outcome: "failed" }
+      }
+
+      const registered = await step.do("capture", () =>
+        withKit(env, (k) => captureRegistered(env, k, orgId, domainId))
+      )
+      await say("say registered", registered)
+      await step.do("renewal", () =>
+        withKit(env, (k) => subscribeRenewal(env, k, orgId, domainId))
+      )
+      if (!registrarLive(env)) {
+        const message = await step.do("test", () =>
+          withKit(env, (k) => finishSandbox(env, k, orgId, domainId))
+        )
+        await say("say test", message)
+        return { outcome: "test" }
+      }
+
+      const served = await step.do("serve", () =>
+        withKit(env, (k) => serveBought(env, k, orgId, domainId))
+      )
+      if (!served) return { outcome: "removed" }
+      for (let n = 1; ; n++) {
+        const seen = await step.do(`serving ${n}`, () =>
+          withKit(env, (k) => boughtReady(k, orgId, domainId))
+        )
+        if (seen.gone) return { outcome: "removed" }
+        if (seen.ready) break
+        if (seen.at >= started + SERVE_DEADLINE_MS) {
+          const message = await step.do("stalled", () =>
+            withKit(env, (k) => servingStalled(k, orgId, domainId))
+          )
+          await say("say stalled", message)
+          return { outcome: "stalled" }
+        }
+        await step.sleep(`wait serving ${n}`, nextWait(seen.at - started))
+      }
+      const bought = await step.do("activate", () =>
+        withKit(env, (k) => activateDomain(env, k, orgId, domainId))
+      )
+      if (!bought) return { outcome: "removed" }
+      await say("say live", bought)
+      await settle()
+      return { outcome: "active" }
     }
 
     const claimed = await step.do("hostnames", () =>

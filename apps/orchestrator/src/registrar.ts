@@ -21,7 +21,7 @@ export const registrarLive = (env: RegistrarEnv) =>
 
 async function cloudflare(
   env: RegistrarEnv,
-  method: "GET" | "POST" | "PUT" | "PATCH",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
   headers: Record<string, string> = {}
@@ -190,7 +190,7 @@ export type Registrant = {
 export function registrantProblem(
   rules: RegistrantRules,
   input: {
-    registrant: Registrant
+    registrant: { organization?: string }
     registrant_type?: string
     company_number?: string
   }
@@ -367,13 +367,13 @@ export async function ensureZone(
  * A Workers Custom Domain sending `hostname` to the router, with its DNS
  * record and certificate made by Cloudflare. A PUT, so a retry repeats it.
  * Custom domains, not routes: a router deploy replaces its routes but leaves
- * custom domains it does not list alone.
+ * custom domains it does not list alone. Its id, for the removal.
  */
 export async function attachHostname(
   env: RegistrarEnv,
   input: { hostname: string; zoneId: string; service: string }
-): Promise<void> {
-  await resultOf<unknown>(
+): Promise<string> {
+  const { id } = await resultOf<{ id: string }>(
     await cloudflare(
       env,
       "PUT",
@@ -385,6 +385,22 @@ export async function attachHostname(
       }
     )
   )
+  return id
+}
+
+/** A Workers Custom Domain removed; one already gone is done. */
+export async function detachHostname(
+  env: RegistrarEnv,
+  id: string
+): Promise<void> {
+  const response = await cloudflare(
+    env,
+    "DELETE",
+    `/accounts/${env.CF_ACCOUNT_ID}/workers/domains/${encodeURIComponent(id)}`
+  )
+  await response.body?.cancel()
+  if (!response.ok && response.status !== 404)
+    throw new DomainError(`cloudflare.${response.status}`)
 }
 
 // ---------------------------------------------------------------------------
