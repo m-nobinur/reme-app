@@ -129,6 +129,12 @@ describe("the zod to valibot seam", () => {
     }
   )
 
+  it("takes a tool with no input (z.object({})) as an empty object, not a map", () => {
+    const valibot = toolInput(z.object({}))
+    expect(v.safeParse(valibot, {}).success).toBe(true)
+    expect(v.safeParse(valibot, "x").success).toBe(false)
+  })
+
   it("refuses a non-object input schema", () => {
     expect(() => toolInput(z.string())).toThrow(/object schema/)
   })

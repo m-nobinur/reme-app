@@ -97,6 +97,11 @@ function object(node: Node, root: Node): v.GenericSchema {
     entries[name] = required.has(name) ? built : v.optional(built)
   }
   const additional = node.additionalProperties
+  // An object with no fields and no extra keys allowed is a tool that takes no
+  // input (z.object({})), not a map.
+  if (Object.keys(properties).length === 0 && additional === false) {
+    return v.strictObject({})
+  }
   if (Object.keys(properties).length === 0) {
     // A map: a record of values, or an open bag.
     const value =
