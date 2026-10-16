@@ -3295,6 +3295,60 @@ export interface components {
       /** Format: date-time */
       updated_at: string
     }
+    BuyDomainInput: {
+      name: string
+      registrant: {
+        /** @description The owner's full legal name, first and last. */
+        name: string
+        /** @description The business's registered or trading name. */
+        organization?: string
+        /** Format: email */
+        email: string
+        phone: string
+        address: {
+          street: string
+          city: string
+          state?: string
+          postal_code: string
+          /** @description ISO 3166-1 alpha-2, such as GB. */
+          country_code: string
+        }
+      }
+      /**
+       * @description Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.
+       * @enum {string}
+       */
+      registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
+      /** @description The Companies House number, required with LTD and LLP. */
+      company_number?: string
+    }
+    BuyDomainOutput:
+      | {
+          /** @constant */
+          outcome: "awaiting_payment"
+          name: string
+          price_gbp: number
+          /** @constant */
+          checkout: "embedded"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     CapabilityCall: {
       /** Format: uuid */
       call_id: string
@@ -4084,7 +4138,14 @@ export interface components {
           /** @constant */
           outcome: "checked"
           /** @enum {string} */
-          state: "awaiting_dns" | "verifying" | "active" | "failed" | "removed"
+          state:
+            | "awaiting_payment"
+            | "awaiting_dns"
+            | "verifying"
+            | "active"
+            | "failed"
+            | "abandoned"
+            | "removed"
           status:
             | {
                 /** @constant */
@@ -4325,6 +4386,8 @@ export interface components {
         | "check_domain"
         | "connect_domain"
         | "remove_domain"
+        | "find_domain"
+        | "buy_domain"
       )[]
       text: string
       reserved_usd: number
@@ -4663,6 +4726,8 @@ export interface components {
           | "check_domain"
           | "connect_domain"
           | "remove_domain"
+          | "find_domain"
+          | "buy_domain"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -4767,10 +4832,12 @@ export interface components {
               name: string
               /** @enum {string} */
               state:
+                | "awaiting_payment"
                 | "awaiting_dns"
                 | "verifying"
                 | "active"
                 | "failed"
+                | "abandoned"
                 | "removed"
               last_check:
                 | (
@@ -5896,10 +5963,12 @@ export interface components {
                 outcome: "checked"
                 /** @enum {string} */
                 state:
+                  | "awaiting_payment"
                   | "awaiting_dns"
                   | "verifying"
                   | "active"
                   | "failed"
+                  | "abandoned"
                   | "removed"
                 status:
                   | {
@@ -6030,6 +6099,78 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "find_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "found"
+                best: {
+                  name: string
+                  price_gbp_year: number
+                  why: string
+                }
+                options: {
+                  name: string
+                  price_gbp_year: number
+                  why: string
+                }[]
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "buy_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "awaiting_payment"
+                name: string
+                price_gbp: number
+                /** @constant */
+                checkout: "embedded"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -6053,6 +6194,8 @@ export interface components {
             | "check_domain"
             | "connect_domain"
             | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6081,6 +6224,8 @@ export interface components {
             | "check_domain"
             | "connect_domain"
             | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6107,6 +6252,8 @@ export interface components {
             | "check_domain"
             | "connect_domain"
             | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6133,6 +6280,8 @@ export interface components {
             | "check_domain"
             | "connect_domain"
             | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6159,6 +6308,8 @@ export interface components {
             | "check_domain"
             | "connect_domain"
             | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6248,7 +6399,14 @@ export interface components {
       domains?: {
         name: string
         /** @enum {string} */
-        state: "awaiting_dns" | "verifying" | "active" | "failed" | "removed"
+        state:
+          | "awaiting_payment"
+          | "awaiting_dns"
+          | "verifying"
+          | "active"
+          | "failed"
+          | "abandoned"
+          | "removed"
         last_check:
           | (
               | {
@@ -6527,9 +6685,105 @@ export interface components {
           /** @constant */
           status: "valid"
         }
+    DomainCheckout: {
+      name: string
+      price_gbp: number
+      client_secret: string
+      /** Format: date-time */
+      expires_at: string
+    }
+    DomainCheckoutRequest: {
+      registrant: {
+        /** @description The owner's full legal name, first and last. */
+        name: string
+        /** @description The business's registered or trading name. */
+        organization?: string
+        /** Format: email */
+        email: string
+        phone: string
+        address: {
+          street: string
+          city: string
+          state?: string
+          postal_code: string
+          /** @description ISO 3166-1 alpha-2, such as GB. */
+          country_code: string
+        }
+      }
+      /**
+       * @description Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.
+       * @enum {string}
+       */
+      registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
+      /** @description The Companies House number, required with LTD and LLP. */
+      company_number?: string
+    }
+    DomainPaymentEvent:
+      | {
+          /** @constant */
+          type: "paid"
+          event_id: string
+          /** Format: uuid */
+          domain_id: string
+          checkout_session: string
+          payment_intent: string
+        }
+      | {
+          /** @constant */
+          type: "expired"
+          event_id: string
+          /** Format: uuid */
+          domain_id: string
+          checkout_session: string
+        }
+      | {
+          /** @constant */
+          type: "renewal_paid"
+          event_id: string
+          /** Format: uuid */
+          domain_id: string
+          subscription: string
+          invoice: string
+        }
+      | {
+          /** @constant */
+          type: "renewal_failed"
+          event_id: string
+          /** Format: uuid */
+          domain_id: string
+          subscription: string
+          invoice: string
+        }
+      | {
+          /** @constant */
+          type: "subscription_ended"
+          event_id: string
+          /** Format: uuid */
+          domain_id: string
+          subscription: string
+        }
+    DomainPrice: {
+      /** @enum {string} */
+      tld: "co.uk" | "uk" | "com"
+      retail_gbp: number
+      cost_usd: number
+    }
     DomainProvider: {
       name: string
       settings_url?: string
+    }
+    DomainRegistration: {
+      years: number
+      auto_renew: boolean
+      expires_at: string | null
+      /** @enum {string} */
+      registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
+    }
+    DomainStripe: {
+      customer: string
+      checkout_session: string
+      payment_intent?: string
+      subscription?: string
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -6981,6 +7235,43 @@ export interface components {
       /** Format: date-time */
       reported_at: string
     }
+    FindDomainInput: {
+      /** @description Words the owner wants in the name. Omit it to start from the business name. */
+      query?: string
+    }
+    FindDomainOutput:
+      | {
+          /** @constant */
+          outcome: "found"
+          best: {
+            name: string
+            price_gbp_year: number
+            why: string
+          }
+          options: {
+            name: string
+            price_gbp_year: number
+            why: string
+          }[]
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     FontPair: {
       /** @enum {string} */
       id:
