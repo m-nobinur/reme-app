@@ -317,7 +317,37 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
   return created
 }
 
-export function Developer({ id }: AgentProps) {
+/**
+ * A render that throws (a bad brief or spec, an agent or tool that cannot be
+ * built, a missing binding) fails the submission inside the runtime, which
+ * defers it and never retries: no turn is logged and nothing wakes the
+ * Workflow. So the Workflow is told here, and fails the build at once.
+ */
+export function Developer(props: AgentProps) {
+  try {
+    return render(props)
+  } catch (error) {
+    startFailed(props.id, error)
+    throw error
+  }
+}
+
+function startFailed(id: string, error: unknown) {
+  const reason = String(error).slice(0, 300)
+  const found = sessions.get(id)
+  found?.tee.emit("developer.start_failed", { reason })
+  Promise.resolve(found?.tee.flush())
+    .then(() => workflow(id))
+    .then((instance) =>
+      instance.sendEvent({
+        type: "developer",
+        payload: { kind: "start_failed", reason },
+      })
+    )
+    .catch(() => undefined)
+}
+
+function render({ id }: AgentProps) {
   const raw = useInitialData<Brief | undefined>()
   if (!raw) throw new Error("the Developer needs a brief at creation")
   // Verified before anything renders (§6.1): a forged, widened or expired
@@ -382,11 +412,7 @@ export function Developer({ id }: AgentProps) {
   useSandbox(
     {
       createSandbox: base.createSandbox,
-      tools: guardedTools(POLICY, {
-        git: GIT,
-        mutations: current.mutations,
-        fromChild: current.gate.fromChild,
-      }),
+      tools: sandboxTools(current),
     },
     { cwd: SITE_ROOT }
   )
@@ -509,9 +535,7 @@ export function Developer({ id }: AgentProps) {
   // BA4: registered on every run so the lead's tool list, and the prefix it
   // caches, is the same for every build; only a planned first build's
   // instructions call it.
-  useTool(writePagesTool(current))
-  useTool(askChief(current))
-  useTool(reportComplete(current))
+  for (const tool of developerTools(current)) useTool(tool)
 
   useResponseFinish(({ response }) => {
     // A turn that wakes the Workflow ends in an accepted report or a
@@ -531,6 +555,21 @@ export function Developer({ id }: AgentProps) {
 
 Developer.agentName = "developer"
 Developer.durability = { maxAttempts: 3, timeoutMs: LEAD_TURN_MS }
+
+/** The lead's own tools, built exactly as at agent start (the render test builds them too). */
+export const developerTools = (current: Session) => [
+  writePagesTool(current),
+  askChief(current),
+  reportComplete(current),
+]
+
+/** The lead's sandbox tools (read, write, edit, bash, grep, glob, checkpoint) behind the guard. */
+export const sandboxTools = (current: Session) =>
+  guardedTools(POLICY, {
+    git: GIT,
+    mutations: current.mutations,
+    fromChild: current.gate.fromChild,
+  })
 
 /** How long `write_pages` waits for the photo step, from its start. */
 const PHOTO_WAIT_MS = 5 * 60_000
