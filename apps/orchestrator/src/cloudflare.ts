@@ -736,6 +736,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   round: look,
                   revisionId: payload.revision_id,
                   earlier: asked,
+                  // The fields and variants each fix names, before and after the lead's round.
+                  readSource: () =>
+                    whileHeld(this.env, ids, async () => {
+                      const file = await sandboxFor(
+                        this.env,
+                        ids.orgId
+                      ).readFile(`${SITE_ROOT}/src/site-config.ts`)
+                      return file.content
+                    }),
                 })
               ),
               axeOf().catch(() => undefined),
