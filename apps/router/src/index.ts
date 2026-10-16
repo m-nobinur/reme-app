@@ -102,22 +102,12 @@ const serviceHosts = (env: Env) =>
  * `fetch(request)` is what reaches the Worker behind it (measured 2026-09-16).
  * A subrequest to a URL on this Worker's own route does not re-enter it.
  *
- * Only ever called where the router has decided the host is not its own, and
- * only where a list of service hostnames says this Worker sits on a route
- * wider than the sites it serves. Staging has no list and answers 404.
+ * Only for a listed service hostname, whose Worker sits on a custom domain
+ * behind this Worker's wider route. Any other name has only the zone's
+ * `100::` record behind it, so handing it back answers Cloudflare's 522: a
+ * host no site claims is this router's 404 instead.
  */
 const passThrough = (c: Context<App>) => fetch(c.req.raw)
-
-/**
- * A host no site here claims. In the zone it is another name's, or nobody's;
- * outside it, behind production's route for every host, it is a custom
- * hostname with no pointer, and handing it back would fetch the `100::`
- * fallback origin, so it is 404.
- */
-const unserved = (c: Context<App>) =>
-  serviceHosts(c.env).size > 0 && inZone(new URL(c.req.url).hostname)
-    ? passThrough(c)
-    : notHere(c)
 
 /**
  * Hashed assets are immutable; everything else is revalidated on every
@@ -407,9 +397,9 @@ app.use("*", async (c, next) => {
   const host = new URL(c.req.url).hostname
   const suffix = c.env.SITE_HOST_SUFFIX
   if (serviceHosts(c.env).has(host)) return passThrough(c)
-  if (!host.endsWith(suffix)) return inZone(host) ? unserved(c) : next()
+  if (!host.endsWith(suffix)) return inZone(host) ? notHere(c) : next()
   // A name with a dot in it, or one no business could hold, costs nothing.
-  if (!SLUG.test(host.slice(0, -suffix.length))) return unserved(c)
+  if (!SLUG.test(host.slice(0, -suffix.length))) return notHere(c)
   return next()
 })
 
@@ -510,7 +500,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     if (known) {
       pointer = Pointer.parse(await known.json())
     } else {
-      if (await edge()?.match(edgeKey(host, "nobody"))) return unserved(c)
+      if (await edge()?.match(edgeKey(host, "nobody"))) return notHere(c)
       if (await edge()?.match(edgeKey(host, "closed"))) return gone(c)
       const { success } = await c.env.MISSES.limit({ key: asker(c) })
       if (!success) return tooMany(c)
@@ -530,9 +520,9 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     }
   }
   // No pointer and no row behind it: nothing here was ever published under
-  // this name. On production that is another name's request (issue #90); a
-  // pointer that resolves and a file that does not is this site's 404, below.
-  if (!pointer) return unserved(c)
+  // this name, so it is 404 on every environment; a pointer that resolves and
+  // a file that does not is this site's 404, below.
+  if (!pointer) return notHere(c)
   if ("redirect_to" in pointer) {
     // Revalidated like a page, so a browser drops it once the domain goes.
     c.header("cache-control", "no-cache")
