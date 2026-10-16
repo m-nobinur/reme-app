@@ -665,6 +665,17 @@ const PAGE_BLOCKS: Record<
 /** A page's SEO title or description field: homeTitle, service2Description and the rest. */
 const PAGE_META =
   /^(?:home|about|services|serviceArea|contact|quote|service\d)(Title|Description)$/
+/**
+ * A page's <title> as the starter's Seo component writes it from the title
+ * field: the business name goes after a title that does not contain it
+ * exactly. Perf run 2's writers wrote 55 characters with "Brightside Care"
+ * and the page showed 91, which the lead then spent four turns on.
+ */
+export const titleOf = (title: string, business: string) =>
+  business && !title.includes(business)
+    ? [title, business].filter(Boolean).join(" | ")
+    : title
+
 /** Fields that render an h1 or h2 inside <main>: every heading but the h3 and the chrome's. */
 const headingField = (name: string) =>
   /(?:Heading|^service\dName)$/.test(name) &&
@@ -688,6 +699,7 @@ export function fieldFindings(
   const found: string[] = []
   let repeats = false
   const filled = (name: string) => (values[name] ?? "").trim()
+  const business = filled("businessName")
   const headings = Object.keys(values).filter(
     (name) => headingField(name) && filled(name)
   )
@@ -709,9 +721,27 @@ export function fieldFindings(
       )
     const meta = PAGE_META.exec(name)?.[1]
     const chars = meta === "Title" ? TITLE_CHARS : DESCRIPTION_CHARS
-    if (meta && (text.length < chars.min || text.length > chars.max))
+    const shown = meta === "Title" ? titleOf(text, business) : text
+    if (meta && (shown.length < chars.min || shown.length > chars.max))
       found.push(
-        `${name} is ${text.length} characters; write ${chars.min} to ${meta === "Title" ? chars.max : 160}`
+        shown === text
+          ? `${name} is ${text.length} characters; write ${chars.min} to ${meta === "Title" ? chars.max : 160}`
+          : `${name} shows as "${shown}", ${shown.length} characters, because a title that does not contain businessName exactly gets " | ${business}" after it; write ${chars.min} to ${chars.max} in all, or name the business exactly within that`
+      )
+    const twin =
+      meta &&
+      Object.keys(values).find(
+        (field) =>
+          field !== name &&
+          PAGE_META.exec(field)?.[1] === meta &&
+          filled(field) &&
+          (meta === "Title"
+            ? titleOf(filled(field), business) === shown
+            : filled(field) === text)
+      )
+    if (twin)
+      found.push(
+        `${name} is the same as ${twin}; each page needs its own ${meta === "Title" ? "title" : "description"}`
       )
     if (!headingField(name)) continue
     if (STOCK_HEADINGS.includes(plainText(text))) {
@@ -766,7 +796,7 @@ export function copyGateRules(): string[] {
     return `${LABEL[kind]} ${aim[0]} to ${aim[1]} words, never under ${min}`
   })
   return [
-    `- The copy gate runs after you, and each miss costs a repair round, so meet its numbers the first time. Every page title is ${TITLE_CHARS.min} to ${TITLE_CHARS.max} characters, and every meta description ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} characters; no two pages share either.`,
+    `- The copy gate runs after you, and each miss costs a repair round, so meet its numbers the first time. Every page title is ${TITLE_CHARS.min} to ${TITLE_CHARS.max} characters as the page shows it: a title that does not contain businessName exactly gets " | " and businessName after it, so either name the business exactly as businessName or leave room for it. Every meta description ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} characters; no two pages share either.`,
     `- Words per section: ${words.join("; ")}.`,
     `- Headings: no h1 or h2 on the site repeats another or is a stock label, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words.`,
   ]

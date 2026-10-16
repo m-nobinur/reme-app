@@ -111,6 +111,7 @@ describe("build activity rows", () => {
       "planning",
       ...(generated.length ? ["photos"] : []),
       "writing",
+      "assembling",
       "design",
       "checking",
     ])
@@ -183,10 +184,12 @@ describe("build activity rows", () => {
       ["planning", true],
       ["photos", true],
       ["writing", true],
+      ["assembling", true],
       ["design", true],
       ["fixing", true],
       ["checking", false],
     ])
+    expect(rows.length).toBe(BUILD_ACTIVITY_MAX)
     // Pages tick together when the lead wrote them itself.
     expect(
       activityFor("full", "implementing", {}, { plan, marks: [reported] })
@@ -201,23 +204,33 @@ describe("build activity rows", () => {
     ).toEqual(["planning", "writing", "checking"])
   })
 
-  it("keeps the pages step current with every page written until a report is accepted", () => {
+  // Perf run 2 sat on "Writing the pages 6 of 6" for 2 min 20 s while the
+  // lead put the site together.
+  it("puts the site together once every page is written, until a report is accepted", () => {
     const plan = Blueprint.parse(PLAN)
-    const now = (marks: Mark[]) =>
+    const rows = (marks: Mark[], done = 2) =>
       activityFor(
         "full",
         "implementing",
-        { pages: { done: 2, total: 2 } },
+        { pages: { done, total: 2 } },
         { plan, marks }
-      ).filter((r) => r.now)
+      )
+    const now = (marks: Mark[], done?: number) =>
+      rows(marks, done)
+        .filter((r) => r.now)
+        .map((r) => [r.id, r.label, r.done, r.total])
+    expect(now([], 1)).toEqual([["writing", "Writing the pages", 1, 2]])
     // Both pages counted and the lead's report refused, or not yet made.
-    expect(now([]).map((r) => [r.id, r.done, r.total])).toEqual([
-      ["writing", 2, 2],
-    ])
+    expect(now([])).toEqual([["assembling", "Putting the site together", 0, 1]])
+    expect(
+      rows([])
+        .find((r) => r.id === "writing")
+        ?.items?.every((i) => i.done)
+    ).toBe(true)
     expect(now([{ type: "assignment.completion_reported" }])).toEqual([
-      expect.objectContaining({ id: "design" }),
+      ["design", "Looking over the design", 0, 1],
     ])
-    for (const row of now([])) BuildActivity.parse(row)
+    for (const row of rows([])) BuildActivity.parse(row)
   })
 
   it("names why a build stopped from the Workflow's reason, other when it has no words", () => {

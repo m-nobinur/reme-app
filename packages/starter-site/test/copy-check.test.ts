@@ -54,3 +54,35 @@ test("leaves a noindex page's head alone", () => {
     '<html><head><title>Not found</title><meta name="robots" content="noindex"></head><body><h1>Not found</h1></body></html>'
   expect(copyFindings([{ file: "404.html", html }])).toEqual([])
 })
+
+// Perf run 2: the gate failed eight service pages on these blocks while this
+// check, which the lead reads after every build, said "clean".
+test("names a page missing a block the copy gate fails it without", () => {
+  const service = (body: string) => ({
+    file: "services/weekly-clean/index.html",
+    html: page(`<h1>Weekly cleaning</h1>${body}`),
+  })
+  expect(copyFindings([service("<p>Intro</p>")])).toEqual([
+    "services/weekly-clean/index.html: has no serviceNIncludes (what is included) block; fill it for this page",
+    "services/weekly-clean/index.html: has no serviceNFor (who it suits) block; fill it for this page",
+  ])
+  expect(
+    copyFindings([
+      service(
+        '<ul data-copy="service_includes"><li>Dusting</li></ul><p data-copy="service_for">Busy homes</p>'
+      ),
+    ])
+  ).toEqual([])
+  expect(
+    copyFindings([
+      {
+        file: "services/index.html",
+        html: page(
+          '<h1>Services</h1><p data-copy="service_body">A</p><p data-copy="service_body">B</p>'
+        ),
+      },
+    ])
+  ).toEqual([
+    "services/index.html: has no servicesHelpBody block; fill it for this page",
+  ])
+})

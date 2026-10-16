@@ -72,7 +72,14 @@ export const EXPECTED_SECONDS = {
 } as const
 
 /** The steps in the order a full build reaches them; the photos row travels with the pages. */
-const ORDER = ["planning", "writing", "design", "fixing", "checking"] as const
+const ORDER = [
+  "planning",
+  "writing",
+  "assembling",
+  "design",
+  "fixing",
+  "checking",
+] as const
 type Step = (typeof ORDER)[number]
 
 /**
@@ -155,8 +162,14 @@ export function activityFor(
     marks = [],
   }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
 ): BuildActivity[] {
-  const at = stepOf(state, marks, Boolean(plan))
-  if (lane === "quick" || !at) return []
+  const reached = stepOf(state, marks, Boolean(plan))
+  if (lane === "quick" || !reached) return []
+  // Every page written and no report yet: the lead is putting the site
+  // together, which took 2 min 20 s in perf run 2 under "6 of 6".
+  const written =
+    progress.pages !== undefined && progress.pages.done >= progress.pages.total
+  const at: Step =
+    reached === "writing" && plan && written ? "assembling" : reached
   const now = ORDER.indexOf(at)
   const passed = (step: Step) => ORDER.indexOf(step) < now
   const photos =
@@ -204,9 +217,13 @@ export function activityFor(
       ...row("writing", "Writing the pages", passed("writing"), progress.pages),
       ...(pages ? { items: pages } : {}),
     },
-    // BA5's look before the gates runs only on a planned build.
+    // A planned build's pages are written in parallel and put together by
+    // the lead; BA5's look before the gates runs only on a planned build.
     ...(plan
-      ? [row("design", "Looking over the design", passed("design"))]
+      ? [
+          row("assembling", "Putting the site together", passed("assembling")),
+          row("design", "Looking over the design", passed("design")),
+        ]
       : []),
     ...(repaired || at === "fixing"
       ? [row("fixing", "Fixing what the checks found", passed("fixing"))]
