@@ -2360,14 +2360,15 @@ const assistantCatalog = [
       <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
     ),
   },
-  {
-    name: "BuyDomain",
+  // The purchase card and the provider that gives it the app's checkout.
+  ...(["BuyDomain", "DomainPurchaseProvider"] as const).map((name) => ({
+    name,
     render: () => (
       <DomainPurchaseProvider value={CATALOG_PURCHASE}>
         <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
       </DomainPurchaseProvider>
     ),
-  },
+  })),
   {
     name: "DomainCheck",
     render: () => (
