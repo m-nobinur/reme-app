@@ -213,7 +213,8 @@ jobs:
           echo "$WEB/ answered $code"
 
       # Last of the Workers, and deliberately after the two it can break. The
-      # router's production route is `*.remeai.co.uk/*`, the whole zone, and a
+      # router's production route is `*/*`, the whole zone plus every owner's
+      # custom domain (ADR-041), and a
       # wildcard route beats a custom domain on the same hostname (measured
       # 2026-09-16). The api, the app and the orchestrator each hold an explicit
       # host route that beats the wildcard in turn (measured 2026-09-18), so

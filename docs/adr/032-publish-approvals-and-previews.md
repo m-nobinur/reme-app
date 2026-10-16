@@ -197,3 +197,20 @@ Reversal trigger: the first real account-deletion request (open item 79). Produc
 its own ADR and its own path under §10.5. This script does not grow a production mode.
 ADR-035 (2026-09-29) deletes an account without erasing its rows, so this trigger now waits on
 the first erasure request.
+
+## Amendment, 2026-10-16: a custom domain's pages differ from the artifact by one origin
+
+This ADR's pages are served as the artifact holds them. With a custom domain (ADR-041) that stops
+being exactly true. `astro build --site` bakes the slug host into canonicals, `og:url`, the
+sitemap and robots, and on a custom domain those must name the domain. The pointer for the
+domain's primary host carries `origin_host` and `canonical_host`, and the router replaces
+`https://{origin_host}` with `https://{canonical_host}` in `.html`, `.xml` and `.txt` bodies: one
+`replaceAll` of one exact string, with a weak ETag. No other byte moves, every other file is
+served as stored, and the manifest's hashes still describe the artifact, which is what the gates
+and the probes check. A preview host is never rewritten. Rejected: a rebuild per domain, because a
+rollback to a revision built before the domain would bring the slug canonical back.
+
+The trigger under "Change if" that moves the publisher to its own Worker once it needs a
+Cloudflare credential has been met and is declined: `CF_DOMAINS_TOKEN` is an orchestrator secret.
+ADR-041 says why. The trigger now reads: a credential whose grants reach beyond custom hostnames
+on our own zone, such as Registrar or DNS edit on owners' zones when buying ships.
