@@ -850,11 +850,19 @@ export const otherHost = (primary: string) =>
 /**
  * A removed domain's two pointers, gone before the slug host is pointed back
  * at the site, so the canonical flips back at once. A missing key is success.
+ * Only `orgId`'s own: once a name is free another org may claim it, and a
+ * late repeat of this removal must not take that org's site down. The other
+ * half's redirect carries no org, so the primary's pointer decides for both.
  */
 export async function dropDomainPointers(
   env: Pick<Env, "ROUTES">,
-  primary: string
+  primary: string,
+  orgId: string
 ): Promise<void> {
+  const held = SitePointer.safeParse(
+    await env.ROUTES.get(`host:${primary}`, "json").catch(() => null)
+  )
+  if (held.success && held.data.org_id !== orgId) return
   await env.ROUTES.delete(`host:${primary}`)
   await env.ROUTES.delete(`host:${otherHost(primary)}`)
 }
@@ -877,7 +885,7 @@ export async function clearPointers(
       .where(eq(orgs.id, orgId))
     return { org: row, domain: await activeDomainHost(db) }
   })
-  if (domain) await dropDomainPointers(env, domain)
+  if (domain) await dropDomainPointers(env, domain, orgId)
   if (org)
     await env.ROUTES.delete(`host:${siteHost(org.slug, env.SITE_HOST_SUFFIX)}`)
 }

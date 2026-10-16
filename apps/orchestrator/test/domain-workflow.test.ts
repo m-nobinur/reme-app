@@ -22,6 +22,8 @@ const script = vi.hoisted(() => ({
   claim: { apex: "a", www: "w" } as unknown,
   seen: [] as unknown[],
   calls: [] as string[],
+  /** Whether every post finds the chat busy, as a never-answered card would. */
+  busy: false,
 }))
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
@@ -30,26 +32,45 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   look: async () => script.seen.shift() ?? { gone: true },
   nudge: async () => {
     script.calls.push("nudge")
+    return { key: "nudge", text: "nudge" }
   },
   expireDomain: async (...args: unknown[]) => {
     script.calls.push(`expire ${String(args[4])}`)
+    return { key: `failed ${String(args[4])}`, text: "failed" }
   },
   activateDomain: async () => {
     script.calls.push("activate")
-    return true
+    return { key: "live", text: "live" }
   },
   repoint: async () => {
     script.calls.push("repoint")
   },
+  postStatus: async (_kit: unknown, _org: unknown, say: { key: string }) => {
+    if (script.busy) throw new Error("status.busy")
+    script.calls.push(`say ${say.key}`)
+  },
 }))
 
-const { DomainWorkflow } = await import("../src/domain-workflow.ts")
+const { DomainWorkflow, SAY_RETRIES } = await import(
+  "../src/domain-workflow.ts"
+)
 
 const T0 = Date.parse("2026-10-16T12:00:00Z")
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
-const at = (ms: number, status = "pending_verification", ready = false): Seen =>
-  ({ gone: false, at: T0 + ms, status, ready }) as Seen
+const at = (
+  ms: number,
+  status = "pending_verification",
+  ready = false,
+  say?: string
+): Seen =>
+  ({
+    gone: false,
+    at: T0 + ms,
+    status,
+    ready,
+    ...(say && { say: { key: say, text: say } }),
+  }) as Seen
 
 async function drive(
   seen: Seen[],
@@ -60,10 +81,12 @@ async function drive(
   script.seen = [...seen]
   const names: string[] = []
   const waits: (number | string)[] = []
+  const configs: Record<string, unknown> = {}
   const step = {
-    do: async (name: string, fn: () => Promise<unknown>) => {
+    do: async (name: string, a: unknown, b?: unknown) => {
       names.push(name)
-      return fn()
+      if (typeof a !== "function") configs[name] = a
+      return ((typeof a === "function" ? a : b) as () => Promise<unknown>)()
     },
     sleep: async (name: string, duration: string) => {
       names.push(name)
@@ -82,24 +105,49 @@ async function drive(
     } as never,
     step as never
   )
-  return { names, waits, result }
+  return { names, waits, result, configs }
 }
 
 beforeEach(() => {
   script.calls.length = 0
+  script.busy = false
 })
 
 describe("the domain Workflow", () => {
-  it("looks on the backoff, activates once a look is ready, and points again after it settles", async () => {
-    const { names, waits, result } = await drive([
+  it("looks on the backoff, says what changed, activates once ready, and points again after it settles", async () => {
+    const { names, waits, result, configs } = await drive([
       at(1000),
-      at(2 * MIN, "conflicting_record"),
+      at(2 * MIN, "conflicting_record", false, "look 2"),
       at(7 * MIN, "valid", true),
     ])
     expect(names).toEqual(steps.DomainWorkflow.live)
     expect(waits).toEqual([2 * MIN, 5 * MIN, "30 seconds"])
     expect(result).toEqual({ outcome: "active" })
+    expect(script.calls).toEqual([
+      "say look 2",
+      "activate",
+      "say live",
+      "repoint",
+    ])
+    // Each post retries on its own schedule; nothing else does.
+    expect(configs).toEqual({ "say 2": SAY_RETRIES, "say live": SAY_RETRIES })
+  })
+
+  it("goes live even when the chat stays busy past every retry", async () => {
+    script.busy = true
+    const { names, result } = await drive([at(MIN, "valid", true, "look 1")])
+    expect(result).toEqual({ outcome: "active" })
+    expect(names).toContain("say live")
     expect(script.calls).toEqual(["activate", "repoint"])
+  })
+
+  it("backs off a busy chat from 10 seconds, doubling, capped at 30 minutes", () => {
+    const delay = SAY_RETRIES.retries?.delay as (input: {
+      ctx: { attempt: number }
+    }) => number
+    expect(
+      [1, 2, 3, 8, 9, 200].map((attempt) => delay({ ctx: { attempt } }))
+    ).toEqual([10_000, 20_000, 40_000, 1_280_000, 30 * MIN, 30 * MIN])
   })
 
   it("a removal's instance only points again after it settles", async () => {
@@ -123,7 +171,12 @@ describe("the domain Workflow", () => {
     // The last wait before the deadline is cut to what is left of it.
     expect(waits).toEqual([2 * MIN, 5 * MIN, 30 * 1000])
     expect(result).toEqual({ outcome: "failed" })
-    expect(script.calls).toEqual(["nudge", "expire timeout"])
+    expect(script.calls).toEqual([
+      "nudge",
+      "say nudge",
+      "expire timeout",
+      "say failed timeout",
+    ])
   })
 
   it("nudges only once however many looks pass 24 hours", async () => {
@@ -140,7 +193,7 @@ describe("the domain Workflow", () => {
     const { names, result } = await drive([], "held")
     expect(names).toEqual(steps.DomainWorkflow["hostname held"])
     expect(result).toEqual({ outcome: "failed" })
-    expect(script.calls).toEqual(["expire held"])
+    expect(script.calls).toEqual(["expire held", "say failed held"])
   })
 
   it("ends quietly for a claim removed before or while it waits", async () => {

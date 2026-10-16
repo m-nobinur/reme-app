@@ -3,8 +3,9 @@ import {
   ConnectDomainOutput,
   DomainCheck,
   DomainName,
-  type DomainProvider,
+  DomainProvider,
   type DomainState,
+  type ServerButton,
   siteHost,
 } from "@workspace/contracts"
 import {
@@ -14,6 +15,7 @@ import {
   type OrgScopedDb,
   orgs,
   pgCode,
+  postAssistantMessage,
   sql,
   type Tenancy,
   tenancy,
@@ -151,19 +153,24 @@ async function eventKey(key: string): Promise<string> {
 }
 
 /**
- * The one way a domain's progress reaches the owner. Keyed, so a retried step
- * says it once.
- *
- * shortcut: an events row until the assistant-message story lands its
- * helper; then this body calls that helper with the same key and text.
+ * A message for the owner, which a step body returns and the Workflow posts
+ * in a step of its own, so a busy chat retries the post and nothing else.
+ */
+export type Say = { key: string; text: string; button?: ServerButton }
+
+/**
+ * The one way a domain's progress reaches the owner: a `domain.status` events
+ * row for the audit, then the assistant's own message in the chat, both keyed
+ * so a retry says it once. A chat in a turn (`busy`) or holding an unanswered
+ * card (`waiting`) throws, for the step's retries; `exists` is a retry of a
+ * post that landed; `none` is an org with no conversation, logged and done.
  */
 export async function postStatus(
   kit: Tenancy,
   orgId: string,
-  key: string,
-  text: string
+  say: Say
 ): Promise<void> {
-  const idempotencyKey = await eventKey(key)
+  const idempotencyKey = await eventKey(say.key)
   try {
     await kit.withOrg({ orgId }, (db) =>
       appendEvent(db, {
@@ -171,12 +178,36 @@ export async function postStatus(
         assignmentId: null,
         staffId: null,
         type: "domain.status",
-        payload: { key, text },
+        payload: { key: say.key, text: say.text },
         idempotencyKey,
       })
     )
   } catch (error) {
     if (pgCode(error) !== "23505") throw error
+  }
+  const posted = await postAssistantMessage(kit, {
+    orgId,
+    key: `domain.status:${say.key}`,
+    message: { text: [say.text], ...(say.button && { button: say.button }) },
+  })
+  if (posted === "busy" || posted === "waiting") {
+    throw new DomainError(`status.${posted}`)
+  }
+  if (posted === "none") {
+    console.log(
+      JSON.stringify({ code: "domain.status_unposted", key: say.key })
+    )
+  }
+}
+
+/** The owner's DNS page as a button, when detection gave us one of our links. */
+function settingsButton(provider: unknown): ServerButton | undefined {
+  const known = DomainProvider.safeParse(provider)
+  if (!known.success || !known.data.settings_url) return undefined
+  const label = `Open ${known.data.name} DNS settings`
+  return {
+    label: label.length <= 60 ? label : "Open your DNS settings",
+    action: { kind: "open", url: known.data.settings_url },
   }
 }
 
@@ -300,13 +331,20 @@ export async function claimHostnames(
 
 export type Seen =
   | { gone: true }
-  | { gone: false; at: number; status: DomainCheck["status"]; ready: boolean }
+  | {
+      gone: false
+      at: number
+      status: DomainCheck["status"]
+      ready: boolean
+      /** What to tell the owner, when the check differs from the last one. */
+      say?: Say
+    }
 
 /**
- * One look: the check, a message when it differs from the last one, and the
- * row brought up to date. Ready means valid and answering through our edge.
- * The message goes first and keyed by the look, so a retried step neither
- * loses it nor says it twice.
+ * One look: the check, the row brought up to date, and a message when the
+ * check differs from the last one. Ready means valid and answering through
+ * our edge. The message is keyed by the look and returned with the step's
+ * result, so the Workflow's own post step neither loses it nor says it twice.
  */
 export async function look(
   env: Env,
@@ -323,10 +361,18 @@ export async function look(
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
-  if (JSON.stringify(row.lastCheck) !== JSON.stringify(check)) {
-    const text = statusText(check, row.name, seen.primary)
-    if (text) await postStatus(kit, orgId, `${domainId}:look:${n}`, text)
-  }
+  const text =
+    JSON.stringify(row.lastCheck) === JSON.stringify(check)
+      ? null
+      : statusText(check, row.name, seen.primary)
+  const button =
+    check.status === "conflicting_record" ||
+    check.status === "invalid_configuration"
+      ? settingsButton(row.provider)
+      : undefined
+  const say: Say | undefined = text
+    ? { key: `${domainId}:look:${n}`, text, ...(button && { button }) }
+    : undefined
   const state: DomainState =
     check.status === "pending_certificate" || check.status === "valid"
       ? "verifying"
@@ -341,7 +387,13 @@ export async function look(
       .returning({ id: domains.id })
   )
   if (updated.length === 0) return { gone: true }
-  return { gone: false, at: Date.now(), status: check.status, ready }
+  return {
+    gone: false,
+    at: Date.now(),
+    status: check.status,
+    ready,
+    ...(say && { say }),
+  }
 }
 
 /** The 24-hour reminder, once, with where the owner's DNS settings are. */
@@ -349,33 +401,33 @@ export async function nudge(
   kit: Tenancy,
   orgId: string,
   domainId: string
-): Promise<void> {
+): Promise<Say | null> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
-  if (!row || !connecting(row.state)) return
-  const provider = row.provider as DomainProvider | null
-  const where = provider
-    ? ` Your domain's settings are at ${provider.name}.`
+  if (!row || !connecting(row.state)) return null
+  const provider = DomainProvider.safeParse(row.provider)
+  const where = provider.success
+    ? ` Your domain's settings are at ${provider.data.name}.`
     : ""
-  await postStatus(
-    kit,
-    orgId,
-    `${domainId}:nudge`,
-    `I'm still waiting for the records for ${row.name}.${where} There's no need to tell me when they're in; I'll see them.`
-  )
+  const button = settingsButton(row.provider)
+  return {
+    key: `${domainId}:nudge`,
+    text: `I'm still waiting for the records for ${row.name}.${where} There's no need to tell me when they're in; I'll see them.`,
+    ...(button && { button }),
+  }
 }
 
 /**
  * The domain goes live: the row first, then every pointer written from it
- * (`writePointer` reads the active domain), then the owner is told. False
- * when the claim was removed meanwhile. A retry after the row moved finds it
- * active and writes the pointers again, which repeats what is live.
+ * (`writePointer` reads the active domain), then what to tell the owner.
+ * Null when the claim was removed meanwhile. A retry after the row moved
+ * finds it active and writes the pointers again, which repeats what is live.
  */
 export async function activateDomain(
   env: Env,
   kit: Tenancy,
   orgId: string,
   domainId: string
-): Promise<boolean> {
+): Promise<Say | null> {
   const done = await kit.withOrg({ orgId }, async (db) => {
     const row = await readDomain(db, domainId)
     if (!row || (row.state !== "active" && !connecting(row.state))) return null
@@ -394,21 +446,22 @@ export async function activateDomain(
     }
     return { row, slug: await slugHostOf(db, env, orgId) }
   })
-  if (!done?.slug) return false
+  if (!done?.slug) return null
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
-  await postStatus(
-    kit,
-    orgId,
-    `${domainId}:active`,
-    `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`
-  )
-  return true
+  return {
+    key: `${domainId}:active`,
+    text: `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`,
+    button: {
+      label: "Open your website",
+      action: { kind: "open", url: `https://${done.row.primaryHost}/` },
+    },
+  }
 }
 
 /**
  * The claim fails: after 72 hours without going live, or when its hostname is
  * held elsewhere. The site stays on its slug host, the name is freed, the
- * hostnames are deleted, and the owner is told once.
+ * hostnames are deleted, and what to tell the owner is returned.
  */
 export async function expireDomain(
   env: Env,
@@ -416,7 +469,7 @@ export async function expireDomain(
   orgId: string,
   domainId: string,
   reason: "timeout" | "held"
-): Promise<void> {
+): Promise<Say | null> {
   const found = await kit.withOrg({ orgId }, async (db) => {
     const row = await readDomain(db, domainId)
     if (!row || (row.state !== "failed" && !connecting(row.state))) return null
@@ -435,19 +488,25 @@ export async function expireDomain(
     }
     return { row, slug: await slugHostOf(db, env, orgId) }
   })
-  if (!found) return
+  if (!found) return null
   for (const id of Object.values(found.row.cfIds as CfIds)) {
     if (id) await deleteHostname(env, id)
   }
   const where = found.slug ? ` Your site stays on ${found.slug}.` : ""
-  await postStatus(
-    kit,
-    orgId,
-    `${domainId}:failed`,
-    reason === "held"
-      ? `I couldn't connect ${found.row.name}: it's already set up somewhere else.${where}`
-      : `I didn't see the records for ${found.row.name} within 3 days, so I've stopped watching.${where} Ask me again any time.`
-  )
+  const name = found.row.name
+  return reason === "held"
+    ? {
+        key: `${domainId}:failed`,
+        text: `I couldn't connect ${name}: it's already set up somewhere else.${where}`,
+      }
+    : {
+        key: `${domainId}:failed`,
+        text: `I didn't see the records for ${name} within 3 days, so I've stopped watching.${where} Ask me again any time.`,
+        button: {
+          label: "Try again",
+          action: { kind: "ask", text: `Connect ${name} to my website again.` },
+        },
+      }
 }
 
 // ---------------------------------------------------------------------------
@@ -747,7 +806,7 @@ export async function repoint(
   if (row.state === "removed") {
     // Only a domain that went live has pointers; a later live claim on the
     // same name is put back by the `writePointer` below.
-    if (row.activatedAt) await dropDomainPointers(env, row.primaryHost)
+    if (row.activatedAt) await dropDomainPointers(env, row.primaryHost, orgId)
   } else if (row.state !== "active") return
   try {
     await writePointer(env, kit, orgId, row.siteId, slug)

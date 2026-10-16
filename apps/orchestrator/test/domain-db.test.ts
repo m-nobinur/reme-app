@@ -6,6 +6,7 @@ import {
   claimHostnames,
   connect,
   expireDomain,
+  postStatus,
   remove,
   repoint,
   revokeDomains,
@@ -234,7 +235,14 @@ describe.skipIf(!url)("custom domains against a database", () => {
         .set({ state: "verifying" })
         .where(eq(domains.id, domainId))
     )
-    expect(await activateDomain(env, kit, site.orgId, domainId)).toBe(true)
+    expect(await activateDomain(env, kit, site.orgId, domainId)).toEqual({
+      key: `${domainId}:active`,
+      text: `www.${name} is live. ${site.slug} now forwards to it, so links you've shared still work.`,
+      button: {
+        label: "Open your website",
+        action: { kind: "open", url: `https://www.${name}/` },
+      },
+    })
     const read = (host: string) =>
       JSON.parse(site.store.pointers.get(`host:${host}`) ?? "null")
     expect(read(`www.${name}`)).toMatchObject({
@@ -245,9 +253,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(read(name)).toEqual({ redirect_to: `www.${name}` })
     expect(read(site.slug)).toEqual({ redirect_to: `www.${name}` })
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "active" })
-    expect(await typesOf(site.orgId, "domain.")).toEqual(
-      expect.arrayContaining(["domain.activated", "domain.status"])
-    )
+    expect(await typesOf(site.orgId, "domain.")).toContain("domain.activated")
 
     // A stale write-back from the router lands after activation; the settle
     // step's second write puts the redirect back.
@@ -274,6 +280,38 @@ describe.skipIf(!url)("custom domains against a database", () => {
     await repoint(env, kit, site.orgId, domainId)
     expect(site.store.pointers.has(`host:www.${name}`)).toBe(false)
     expect(await remove(env, kit, site.orgId, name)).toBeNull()
+
+    // Once the name is free another org may take it live; a late repeat of
+    // this removal leaves that org's pointers alone.
+    const theirs = JSON.stringify({
+      org_id: crypto.randomUUID(),
+      site_id: crypto.randomUUID(),
+      revision_id: crypto.randomUUID(),
+      config_version: 1,
+    })
+    site.store.pointers.set(`host:www.${name}`, theirs)
+    site.store.pointers.set(
+      `host:${name}`,
+      JSON.stringify({ redirect_to: `www.${name}` })
+    )
+    await repoint(env, kit, site.orgId, domainId)
+    expect(site.store.pointers.get(`host:www.${name}`)).toBe(theirs)
+    expect(site.store.pointers.has(`host:${name}`)).toBe(true)
+  })
+
+  it("keeps one audit row per status and lets go of an org with no conversation", async () => {
+    const site = await published()
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const say = { key: `${crypto.randomUUID()}:active`, text: "live" }
+    await postStatus(kit, site.orgId, say)
+    await postStatus(kit, site.orgId, say)
+    expect(await typesOf(site.orgId, "domain.status")).toEqual([
+      "domain.status",
+    ])
+    expect(log).toHaveBeenCalledWith(
+      JSON.stringify({ code: "domain.status_unposted", key: say.key })
+    )
+    log.mockRestore()
   })
 
   it("expires a claim without touching the pointers, and frees the name", async () => {

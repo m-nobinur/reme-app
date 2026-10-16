@@ -12,6 +12,19 @@ import {
 import { CAA_FOR_US } from "../src/domains.ts"
 import { stubNet } from "./fixtures/domains.ts"
 
+/** What the chat's post answers, in order, and every post asked of it. */
+const posting = vi.hoisted(() => ({
+  answers: [] as string[],
+  calls: [] as unknown[],
+}))
+vi.mock("@workspace/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@workspace/db")>()),
+  postAssistantMessage: async (_kit: unknown, post: unknown) => {
+    posting.calls.push(post)
+    return posting.answers.shift() ?? "posted"
+  },
+}))
+
 /**
  * The connect Workflow's decisions, on the recorded GoDaddy answers: what a
  * look concludes, when the owner is told, and what the name is taken to be.
@@ -57,7 +70,10 @@ function fakeKit() {
     state: "awaiting_dns" as string,
     cfIds: { apex: `h-${NAME}`, www: `h-${WWW}` },
     lastCheck: null as unknown,
-    provider: null,
+    provider: {
+      name: "GoDaddy",
+      settings_url: "https://dcc.godaddy.com/manage/dns",
+    } as unknown,
     createdAt: new Date(),
   }
   const events: { type: string; payload: { key: string; text: string } }[] = []
@@ -93,28 +109,36 @@ function fakeKit() {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe("a look", () => {
   it("tells the owner about a planted A record exactly once, then goes ready when it is fixed", async () => {
-    const { kit, row, events } = fakeKit()
+    const { kit, row } = fakeKit()
     const pending = {
       [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
       [`${BASE}/h-${WWW}`]: () => hostname(WWW, "pending", "initializing"),
     }
     stubNet(pending, { [`${NAME} CAA`]: { Status: 0 } })
-    expect(await look(env, kit, "org", "dom", 1)).toMatchObject({
+    expect(await look(env, kit, "org", "dom", 1)).toEqual({
       gone: false,
+      at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
+      say: {
+        key: "dom:look:1",
+        text: `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
+        button: {
+          label: "Open GoDaddy DNS settings",
+          action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+        },
+      },
     })
-    expect(await look(env, kit, "org", "dom", 2)).toMatchObject({
-      status: "conflicting_record",
-    })
-    expect(events.map((e) => e.payload.text)).toEqual([
-      `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
-    ])
+    // The same record still there: nothing new to say.
+    const again = await look(env, kit, "org", "dom", 2)
+    expect(again).toMatchObject({ status: "conflicting_record" })
+    expect(again).not.toHaveProperty("say")
     expect(row.state).toBe("awaiting_dns")
 
     vi.unstubAllGlobals()
@@ -127,20 +151,19 @@ describe("a look", () => {
       },
       FIXED
     )
-    expect(await look(env, kit, "org", "dom", 3)).toMatchObject({
-      status: "valid",
-      ready: true,
-    })
+    const ready = await look(env, kit, "org", "dom", 3)
+    expect(ready).toMatchObject({ status: "valid", ready: true })
+    // Live has its own message, from the activation.
+    expect(ready).not.toHaveProperty("say")
     expect(row).toMatchObject({
       state: "verifying",
       primaryHost: WWW,
       lastCheck: { status: "valid" },
     })
-    expect(events).toHaveLength(1)
   })
 
   it("holds a valid domain the edge does not answer for as a certificate still deploying", async () => {
-    const { kit, row, events } = fakeKit()
+    const { kit, row } = fakeKit()
     stubNet(
       {
         [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
@@ -149,12 +172,15 @@ describe("a look", () => {
       },
       FIXED
     )
-    expect(await look(env, kit, "org", "dom", 1)).toMatchObject({
+    const seen = await look(env, kit, "org", "dom", 1)
+    expect(seen).toMatchObject({
       status: "pending_certificate",
       ready: false,
+      say: { key: "dom:look:1" },
     })
+    // Nothing for the owner to do here, so no button.
+    expect(seen.gone || seen.say?.button).toBeUndefined()
     expect(row.state).toBe("verifying")
-    expect(events.map((e) => e.payload.key)).toEqual(["dom:look:1"])
   })
 
   it("is gone for a claim that is no longer connecting", async () => {
@@ -228,11 +254,46 @@ describe("what the owner is told", () => {
     }
   })
 
-  it("says a keyed status once however often it is posted", async () => {
+  it("keeps one audit row per key and posts to the chat under the same key", async () => {
     const { kit, events } = fakeKit()
-    await postStatus(kit, "org", "dom:active", "live")
-    await postStatus(kit, "org", "dom:active", "live")
-    expect(events).toHaveLength(1)
+    const say = { key: "dom:active", text: "live" }
+    posting.answers.push("posted", "exists")
+    await postStatus(kit, "org", say)
+    await postStatus(kit, "org", say)
+    expect(events.map((e) => e.type)).toEqual(["domain.status"])
+    expect(posting.calls).toEqual([
+      {
+        orgId: "org",
+        key: "domain.status:dom:active",
+        message: { text: ["live"] },
+      },
+      {
+        orgId: "org",
+        key: "domain.status:dom:active",
+        message: { text: ["live"] },
+      },
+    ])
+  })
+
+  it.each(["busy", "waiting"] as const)(
+    "throws on a %s chat, so the step retries the post",
+    async (answer) => {
+      const { kit } = fakeKit()
+      posting.answers.push(answer)
+      await expect(
+        postStatus(kit, "org", { key: "k", text: "t" })
+      ).rejects.toThrow(`status.${answer}`)
+    }
+  )
+
+  it("logs and lets go of an org with no conversation", async () => {
+    const { kit } = fakeKit()
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    posting.answers.push("none")
+    await postStatus(kit, "org", { key: "k", text: "t" })
+    expect(log).toHaveBeenCalledWith(
+      JSON.stringify({ code: "domain.status_unposted", key: "k" })
+    )
   })
 })
 

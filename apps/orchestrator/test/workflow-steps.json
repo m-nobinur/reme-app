@@ -691,9 +691,11 @@
       "look 1",
       "check 1",
       "look 2",
+      "say 2",
       "check 2",
       "look 3",
       "activate",
+      "say live",
       "settle",
       "pointers again"
     ],
@@ -704,13 +706,15 @@
       "check 1",
       "look 2",
       "nudge",
+      "say nudge",
       "check 2",
       "look 3",
       "check 3",
       "look 4",
-      "expire"
+      "expire",
+      "say failed"
     ],
-    "hostname held": ["hostnames", "held"],
+    "hostname held": ["hostnames", "held", "say held"],
     "removed before the hostnames": ["hostnames"],
     "removed while waiting": ["hostnames", "look 1", "check 1", "look 2"]
   }

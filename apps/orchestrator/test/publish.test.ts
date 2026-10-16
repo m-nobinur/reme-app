@@ -759,7 +759,7 @@ describe("the artifact check and the probe", () => {
       expect(read(host)).toEqual({ redirect_to: "sparkleclean.co.uk" })
     }
     // Removal drops the domain's two keys; the slug is pointed back after.
-    await dropDomainPointers(env, "sparkleclean.co.uk")
+    await dropDomainPointers(env, "sparkleclean.co.uk", site)
     expect([...store.pointers.keys()]).toEqual([`host:${slug}`])
   })
 

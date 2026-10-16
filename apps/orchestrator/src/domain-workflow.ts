@@ -2,6 +2,7 @@ import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
+  type WorkflowStepConfig,
 } from "cloudflare:workers"
 import {
   activateDomain,
@@ -13,10 +14,28 @@ import {
   NUDGE_AFTER_MS,
   nextWait,
   nudge,
+  postStatus,
   repoint,
+  type Say,
   SETTLE,
   withKit,
 } from "./domain-flow.ts"
+
+const MINUTE = 60 * 1000
+
+/**
+ * A message waits while the owner's chat is in a turn or holds an unanswered
+ * card, which can be days: 10 s doubling to a 30-minute cap, about four days
+ * of tries in all. Past that the message is dropped and its `domain.status`
+ * row is the record.
+ */
+export const SAY_RETRIES: WorkflowStepConfig = {
+  retries: {
+    limit: 200,
+    delay: ({ ctx }) => Math.min(10_000 * 2 ** (ctx.attempt - 1), 30 * MINUTE),
+  },
+  timeout: "1 minute",
+}
 
 /**
  * One instance per custom domain claim, `domain-{domain_id}`, connect path
@@ -25,8 +44,9 @@ import {
  * the domain is ready, removed, or 72 hours old. Ready activates it and
  * writes the pointers again after `SETTLE`; 72 hours fails it and frees the
  * name. A removal starts `domain-{domain_id}-removed` with `settle`, which
- * only writes the pointers again. Steps carry ids only and every body is in
- * domain-flow.ts; this is the order.
+ * only writes the pointers again. A step body returns what to tell the owner
+ * and a `say` step posts it, so a busy chat retries the post alone. Steps
+ * carry ids only and every body is in domain-flow.ts; this is the order.
  */
 export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
   async run(event: WorkflowEvent<DomainParams>, step: WorkflowStep) {
@@ -42,6 +62,16 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         withKit(env, (kit) => repoint(env, kit, orgId, domainId))
       )
     }
+    const say = async (name: string, message: Say | null | undefined) => {
+      if (!message) return
+      try {
+        await step.do(name, SAY_RETRIES, () =>
+          withKit(env, (kit) => postStatus(kit, orgId, message))
+        )
+      } catch {
+        // The chat stayed busy past every retry; the audit row keeps it.
+      }
+    }
 
     // A removal's own short instance: the route already wrote the pointers.
     if (event.payload.settle) {
@@ -54,9 +84,10 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
     )
     if (claimed === "gone") return { outcome: "removed" }
     if (claimed === "held") {
-      await step.do("held", () =>
+      const message = await step.do("held", () =>
         withKit(env, (kit) => expireDomain(env, kit, orgId, domainId, "held"))
       )
+      await say("say held", message)
       return { outcome: "failed" }
     }
 
@@ -66,19 +97,22 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         withKit(env, (kit) => look(env, kit, orgId, domainId, n))
       )
       if (seen.gone) return { outcome: "removed" }
+      await say(`say ${n}`, seen.say)
       if (seen.ready) break
       if (seen.at >= deadline) {
-        await step.do("expire", () =>
+        const message = await step.do("expire", () =>
           withKit(env, (kit) =>
             expireDomain(env, kit, orgId, domainId, "timeout")
           )
         )
+        await say("say failed", message)
         return { outcome: "failed" }
       }
       if (!nudged && seen.at - started >= NUDGE_AFTER_MS) {
-        await step.do("nudge", () =>
+        const message = await step.do("nudge", () =>
           withKit(env, (kit) => nudge(kit, orgId, domainId))
         )
+        await say("say nudge", message)
         nudged = true
       }
       try {
@@ -95,6 +129,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       withKit(env, (kit) => activateDomain(env, kit, orgId, domainId))
     )
     if (!live) return { outcome: "removed" }
+    await say("say live", live)
     await settle()
     return { outcome: "active" }
   }
