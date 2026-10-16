@@ -213,6 +213,86 @@ describe("settle", () => {
   })
 })
 
+describe("what the lead can act on", () => {
+  it("tells the critic what the builder can change and to mark the rest", () => {
+    const { system } = criticPrompt({ blueprint: {} })
+    expect(system).toContain("The builder can change only these")
+    expect(system).toContain('needs "component"')
+    expect(system).toContain("never reaches the builder")
+  })
+
+  // Perf run 2: four of five fixes were in read-only components.
+  it("sends the lead copy and layout fixes and logs the component ones aside", () => {
+    const fixes = readFixes(
+      JSON.stringify({
+        fixes: [
+          { ...fix("trust_strip"), needs: "component" },
+          { ...fix("faq"), needs: "copy" },
+          { ...fix("cta_band"), needs: "layout" },
+          { ...fix("hero"), needs: "sideways" },
+        ],
+      })
+    )
+    expect(fixes.map((f) => f.needs)).toEqual([
+      "component",
+      "copy",
+      "layout",
+      undefined,
+    ])
+    const payload = payloadOf({ fixes, ran: true }, 1)
+    expect(payload.fixes?.map((f) => f.section)).toEqual([
+      "faq",
+      "cta_band",
+      "hero",
+    ])
+    expect(payload.starter?.map((f) => f.section)).toEqual(["trust_strip"])
+    expect(payloadOf({ fixes: [fix("faq")], ran: true }, 1)).not.toHaveProperty(
+      "starter"
+    )
+  })
+})
+
+describe("the recheck's verdicts", () => {
+  const earlier = ["trust_strip", "faq", "service_area", "service_cards"].map(
+    (s) => fix(s)
+  )
+
+  it("asks for a verdict on each earlier fix by number, on its own schema", async () => {
+    const complete = vi.fn(
+      replying(
+        JSON.stringify({
+          checks: [
+            { fix: 1, fixed: false },
+            { fix: 2, fixed: true },
+            { fix: 9, fixed: true },
+            { fix: 3, fixed: "yes" },
+          ],
+          fixes: [],
+        })
+      )
+    )
+    const out = await critique({ ...base, earlier, complete })
+    expect(out.held).toEqual([false, true, null, null])
+    const call = complete.mock.calls[0]?.[0]
+    expect(call?.schema.name).toBe("design_recheck")
+    expect(call?.user).toContain('"fix":1')
+    expect(call?.user).not.toContain("list it again")
+  })
+
+  // Perf run 2: the recheck listed all five again and every one read as not
+  // fixed, though the lead had made four of the changes.
+  it("takes the verdict over a fix the reply also listed again", () => {
+    const held = [false, true, true, true]
+    const settled = payloadOf({ fixes: earlier, ran: true, held }, 2, earlier)
+    expect(settled.fixes?.map((f) => f.fixed)).toEqual(held)
+    expect(settled.new).toEqual([])
+    // With no verdict for a fix, the old reading stands.
+    expect(
+      settle(earlier, [fix("faq")], true, [true]).fixes.map((f) => f.fixed)
+    ).toEqual([true, false, true, true])
+  })
+})
+
 describe("a look that did not run", () => {
   const earlier = [fix("Hero"), fix("Faq")]
 
