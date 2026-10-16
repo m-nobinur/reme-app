@@ -179,7 +179,8 @@ export const ConnectDomainInput = z.strictObject({ name: DomainName })
 /**
  * `connect_domain`'s output once the owner said yes. A no is `output-denied`.
  * `steps` are the records to add, `apex` says whether the bare domain is an
- * alias or forwards from `www`, and `provider` is the detected DNS provider.
+ * alias or forwards from `www` (absent for a subdomain, which is served on its
+ * own name), and `provider` is the detected DNS provider.
  */
 export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
@@ -187,7 +188,7 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
     method: z.enum(["domain_connect", "records"]),
     email_affected: z.boolean(),
     steps: z.array(DnsRecord).max(10).optional(),
-    apex: z.enum(["alias", "forward"]),
+    apex: z.enum(["alias", "forward"]).optional(),
     provider: DomainProvider.optional(),
   }),
   Refused,

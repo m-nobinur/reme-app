@@ -4200,7 +4200,7 @@ export interface components {
             value: string
           }[]
           /** @enum {string} */
-          apex: "alias" | "forward"
+          apex?: "alias" | "forward"
           provider?: {
             name: string
             settings_url?: string
@@ -5974,7 +5974,7 @@ export interface components {
                   value: string
                 }[]
                 /** @enum {string} */
-                apex: "alias" | "forward"
+                apex?: "alias" | "forward"
                 provider?: {
                   name: string
                   settings_url?: string

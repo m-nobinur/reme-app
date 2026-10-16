@@ -6,7 +6,7 @@ import { Text } from "./text.ts"
 // at the site through records they add at their DNS provider. Nothing here
 // carries an org id or a Cloudflare id: the CoS reads these shapes.
 
-/** A zone apex: lower-case, punycode for anything not ASCII, at most 253 characters. */
+/** A zone apex or a subdomain one level below it: lower-case, punycode for anything not ASCII, at most 253 characters. */
 export const DomainName = Hostname
 
 /**

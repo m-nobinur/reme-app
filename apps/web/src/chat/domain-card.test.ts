@@ -125,6 +125,22 @@ it("shows the records, a copy button for each value, and the provider button", a
   await card.unmount()
 })
 
+it("shows a subdomain's one record with no line about the bare address", async () => {
+  const card = await draw(
+    done({
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      steps: [{ type: "CNAME", name: "book", value: "domains.remeai.co.uk" }],
+    })
+  )
+  const text = card.container.textContent ?? ""
+  expect(text).toContain("There is 1 change to make.")
+  expect(card.container.querySelectorAll("ol > li")).toHaveLength(1)
+  expect(text).not.toContain("without www")
+  await card.unmount()
+})
+
 it("copies a value to the clipboard", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, "clipboard", {

@@ -39,6 +39,7 @@ import {
   OUR_ZONE,
   recordsFor,
   relative,
+  zoneApex,
 } from "./domains.ts"
 import {
   activeDeployment,
@@ -227,7 +228,11 @@ export function statusText(check: DomainCheck, name: string, primary: string) {
       if (first.type === "CAA") {
         return `Nearly there. ${name} has a CAA record that stops our certificate authority from issuing your secure certificate. Add a CAA record with the value ${CAA_FOR_US} and I'll pick it up from there.`
       }
-      const host = first.name === "@" ? name : `${first.name}.${name}`
+      // A subdomain's own record is named relative to its zone, so it is `name` itself.
+      const host =
+        first.name === "@" || name.startsWith(`${first.name}.`)
+          ? name
+          : `${first.name}.${name}`
       return `Nearly there. ${host} still has an old ${first.type} record (${first.value}) in the way. Delete it and I'll pick it up from there.`
     }
     case "pending_certificate":
@@ -240,14 +245,19 @@ export function statusText(check: DomainCheck, name: string, primary: string) {
 }
 
 /** The check's next step for the CoS, in one sentence. */
-function nextStep(state: DomainState, check: DomainCheck, name: string) {
+function nextStep(
+  state: DomainState,
+  check: DomainCheck,
+  name: string,
+  primary: string
+) {
   if (state === "active") return `${name} is live. Nothing to do.`
   if (state === "failed")
     return `Connecting ${name} timed out. Offer to try again.`
   if (state === "removed")
     return `${name} was removed. Offer to connect it again.`
   return (
-    statusText(check, name, `www.${name}`) ??
+    statusText(check, name, primary) ??
     "Nothing to do: the records are not there yet and I'm watching for them."
   )
 }
@@ -307,11 +317,15 @@ export async function currentCheck(
       ids.www ? getHostname(env, ids.www) : null,
     ])
     const wwwHost = `www.${row.name}`
-    const alias = apexMode(inspection, apex) === "alias"
-    const hosts: Array<{ host: string; hostname: CustomHostname | null }> = [
-      ...(alias ? [{ host: row.name, hostname: apex }] : []),
-      { host: wwwHost, hostname: www },
-    ]
+    // A subdomain is served on its own name, its hostname kept as `apex`.
+    const alias = !!inspection.sub || apexMode(inspection, apex) === "alias"
+    const hosts: Array<{ host: string; hostname: CustomHostname | null }> =
+      inspection.sub
+        ? [{ host: row.name, hostname: apex }]
+        : [
+            ...(alias ? [{ host: row.name, hostname: apex }] : []),
+            { host: wwwHost, hostname: www },
+          ]
     let check = domainCheck(inspection, hosts)
     // The takeover guard: a name another org held, or one that pointed at us
     // before this claim, is not verified until each host's ownership TXT is
@@ -334,7 +348,8 @@ export async function currentCheck(
 // ---------------------------------------------------------------------------
 
 /**
- * The claim's two custom hostnames, the apex and `www`, created or found and
+ * The claim's custom hostnames, the apex and `www`, or a subdomain's one
+ * (kept as `apex`), created or found and
  * kept in `cf_ids`, with each one's ownership TXT in `ownership`. Each id is stored as soon as its hostname exists, so a
  * retry after the second create fails still owns the first. `gone` for a
  * claim no longer connecting, `held` when Cloudflare has a hostname this
@@ -350,10 +365,11 @@ export async function claimHostnames(
   if (!row || !connecting(row.state)) return "gone"
   const ids = { ...(row.cfIds as CfIds) }
   const ownership = { ...(row.ownership as Ownership) }
+  const sub = (await zoneApex(row.name)) !== row.name
   const hosts = [
-    ["www", `www.${row.name}`],
-    ["apex", row.name],
-  ] as const
+    ...(sub ? [] : [["www", `www.${row.name}`] as const]),
+    ["apex", row.name] as const,
+  ]
   for (const [key, host] of hosts) {
     try {
       const hostname = await ensureHostname(env, host, { id: ids[key] })
@@ -580,7 +596,7 @@ const invalid = () =>
     400,
     "validation",
     "domain.invalid",
-    "That isn't a domain we can connect: give the address itself, like sparkleclean.co.uk."
+    "That isn't a domain we can connect: give the address itself, like sparkleclean.co.uk or book.sparkleclean.co.uk."
   )
 
 /**
@@ -614,16 +630,18 @@ export async function connect(
       "I couldn't read the domain's DNS just now. Try again in a minute."
     )
   }
-  // A subdomain other than `www` has a zone apex above it.
-  if (inspection.apex !== name) return invalid()
-  const provider = await detectProvider(name, inspection.nameservers)
+  // A subdomain one level below its zone apex, like `book.x.co.uk`; no deeper.
+  if (inspection.sub && relative(inspection.sub, inspection.apex).includes("."))
+    return invalid()
+  const provider = await detectProvider(inspection.apex, inspection.nameservers)
   const apex = apexMode(inspection, null)
   const base = {
     outcome: "connecting" as const,
     method: "records" as const,
     email_affected: false,
     steps: recordsFor({ inspection, apex, hostnames: [], withTxt: false }),
-    apex,
+    // A subdomain has no bare-address choice.
+    ...(!inspection.sub && { apex }),
     ...(provider && { provider }),
   }
   const pointed = alreadyPointsAtUs(inspection)
@@ -673,7 +691,8 @@ export async function connect(
           orgId,
           siteId: orgId,
           name,
-          primaryHost: apex === "alias" ? name : `www.${name}`,
+          primaryHost:
+            inspection.sub || apex === "alias" ? name : `www.${name}`,
           origin: "connected",
           method: "records",
           state: "awaiting_dns",
@@ -730,7 +749,7 @@ export async function connect(
       ? [
           {
             type: "TXT" as const,
-            name: relative(own.name, name),
+            name: relative(own.name, inspection.apex),
             value: own.value,
           },
         ]
@@ -819,7 +838,7 @@ export async function checkNow(
     outcome: "checked",
     state: row.state,
     status,
-    next_step: nextStep(row.state, status, name),
+    next_step: nextStep(row.state, status, name, row.primaryHost),
   })
 }
 

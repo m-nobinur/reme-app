@@ -15293,8 +15293,7 @@
             "required": [
               "outcome",
               "method",
-              "email_affected",
-              "apex"
+              "email_affected"
             ],
             "additionalProperties": false
           },
@@ -21625,8 +21624,7 @@
                     "required": [
                       "outcome",
                       "method",
-                      "email_affected",
-                      "apex"
+                      "email_affected"
                     ],
                     "additionalProperties": false
                   },

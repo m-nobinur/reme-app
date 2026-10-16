@@ -24,6 +24,20 @@ const txtAnswer = (apex: string, value: string) => ({
   ],
 })
 
+const soaIn = (host: string, zone: string) => ({
+  [`${host} SOA`]: {
+    Status: 0,
+    Authority: [
+      {
+        name: zone,
+        type: 6,
+        TTL: 600,
+        data: "ns47.domaincontrol.com. dns.jomax.net. 1 1 1 1 1",
+      },
+    ],
+  },
+})
+
 const urls = (fetched: ReturnType<typeof stubNet>) =>
   fetched.mock.calls.map(([u]) => String(u))
 
@@ -245,6 +259,25 @@ describe("the DoH inspector", () => {
       ],
       mx: ["10 mail.neomailsrvr.com."],
     })
+  })
+
+  it("reads a subdomain alone and asks for its own CNAME, with no www and no apex line", async () => {
+    stubNet(
+      {},
+      soaIn("book.sparklecleanbristol.co.uk", "sparklecleanbristol.co.uk")
+    )
+    const inspection = await inspect("book.sparklecleanbristol.co.uk")
+    expect(inspection.apex).toBe("sparklecleanbristol.co.uk")
+    expect(inspection.sub).toBe("book.sparklecleanbristol.co.uk")
+    expect(Object.keys(inspection.hosts)).toEqual([
+      "book.sparklecleanbristol.co.uk",
+    ])
+    expect(
+      recordsFor({ inspection, apex: "alias", hostnames: [], withTxt: false })
+    ).toEqual([
+      { type: "CNAME", name: "book", value: CNAME_TARGET },
+      { type: "CAA", name: "@", value: CAA_FOR_US },
+    ])
   })
 
   it("refuses a name that does not exist rather than taking the registry's zone", async () => {

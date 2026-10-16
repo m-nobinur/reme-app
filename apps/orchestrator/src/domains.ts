@@ -221,7 +221,12 @@ export type Inspection = {
   apex: string
   nameservers: string[]
   onCloudflare: boolean
-  /** Keyed by fully qualified name: the apex and `www.{apex}`. */
+  /**
+   * The subdomain the owner named, which is served on its own name with no
+   * `www`; absent for a zone apex or its `www`.
+   */
+  sub?: string
+  /** Keyed by fully qualified name: the apex and `www.{apex}`, or `sub` alone. */
   hosts: Record<string, HostRecords>
   /** The addresses `CNAME_TARGET` resolves to, to recognise a flattened ALIAS. */
   target: string[]
@@ -245,23 +250,31 @@ async function hostRecords(host: string): Promise<HostRecords> {
   }
 }
 
-/**
- * Public DNS for a domain the owner named, apex or `www`: the zone apex from
- * the SOA, then NS, the apex and `www` records, CAA and MX. Throws
- * `domain.not_found` for a name that does not exist.
- */
-export async function inspect(name: string): Promise<Inspection> {
+/** The zone apex above `name`, from its SOA. Throws `domain.not_found` for a name that does not exist. */
+export async function zoneApex(name: string): Promise<string> {
   const soa = await doh(bare(name), "SOA")
   const zone = [...soa.answers, ...soa.authority].find(
     (x) => x.type === TYPES.SOA
   )
   if (soa.status === 3 || !zone) throw new DomainError("domain.not_found")
-  const apex = bare(zone.name)
+  return bare(zone.name)
+}
+
+/**
+ * Public DNS for a domain the owner named, apex, `www` or another subdomain:
+ * the zone apex from the SOA, then NS, the records at the hosts to serve
+ * (the apex and `www`, or the subdomain alone), CAA and MX. Throws
+ * `domain.not_found` for a name that does not exist.
+ */
+export async function inspect(name: string): Promise<Inspection> {
+  const apex = await zoneApex(name)
+  const asked = bare(name).replace(/^www\./, "")
+  const sub = asked !== apex ? asked : undefined
   const www = `www.${apex}`
-  const [ns, root, wwwRecords, a, aaaa, caa, mx] = await Promise.all([
+  const served = sub ? [sub] : [apex, www]
+  const [ns, records, a, aaaa, caa, mx] = await Promise.all([
     doh(apex, "NS"),
-    hostRecords(apex),
-    hostRecords(www),
+    Promise.all(served.map(async (h) => [h, await hostRecords(h)] as const)),
     doh(CNAME_TARGET, "A"),
     doh(CNAME_TARGET, "AAAA"),
     doh(apex, "CAA"),
@@ -274,7 +287,8 @@ export async function inspect(name: string): Promise<Inspection> {
     apex,
     nameservers,
     onCloudflare: nameservers.some((n) => n.endsWith(".cloudflare.com")),
-    hosts: { [apex]: root, [www]: wwwRecords },
+    ...(sub && { sub }),
+    hosts: Object.fromEntries(records),
     target: [...data(a.answers, TYPES.A), ...data(aaaa.answers, TYPES.AAAA)],
     caa: data(caa.answers, TYPES.CAA),
     mx: data(mx.answers, TYPES.MX),
@@ -470,7 +484,7 @@ export function relative(name: string, apex: string): string {
 export type ApexMode = "alias" | "forward"
 
 /**
- * The records the owner adds. `www` always CNAMEs to us. The apex gets an
+ * The records the owner adds. `www`, or the subdomain, CNAMEs to us. The apex gets an
  * ALIAS in alias mode; in forward mode it is the provider's redirect to
  * `https://www.{apex}`, which no record expresses. The TXT pair is for a
  * domain whose live site must not lose its certificate at cutover, and a
@@ -482,11 +496,15 @@ export function recordsFor(input: {
   hostnames: CustomHostname[]
   withTxt: boolean
 }): DnsRecord[] {
-  const { apex } = input.inspection
+  const { apex, sub } = input.inspection
   const records: DnsRecord[] = [
-    { type: "CNAME", name: "www", value: CNAME_TARGET },
+    {
+      type: "CNAME",
+      name: sub ? relative(sub, apex) : "www",
+      value: CNAME_TARGET,
+    },
   ]
-  if (input.apex === "alias") {
+  if (!sub && input.apex === "alias") {
     records.push({ type: "ALIAS", name: "@", value: CNAME_TARGET })
   }
   if (input.withTxt) {

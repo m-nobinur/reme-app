@@ -385,11 +385,21 @@ describe("a connect request", () => {
     expect(fetched).not.toHaveBeenCalled()
   })
 
-  it("refuses a subdomain other than www: its zone apex is above it", async () => {
-    stubNet()
+  it("refuses a subdomain more than one level below its zone apex", async () => {
+    stubNet(
+      {},
+      {
+        [`a.shop.${NAME} SOA`]: {
+          Status: 0,
+          Authority: [
+            { name: NAME, type: 6, TTL: 600, data: "ns. h. 1 1 1 1 1" },
+          ],
+        },
+      }
+    )
     expect(
       await connect(env, untouched, "org", {
-        name: `shop.${NAME}`,
+        name: `a.shop.${NAME}`,
         approval_id: "a",
       })
     ).toMatchObject({ status: 400, code: "domain.invalid" })

@@ -74,7 +74,7 @@ function Step({ record }: { record: DnsRecord }) {
 }
 
 /** What to do about the bare address, by how the assistant will serve it. */
-function apexText(apex: Connecting["apex"], name: string) {
+function apexText(apex: "alias" | "forward", name: string) {
   return apex === "alias"
     ? "For the address without www, add an ALIAS or ANAME record at the root of your domain, pointing to the same place."
     : `For the address without www, forward it to https://www.${name} as permanent.`
@@ -106,8 +106,9 @@ function WaitButton() {
 
 function Records({ output, name }: { output: Connecting; name: string }) {
   const { provider, steps } = output
-  // The apex line is a step of its own, so the count matches the list.
-  const changes = steps?.length ? steps.length + 1 : 0
+  // The apex line is a step of its own, so the count matches the list; a
+  // subdomain has none.
+  const changes = steps?.length ? steps.length + (output.apex ? 1 : 0) : 0
   return (
     <div className="flex flex-col gap-3" data-slot="domain-records">
       <p className="text-sm">
@@ -115,7 +116,7 @@ function Records({ output, name }: { output: Connecting; name: string }) {
           ? `Your domain's settings are at ${provider.name}.`
           : "Make these changes where you manage your domain."}{" "}
         {changes
-          ? `There are ${changes} changes to make${provider ? " there" : ""}. `
+          ? `${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `
           : ""}
         {output.email_affected
           ? "These may touch your email, so ask whoever set it up before you change anything."
@@ -143,7 +144,7 @@ function Records({ output, name }: { output: Connecting; name: string }) {
               record={record}
             />
           ))}
-          <li>{apexText(output.apex, name)}</li>
+          {output.apex ? <li>{apexText(output.apex, name)}</li> : null}
         </ol>
       ) : null}
       <p className={META}>
