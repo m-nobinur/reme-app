@@ -392,6 +392,8 @@ describe("the parallel first build", () => {
   it("gives every page builder the same instructions, the facts and the plan included", () => {
     const text = pageInstructions(planned)
     expect(text).toBe(pageInstructions(planned))
+    // Terse by rule: each page's last turn is its summary, and the lead reads it.
+    expect(text).toContain("Write nothing between tool calls")
     expect(text).toContain("Blueprint, the plan the owner approved")
     expect(text).toContain("Canonical facts")
     expect(text).not.toContain("ask_chief for the first missing")

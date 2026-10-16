@@ -32,6 +32,10 @@ export type Effort = "low" | "medium" | "high"
  * (`REME_MODEL_DEFAULT`, `--model B`); `haiku` roles are fixed.
  */
 export const ROLES = {
+  // Kept at high (A/B 2026-10-16, 3 businesses): medium took 19 s and $0.03 a
+  // plan against 38 s and $0.05, but 3 of its 9 plans failed the first
+  // attempt, all for the business with a free-text direction note, by naming a
+  // direction that is not in the library. High passed 3 of 3 (one per business).
   plan: { model: "sonnet", effort: "high", maxTokens: 32_000 },
   build: { model: "sonnet", effort: "medium", maxTokens: 32_000 },
   page: { model: "sonnet", effort: "medium", maxTokens: 16_000 },
