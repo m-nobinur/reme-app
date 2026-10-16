@@ -2001,6 +2001,41 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(next.calls[0]).toContain('\\"waiting_card\\":null')
     }, 60_000)
 
+    it("keeps the owner's message at the time it was sent, though its row is written after the planner", async () => {
+      const who = await owner(kit, url as string, "chat-sent-at")
+      const { model } = planner([
+        plan({
+          facts: {},
+          say: "Lovely. Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ])
+      const me = talker(who, undefined, { planner: model })
+      const id = await me.onboarding()
+      // The api's clock, ten minutes behind the database's: a row written
+      // with the database's `now()` cannot pass for the time it arrived.
+      const sent = new Date(Date.now() - 10 * 60_000)
+      vi.useFakeTimers({ toFake: ["Date"], now: sent })
+      try {
+        const done = await me.send({
+          conversation_id: id,
+          mode: "act",
+          turn: { kind: "message", message_id: "u_sent_at", text: "Hello" },
+        })
+        expect(done.response.status, done.text).toBe(200)
+      } finally {
+        vi.useRealTimers()
+      }
+      const row = (await me.rows(id)).find((r) => r.id === "u_sent_at")
+      expect(row?.createdAt.toISOString()).toBe(sent.toISOString())
+      const reloaded = (await me.history(id)).messages.find(
+        (m) => m.id === "u_sent_at"
+      )
+      expect(reloaded?.content.metadata).toEqual({
+        custom: { createdAt: sent.toISOString() },
+      })
+    }, 60_000)
+
     it("shows the waiting card again after a side question, and answers a card with no model", async () => {
       const who = await owner(kit, url as string, "chat-side")
       await who.call(stubOrchestrator(), "/facts", {
