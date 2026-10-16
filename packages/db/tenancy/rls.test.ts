@@ -4,6 +4,7 @@ import { PgDialect } from "drizzle-orm/pg-core"
 import type { Sql, TransactionSql } from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connect, connectionString } from "../src/client.ts"
+import { activeDomainHost } from "../src/domains.ts"
 import {
   APP_ROLE,
   ENTER_APP_ROLE,
@@ -12,6 +13,7 @@ import {
   ORG_SETTING,
   type OrgScopedDb,
   pgCode,
+  resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   setContext,
@@ -22,6 +24,8 @@ import {
 } from "../src/tenancy.ts"
 import {
   clearTwoOrgs,
+  DOMAIN_OF,
+  DOMAIN_PENDING,
   ORG_A,
   ORG_ABSENT,
   ORG_B,
@@ -153,6 +157,32 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       return {
         granted: [await call("tenancy-probe-a"), await call("tenancy-probe-b")],
         refused: [await call("tenancy-probe-c"), await call("")],
+      }
+    },
+  },
+  // The router's way from a custom hostname to a site (migration 0015): an
+  // active domain's apex or its `www.`, three columns back, and nothing for a
+  // host that is pending, unknown or empty.
+  resolve_domain_host: {
+    probe: async (raw) => {
+      const call = async (host: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select org_id from public.resolve_domain_host(${host})`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [
+          await call(DOMAIN_OF.a),
+          await call(`www.${DOMAIN_OF.b}`),
+          await call(DOMAIN_OF.b.toUpperCase()),
+        ],
+        refused: [
+          await call(DOMAIN_PENDING),
+          await call(`www.${DOMAIN_PENDING}`),
+          await call("tenancy-probe-c.example.com"),
+          await call(`blog.${DOMAIN_OF.a}`),
+          await call(""),
+        ],
       }
     },
   },
@@ -1590,5 +1620,125 @@ describe("reminders hold their shape", () => {
         reminder(tx, { conversation: CONVERSATION_B })
       )
     ).toBe(FOREIGN_KEY)
+  })
+})
+
+describe("domains hold their shape", () => {
+  /** Org A's pending fixture, and each org's approval from `fixtures.ts`. */
+  const PENDING_A = "00000000-0000-4000-a000-000000000018"
+  const APPROVAL_A = "00000000-0000-4000-a000-000000000013"
+  const APPROVAL_B = "00000000-0000-4000-b000-000000000013"
+
+  const domain = (
+    tx: TransactionSql,
+    options: { org?: string; name?: string; host?: string; state?: string }
+  ) => tx`
+    insert into domains (org_id, site_id, name, primary_host, origin, method, state)
+    values (${options.org ?? ORG_A}, ${options.org ?? ORG_A},
+      ${options.name ?? "newco.example.com"},
+      ${options.host ?? options.name ?? "newco.example.com"},
+      'connected', 'records', ${options.state ?? "awaiting_dns"})`
+
+  it("refuses a second live claim on a name, in any org", async () => {
+    for (const state of ["awaiting_dns", "verifying", "active"]) {
+      expect(
+        await inTransaction((tx) =>
+          domain(tx, { org: ORG_B, name: DOMAIN_OF.a, state })
+        ),
+        state
+      ).toBe(UNIQUE)
+    }
+  })
+
+  it("lets a name be claimed again once the claim ended", async () => {
+    for (const state of ["removed", "failed"]) {
+      expect(
+        await inTransaction(async (tx) => {
+          await tx`update domains set state = ${state} where name = ${DOMAIN_OF.a}`
+          await domain(tx, { org: ORG_B, name: DOMAIN_OF.a })
+        }),
+        state
+      ).toBeUndefined()
+    }
+  })
+
+  it("takes a lowercase apex name and a primary host of its own", async () => {
+    for (const name of [
+      "Newco.example.com",
+      "newco",
+      "-a.example.com",
+      "a b.example.com",
+      "new_co.example.com",
+      // The definer strips a `www.`, so a name carrying one would share a host.
+      "www.newco.example.com",
+    ]) {
+      expect(await inTransaction((tx) => domain(tx, { name })), name).toBe(
+        CHECK
+      )
+    }
+    expect(
+      await inTransaction((tx) =>
+        domain(tx, { name: "newco.example.com", host: "other.example.com" })
+      )
+    ).toBe(CHECK)
+    expect(
+      await inTransaction((tx) =>
+        domain(tx, {
+          name: "xn--bcher-kva.example",
+          host: "www.xn--bcher-kva.example",
+        })
+      )
+    ).toBeUndefined()
+  })
+
+  it("takes an approval from its own org only, and once", async () => {
+    // Org B's own domain lets go of its approval first, so the foreign key
+    // is what refuses, not the unique constraint.
+    expect(
+      await inTransaction(async (tx) => {
+        await tx`update domains set approval_id = null where org_id = ${ORG_B}`
+        await tx`update domains set approval_id = ${APPROVAL_B} where id = ${PENDING_A}`
+      })
+    ).toBe(FOREIGN_KEY)
+    // Org A's live fixture already holds org A's approval.
+    expect(
+      await inTransaction(
+        (tx) =>
+          tx`update domains set approval_id = ${APPROVAL_A} where id = ${PENDING_A}`
+      )
+    ).toBe(UNIQUE)
+  })
+
+  it("lets an org read and change only its own domains", async () => {
+    const seen = await withOrg({ orgId: ORG_B }, (db) =>
+      db.execute<{ name: string }>(sql`select name from domains`)
+    )
+    expect(seen.map((row) => row.name)).toEqual([DOMAIN_OF.b])
+    const touched = await withOrg({ orgId: ORG_B }, (db) =>
+      db.execute(
+        sql`update domains set state = 'removed' where name = ${DOMAIN_OF.a}`
+      )
+    )
+    expect(touched.count).toBe(0)
+  })
+
+  it("answers the router for an active host and no other, and the org for its redirect", async () => {
+    const kit = tenancy(connectionString())
+    try {
+      expect(await resolveDomainHost(kit, `www.${DOMAIN_OF.a}`)).toEqual({
+        orgId: ORG_A,
+        siteId: ORG_A,
+        primaryHost: `www.${DOMAIN_OF.a}`,
+      })
+      expect(await resolveDomainHost(kit, DOMAIN_PENDING)).toBeNull()
+      expect(
+        await withOrg({ orgId: ORG_A }, (db) => activeDomainHost(db))
+      ).toBe(`www.${DOMAIN_OF.a}`)
+      expect(
+        await withOrg({ orgId: ORG_B }, (db) => activeDomainHost(db))
+      ).toBe(DOMAIN_OF.b)
+    } finally {
+      await kit.close()
+    }
   })
 })

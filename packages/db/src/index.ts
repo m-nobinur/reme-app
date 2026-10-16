@@ -4,6 +4,7 @@
 // typecheck error about a private property. Callers take the tag from here.
 export { asc, eq, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
+export { activeDomainHost } from "./domains.ts"
 export {
   type AppendEvent,
   type AppendSessionEvent,
@@ -39,6 +40,7 @@ export {
   ORG_SETTING,
   pgCode,
   recentDesigns,
+  resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,

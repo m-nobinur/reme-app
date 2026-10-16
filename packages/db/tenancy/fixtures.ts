@@ -9,6 +9,7 @@ import {
   conversations,
   departments,
   deployments,
+  domains,
   events,
   facts,
   memberships,
@@ -52,6 +53,13 @@ const ulid = (org: "a" | "b", n: number) =>
   `01K3TENANCY${org.toUpperCase()}${String(n).padStart(14, "0")}`
 
 const PLATFORM_ROLE = uuid(9)
+
+/** The connected domain each org holds live, and org A's one still awaiting DNS. */
+export const DOMAIN_OF = {
+  a: "tenancy-probe-a.example.com",
+  b: "tenancy-probe-b.example.com",
+} as const
+export const DOMAIN_PENDING = "pending.tenancy-probe-a.example.com"
 
 /**
  * One person per org, in the platform `users` table. Exported because the
@@ -310,7 +318,31 @@ export async function seedTwoOrgs() {
       createdByStaffId: per(tag, 4),
       idempotencyKey: `tenancy_reminder_${tag}`,
     })
+    // The org's connected domain: live, served on its apex (org A on `www.`).
+    await db.insert(domains).values({
+      id: per(tag, 17),
+      orgId: org,
+      siteId: org,
+      name: DOMAIN_OF[tag],
+      primaryHost: tag === "a" ? `www.${DOMAIN_OF[tag]}` : DOMAIN_OF[tag],
+      origin: "connected",
+      method: "records",
+      state: "active",
+      approvalId: per(tag, 13),
+      activatedAt: new Date(),
+    })
   }
+  // A connect still waiting on DNS: the definer must not answer for it.
+  await db.insert(domains).values({
+    id: per("a", 18),
+    orgId: ORG_A,
+    siteId: ORG_A,
+    name: DOMAIN_PENDING,
+    primaryHost: DOMAIN_PENDING,
+    origin: "connected",
+    method: "records",
+    state: "awaiting_dns",
+  })
   await sql.end()
 }
 

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 import {
   bigint,
+  boolean,
   char,
   check,
   customType,
@@ -1113,5 +1114,89 @@ export const reminders = pgTable(
       sql`char_length(title) between 1 and 200 and title ~ '[^ \\t\\n\\v\\f\\r]'`
     ),
     orgIsolation("reminders"),
+  ]
+)
+
+/**
+ * Where a domain came from. Only `connected` while the buy path is parked; it
+ * adds `purchased` with its own expand migration.
+ */
+export const domainOrigin = pgEnum("domain_origin", ["connected"])
+
+/** How the owner points the domain at Reme. */
+export const connectMethod = pgEnum("connect_method", [
+  "records",
+  "domain_connect",
+])
+
+/** `DomainState`. `removed` rows stay, so a later claim on the name can ask for a TXT. */
+export const domainState = pgEnum("domain_state", [
+  "awaiting_dns",
+  "verifying",
+  "active",
+  "failed",
+  "removed",
+])
+
+/**
+ * A custom domain an owner connected to their site. `name` is the zone apex,
+ * lowercase and punycode; `primary_host` is the apex or its `www.`. Postgres is
+ * the truth and the router's `host:` pointers in KV are a cache of the active
+ * rows. A name has one live row across all orgs, so that index is a plain
+ * unique index: a second claim fails on the unique violation and never reads
+ * the other org's row. The router's fallback finds an active row from the
+ * request host through `resolve_domain_host` (migration 0015).
+ */
+export const domains = pgTable(
+  "domains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** The site the domain serves. Not a foreign key, like `deployments.site_id`. */
+    siteId: uuid("site_id").notNull(),
+    name: text("name").notNull(),
+    primaryHost: text("primary_host").notNull(),
+    origin: domainOrigin("origin").notNull(),
+    method: connectMethod("method").notNull(),
+    state: domainState("state").notNull(),
+    onCloudflare: boolean("on_cloudflare").notNull().default(false),
+    /** Cloudflare ids: the custom hostnames and the like. */
+    cfIds: jsonb("cf_ids").notNull().default(sql`'{}'::jsonb`),
+    /** `DomainProvider`, `{name, settings_url}`, from detection. */
+    provider: jsonb("provider"),
+    /** Another org held this name before, so ownership needs a TXT record. */
+    needsTxt: boolean("needs_txt").notNull().default(false),
+    /** The approval that let the connect through; one domain per approval. */
+    approvalId: uuid("approval_id").unique(),
+    /** The last `DomainCheck`. */
+    lastCheck: jsonb("last_check"),
+    createdAt,
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "domains_approval_fk",
+      columns: [t.approvalId, t.orgId],
+      foreignColumns: [approvals.id, approvals.orgId],
+    }),
+    // No `www.` prefix: `resolve_domain_host` strips one, so a live `www.x`
+    // beside a live `x` would put two orgs behind one host.
+    check(
+      "domains_name_lowercase_apex",
+      sql`name ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' and char_length(name) <= 253 and name not like 'www.%'`
+    ),
+    check(
+      "domains_primary_host_of_name",
+      sql`primary_host in (name, 'www.' || name)`
+    ),
+    // One live claim on a name, across orgs.
+    uniqueIndex("domains_live_name")
+      .on(t.name)
+      .where(sql`state not in ('removed', 'failed')`),
+    index("domains_org_state_idx").on(t.orgId, t.state),
+    orgIsolation("domains"),
   ]
 )
