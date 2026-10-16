@@ -16,7 +16,9 @@ import {
   eq,
   events,
   failureCode,
+  postAssistantMessage,
   reminders,
+  serverMessageId,
   sql,
   type Tenancy,
   tenancy,
@@ -46,7 +48,7 @@ import {
   vi,
 } from "vitest"
 import type { z } from "zod"
-import { type ChatDeps, chat } from "../src/chat.ts"
+import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
   activeTools,
   type CosAgent,
@@ -552,10 +554,12 @@ describe("the CoS's model and price", () => {
     expect(activeTools("act")).toContain("create_reminder")
   })
 
-  it("reads a domain in Ask mode, and connects one only in Act mode", () => {
+  it("reads a domain in Ask mode, and connects or removes one only in Act mode", () => {
     expect(activeTools("ask")).toContain("check_domain")
-    expect(activeTools("ask")).not.toContain("connect_domain")
-    expect(activeTools("act")).toContain("connect_domain")
+    for (const act of ["connect_domain", "remove_domain"] as const) {
+      expect(activeTools("ask")).not.toContain(act)
+      expect(activeTools("act")).toContain(act)
+    }
   })
 
   it("labels a reminder call with the owner's words before it has an output", () => {
@@ -841,6 +845,45 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   /** Everything the model was sent, as one string. */
   const wire = (sent: CallOptions[]) => JSON.stringify(sent)
+
+  it("sends the model what the assistant posted on its own since the last turn, logged once", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Connect my domain", "ask"), {
+      model: scripted(said("It's on its way.")).model,
+    })
+    const key = `live:${id}`
+    expect(
+      await postAssistantMessage(kit, {
+        orgId: me.orgId,
+        key,
+        message: {
+          text: ["brightclean.example is live."],
+          button: {
+            label: "Open it",
+            action: { kind: "open", url: "https://brightclean.example" },
+          },
+        },
+      })
+    ).toBe("posted")
+    const next = scripted(said("Glad it's up."))
+    await turn(me, typed(id, "Is it working?", "ask"), { model: next.model })
+    const sent = wire(next.sent)
+    expect(sent).toContain("brightclean.example is live.")
+    // Before the owner's question, as the chat showed it.
+    expect(sent.indexOf("brightclean.example is live.")).toBeLessThan(
+      sent.indexOf("Is it working?")
+    )
+    const again = scripted(said("Yes."))
+    await turn(me, typed(id, "Thanks", "ask"), { model: again.model })
+    expect(wire(again.sent)).toContain("brightclean.example is live.")
+    const posts = (await logOf(id)).filter(
+      (e) =>
+        e.type === "cos.message" &&
+        e.payload.message.id === serverMessageId(key)
+    )
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.taint).toEqual(["inferred"])
+  })
 
   it("answers a typed message and logs the turn, and the model never sees a tenancy id", async () => {
     const id = await conversation(me)
@@ -1160,19 +1203,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
   })
 
-  it("falls back on a provider error before content, and ends with an error chunk after it", async () => {
+  it("answers one line, never a card, on a provider error before content, and ends with an error chunk after it", async () => {
     const id = await conversation(me)
-    const early = await turn(me, typed(id, "Change the header", "act"), {
-      model: scripted(new Error("upstream 500")).model,
-    })
-    expect(early.response.status, early.text).toBe(200)
-    expect(early.chunks.some((c) => c.type === "tool-approval-request")).toBe(
-      true
-    )
-    expect((await turnsOf(id)).at(-1)).toMatchObject({
-      outcome: "fallback",
-      reason: "provider",
-    })
+    // Live test 2026-10-16: Act mode's script turned "Hello" into a build card.
+    for (const [text, mode] of [
+      ["Change the header", "act"],
+      ["How is my site?", "ask"],
+    ] as const) {
+      const early = await turn(me, typed(id, text, mode), {
+        model: scripted(new Error("upstream 500")).model,
+      })
+      expect(early.response.status, early.text).toBe(200)
+      expect(early.chunks.some((c) => c.type.startsWith("tool-"))).toBe(false)
+      expect((await tailOf(me, id)).parts).toEqual([
+        { type: "step-start" },
+        { type: "text", text: NO_ANSWER, state: "done" },
+      ])
+      expect((await turnsOf(id)).at(-1)).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+    }
 
     const late = await turn(me, typed(id, "Tell me more", "ask"), {
       model: scripted([
@@ -1475,7 +1526,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await s.state(asking, "cancelled")
   })
 
-  it("waits for the owner's yes before connect_domain, and reads check_domain without asking", async () => {
+  it("waits for the owner's yes before connect_domain and remove_domain, and reads check_domain without asking", async () => {
     const id = await conversation(me)
     const stub = stubOrchestrator()
     const done = await turn(
@@ -1493,6 +1544,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               id: "call_connect",
               tool: "connect_domain",
               input: { name: "sparkleclean.co.uk" },
+            },
+            {
+              id: "call_remove",
+              tool: "remove_domain",
+              input: { name: "old.example" },
             }
           )
         ).model,
@@ -1501,13 +1557,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     expect(done.response.status, done.text).toBe(200)
     // The check ran (this org holds no such domain, so it was refused here);
-    // the connect waits on its card and nothing reached the orchestrator.
+    // the connect and the removal wait on their cards and nothing reached
+    // the orchestrator.
     expect(waiting(await tailOf(me, id)).map((p) => p.type)).toEqual([
       "tool-connect_domain",
+      "tool-remove_domain",
     ])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     expect(stub.calls).toHaveLength(0)
   })
 

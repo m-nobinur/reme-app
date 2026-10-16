@@ -24,6 +24,8 @@ import {
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
   type RecordReviewOutput,
+  type RemoveDomainInput,
+  type RemoveDomainOutput,
   RequestChangeOutput,
   type ReviewFactKey,
 } from "@workspace/contracts"
@@ -33,11 +35,14 @@ import {
   eq,
   events,
   failureCode,
+  memberships,
   siteRevisions,
   sql,
   type Tenancy,
+  users,
 } from "@workspace/db"
 import {
+  type Bridged,
   bridge,
   holds,
   notFound,
@@ -56,7 +61,7 @@ import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
 /**
- * The Chief of Staff's nine tools (ADR-034), as plain functions: the
+ * The Chief of Staff's ten tools (ADR-034), as plain functions: the
  * session's org, user and session in, the contract's output out. What they
  * return is what the model reads, so each is cut to its `COS_TOOLS` output:
  * no org or staff id, no URL, no open record, and every refusal the closed
@@ -461,6 +466,16 @@ const noDomain = () =>
     detail: {},
   })
 
+/** An orchestrator domain answer as the model reads it: the output, or the closed refusal. */
+async function domainAnswer<T>(
+  result: Bridged,
+  parse: (body: unknown) => T
+): Promise<T | Refused> {
+  const answered = relay(result, parse)
+  if (!answered.ok) return refused(answered)
+  return parse(await answered.json())
+}
+
 /**
  * Where a connected domain is now. It wakes the domain's workflow to look
  * at once, so the orchestrator answers. A name this org does not hold,
@@ -477,32 +492,92 @@ export async function checkDomain(
       .where(sql`${eq(domains.name, name)} and ${live}`)
   )
   if (!held) return refused(noDomain())
-  const answered = relay(
-    await bridge(env, owner, `/domains/${encodeURIComponent(name)}/check`),
+  return domainAnswer(
+    await bridge(env, owner, `/domains/${name}/check`),
     CheckDomainOutput.parse
   )
-  if (!answered.ok) return refused(answered)
-  return CheckDomainOutput.parse(await answered.json())
 }
+
+/** The orchestrator's connect answers that a second look a moment later can turn into records. */
+const PASSING = new Set(["dns.unavailable", "domain.records_pending"])
+
+/** The pause before that second look, inside the turn's budget. */
+export const CONNECT_RETRY_MS = 2_000
 
 /**
  * The owner's existing domain, connected through the orchestrator's
  * `/domains`, keyed by the approval: it starts the domain's workflow once
  * and replays its answer. Whether the name may be claimed (`domain.in_use`,
  * `domain.too_many_pending`, `domain.invalid`) is the orchestrator's to say.
+ * A passing 503 is asked once more under the same key, so one approval
+ * survives one blip; a second one stands.
  */
 export async function connectDomain(
   { env, owner }: ToolContext,
   { name }: ConnectDomainInput,
   approvalId: string
 ): Promise<ConnectDomainOutput> {
-  const answered = relay(
-    await bridge(env, owner, "/domains", {
+  const ask = () =>
+    bridge(env, owner, "/domains", {
       body: { name, approval_id: approvalId },
       key: approvalId,
-    }),
-    ConnectDomainOutput.parse
+    })
+  let result = await ask()
+  if (
+    result.status === 503 &&
+    PASSING.has(ErrorEnvelope.safeParse(result.body).data?.code ?? "")
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS))
+    result = await ask()
+  }
+  return domainAnswer(result, ConnectDomainOutput.parse)
+}
+
+/**
+ * The org's removal of a connected domain, for the owner's route and the
+ * CoS tool alike: the org's owner only, checked as account deletion checks
+ * it, then the orchestrator's `DELETE /domains/{name}` (`remove` in
+ * domain-flow.ts), which answers 204. `name` is a path segment as given.
+ */
+export async function removal(
+  { env, kit, owner }: ToolContext,
+  name: string,
+  key: string
+): Promise<Response> {
+  const [own] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(
+        sql`${memberships.status} = 'active' and ${users.workosUserId} = ${owner.session.workosUserId}`
+      )
   )
+  if (own?.role !== "owner") {
+    return failure(403, {
+      class: "permission",
+      code: "domain.not_owner",
+      message: "Only the owner can remove a domain.",
+      detail: {},
+    })
+  }
+  const result = await bridge(env, owner, `/domains/${name}`, {
+    method: "DELETE",
+    key,
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, () => {
+    throw new Error("a removal answers 204 and no body")
+  })
+}
+
+/** A connected domain taken off the site once the owner said yes, keyed by the approval. */
+export async function removeDomain(
+  context: ToolContext,
+  { name }: RemoveDomainInput,
+  approvalId: string
+): Promise<RemoveDomainOutput> {
+  const answered = await removal(context, name, approvalId)
   if (!answered.ok) return refused(answered)
-  return ConnectDomainOutput.parse(await answered.json())
+  return { outcome: "removed" }
 }
