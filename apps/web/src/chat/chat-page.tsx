@@ -39,6 +39,7 @@ import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { asked, missingConversations, startsNewChat } from "./history"
 import { useConversationRuntime } from "./runtime"
+import { ServerButtonUI } from "./server-button"
 import { SiteReadyCard } from "./site-ready"
 import { uploadPhotos } from "./upload"
 
@@ -169,6 +170,7 @@ export function ChatPage() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ServerButtonUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (

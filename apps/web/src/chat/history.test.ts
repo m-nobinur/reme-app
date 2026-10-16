@@ -6,15 +6,17 @@ import type {
   MessageStorageEntry,
 } from "@assistant-ui/react"
 import type { Conversation, ConversationMessage } from "@workspace/contracts"
-import { expect, expectTypeOf, it, vi } from "vitest"
+import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { TransportedMessage } from "../lib/api/types"
 import {
   type AISDKStorageFormat,
   conversationHistory,
+  followThread,
   lastChat,
   missingConversations,
   STORAGE_FORMAT,
   startsNewChat,
+  tailOf,
   toMetadata,
   toStorageEntry,
   toUIMessage,
@@ -239,4 +241,82 @@ it("reads a rated reply back with its thumb, on both ways a row loads", async ()
   expect(format.decode(toStorageEntry(rated("down"))).message).toEqual(
     toUIMessage(rated("down"))
   )
+})
+
+it("reads the chat's newest message off the workspace tag, and nothing off another", () => {
+  const hash = "015abd7f5cc57a2dd94b7590f04ad808"
+  expect(tailOf(`"${hash}.srv_1"`)).toBe("srv_1")
+  // Compression on the way can weaken a tag; the tail is the same.
+  expect(tailOf(`W/"${hash}.srv_1"`)).toBe("srv_1")
+  expect(tailOf(`"${hash}"`)).toBeNull()
+  expect(tailOf(null)).toBeNull()
+  expect(tailOf(`"${hash}.a b"`)).toBeNull()
+})
+
+describe("following the open thread", () => {
+  const stored = ROWS
+  const setup = (
+    screen: { idle: boolean; messages: { id: string }[] },
+    read: () => Promise<TransportedMessage[] | null> = vi.fn(async () => stored)
+  ) => {
+    const apply = vi.fn()
+    const follow = followThread({ read, now: () => screen, apply })
+    return { follow, read, apply }
+  }
+
+  it("reads again when the tag names a message the thread lacks, once", async () => {
+    const screen = { idle: true, messages: [{ id: "m1" }] }
+    const { follow, read, apply } = setup(screen)
+    await follow("m1") // what the history load read
+    expect(read).not.toHaveBeenCalled()
+    await follow("srv_1")
+    await follow("srv_1")
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(apply).toHaveBeenCalledWith(stored)
+  })
+
+  it("leaves a thread that already holds the tail, as after the owner's own turn", async () => {
+    const screen = { idle: true, messages: [{ id: "m1" }, { id: "m2" }] }
+    const { follow, read } = setup(screen)
+    await follow("m1")
+    await follow("m2")
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it("waits out a turn in flight, then reads", async () => {
+    const screen = { idle: false, messages: [{ id: "m1" }] }
+    const { follow, read, apply } = setup(screen)
+    await follow("m1")
+    await follow("srv_1")
+    expect(read).not.toHaveBeenCalled()
+    screen.idle = true
+    await follow("srv_1")
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
+  it("drops a read a turn overtook, so the newer screen stands", async () => {
+    const screen = { idle: true, messages: [{ id: "m1" }] }
+    const { follow, apply } = setup(screen, async () => {
+      // The owner sent while the rows were on their way.
+      screen.messages = [...screen.messages, { id: "u2" }]
+      return stored
+    })
+    await follow("m1")
+    await follow("srv_1")
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it("tries a failed read again on the next change", async () => {
+    const screen = { idle: true, messages: [{ id: "m1" }] }
+    const read = vi
+      .fn<() => Promise<TransportedMessage[] | null>>()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(stored)
+    const { follow, apply } = setup(screen, read)
+    await follow("m1")
+    await follow("srv_1")
+    expect(apply).not.toHaveBeenCalled()
+    await follow("srv_1")
+    expect(apply).toHaveBeenCalledWith(stored)
+  })
 })
