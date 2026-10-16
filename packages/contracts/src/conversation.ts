@@ -80,6 +80,42 @@ export const ConversationMessage = z.strictObject({
 })
 
 /**
+ * A button on a message the server posted. `ask` sends `text` as the owner's
+ * next message, which the chat already does for a suggestion; `open` opens an
+ * https link in a new tab.
+ */
+export const ServerButton = z.strictObject({
+  label: Text(60),
+  action: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("ask"), text: Text(500) }),
+    z.strictObject({
+      kind: z.literal("open"),
+      url: z
+        .string()
+        .max(2048)
+        .regex(/^https:\/\/[^\s]+$/),
+    }),
+  ]),
+})
+
+/** How a `ServerButton` is stored among a message's parts: an AI SDK data part. */
+export const ServerButtonPart = z.strictObject({
+  type: z.literal("data-button"),
+  data: ServerButton,
+})
+
+/**
+ * A message the server posts on its own, with no owner turn: the text parts,
+ * then the button part if there is one. `id` is derived from what happened,
+ * not generated, so posting it twice stores it once.
+ */
+export const ServerMessage = z.strictObject({
+  id: MessageId,
+  text: z.array(Text(2000)).min(1).max(5),
+  button: ServerButton.optional(),
+})
+
+/**
  * `GET /conversations/:id/messages`: oldest first, the whole conversation.
  * A response only, never a request body, as `ConversationMessage` says.
  */
@@ -94,3 +130,6 @@ export type ConversationMessage = z.infer<typeof ConversationMessage>
 export type ConversationHistory = z.infer<typeof ConversationHistory>
 export type MessageRating = z.infer<typeof MessageRating>
 export type MessageFeedback = z.infer<typeof MessageFeedback>
+export type ServerButton = z.infer<typeof ServerButton>
+export type ServerButtonPart = z.infer<typeof ServerButtonPart>
+export type ServerMessage = z.infer<typeof ServerMessage>

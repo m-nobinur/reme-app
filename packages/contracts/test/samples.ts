@@ -400,6 +400,18 @@ export const samples: Record<ContractName, unknown> = {
       ],
     },
   },
+  CheckDomainInput: { name: "brightclean.example" },
+  CheckDomainOutput: {
+    outcome: "checked",
+    state: "awaiting_dns",
+    status: {
+      status: "conflicting_record",
+      conflicts: [
+        { type: "A", name: "www.brightclean.example", value: "192.0.2.1" },
+      ],
+    },
+    next_step: "Remove the A record for www, then add the CNAME.",
+  },
   CompletionReport: {
     report_id: "d6e7f809-1a2b-46e7-a8a9-334455667788",
     org_id: ORG,
@@ -444,6 +456,24 @@ export const samples: Record<ContractName, unknown> = {
     examples: ["<ContactDetails phone={site.phone} />"],
     forbidden: ["A placeholder number when the phone is empty"],
     source: "generated",
+  },
+  ConnectDomainInput: { name: "brightclean.example" },
+  ConnectDomainOutput: {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    steps: [
+      {
+        type: "CNAME",
+        name: "www.brightclean.example",
+        value: "sites.remeai.co.uk",
+      },
+    ],
+    apex: "forward",
+    provider: {
+      name: "GoDaddy",
+      settings_url: "https://dcc.godaddy.com/manage/dns",
+    },
   },
   Conversation: {
     id: CONVERSATION,
@@ -594,6 +624,13 @@ export const samples: Record<ContractName, unknown> = {
     ],
     approvals: [{ version: 2, expires_at: LATER }],
     missing_facts: ["business.tagline"],
+    domains: [
+      {
+        name: "brightclean.example",
+        state: "awaiting_dns",
+        last_check: { status: "pending_verification" },
+      },
+    ],
   },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
@@ -648,6 +685,16 @@ export const samples: Record<ContractName, unknown> = {
     approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
     version: 4,
     expires_at: LATER,
+  },
+  DnsRecord: {
+    type: "CNAME",
+    name: "www.brightclean.example",
+    value: "sites.remeai.co.uk",
+  },
+  DomainCheck: { status: "valid" },
+  DomainProvider: {
+    name: "GoDaddy",
+    settings_url: "https://dcc.godaddy.com/manage/dns",
   },
   ErrorEnvelope: {
     class: "permission",
@@ -856,6 +903,7 @@ export const samples: Record<ContractName, unknown> = {
     permission: true,
   },
   RecordReviewOutput: { outcome: "recorded", slot: 1 },
+  RedirectPointer: { redirect_to: "brightclean.example" },
   RequestChangeOutput: {
     outcome: "started",
     build: {
@@ -904,6 +952,21 @@ export const samples: Record<ContractName, unknown> = {
     expires_at: LATER,
     signature: "ed25519:AbC123",
   },
+  ServerButtonPart: {
+    type: "data-button",
+    data: {
+      label: "Open GoDaddy DNS settings",
+      action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+    },
+  },
+  ServerMessage: {
+    id: "domain-live-0c1f2b3a",
+    text: ["brightclean.example is live."],
+    button: {
+      label: "See the site",
+      action: { kind: "open", url: "https://brightclean.example" },
+    },
+  },
   SetFactsRequest: {
     facts: [
       { key: "business.phone", value: { e164: "+15550142" } },
@@ -920,6 +983,7 @@ export const samples: Record<ContractName, unknown> = {
     site_id: ORG,
     revision_id: REVISION,
     config_version: 4,
+    canonical_host: "brightclean.example",
   },
   SiteRevision: {
     revision_id: REVISION,
