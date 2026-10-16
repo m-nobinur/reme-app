@@ -11,9 +11,8 @@ import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
-import { useLiveWorkspace } from "@/lib/workspace"
 import { planNote } from "./blueprint-plan"
-import { followThread, tailOf, toUIMessage } from "./history"
+import { followThread, toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
   blueprintChanges,
@@ -55,6 +54,7 @@ export function useConversationRuntime({
   intent,
   onIntentSent,
   planChange,
+  tail,
 }: {
   onFinish: () => void
   suggestions: ThreadSuggestion[]
@@ -71,6 +71,12 @@ export function useConversationRuntime({
    * the chat. A ref for the same reason as `intent`.
    */
   planChange?: { current: ((note: string) => Promise<boolean>) | null }
+  /**
+   * The polled `/workspace` tag's tail (`tailOf`), kept by the page: this
+   * hook renders apart from it and never sees the workspace change, so the
+   * page calls `moved` when the tail does.
+   */
+  tail?: { current: string | null; moved?: () => void }
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -146,11 +152,17 @@ export function useConversationRuntime({
       apply: (rows) => latest.current.setMessages(rows.map(toUIMessage)),
     })
   )
-  const tail = tailOf(useLiveWorkspace().workspace?.etag)
+  useEffect(() => {
+    if (!tail) return
+    tail.moved = () => void follow(tail.current)
+    return () => {
+      tail.moved = undefined
+    }
+  }, [follow, tail])
   // biome-ignore lint/correctness/useExhaustiveDependencies: a turn ending is a time to read a tail it held back.
   useEffect(() => {
-    void follow(tail)
-  }, [follow, tail, chat.status])
+    void follow(tail?.current ?? null)
+  }, [follow, chat.status])
   // The owner's thumb on a reply. It is kept on the chat's own message, so
   // the next update keeps it pressed, and sent with a key of this press's
   // own, so up, down, up records three ratings and a retry of one records

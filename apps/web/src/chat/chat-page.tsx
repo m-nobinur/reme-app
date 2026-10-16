@@ -37,7 +37,7 @@ import { usePlanCard } from "./blueprint-plan"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
-import { asked, missingConversations, startsNewChat } from "./history"
+import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { ServerButtonUI } from "./server-button"
 import { SiteReadyCard } from "./site-ready"
@@ -95,6 +95,16 @@ export function ChatPage() {
   const plan = usePlanCard(live)
   const planChange = useRef(plan.change)
   planChange.current = plan.change
+  // A message the assistant posted on its own, named by the polled tag. Set
+  // here, where the workspace re-renders, for the runtime hook to follow.
+  const tail = useRef<{ current: string | null; moved?: () => void }>({
+    current: null,
+  }).current
+  const liveTail = tailOf(live.workspace?.etag)
+  tail.current = liveTail
+  useEffect(() => {
+    if (liveTail) tail.moved?.()
+  }, [liveTail, tail])
   const useThreadRuntime = () =>
     useConversationRuntime({
       // A turn can change what waits on the owner and the conversation's
@@ -113,6 +123,7 @@ export function ChatPage() {
       intent,
       onIntentSent: () => setSiteChange(null),
       planChange,
+      tail,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
