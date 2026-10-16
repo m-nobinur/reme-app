@@ -27,7 +27,7 @@ type Typed<T extends { input: z.ZodType; output: z.ZodType }> = {
  * Every tool a conversation can hold, typed from its contract: the Chief of
  * Staff's `COS_TOOLS`, and the onboarding cards.
  */
-export type ChatTools = {
+type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
 } & {
   ask_fact: { input: AskFactInput; output: AskFactOutput }
@@ -52,7 +52,7 @@ export type ChatTools = {
  * and whether the reply's words are ones they typed, such as changes to a
  * proposed quote form.
  */
-export type ChatMetadata = {
+type ChatMetadata = {
   custom?: { createdAt?: string }
   submittedFeedback?: { type: "positive" | "negative" }
   reply?: true

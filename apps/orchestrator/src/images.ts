@@ -385,7 +385,7 @@ async function draw(
  * What the defect check scores, each 0 (none), 1 (minor, ships) or 2 (a
  * visitor would notice, so the photo is redrawn).
  */
-export const DEFECTS = {
+const DEFECTS = {
   geometry:
     "warped, bent or impossible geometry: lines that should be straight, fittings that could not be built, objects melting into each other",
   text: "garbled or readable text, logos, signage or labels",
@@ -412,7 +412,7 @@ const Check = z.object({
   note: z.string().max(400).catch(""),
 })
 export type Check = z.infer<typeof Check>
-export const failedChecks = (check: Check) =>
+const failedChecks = (check: Check) =>
   (Object.keys(DEFECTS) as Defect[]).filter((k) => check[k] === 2)
 
 /**

@@ -144,7 +144,7 @@ const shape = (value: unknown): string => {
 
 type WrittenFact = { key: string; fact_id: string; version: number }
 
-export type FactsUpdate =
+type FactsUpdate =
   | { outcome: "written"; replayed: boolean; facts: WrittenFact[] }
   | { outcome: "unknown_key"; key: string }
   | { outcome: "shape_changed"; key: string }
@@ -219,7 +219,7 @@ export async function updateFacts(
   return { outcome: "written", replayed: false, facts: written }
 }
 
-export type HiddenUpdate =
+type HiddenUpdate =
   | { outcome: "written"; replayed: boolean; hidden: string[] }
   | { outcome: "unknown_key"; key: string }
 

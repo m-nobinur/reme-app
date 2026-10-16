@@ -82,7 +82,7 @@ const RECIPES = JSON.parse(
 export const STARTER_PAGES = Object.keys(RECIPES.pages) as PageId[]
 
 /** A pack, with `order` from `service_business` when it writes none of its own. */
-export function packOf(industry: string | undefined) {
+function packOf(industry: string | undefined) {
   const id: IndustryPackId =
     (INDUSTRY_PACK as Record<string, IndustryPackId>)[industry ?? ""] ??
     "service_business"
@@ -134,7 +134,7 @@ export function ownerChoices(facts: readonly FactRecord[]) {
 }
 
 /** The pages the site gets: the owner's pick plus home and quote, as far as the starter has them. */
-export function wantedPages(facts: readonly FactRecord[]): PageId[] {
+function wantedPages(facts: readonly FactRecord[]): PageId[] {
   const picked = factValue(facts, "site.pages")?.ids
   if (!picked) return STARTER_PAGES
   const want = new Set<PageId>([...picked, ...FIXED_PAGES])
@@ -163,7 +163,7 @@ const HOME_ORDER: SectionKind[] = [
  * home page section. A gallery is the owner's own photos or nothing, so
  * without uploads it is not planned.
  */
-export function pickedSections(facts: readonly FactRecord[]): {
+function pickedSections(facts: readonly FactRecord[]): {
   kind: SectionKind
   planned: boolean
 }[] {
@@ -349,7 +349,7 @@ export function diversityNote(
 }
 
 /** The direction recent sites used least, the first such in library order. */
-export function leastUsed(
+function leastUsed(
   candidates: readonly DesignDirection[],
   recent: readonly RecentDesign[]
 ): DesignDirection {
@@ -449,9 +449,7 @@ const CONTENT_BLOCKS: Partial<Record<string, [SectionKind, string][]>> = {
     ["steps", "What to expect on a visit, from arrival to the finished job"],
   ],
 }
-export function withContentBlocks(
-  pages: Blueprint["pages"]
-): Blueprint["pages"] {
+function withContentBlocks(pages: Blueprint["pages"]): Blueprint["pages"] {
   const home = pages.find((p) => p.page === "home")?.sections ?? []
   return pages.map((page) => {
     const missing = (CONTENT_BLOCKS[page.page] ?? []).filter(
@@ -1019,14 +1017,14 @@ export async function plan(input: {
 }
 
 /** The step's answer: ids and counts only, the plan itself is on the row (R8). */
-export type PlanStep = {
+type PlanStep = {
   round: number
   source: "model" | "fallback"
   attempts: number
 }
 
 /** Planner env: the model keys and the routing overrides `modelRouting` reads. */
-export type PlannerEnv = ModelEnv & {
+type PlannerEnv = ModelEnv & {
   REME_MODEL_DEFAULT?: string
   REME_MODEL_FALLBACK?: string
 }

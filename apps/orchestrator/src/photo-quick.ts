@@ -31,7 +31,7 @@ export const PhotosEvent = z.object({
 export type PhotosEvent = z.infer<typeof PhotosEvent>
 
 /** The newest `site.photos` of the org: what the live site was last built with. */
-export async function readPhotos(
+async function readPhotos(
   kit: Tenancy,
   orgId: string
 ): Promise<PhotosEvent | null> {
@@ -48,7 +48,7 @@ export async function readPhotos(
 }
 
 /** How often the slot was regenerated in the last day. */
-export async function triesToday(
+async function triesToday(
   kit: Tenancy,
   orgId: string,
   slotId: string
@@ -89,7 +89,7 @@ export function pickSlot(
     : null
 }
 
-export class PhotoFell extends Error {}
+class PhotoFell extends Error {}
 
 /**
  * Draws a fresh picture for one slot and puts it on disk where the old one

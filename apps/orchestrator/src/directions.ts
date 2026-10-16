@@ -9,7 +9,7 @@ import { STARTER_FILES } from "./seed.ts"
  * Either way every entry is parsed by CT1's `DesignDirection`, and a file that
  * does not parse fails the Worker at load rather than a build at plan time.
  */
-export const DIRECTIONS_FILE = "src/directions.json"
+const DIRECTIONS_FILE = "src/directions.json"
 
 /** Two of VS6's starting set, as its table writes them. */
 export const STAND_IN_DIRECTIONS: readonly DesignDirection[] = [

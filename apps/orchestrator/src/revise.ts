@@ -71,7 +71,7 @@ export async function latestBlueprint(
 }
 
 /** The slice of the Sandbox SDK the restore uses. */
-export type Restorable = {
+type Restorable = {
   exec: (
     command: string,
     options?: { timeout?: number }

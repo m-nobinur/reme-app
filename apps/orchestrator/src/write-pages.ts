@@ -106,7 +106,7 @@ export function setValues(
 }
 
 /** What a writer reads after its instructions: the task, then its lines as they are. */
-export const writerUser = (prompt: string, source: string) =>
+const writerUser = (prompt: string, source: string) =>
   [
     prompt,
     "",

@@ -17,7 +17,7 @@ export const extension = (contentType: string) =>
   EXTENSION[contentType] ?? "png"
 
 /** The content type a stored file's extension names; an unknown one is a PNG. */
-export const contentTypeOf = (ext: string) =>
+const contentTypeOf = (ext: string) =>
   Object.entries(EXTENSION).find(([, e]) => e === ext)?.[0] ?? "image/png"
 
 /**

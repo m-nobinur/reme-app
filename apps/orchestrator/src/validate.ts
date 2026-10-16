@@ -330,7 +330,7 @@ export async function validateRevision(
 }
 
 /** A sandbox script's run, as `runAxe` reports it. */
-export type AxeRun = { exit_code: number; key: string | null }
+type AxeRun = { exit_code: number; key: string | null }
 
 /**
  * The accessibility gate (§8.5): axe ran in the sandbox over the built site
@@ -367,7 +367,7 @@ async function axeGate(sites: Artifacts, axe: AxeRun | null) {
 }
 
 /** What the `a11y` step decided: a gate verdict, or nothing to do for a build that moved on. */
-export type A11yVerdict = Verdict | { outcome: "stopped" }
+type A11yVerdict = Verdict | { outcome: "stopped" }
 
 /**
  * A quick edit's accessibility gate, once its preview exists: axe ran in the

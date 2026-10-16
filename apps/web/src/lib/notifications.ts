@@ -26,7 +26,7 @@ export function notificationsOf(
  * another's read. Per browser: another device counts its own.
  */
 export const seenCookie = (orgId: string) => `reme-notifications-seen-${orgId}`
-export const SEEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+const SEEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 /** Records `at` as the newest time the owner has seen, for the next frame read. */
 export function markSeen(orgId: string, at: string) {

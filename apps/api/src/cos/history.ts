@@ -20,7 +20,7 @@ import { sha256Hex, sortedKeys } from "../http.ts"
 export type SessionEvent = { seq: number; type: string; payload: unknown }
 
 /** A row as the log holds it, with the taint labels it was written with. */
-export type LoggedEvent = SessionEvent & { taint: TaintLabel[] }
+type LoggedEvent = SessionEvent & { taint: TaintLabel[] }
 
 /**
  * A session's events, in seq order. `sessionId` is a conversation id read
@@ -69,7 +69,7 @@ export const CONTEXT_POLICY: ContextPolicy = {
 }
 
 /** What a call is sent, in the two forms the log holds it. */
-export type CosCallMessages = {
+type CosCallMessages = {
   /** The history as UI messages, for `convertToModelMessages`. */
   messages: UIMessage[]
   /** The response messages of the turn's earlier steps, as the SDK held them. */

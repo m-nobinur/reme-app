@@ -163,7 +163,7 @@ export function readFixes(text: string): Fix[] {
   return fixes.slice(0, FIXES_MAX)
 }
 
-export type Critiqued = {
+type Critiqued = {
   fixes: Fix[]
   calls: Call[]
   /** False when the look did not happen or gave no usable answer: then `fixes` is empty because nothing was seen, not because the site holds. */
@@ -312,14 +312,14 @@ export function changedPieces(
   )
 }
 
-export type CritiqueStep = {
+type CritiqueStep = {
   round: 1 | 2
   /** Round 1: what to repair. Round 2: what still shows, plus anything new. */
   fixes: Fix[]
 }
 
 /** Env the critic needs: the model keys and routing overrides, and the sites bucket. */
-export type CriticEnv = ModelEnv & {
+type CriticEnv = ModelEnv & {
   REME_MODEL_DEFAULT?: string
   REME_MODEL_FALLBACK?: string
   SITES: Artifacts

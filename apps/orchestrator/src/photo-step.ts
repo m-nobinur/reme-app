@@ -37,7 +37,7 @@ export type PhotoFile = Pick<
 >
 
 /** The step's answer: counts and the files, eight at most (R8, ids only). */
-export type PhotoStep = {
+type PhotoStep = {
   generated: number
   fell_back: number
   files: PhotoFile[]

@@ -56,7 +56,7 @@ export type Rows = (
   message: { id: string; role: string; parts: unknown[] }
 ) => Promise<void>
 
-export type StreamTurn = {
+type StreamTurn = {
   run: AgentTurn
   model: LanguageModel
   mode: "ask" | "act"

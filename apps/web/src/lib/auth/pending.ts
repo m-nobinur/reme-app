@@ -24,7 +24,7 @@ import { cookiePassword } from "./workos"
  * unsigned cookie would let someone swap in another account's id and enrol a
  * factor on it, so integrity here is not decoration.
  */
-export type PendingAuth = {
+type PendingAuth = {
   token: string
   userId: string
   email: string

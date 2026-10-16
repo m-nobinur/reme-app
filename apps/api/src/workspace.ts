@@ -585,7 +585,7 @@ export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {
 }
 
 /** Where an environment's site links point: its host suffix and, on local dev, the router's port. */
-export type SiteConfig = Pick<Env, "SITE_HOST_SUFFIX" | "SITE_PORT">
+type SiteConfig = Pick<Env, "SITE_HOST_SUFFIX" | "SITE_PORT">
 
 /** The revision the site serves now, and its host and link while it serves one. */
 export async function readSite(

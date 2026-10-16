@@ -544,7 +544,7 @@ const CONFIG = `${SITE_ROOT}/src/site-config.ts`
  * checkpoint. Durable: a replay after an interruption returns each writer's
  * recorded reply, and every write it makes is the same again.
  */
-export const writePagesTool = (current: Session) =>
+const writePagesTool = (current: Session) =>
   defineTool({
     name: "write_pages",
     description:

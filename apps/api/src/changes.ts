@@ -252,7 +252,7 @@ export type ChangeInput = {
   reviews: { assignment_id: string | null; revision_id: string }[]
 }
 
-export type ChangeRoute =
+type ChangeRoute =
   | { route: "build" | "revise" }
   | { route: "steer"; assignment_id: string }
   | {

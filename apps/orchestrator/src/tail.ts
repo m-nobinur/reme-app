@@ -41,13 +41,13 @@ const CUSTOM_LINT = Object.values(
 const LOOKBACK = 3
 
 /** The slice of the sandbox the upload uses; `exec` runs in the site's root. */
-export type DistSandbox = {
+type DistSandbox = {
   exec: (command: string) => Promise<{ exitCode: number; stdout: string }>
   readFileBuffer: (path: string) => Promise<Uint8Array>
 }
 
 /** The slice of the site bucket the upload uses. */
-export type DistBucket = {
+type DistBucket = {
   get: (
     key: string
   ) => Promise<{ arrayBuffer: () => Promise<ArrayBuffer> } | null>
@@ -62,7 +62,7 @@ export type Previous = { base: string; files: Record<string, string> }
  * A revision's manifest is written after its files, so one that parses names
  * files that exist, unless retention swept them since (the copy checks).
  */
-export async function previousArtifact(
+async function previousArtifact(
   db: OrgScopedDb,
   sites: {
     get: (key: string) => Promise<{ json: () => Promise<unknown> } | null>
@@ -184,8 +184,7 @@ export const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
  * widths. Custom sections live beside them and stay writable. Compared with
  * the site's first commit, the starter as it was seeded or restored.
  */
-export const PROTECTED =
-  "src/layouts src/components ':(exclude)src/components/custom'"
+const PROTECTED = "src/layouts src/components ':(exclude)src/components/custom'"
 
 /** Fails the report, after putting back the starter's copy, when a protected file changed. */
 async function holdStarterFiles(
@@ -268,7 +267,7 @@ const SECURITY_HEADERS = {
  * `tail`, a failed `astro build` exited 0 and reported a revision with no
  * files.
  */
-export const tailed = (command: string) =>
+const tailed = (command: string) =>
   `(${command} > /tmp/tailed.log 2>&1; s=$?; tail -20 /tmp/tailed.log; exit $s)`
 
 /** A durable step runner: flue's inside a tool, or a plain call inside one Workflow step. */

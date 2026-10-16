@@ -44,7 +44,7 @@ export const SLEEP_AFTER = 30 * 60
  * `preview_ready`. Outside the site, so no snapshot or build carries it, and
  * outside the Developer's tool root, so the model cannot write it.
  */
-export const REVISION_FILE = "/workspace/.reme/revision"
+const REVISION_FILE = "/workspace/.reme/revision"
 
 /** The reasons of `ContainerUnavailableError` that mean the pool is full. */
 const POOL_FULL = new Set([
@@ -150,7 +150,7 @@ export async function provision(
  * window left is that read to the destroy; a build caught in it finds a
  * fresh container and restores, as after any replacement.
  */
-export async function evictWarm(
+async function evictWarm(
   env: Env,
   siteId: string,
   now = Date.now()
@@ -406,7 +406,7 @@ const PROBE_COMMANDS = [
   },
 ] as const
 
-export type ProbeResult = {
+type ProbeResult = {
   sandbox_id: string
   cold_start_ms: number
   checks: {

@@ -76,7 +76,7 @@ export function copyFields(plan: Blueprint): string[] {
 type PageTask = { page: PageId; fields: string[]; service?: number }
 
 /** The most services a site shows, so the most service pages. */
-export const SERVICES_MAX = 6
+const SERVICES_MAX = 6
 
 /** How many service pages a build writes: one per offering, six at most. */
 export const serviceCount = (brief: Brief) =>
@@ -220,7 +220,7 @@ export function writerTasks(
 }
 
 /** The pack's CTA and headings from src/recipes.json, as this build reads them. */
-export function packLines(brief: Brief): string[] {
+function packLines(brief: Brief): string[] {
   const id = (INDUSTRY_PACK as Record<string, string>)[
     industryOf(brief.snapshot.facts) ?? ""
   ]
@@ -237,7 +237,7 @@ export function packLines(brief: Brief): string[] {
 }
 
 /** The lead's build command: the check's last lines and only the build's errors and warnings. */
-export const BUILD_COMMAND =
+const BUILD_COMMAND =
   './node_modules/.bin/astro check 2>&1 | tail -n 15 && ./node_modules/.bin/astro build 2>&1 | grep -E "error|Error|WARN|copy-check" | head -n 40'
 
 /** The lead's plan of work for a planned first build, after the Blueprint. */

@@ -45,7 +45,7 @@ import {
  */
 
 /** How long an owner has to answer a review before the sweep parks it (§13). */
-export const REVIEW_TTL_MS = 72 * 60 * 60 * 1000
+const REVIEW_TTL_MS = 72 * 60 * 60 * 1000
 
 const ACTION_KIND = "site.publish"
 
@@ -713,7 +713,7 @@ export type PublishParams =
       rollback: { key: string; reason: string }
     }
 
-export type Target = {
+type Target = {
   site_id: string
   revision_id: string
   assignment_id: string | null
