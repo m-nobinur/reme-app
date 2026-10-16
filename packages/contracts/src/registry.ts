@@ -78,6 +78,7 @@ import {
   DomainPaymentEvent,
   DomainPrice,
   DomainProvider,
+  DomainPurchaseStatus,
   DomainRegistration,
   DomainStripe,
 } from "./domain.ts"
@@ -185,6 +186,7 @@ export const contracts = {
   DomainPaymentEvent,
   DomainPrice,
   DomainProvider,
+  DomainPurchaseStatus,
   DomainRegistration,
   DomainStripe,
   ErrorEnvelope,
