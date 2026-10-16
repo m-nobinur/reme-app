@@ -40,13 +40,14 @@ describe("the content security policy header", () => {
     expect(header).toBe(contentSecurityPolicy(handed as string))
     expect(header?.split("; ")).toEqual([
       "default-src 'self'",
-      `script-src 'self' 'nonce-${handed}'`,
+      `script-src 'self' 'nonce-${handed}' https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com`,
       "style-src 'self' 'unsafe-inline'",
       expect.stringContaining(
         "img-src 'self' data: blob: https://*.remeai.co.uk"
       ),
       "font-src 'self' data:",
-      "connect-src 'self'",
+      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
+      "frame-src https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

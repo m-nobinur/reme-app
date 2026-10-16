@@ -25,19 +25,27 @@ import { createMiddleware } from "@tanstack/react-start"
  * local build is not served from remeai.co.uk. A built Worker never has it.
  *
  * `connect-src 'self'`: the browser calls only this Worker. `apps/api` and
- * WorkOS are reached from the server.
+ * WorkOS are reached from the server. The one exception is Stripe: a domain
+ * purchase pays in embedded Checkout, which must load Stripe.js from
+ * js.stripe.com and talk to Stripe itself. The hosts are Stripe's own list
+ * for Stripe.js and Checkout (docs.stripe.com/security/guide, 2026-10-16);
+ * hooks.stripe.com is the 3D Secure frame.
  */
+const STRIPE_SCRIPTS =
+  "https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com"
+
 export function contentSecurityPolicy(
   nonce: string,
   dev = import.meta.env.DEV
 ): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS}`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""}`,
+    `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""} https://*.stripe.com`,
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
+    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
