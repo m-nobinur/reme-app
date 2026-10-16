@@ -27,7 +27,7 @@ import {
 import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { removal } from "./cos/tools.ts"
-import { checkout } from "./domain-buy.ts"
+import { checkout, purchaseStatus } from "./domain-buy.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
@@ -218,6 +218,9 @@ export async function ownerRoute(
   }
   if (noun === "domains" && method === "POST" && action === "checkout") {
     return checkout(request, env, kit, owner, id)
+  }
+  if (noun === "domains" && method === "GET" && !action) {
+    return purchaseStatus(kit, owner, id)
   }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)

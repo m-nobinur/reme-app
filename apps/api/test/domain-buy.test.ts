@@ -234,7 +234,9 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     const stub = told()
     const response = await checkout(me, stub, name)
     expect(response.status).toBe(200)
-    expect((await response.json()).client_secret).toBe("cs_secret2")
+    expect(DomainCheckout.parse(await response.json()).client_secret).toBe(
+      "cs_secret2"
+    )
     expect(stripe.map((a) => [a.method, a.path])).toEqual([
       ["GET", "checkout/sessions/cs_test_open"],
     ])
@@ -322,5 +324,28 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
       "domain.registrant_invalid"
     )
+  })
+
+  it("reads the newest purchase of a name, its sandbox flag and how it closed", async () => {
+    const name = unique("status")
+    const status = async (who: Owner) => {
+      const response = await who.call(told(), `/domains/${name}`)
+      return { status: response.status, body: await response.json() }
+    }
+    await purchase(me, name, {
+      state: "abandoned",
+      registration: { sandbox: true, outcome: "expired" },
+    })
+    expect(await status(me)).toEqual({
+      status: 200,
+      body: { name, state: "abandoned", test: true, outcome: "expired" },
+    })
+    await purchase(me, name, { registration: { sandbox: false } })
+    expect(await status(me)).toEqual({
+      status: 200,
+      body: { name, state: "awaiting_payment", test: false },
+    })
+    // Another org's purchase of the same name is not there for it.
+    expect((await status(other)).status).toBe(404)
   })
 })

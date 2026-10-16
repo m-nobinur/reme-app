@@ -4,6 +4,8 @@ import {
   DomainCheckoutRequest,
   DomainPaymentEvent,
   DomainPrice,
+  DomainPurchaseStatus,
+  DomainRegistration,
   DomainStripe,
   idempotencyKey,
   Uuid,
@@ -90,6 +92,31 @@ async function newest(kit: Tenancy, orgId: string, name: string) {
       .limit(1)
   )
   return row ?? null
+}
+
+/**
+ * `GET /domains/{name}`: where the org's newest purchase of that name is,
+ * for the card to poll after Checkout and on a reloaded chat. `test` is a
+ * sandbox purchase, which closes `removed` with `test_registered` and is
+ * never served.
+ */
+export async function purchaseStatus(
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  const row = await newest(kit, owner.orgId, name)
+  if (!row) return noPurchase()
+  const registration = DomainRegistration.safeParse(row.registration).data
+  return Response.json(
+    DomainPurchaseStatus.parse({
+      name: row.name,
+      state: row.state,
+      test: registration?.sandbox ?? false,
+      ...(registration?.outcome ? { outcome: registration.outcome } : {}),
+    })
+  )
 }
 
 /**
