@@ -403,7 +403,7 @@ export const copyFindings = (output: string) =>
  * A `runtime.turn` row per call, the shape the budget and `turnCount` read
  * (`response.usage.cost.total`), so a quick edit is metered like a build.
  */
-async function logTurn(
+export async function logTurn(
   kit: Tenancy,
   ids: { orgId: string; assignmentId: string },
   staffId: string,

@@ -56,7 +56,9 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   class InstanceExists extends Error {}
   return { AgentInstanceExistsError: InstanceExists }
 })
-const dispatched: { message: unknown }[] = []
+const dispatched: { message: unknown; photosSettled?: boolean }[] = []
+// Whether the photo step had settled when the Developer was dispatched.
+const photoStep = vi.hoisted(() => ({ settled: false }))
 // The real module underneath, so the gate reasons the Workflow matches on are
 // the ones the gate actually emits. Only the agent entry point is stood in for.
 vi.mock("@workspace/facade", async (importOriginal) => ({
@@ -64,7 +66,7 @@ vi.mock("@workspace/facade", async (importOriginal) => ({
   AgentInstanceExistsError,
   init: () => ({
     dispatch: async (request: { message: unknown }) => {
-      dispatched.push(request)
+      dispatched.push({ ...request, photosSettled: photoStep.settled })
       return { submissionId: "s" }
     },
   }),
@@ -272,20 +274,27 @@ vi.mock("../src/planner.ts", () => ({
   readDecision: async () =>
     script.decisions.length > 0 ? script.decisions.shift() : "build",
 }))
-// BA4's photos: one generated file, so the brief is seen to carry it.
+// BA4's photos: one generated file, drawn over a few milliseconds, so the
+// Developer is seen to start before they settle.
 vi.mock("../src/photo-step.ts", () => ({
-  makePhotos: async () => ({
-    generated: 1,
-    fell_back: 0,
-    files: [
-      {
-        slot_id: "hero",
-        status: "generated",
-        key: "generated/o/a.png",
-        content_type: "image/png",
-      },
-    ],
-  }),
+  makePhotos: async () => {
+    photoStep.settled = false
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    photoStep.settled = true
+    return photoFiles
+  },
+}))
+const photoFiles = vi.hoisted(() => ({
+  generated: 1,
+  fell_back: 0,
+  files: [
+    {
+      slot_id: "hero",
+      status: "generated",
+      key: "generated/o/a.png",
+      content_type: "image/png",
+    },
+  ],
 }))
 // BA5: the critic's rounds are driven in critic.test.ts; here each look finds
 // what the path scripts, none by default.
@@ -748,20 +757,24 @@ describe("the assignment Workflow's step names", () => {
     expect(console_.initialData.goal_tainted).toBe(false)
   })
 
-  it("hands a planned build's photos to the Developer and an unplanned one none", async () => {
-    const photosOf = async (lane: typeof script.lane) => {
+  it("starts a planned build's Developer while its photos draw, with none in its brief", async () => {
+    const admitted = async (lane: typeof script.lane) => {
       dispatched.length = 0
       script.verdicts = ["preview_ready"]
       script.lane = lane
       await drive([completion]).run()
-      return (
-        dispatched[0] as unknown as { initialData: { photos?: unknown[] } }
-      ).initialData.photos
+      return dispatched[0] as unknown as {
+        photosSettled: boolean
+        initialData: { photos?: unknown[] }
+      }
     }
-    expect(await photosOf(full)).toEqual([
-      expect.objectContaining({ slot_id: "hero", key: "generated/o/a.png" }),
-    ])
-    expect(await photosOf({})).toBeUndefined()
+    // write_pages places each photo as it lands; the brief names none.
+    const planned = await admitted(full)
+    expect(planned.photosSettled).toBe(false)
+    expect(planned.initialData.photos).toBeUndefined()
+    // The run waited for the step before it ended.
+    expect(photoStep.settled).toBe(true)
+    expect((await admitted({})).initialData.photos).toBeUndefined()
   })
 
   it("sends the lead back once with the critic's fixes, and not at all for a build that did not plan", async () => {

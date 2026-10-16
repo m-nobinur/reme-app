@@ -16,7 +16,6 @@ import {
   COPY_WRITER_RULES,
   copyFields,
   copyInstructions,
-  FAN_OUT,
   fieldsOfPrompt,
   leadLines,
   pageCheck,
@@ -24,7 +23,7 @@ import {
   pageOfPrompt,
   pageTasks,
   siteValues,
-  taskGroups,
+  writerTasks,
 } from "../src/fanout.ts"
 import {
   BUILD_MARK,
@@ -301,9 +300,9 @@ describe("the parallel first build", () => {
     ])
       if (fanPlan.pages.some((p) => p.page === page))
         expect(owner(field as string), field).toBe(page)
-    const [about] = taskGroups(fanPlan)
-      .flat()
-      .filter((t) => pageOfPrompt(t.prompt) === "about")
+    const [about] = writerTasks(fanPlan).filter(
+      (t) => pageOfPrompt(t.prompt) === "about"
+    )
     const message =
       pageCheck('const values = {\n  approach1Body: "",\n}', about?.prompt) ??
       ""
@@ -312,9 +311,9 @@ describe("the parallel first build", () => {
   })
 
   it("checks a writer's own fields after its edit and names what to fix", () => {
-    const [about] = taskGroups(fanPlan)
-      .flat()
-      .filter((t) => pageOfPrompt(t.prompt) === "about")
+    const [about] = writerTasks(fanPlan).filter(
+      (t) => pageOfPrompt(t.prompt) === "about"
+    )
     expect(fieldsOfPrompt(about?.prompt)).toContain("aboutCtaHeading")
     const source = [
       "const values = {",
@@ -333,12 +332,12 @@ describe("the parallel first build", () => {
     const message = pageCheck(source, about?.prompt) ?? ""
     expect(message).toContain('aboutCtaHeading "Ready for a tidier garden"')
     expect(message).toContain("have 20 words together")
-    expect(message).toContain("Fix exactly these with one more edit call")
+    expect(message).toContain("Fix exactly these in one more reply")
     // Only the writer's own fields: the home page's builder hears of its
     // ctaHeading, never of the about body, and clean fields pass.
-    const home = taskGroups(fanPlan)
-      .flat()
-      .find((t) => pageOfPrompt(t.prompt) === "home")
+    const home = writerTasks(fanPlan).find(
+      (t) => pageOfPrompt(t.prompt) === "home"
+    )
     const told = pageCheck(source, home?.prompt) ?? ""
     expect(told).toContain('ctaHeading "Ready for a tidier garden?" repeats')
     expect(told).not.toContain("words together")
@@ -354,10 +353,8 @@ describe("the parallel first build", () => {
     expect(pageCheck(source, undefined)).toBeNull()
   })
 
-  it("sends at most four tasks a turn, every page once and the copy writer once", () => {
-    const groups = taskGroups(fanPlan, 5)
-    expect(groups.every((g) => g.length <= FAN_OUT)).toBe(true)
-    const all = groups.flat()
+  it("lists every page once and the copy writer once, each service page after the home page", () => {
+    const all = writerTasks(fanPlan, 5)
     expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
     const pages = all
       .filter((t) => t.agent === "page")
@@ -365,51 +362,48 @@ describe("the parallel first build", () => {
     expect(pages.filter((p) => p !== "service")).toEqual(
       fanPlan.pages.map((p) => p.page).filter((p) => p !== "service")
     )
-    // Five service pages, in groups after every other task, so each reads
-    // the name the home page's builder wrote.
-    expect(pages.filter((p) => p === "service")).toHaveLength(5)
-    const firstService = groups.findIndex((g) =>
-      g.some((t) => pageOfPrompt(t.prompt) === "service")
-    )
-    expect(
-      groups
-        .slice(firstService)
-        .flat()
-        .every((t) => pageOfPrompt(t.prompt) === "service")
-    ).toBe(true)
+    // Five service pages, each waiting for the home page's writer, who names
+    // the service; nothing else waits.
+    const home = all.findIndex((t) => pageOfPrompt(t.prompt) === "home")
+    const services = all.filter((t) => pageOfPrompt(t.prompt) === "service")
+    expect(services).toHaveLength(5)
+    expect(services.every((t) => t.after === home)).toBe(true)
+    expect(all.filter((t) => t.after !== undefined)).toHaveLength(5)
   })
 
-  it("tells a planned first build's lead to fan out, and no one else", () => {
+  it("tells a planned first build's lead to call write_pages, and no one else", () => {
     const text = instructions(planned, 20)
     for (const line of leadLines(planned, fanPlan)) expect(text).toContain(line)
-    expect(text).toContain("<use_parallel_tool_calls>")
+    expect(text).toContain("call write_pages once")
+    // The lead's own build reports only what it must fix.
+    expect(text).toContain("| head -n 40")
     expect(instructions({ ...planned, restore_key: "k" }, 20)).not.toContain(
-      "<use_parallel_tool_calls>"
+      "call write_pages once"
     )
-    expect(instructions(brief([cleaning]), 20)).not.toContain("task agent")
+    expect(instructions(brief([cleaning]), 20)).not.toContain(
+      "call write_pages once"
+    )
   })
 
   it("gives every page builder the same instructions, the facts and the plan included", () => {
     const text = pageInstructions(planned)
     expect(text).toBe(pageInstructions(planned))
-    // Terse by rule: each page's last turn is its summary, and the lead reads it.
-    expect(text).toContain("Write nothing between tool calls")
+    // One reply, no tools, and a terse summary the lead reads.
+    expect(text).toContain("You have no tools. Reply with JSON only")
+    expect(text).toContain("summary is one sentence of at most 40 words")
     expect(text).toContain("Blueprint, the plan the owner approved")
     expect(text).toContain("Canonical facts")
     expect(text).not.toContain("ask_chief for the first missing")
   })
 
-  it("has the copy writer write its fields in one edit and stop, not draft, count and re-edit", () => {
+  it("has the copy writer write its fields by feel in one reply, not draft and count", () => {
     const text = copyInstructions(planned)
     expect(text).toContain(COPY_WRITER_RULES)
-    expect(text).toContain("Write all your fields in one edit call")
+    expect(text).toContain("You have no tools. Reply with JSON only")
     expect(text).toContain("Never count characters")
-    expect(text).toContain("stop and write the summary")
-    // Its fields are empty lines it can anchor on, so it is not sent to read the file first.
-    expect(text).not.toContain("Read src/site-config.ts and the components")
-    expect(pageInstructions(planned)).toContain(
-      "Read src/site-config.ts and the components"
-    )
+    // Its fields are all empty, so it gets no lines' notes; a page writer does.
+    expect(text).not.toContain("each with its note")
+    expect(pageInstructions(planned)).toContain("each with its note")
   })
 
   it("quotes the copy check's own ranges to the copy writer", () => {
