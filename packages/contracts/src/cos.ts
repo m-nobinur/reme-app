@@ -10,6 +10,7 @@ import {
   DomainOffer,
   DomainProvider,
   DomainState,
+  Registrant,
   RegistrantDetails,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
@@ -261,6 +262,17 @@ export const FindDomainOutput = z.discriminatedUnion("outcome", [
 export const BuyDomainInput = z.strictObject({
   name: DomainName,
   ...RegistrantDetails.shape,
+})
+
+/**
+ * What the model may send `buy_domain`: no county, since it sent the city,
+ * "null" and a wrong county. The owner adds one on the card. Stored inputs
+ * with a county still read as `BuyDomainInput`.
+ */
+export const BuyDomainAsk = BuyDomainInput.extend({
+  registrant: Registrant.extend({
+    address: Registrant.shape.address.omit({ state: true }),
+  }),
 })
 
 /**

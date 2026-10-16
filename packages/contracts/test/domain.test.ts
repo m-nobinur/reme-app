@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   BUY_REFUSALS,
+  BuyDomainAsk,
   BuyDomainInput,
   CheckDomainOutput,
   ConnectDomainOutput,
@@ -296,6 +297,15 @@ describe("BuyDomainInput", () => {
     ["a price from the model", { ...input, price_gbp: 1 }],
   ])("refuses %s", (_name, value) => {
     expect(verdict("BuyDomainInput", BuyDomainInput, value)).toEqual(REFUSED)
+  })
+
+  it("takes a county from a stored input, never from the model", () => {
+    const county = registrant({
+      address: { ...input.registrant.address, state: "Somerset" },
+    })
+    expect(BuyDomainInput.safeParse(county).success).toBe(true)
+    expect(BuyDomainAsk.safeParse(county).success).toBe(false)
+    expect(BuyDomainAsk.safeParse(input).success).toBe(true)
   })
 })
 
