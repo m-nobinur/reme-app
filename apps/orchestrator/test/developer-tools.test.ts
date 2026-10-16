@@ -29,7 +29,7 @@ vi.mock("../src/sandbox.ts", () => ({
   recover: async () => undefined,
 }))
 
-const { Developer, developerTools, sandboxTools } = await import(
+const { Developer, developerTools, sandboxTools, unlisted } = await import(
   "../src/agents/developer.ts"
 )
 
@@ -78,5 +78,24 @@ describe("a Developer that cannot start", () => {
         },
       ])
     )
+  })
+})
+
+// Perf run 2: the harness's listing of the site grew between deliveries and
+// rewrote the lead's whole cached prompt after the critique.
+describe("the lead's sandbox, as the harness lists it", () => {
+  it("lists the site as empty whatever is built, and every other directory as it is", async () => {
+    let built = ["src", "package.json"]
+    const create = unlisted(async (_: { id: string }) => ({
+      cwd: "/workspace",
+      readdir: async (path: string) => (path === "/tmp" ? ["x"] : built),
+    }))
+    const sandbox = await create({ id: "a" })
+    expect(await sandbox.readdir("/workspace/site")).toEqual([])
+    built = [...built, "dist", ".astro"]
+    expect(await sandbox.readdir("/workspace/site/")).toEqual([])
+    expect(await sandbox.readdir("/workspace/site/src")).toEqual(built)
+    expect(await sandbox.readdir("/tmp")).toEqual(["x"])
+    expect(sandbox.cwd).toBe("/workspace")
   })
 })
