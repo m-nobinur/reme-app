@@ -28,6 +28,7 @@ import {
   conversationMessages,
   conversations,
   currentFacts,
+  domains,
   eq,
   events,
   type OrgScopedDb,
@@ -589,7 +590,11 @@ export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {
 /** Where an environment's site links point: its host suffix and, on local dev, the router's port. */
 type SiteConfig = Pick<Env, "SITE_HOST_SUFFIX" | "SITE_PORT">
 
-/** The revision the site serves now, and its host and link while it serves one. */
+/**
+ * The revision the site serves now, and its host and link while it serves
+ * one: the active custom domain over https when the org has one, else the
+ * slug host.
+ */
 export async function readSite(
   db: OrgScopedDb,
   config: SiteConfig
@@ -601,12 +606,19 @@ export async function readSite(
       live: sql<
         WorkspaceStatus["site"]["live"]
       >`(select json_build_object('revision_id', r.id, 'version', r.version, 'assignment_id', r.assignment_id) from deployments d join site_revisions r on r.id = d.revision_id where d.site_id = orgs.id order by d.config_version desc limit 1)`,
+      // `activeDomainHost`'s pick, inside this statement so the poll adds none.
+      custom: sql<
+        string | null
+      >`(select ${domains.primaryHost} from ${domains} where ${domains.state} = 'active' order by ${domains.createdAt} limit 1)`,
     })
     .from(orgs)
     .limit(1)
   const live = row?.live ?? null
-  const host = row && live ? siteHost(row.slug, config.SITE_HOST_SUFFIX) : null
-  return { host, url: host && siteUrl(host, config.SITE_PORT), live }
+  if (!row || !live) return { host: null, url: null, live }
+  if (row.custom)
+    return { host: row.custom, url: `https://${row.custom}`, live }
+  const host = siteHost(row.slug, config.SITE_HOST_SUFFIX)
+  return { host, url: siteUrl(host, config.SITE_PORT), live }
 }
 
 /** Required facts the org does not hold yet, minus the ones it keeps off the site. */

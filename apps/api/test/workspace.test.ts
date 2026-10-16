@@ -12,6 +12,7 @@ import {
   assignments,
   conversationMessages,
   conversations,
+  domains,
   eq,
   postAssistantMessage,
   serverMessageId,
@@ -350,6 +351,51 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         { revision_id: busyIds.reviewRevision, version: 2 },
       ],
     ])
+  })
+
+  it("names the active custom domain over https, and the slug host while the domain only connects", async () => {
+    const name = `${crypto.randomUUID().slice(0, 8)}.example`
+    const row = (state: "awaiting_dns" | "active") =>
+      kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db
+          .insert(domains)
+          .values({
+            orgId: busy.orgId,
+            siteId: busy.orgId,
+            name,
+            primaryHost: `www.${name}`,
+            origin: "connected",
+            method: "records",
+            state,
+          })
+          .returning({ id: domains.id })
+      )
+    const local = {
+      SITE_HOST_SUFFIX: ".reme.localhost" as Env["SITE_HOST_SUFFIX"],
+      SITE_PORT: "3004",
+    }
+    const [connecting] = await row("awaiting_dns")
+    try {
+      expect((await readWorkspace(kit, busy.orgId, local)).site).toMatchObject({
+        host: `${busy.slug}.reme.localhost`,
+        url: `http://${busy.slug}.reme.localhost:3004`,
+      })
+      await kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db
+          .update(domains)
+          .set({ state: "active" })
+          .where(eq(domains.id, connecting?.id as string))
+      )
+      // No port and no http, even on local dev: the domain is Cloudflare's.
+      expect((await readWorkspace(kit, busy.orgId, local)).site).toMatchObject({
+        host: `www.${name}`,
+        url: `https://www.${name}`,
+      })
+    } finally {
+      await kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db.delete(domains).where(eq(domains.name, name))
+      )
+    }
   })
 
   it("shows a working build's photos as they settle and its pages by name, its clock without the plan review", async () => {
