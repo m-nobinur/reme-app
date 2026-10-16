@@ -42,7 +42,7 @@ export function contentSecurityPolicy(
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS}`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""} https://*.stripe.com`,
+    `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""}`,
     "font-src 'self' data:",
     "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
     `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com`,
