@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest"
 import {
+  BUY_REFUSALS,
+  BuyDomainInput,
   CheckDomainOutput,
   ConnectDomainOutput,
   DnsRecord,
+  DOMAIN_PRICES,
   DomainCheck,
   DomainName,
+  DomainPaymentEvent,
   DomainProvider,
+  DomainTld,
+  ErrorEnvelope,
   RemoveDomainOutput,
   ServerButtonPart,
   ServerMessage,
+  sellableTld,
 } from "../src/index.ts"
 import { RedirectPointer, SitePointer } from "../src/site.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
@@ -234,5 +241,93 @@ describe("ServerMessage", () => {
         type: "tool-button",
       }).success
     ).toBe(false)
+  })
+})
+
+describe("sellableTld", () => {
+  it.each([
+    ["brightclean.co.uk", "co.uk"],
+    ["brightclean.uk", "uk"],
+    ["brightclean.com", "com"],
+  ])("sells %s as %s", (name, tld) => {
+    expect(sellableTld(name)).toBe(tld)
+  })
+
+  it.each([
+    "book.brightclean.co.uk",
+    "co.uk",
+    "org.uk",
+    "brightclean.org",
+    "brightclean.org.uk",
+  ])("does not sell %s", (name) => {
+    expect(sellableTld(name)).toBeNull()
+  })
+
+  it("has a price for every ending it sells", () => {
+    expect(Object.keys(DOMAIN_PRICES).sort()).toStrictEqual(
+      [...DomainTld.options].sort()
+    )
+  })
+})
+
+describe("BuyDomainInput", () => {
+  const input = samples.BuyDomainInput as {
+    registrant: { address: object }
+  }
+  const registrant = (patch: object) => ({
+    ...input,
+    registrant: { ...input.registrant, ...patch },
+  })
+  it.each([
+    [
+      "a company number in lower case",
+      { ...input, company_number: "sc123456" },
+    ],
+    [
+      "a country by name",
+      registrant({
+        address: { ...input.registrant.address, country_code: "UK " },
+      }),
+    ],
+    ["a phone not in E.164", registrant({ phone: "07700 900123" })],
+    ["a registrant type of its own", { ...input, registrant_type: "CHARITY" }],
+    ["a price from the model", { ...input, price_gbp: 1 }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("BuyDomainInput", BuyDomainInput, value)).toEqual(REFUSED)
+  })
+})
+
+describe("DomainPaymentEvent", () => {
+  const paid = samples.DomainPaymentEvent as object
+  it.each([
+    [
+      "a paid event with no payment intent",
+      { ...paid, payment_intent: undefined },
+    ],
+    ["a secret riding along", { ...paid, client_secret: "cs_x_sec_y" }],
+    ["an id of the wrong kind", { ...paid, payment_intent: "cs_test_a1" }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("DomainPaymentEvent", DomainPaymentEvent, value)).toEqual(
+      REFUSED
+    )
+  })
+
+  it("accepts a renewal that failed", () => {
+    const event = {
+      type: "renewal_failed",
+      event_id: "evt_9z8y7x",
+      domain_id: "8a9b0c1d-2e3f-4a5b-9c6d-7e8f9a0b1c2d",
+      subscription: "sub_1a2b3c",
+      invoice: "in_1a2b3c",
+    }
+    expect(verdict("DomainPaymentEvent", DomainPaymentEvent, event)).toEqual(
+      ACCEPTED
+    )
+  })
+})
+
+describe("BUY_REFUSALS", () => {
+  it.each(Object.values(BUY_REFUSALS))("$code is an envelope code", (r) => {
+    expect(ErrorEnvelope.shape.code.safeParse(r.code).success).toBe(true)
   })
 })
