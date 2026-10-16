@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm"
+import { asc, eq, sql } from "drizzle-orm"
 import { domains } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
 
@@ -20,4 +20,20 @@ export async function activeDomainHost(
     .orderBy(asc(domains.createdAt))
     .limit(1)
   return row?.primaryHost ?? null
+}
+
+/**
+ * Whether an org other than this one ever held `name`, in any state: the
+ * takeover guard a new claim sets `needs_txt` from. RLS hides those rows, so
+ * it asks the `domain_held_elsewhere` definer (migration 0016), which reads
+ * the caller's org from the context `withOrg` set and answers a boolean only.
+ */
+export async function domainHeldElsewhere(
+  db: OrgScopedDb,
+  name: string
+): Promise<boolean> {
+  const [row] = await db.execute<{ held: boolean }>(
+    sql`select public.domain_held_elsewhere(${name}) as held`
+  )
+  return row?.held === true
 }

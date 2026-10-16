@@ -534,6 +534,24 @@ function pointsAtUs(records: HostRecords, inspection: Inspection): boolean {
 }
 
 /**
+ * Whether the apex or `www` already reaches us before a claim exists: a
+ * record left from an earlier claim, which would let a new one go live on DNS
+ * alone. Strict on the owner's Cloudflare, where only a visible CNAME counts.
+ */
+export function alreadyPointsAtUs(inspection: Inspection): boolean {
+  const strict = { ...inspection, onCloudflare: false }
+  return Object.values(inspection.hosts).some((records) =>
+    pointsAtUs(records, strict)
+  )
+}
+
+/** Whether public DNS shows the TXT record `name` with `value`. */
+export async function hasTxt(name: string, value: string): Promise<boolean> {
+  const { answers } = await doh(name, "TXT")
+  return answers.some((x) => x.type === TYPES.TXT && txt(x.data) === value)
+}
+
+/**
  * Whether the bare domain is served directly (an ALIAS or a flattened CNAME
  * to us) or forwards to `www`. Its own custom hostname being active settles
  * it; otherwise its addresses must be ours, which the owner's own Cloudflare

@@ -121,7 +121,7 @@
       "preview_urls": false,
       "workers_dev": false,
       // The second entry keeps this hostname off the site router. Its route is
-      // `*.remeai.co.uk/*`, and a wildcard route beats a custom domain, so
+      // `*/*` (ADR-041), and a wildcard route beats a custom domain, so
       // without this every request here would pass through that Worker first.
       // An explicit host route beats the wildcard (measured 2026-09-18 with two
       // throwaway Workers, 6 of 6). The router's `SERVICE_HOSTS` stays as the

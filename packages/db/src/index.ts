@@ -9,7 +9,7 @@ export {
   postAssistantMessage,
   serverMessageId,
 } from "./assistant-messages.ts"
-export { activeDomainHost } from "./domains.ts"
+export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
 export {
   type AppendEvent,
   type AppendSessionEvent,

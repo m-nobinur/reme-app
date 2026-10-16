@@ -10,6 +10,7 @@ import {
   remove,
   repoint,
   revokeDomains,
+  sweepDomains,
 } from "../src/domain-flow.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
@@ -62,7 +63,16 @@ function stubNet() {
             hostname: string
           }
           hostnames.set(`h-${hostname}`, hostname)
-          return envelope({ id: `h-${hostname}`, hostname, status: "pending" })
+          return envelope({
+            id: `h-${hostname}`,
+            hostname,
+            status: "pending",
+            ownership_verification: {
+              type: "txt",
+              name: `_cf-custom-hostname.${hostname}`,
+              value: `v-${hostname}`,
+            },
+          })
         }
         if (init?.method === "DELETE") {
           deleted.push(u.pathname.split("/").at(-1) ?? "")
@@ -187,6 +197,51 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(await connect(env, kit, other.orgId, body)).toMatchObject({
       status: 409,
       code: "domain.in_use",
+    })
+  })
+
+  it("asks a second org for the ownership TXT once another org held the name", async () => {
+    stubNet()
+    const first = await published()
+    const { env } = domainEnv(first.store)
+    const name = unique()
+    const body = { name, approval_id: "approval-1" }
+    expect(await connect(env, kit, first.orgId, body)).toMatchObject({
+      status: 201,
+      output: { steps: [{ type: "CNAME" }] },
+    })
+    expect(await rowOf(first.orgId, name)).toMatchObject({ needsTxt: false })
+    expect(await remove(env, kit, first.orgId, name)).toBeNull()
+
+    const second = await published()
+    const { env: env2, created } = domainEnv(second.store)
+    const answer = await connect(env2, kit, second.orgId, body)
+    const steps = [
+      { type: "CNAME", name: "www", value: "domains.remeai.co.uk" },
+      {
+        type: "TXT",
+        name: "_cf-custom-hostname.www",
+        value: `v-www.${name}`,
+      },
+      { type: "TXT", name: "_cf-custom-hostname", value: `v-${name}` },
+    ]
+    expect(answer).toMatchObject({ status: 201, output: { steps } })
+    const row = await rowOf(second.orgId, name)
+    expect(row).toMatchObject({
+      needsTxt: true,
+      cfIds: { www: `h-www.${name}`, apex: `h-${name}` },
+      ownership: {
+        [`www.${name}`]: {
+          name: `_cf-custom-hostname.www.${name}`,
+          value: `v-www.${name}`,
+        },
+      },
+    })
+    expect(created).toHaveLength(1)
+    // Asking again replays the same records from the row.
+    expect(await connect(env2, kit, second.orgId, body)).toEqual({
+      status: 200,
+      output: (answer as { output: unknown }).output,
     })
   })
 
@@ -360,5 +415,93 @@ describe.skipIf(!url)("custom domains against a database", () => {
       `h-${name}`,
       `h-www.${name}`,
     ])
+  })
+
+  it("raises one alert and one message per change in a live domain, and nothing for no change", async () => {
+    const site = await previewed()
+    const name = unique()
+    const www = `www.${name}`
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db.insert(domains).values({
+        orgId: site.orgId,
+        siteId: site.orgId,
+        name,
+        primaryHost: www,
+        origin: "connected",
+        method: "records",
+        state: "active",
+        cfIds: { www: `h-${www}`, apex: `h-${name}` },
+        provider: {
+          name: "GoDaddy",
+          settings_url: "https://dcc.godaddy.com/manage/dns",
+        },
+        lastCheck: { status: "valid" },
+        activatedAt: new Date(),
+      })
+    )
+    const now = { status: "active", ssl: "active" }
+    const read = vi.fn(async (_url: string | URL | Request) =>
+      Response.json({
+        success: true,
+        errors: [],
+        result: {
+          id: `h-${www}`,
+          hostname: www,
+          status: now.status,
+          ssl: { status: now.ssl },
+        },
+      })
+    )
+    vi.stubGlobal("fetch", read)
+    const env = { CF_DOMAINS_TOKEN: "token", CF_DOMAINS_ZONE_ID: "zone" }
+    const alerts = async () =>
+      (
+        await kit.withOrg({ orgId: site.orgId }, (db) =>
+          db
+            .select({ payload: events.payload })
+            .from(events)
+            .where(eq(events.type, "alert.raised"))
+        )
+      )
+        .map((e) => (e.payload as { kind: string }).kind)
+        .sort()
+
+    // Unchanged: nothing.
+    expect(await sweepDomains(env, kit, site.orgId, "2026101606")).toEqual([])
+    expect(String(read.mock.calls[0]?.[0])).toBe(`${CF}/h-${www}`)
+
+    now.status = "moved"
+    expect(await sweepDomains(env, kit, site.orgId, "2026101606")).toEqual([
+      {
+        key: expect.stringMatching(/:sweep:2026101606$/),
+        text: `${www} no longer points at your website, so visitors there won't reach it. Point its record back at domains.remeai.co.uk and it comes back on its own.`,
+        button: {
+          label: "Open GoDaddy DNS settings",
+          action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+        },
+      },
+    ])
+    // The next day, still moved: no second alert or message.
+    expect(await sweepDomains(env, kit, site.orgId, "2026101706")).toEqual([])
+    expect(await alerts()).toEqual(["domain.invalid_configuration"])
+
+    now.status = "active"
+    now.ssl = "pending_validation"
+    expect(await sweepDomains(env, kit, site.orgId, "2026101806")).toEqual([
+      expect.objectContaining({
+        text: `The secure certificate for ${www} isn't active right now, so visitors may see a warning. I'm keeping an eye on it.`,
+      }),
+    ])
+    // Back to valid is recorded quietly.
+    now.ssl = "active"
+    expect(await sweepDomains(env, kit, site.orgId, "2026101906")).toEqual([])
+    expect(await alerts()).toEqual([
+      "domain.invalid_configuration",
+      "domain.pending_certificate",
+    ])
+    expect(await rowOf(site.orgId, name)).toMatchObject({
+      state: "active",
+      lastCheck: { status: "valid" },
+    })
   })
 })

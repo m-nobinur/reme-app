@@ -4,7 +4,8 @@ Status: accepted, 2026-08-30. Amended 2026-09-14 twice: the preview hostname sha
 the service Workers got hostnames, see the decision and the last two consequences. Amended
 2026-09-15: staging gained `staging-preview`, see the decision; and staging's tenant and preview
 hosts take a `-stg` suffix on `remeai.co.uk`, see the last consequence. Amended 2026-09-29: a preview host cuts its slug to fit one label, and
-only `preview-v{n}-` marks a preview, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
+only `preview-v{n}-` marks a preview, see the last consequence. Amended 2026-10-16: owners' own
+domains, the `domains` reserved name and the `*/*` route, see the last consequence. Applies to `apps/web`, the C7 website plane, `infra/`, DNS on
 `remeai.co.uk`, and the story that lets an owner choose a slug.
 
 Changes no DR. It settles the hostnames the plans left as placeholders (`mypareme.app`,
@@ -203,3 +204,13 @@ C7 does not exist. This ADR fixes the hostnames so C7 is not designed around a p
   2026-09-18. `staging`, `staging-api` and `staging-orchestrator` answer their own Workers, each
   now holding an explicit zone route for its hostname, as the production services do, with the
   three also named in `SERVICE_HOSTS`. Production held no org, so no slug started `preview-`.
+- **Amended 2026-10-16, custom domains (ADR-041).** An owner's own domain is a Cloudflare for
+  SaaS custom hostname on `remeai.co.uk`, and the production router's route becomes `*/*`: the
+  whole zone plus every custom hostname, which is the route Cloudflare's "Workers as your fallback
+  origin" page documents. On the zone it also takes the apex, which passes through as a service
+  host does. The explicit host routes of api, app and orchestrator stand, and a more specific
+  route still beats `*/*`, so `-stg` hosts stay staging's. A
+  host outside the zone with no pointer gets 404 rather than a pass-through, which would fetch the
+  fallback origin. `domains.remeai.co.uk` is that fallback origin, a proxied `AAAA 100::`, so the
+  reserved list gains `domains`: `slugFor` gives a business named "Domains" a `site-` prefix, as
+  it does a name starting `preview-`.

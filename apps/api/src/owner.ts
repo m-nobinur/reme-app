@@ -13,7 +13,15 @@ import {
   PreviewLink,
   SetFactsRequest,
 } from "@workspace/contracts"
-import { approvals, assignments, type Tenancy } from "@workspace/db"
+import {
+  approvals,
+  assignments,
+  eq,
+  memberships,
+  sql,
+  type Tenancy,
+  users,
+} from "@workspace/db"
 import { readPhoto, uploadAssets } from "./assets.ts"
 import {
   bridge,
@@ -45,7 +53,7 @@ import {
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -153,6 +161,48 @@ async function decide(
   })
 }
 
+/**
+ * `DELETE /domains/{name}`: the owner takes a connected domain off the site.
+ * The org's owner only, checked as account deletion checks it; the
+ * orchestrator does the removal (`remove` in domain-flow.ts), answers 204,
+ * and its refusals are relayed.
+ */
+async function removeDomain(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+) {
+  const key = idempotencyKey(request)
+  if (!key) return keyMissing()
+  const [own] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(
+        sql`${memberships.status} = 'active' and ${users.workosUserId} = ${owner.session.workosUserId}`
+      )
+  )
+  if (own?.role !== "owner") {
+    return failure(403, {
+      class: "permission",
+      code: "domain.not_owner",
+      message: "Only the owner can remove a domain.",
+      detail: {},
+    })
+  }
+  const result = await bridge(env, owner, `/domains/${name}`, {
+    method: "DELETE",
+    key,
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, () => {
+    throw new Error("a removal answers 204 and no body")
+  })
+}
+
 export async function ownerRoute(
   request: Request,
   env: Env,
@@ -202,6 +252,9 @@ export async function ownerRoute(
     return conversationRoute(request, kit, owner, id, action)
   }
   if (noun === "reminders") return reminderRoute(request, kit, owner, id)
+  if (noun === "domains" && method === "DELETE") {
+    return removeDomain(request, env, kit, owner, id)
+  }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)
   }

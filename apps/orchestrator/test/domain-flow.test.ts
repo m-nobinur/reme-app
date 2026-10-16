@@ -69,6 +69,8 @@ function fakeKit() {
     primaryHost: WWW,
     state: "awaiting_dns" as string,
     cfIds: { apex: `h-${NAME}`, www: `h-${WWW}` },
+    needsTxt: false,
+    ownership: {} as unknown,
     lastCheck: null as unknown,
     provider: {
       name: "GoDaddy",
@@ -183,6 +185,48 @@ describe("a look", () => {
     expect(row.state).toBe("verifying")
   })
 
+  it("keeps a guarded claim unverified until its ownership TXT is in public DNS", async () => {
+    const { kit, row } = fakeKit()
+    row.needsTxt = true
+    const own = { name: `_cf-custom-hostname.${WWW}`, value: "0e2d5a7f-uuid" }
+    row.ownership = { [WWW]: own }
+    const net = {
+      [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
+      // Cloudflare calls it active on the CNAME alone.
+      [`${BASE}/h-${WWW}`]: () => hostname(WWW, "active", "active"),
+      [`https://${WWW}/`]: () => new Response("not here", { status: 404 }),
+    }
+    stubNet(net, FIXED)
+    expect(await look(env, kit, "org", "dom", 1)).toMatchObject({
+      status: "pending_verification",
+      ready: false,
+    })
+    // A TXT with another value is not the owner's proof either.
+    const txt = (value: string) => ({
+      [`${own.name} TXT`]: {
+        Status: 0,
+        Answer: [{ name: own.name, type: 16, TTL: 300, data: `"${value}"` }],
+      },
+    })
+    vi.unstubAllGlobals()
+    stubNet(net, { ...FIXED, ...txt("someone-else") })
+    expect(await look(env, kit, "org", "dom", 2)).toMatchObject({
+      status: "pending_verification",
+      ready: false,
+    })
+    vi.unstubAllGlobals()
+    stubNet(net, { ...FIXED, ...txt(own.value) })
+    expect(await look(env, kit, "org", "dom", 3)).toMatchObject({
+      status: "valid",
+      ready: true,
+    })
+    // A host with no stored TXT is never taken as proven.
+    row.ownership = {}
+    expect(await look(env, kit, "org", "dom", 4)).toMatchObject({
+      status: "pending_verification",
+    })
+  })
+
   it("is gone for a claim that is no longer connecting", async () => {
     const { kit, row } = fakeKit()
     row.state = "removed"
@@ -200,6 +244,8 @@ describe("the check", () => {
       name: NAME,
       primaryHost: WWW,
       cfIds: { apex: `h-${NAME}`, www: `h-${WWW}` },
+      needsTxt: false,
+      ownership: {},
     }
     expect(await currentCheck(env, row)).toEqual({
       check: {

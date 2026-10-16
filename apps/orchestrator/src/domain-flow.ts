@@ -10,6 +10,7 @@ import {
 } from "@workspace/contracts"
 import {
   appendEvent,
+  domainHeldElsewhere,
   domains,
   eq,
   type OrgScopedDb,
@@ -21,9 +22,11 @@ import {
   tenancy,
 } from "@workspace/db"
 import {
+  alreadyPointsAtUs,
   apexMode,
   CAA_FOR_US,
   type CloudflareEnv,
+  CNAME_TARGET,
   type CustomHostname,
   DomainError,
   deleteHostname,
@@ -31,9 +34,11 @@ import {
   domainCheck,
   ensureHostname,
   getHostname,
+  hasTxt,
   inspect,
   OUR_ZONE,
   recordsFor,
+  relative,
 } from "./domains.ts"
 import {
   activeDeployment,
@@ -82,6 +87,8 @@ export const nextWait = (n: number) => WAITS_MS[n - 1] ?? 60 * MINUTE
 
 type DomainRow = typeof domains.$inferSelect
 type CfIds = { apex?: string; www?: string }
+/** Cloudflare's `ownership_verification` TXT per host, as `domains.ownership` keeps it. */
+type Ownership = Record<string, { name: string; value: string }>
 
 /** A kit for one step, closed when it ends. */
 export async function withKit<T>(
@@ -259,6 +266,27 @@ export async function reaches(host: string): Promise<boolean> {
   }
 }
 
+/** Statuses a check reaches only once Cloudflare holds the hostnames verified. */
+const PAST_VERIFICATION: DomainCheck["status"][] = [
+  "invalid_configuration",
+  "pending_certificate",
+  "valid",
+]
+
+/** Every host's stored ownership TXT is in public DNS; a host with none fails. */
+async function ownedByTxt(
+  ownership: Ownership,
+  hosts: Array<{ host: string }>
+): Promise<boolean> {
+  const seen = await Promise.all(
+    hosts.map(({ host }) => {
+      const own = ownership[host]
+      return own ? hasTxt(own.name, own.value) : false
+    })
+  )
+  return seen.every(Boolean)
+}
+
 /**
  * The domain's check now, from public DNS and its two custom hostnames, and
  * the host it would be served on. Never throws: a failed read is
@@ -266,7 +294,10 @@ export async function reaches(host: string): Promise<boolean> {
  */
 export async function currentCheck(
   env: CloudflareEnv,
-  row: Pick<DomainRow, "name" | "cfIds" | "primaryHost">
+  row: Pick<
+    DomainRow,
+    "name" | "cfIds" | "primaryHost" | "needsTxt" | "ownership"
+  >
 ): Promise<{ check: DomainCheck; primary: string }> {
   try {
     const ids = row.cfIds as CfIds
@@ -281,10 +312,18 @@ export async function currentCheck(
       ...(alias ? [{ host: row.name, hostname: apex }] : []),
       { host: wwwHost, hostname: www },
     ]
-    return {
-      check: domainCheck(inspection, hosts),
-      primary: alias ? row.name : wwwHost,
+    let check = domainCheck(inspection, hosts)
+    // The takeover guard: a name another org held, or one that pointed at us
+    // before this claim, is not verified until each host's ownership TXT is
+    // in public DNS. Cloudflare's own `active` may come from the CNAME alone.
+    if (
+      row.needsTxt &&
+      PAST_VERIFICATION.includes(check.status) &&
+      !(await ownedByTxt(row.ownership as Ownership, hosts))
+    ) {
+      check = { status: "pending_verification" }
     }
+    return { check, primary: alias ? row.name : wwwHost }
   } catch {
     return { check: { status: "unknown_error" }, primary: row.primaryHost }
   }
@@ -296,7 +335,7 @@ export async function currentCheck(
 
 /**
  * The claim's two custom hostnames, the apex and `www`, created or found and
- * kept in `cf_ids`. Each id is stored as soon as its hostname exists, so a
+ * kept in `cf_ids`, with each one's ownership TXT in `ownership`. Each id is stored as soon as its hostname exists, so a
  * retry after the second create fails still owns the first. `gone` for a
  * claim no longer connecting, `held` when Cloudflare has a hostname this
  * claim does not own.
@@ -310,20 +349,29 @@ export async function claimHostnames(
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return "gone"
   const ids = { ...(row.cfIds as CfIds) }
+  const ownership = { ...(row.ownership as Ownership) }
   const hosts = [
     ["www", `www.${row.name}`],
     ["apex", row.name],
   ] as const
   for (const [key, host] of hosts) {
     try {
-      ids[key] = (await ensureHostname(env, host, { id: ids[key] })).id
+      const hostname = await ensureHostname(env, host, { id: ids[key] })
+      ids[key] = hostname.id
+      const own = hostname.ownership_verification
+      if (own?.name && own.value) {
+        ownership[host] = { name: own.name, value: own.value }
+      }
     } catch (error) {
       if (error instanceof DomainError && error.name === "domain.hostname_held")
         return "held"
       throw error
     }
     await kit.withOrg({ orgId }, (db) =>
-      db.update(domains).set({ cfIds: ids }).where(eq(domains.id, domainId))
+      db
+        .update(domains)
+        .set({ cfIds: ids, ownership })
+        .where(eq(domains.id, domainId))
     )
   }
   return ids
@@ -539,7 +587,9 @@ const invalid = () =>
  * `POST /domains`: inspect the domain, claim it for the org and start its
  * Workflow, answering with the records to add. The same org asking again for
  * a name it is connecting gets the same answer; one name has one live claim
- * across orgs, and the unique index says so.
+ * across orgs, and the unique index says so. A name another org ever held, or
+ * whose DNS already reaches us, is a `needs_txt` claim: its hostnames are
+ * claimed here and their ownership TXT records added to the answer.
  */
 export async function connect(
   env: Env,
@@ -568,19 +618,24 @@ export async function connect(
   if (inspection.apex !== name) return invalid()
   const provider = await detectProvider(name, inspection.nameservers)
   const apex = apexMode(inspection, null)
-  const output = ConnectDomainOutput.parse({
-    outcome: "connecting",
-    method: "records",
+  const base = {
+    outcome: "connecting" as const,
+    method: "records" as const,
     email_affected: false,
     steps: recordsFor({ inspection, apex, hostnames: [], withTxt: false }),
     apex,
     ...(provider && { provider }),
-  })
-  let claimed: Refusal | { id: string | null }
+  }
+  const pointed = alreadyPointsAtUs(inspection)
+  let claimed: Refusal | { id: string; created: boolean; needsTxt: boolean }
   try {
     claimed = await kit.withOrg({ orgId }, async (db) => {
       const [held] = await db
-        .select({ state: domains.state })
+        .select({
+          id: domains.id,
+          state: domains.state,
+          needsTxt: domains.needsTxt,
+        })
         .from(domains)
         .where(
           sql`${domains.name} = ${name} and ${domains.state} in ('awaiting_dns', 'verifying', 'active')`
@@ -592,7 +647,7 @@ export async function connect(
           "domain.in_use",
           `${name} is already live on this site.`
         )
-      if (held) return { id: null }
+      if (held) return { id: held.id, created: false, needsTxt: held.needsTxt }
       if (!(await activeDeployment(db, orgId)))
         return refuse(
           409,
@@ -611,6 +666,7 @@ export async function connect(
           "domain.too_many_pending",
           "There are already three domains waiting for their records. Finish or remove one first."
         )
+      const needsTxt = pointed || (await domainHeldElsewhere(db, name))
       const [row] = await db
         .insert(domains)
         .values({
@@ -623,6 +679,7 @@ export async function connect(
           state: "awaiting_dns",
           onCloudflare: inspection.onCloudflare,
           provider: provider ?? null,
+          needsTxt,
         })
         .returning({ id: domains.id })
       if (!row) throw new Error("domains insert returned nothing")
@@ -633,7 +690,7 @@ export async function connect(
         type: "domain.connect_requested",
         payload: { domain_id: row.id, name, approval_id: approvalId },
       })
-      return { id: row.id }
+      return { id: row.id, created: true, needsTxt }
     })
   } catch (error) {
     if (pgCode(error) === "23505")
@@ -646,8 +703,53 @@ export async function connect(
     throw error
   }
   if ("refused" in claimed) return claimed
-  if (claimed.id) await start(env, orgId, claimed.id)
-  return { status: claimed.id ? 201 : 200, output }
+  if (claimed.created) {
+    // A guarded claim needs its hostnames now, for their TXT; claimed before
+    // the Workflow starts so the two never race to create one.
+    if (claimed.needsTxt) {
+      await claimHostnames(env, kit, orgId, claimed.id).catch(() => {
+        // The Workflow claims it with retries; asking again gives the TXT.
+      })
+    }
+    await start(env, orgId, claimed.id)
+  }
+  const status = claimed.created ? 201 : 200
+  if (!claimed.needsTxt)
+    return { status, output: ConnectDomainOutput.parse(base) }
+  const [row] = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ ownership: domains.ownership })
+      .from(domains)
+      .where(eq(domains.id, claimed.id))
+  )
+  const ownership = (row?.ownership ?? {}) as Ownership
+  // www first, as the card lists it; jsonb keeps its own key order.
+  const txt = [`www.${name}`, name].flatMap((host) => {
+    const own = ownership[host]
+    return own
+      ? [
+          {
+            type: "TXT" as const,
+            name: relative(own.name, name),
+            value: own.value,
+          },
+        ]
+      : []
+  })
+  if (txt.length === 0)
+    return refuse(
+      503,
+      "transient",
+      "domain.records_pending",
+      "I've started connecting the domain but its records aren't ready yet. Ask me again in a minute."
+    )
+  return {
+    status,
+    output: ConnectDomainOutput.parse({
+      ...base,
+      steps: [...base.steps, ...txt],
+    }),
+  }
 }
 
 /** The claim's Workflow, created; one already there is fine. */
@@ -814,6 +916,82 @@ export async function repoint(
     // A closed org keeps no pointer at all; anything else is a failure.
     if ((error as { code?: string }).code !== "org.closed") throw error
   }
+}
+
+/**
+ * The daily look at an org's live domains, the sweep's domain chunk: the
+ * primary host's custom hostname read again. A hostname Cloudflare calls
+ * `moved` (its DNS left us) or a certificate no longer active raises one
+ * `alert.raised` and returns one message for the owner; one Cloudflare no
+ * longer has raises the alert only, since the owner cannot fix it. The check is kept in `last_check` in the same transaction as
+ * the alert, so the next sweep finds no change and raises nothing; a domain
+ * back to valid is recorded quietly. `hour` keys the message.
+ */
+export async function sweepDomains(
+  env: CloudflareEnv,
+  kit: Tenancy,
+  orgId: string,
+  hour: string
+): Promise<Say[]> {
+  const rows = await kit.withOrg({ orgId }, (db) =>
+    db.select().from(domains).where(eq(domains.state, "active"))
+  )
+  const says: Say[] = []
+  for (const row of rows) {
+    const ids = row.cfIds as CfIds
+    const id = row.primaryHost === row.name ? ids.apex : ids.www
+    if (!id) continue
+    const hostname = await getHostname(env, id)
+    const check: DomainCheck = !hostname
+      ? { status: "not_found" }
+      : hostname.status === "moved"
+        ? { status: "invalid_configuration" }
+        : hostname.ssl?.status !== "active"
+          ? { status: "pending_certificate" }
+          : { status: "valid" }
+    if (JSON.stringify(row.lastCheck) === JSON.stringify(check)) continue
+    const before = row.lastCheck === null ? null : JSON.stringify(row.lastCheck)
+    const raised = await kit.withOrg({ orgId }, async (db) => {
+      const changed = await db
+        .update(domains)
+        .set({ lastCheck: check })
+        .where(
+          sql`${domains.id} = ${row.id} and ${domains.state} = 'active' and ${domains.lastCheck} is not distinct from ${before}::jsonb`
+        )
+        .returning({ id: domains.id })
+      if (changed.length === 0 || check.status === "valid") return false
+      await appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: {
+          kind: `domain.${check.status}`,
+          domain_id: row.id,
+          primary_host: row.primaryHost,
+        },
+      })
+      return true
+    })
+    // A hostname Cloudflare lost is ours to fix: the alert, no message.
+    if (!raised || check.status === "not_found") continue
+    const primary = row.primaryHost
+    const key = `${row.id}:sweep:${hour}`
+    if (check.status === "pending_certificate") {
+      says.push({
+        key,
+        text: `The secure certificate for ${primary} isn't active right now, so visitors may see a warning. I'm keeping an eye on it.`,
+      })
+      continue
+    }
+    const button = settingsButton(row.provider)
+    says.push({
+      key,
+      text: `${primary} no longer points at your website, so visitors there won't reach it. Point its record back at ${CNAME_TARGET} and it comes back on its own.`,
+      ...(button && { button }),
+    })
+  }
+  return says
 }
 
 /**

@@ -80,6 +80,8 @@ const environments = {
         "REME_MODEL_PRIMARY",
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
+        // Custom hostnames on the SaaS zone (optional, see OPTIONAL_SECRETS).
+        "CF_DOMAINS_TOKEN",
       ],
       // Verifies the claims the orchestrator signs; the same value on both.
       "reme-router": ["PREVIEW_KEY"],
@@ -126,6 +128,7 @@ const environments = {
         "REME_MODEL_PRIMARY",
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
+        "CF_DOMAINS_TOKEN",
       ],
       "reme-router-production": ["PREVIEW_KEY"],
     },
@@ -402,6 +405,14 @@ const localEnv = new Map(
     })
 )
 
+/**
+ * Secrets a Worker runs without. `CF_DOMAINS_TOKEN` waits on the owner's
+ * Cloudflare for SaaS setup; until it is set, connecting a domain answers
+ * `domains.not_configured` and nothing else changes. Empty in .env.local
+ * means skipped with a note, not a stop.
+ */
+const OPTIONAL_SECRETS: ReadonlySet<string> = new Set(["CF_DOMAINS_TOKEN"])
+
 for (const [worker, secrets] of Object.entries(config.secrets)) {
   // A Worker that has never been deployed has nowhere to hold a secret, and
   // `reme-api` cannot deploy until the Hyperdrive id above is in its config. So
@@ -426,6 +437,10 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
       continue
     }
     const value = localEnv.get(secret)
+    if (!value && OPTIONAL_SECRETS.has(secret)) {
+      note(`${state("skipped")}${worker} ${secret}, optional and empty`)
+      continue
+    }
     if (!value) {
       stop(
         `${secret} is empty in .env.local, so ${worker} cannot have it`,

@@ -14,7 +14,7 @@
   "preview_urls": true,
   "workers_dev": false,
   // The zone route keeps this hostname off the production site router's
-  // `*.remeai.co.uk/*`: see apps/api/wrangler.jsonc.
+  // `*/*`: see apps/api/wrangler.jsonc.
   "routes": [
     { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true },
     {
