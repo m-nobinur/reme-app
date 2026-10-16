@@ -1,4 +1,5 @@
 ---
+import { plain } from "../../accent"
 import Photo from "../../layouts/Photo.astro"
 import { hasPhoto } from "../../photo-files"
 import { navLinks, primaryAction } from "../../routes"
@@ -53,7 +54,7 @@ const blurb = site.tagline || site.homeIntro
         {navLinks.length > 0 && (
           <nav aria-label={site.footerNavLabel}>
             {site.footerPagesHeading && (
-              <p class="footer-heading">{site.footerPagesHeading}</p>
+              <p class="footer-heading">{plain(site.footerPagesHeading)}</p>
             )}
             <ul>
               {navLinks.map((link) => (
@@ -67,7 +68,7 @@ const blurb = site.tagline || site.homeIntro
         {hasContact && (
           <div class="footer-contact">
             {site.footerContactHeading && (
-              <p class="footer-heading">{site.footerContactHeading}</p>
+              <p class="footer-heading">{plain(site.footerContactHeading)}</p>
             )}
             <ContactDetails />
           </div>

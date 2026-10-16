@@ -401,6 +401,55 @@ describe("the copy gate", () => {
       )
     })
 
+    it("does not spell-check addresses or JSON-LD urls, nor a real word the trade shares", () => {
+      const fact = (key: string, value: unknown) =>
+        ({ key, value }) as unknown as FactRecord
+      const own = factWords([
+        fact("business.offerings", {
+          items: ["gutter clearing", "exterior painting"],
+        }),
+        fact("business.industry", { name: "Property maintenance" }),
+      ])
+      // The run's case: a platform host whose org slug holds "cleaning".
+      const host = "dev-owner-9a6fc6d2-cleaning-fictional-f6489c51.reme.example"
+      const ld = (description = "") =>
+        `<script type="application/ld+json">${JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "@id": `https://${host}/#business`,
+          name: "Harbourside Property Care",
+          url: `https://${host}/`,
+          sameAs: [`https://${host}/about/`],
+          email: `hello@${host}`,
+          description,
+        })}</script>`
+      const slips = (main: string, head = ld()) =>
+        copyFindings(
+          [
+            page(
+              "index.html",
+              "Harbourside property care in Bristol and Clifton",
+              `<h1>Gutter clearing</h1>${main}`,
+              head
+            ),
+          ],
+          "",
+          own
+        ).filter((f) => f.problem === "term")
+      expect(slips("<p>Gutters cleared across Bristol.</p>")).toEqual([])
+      expect(
+        slips(`<p>Write to hello@${host} or see https://${host}/about/.</p>`)
+      ).toEqual([])
+      // Prose in the JSON-LD is still read.
+      expect(
+        slips("<p>Gutters cleared.</p>", ld("Exterior paintting")).map(
+          (f) => f.text
+        )
+      ).toEqual(["paintting"])
+      // Cleaning and clearing are both real words.
+      expect(slips("<p>Gutter cleaning and gutter clearing.</p>")).toEqual([])
+    })
+
     it("fails a service page missing its included or who-it-suits block, naming which", () => {
       const service = (blocks: string) =>
         page(

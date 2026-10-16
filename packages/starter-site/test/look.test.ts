@@ -38,10 +38,17 @@ const HEADINGS = [
   "contactIncludeHeading",
   "servicesHelpHeading",
   "servicesFaqHeading",
+  // An h3 under the about story, not a section h2.
+  "audienceHeading",
 ] as const
 const MARKED = {
   ...FILLED,
   ...Object.fromEntries(HEADINGS.map((key) => [key, `Plain words, *${key}*`])),
+  // A marked clause followed by a question mark keeps the mark.
+  ctaHeading: "Ready for *ctaHeading*?",
+  // Item titles that carry the marks show none.
+  step1Title: "Visit *step1Title*",
+  valueProp1Title: "Care *valueProp1Title*",
 }
 
 let built: Built | undefined
@@ -89,6 +96,33 @@ describe("eyebrows and accent clauses (rules 2 and 3)", () => {
       )
     )
     expect(plainH2).toEqual([])
+  })
+
+  // Perf run 3: an About h3 read "Work for *homeowners and landlords*".
+  test("no heading, of any level, shows a literal asterisk", () => {
+    if (!built) throw new Error("the build did not run")
+    const marks = readPages(built.dist).flatMap((page) =>
+      [...page.html.matchAll(/<(h[1-6])[^>]*>([\s\S]*?)<\/\1>/g)]
+        .filter(([, , inner]) => inner?.includes("*"))
+        .map(([, tag, inner]) => `${page.file} ${tag}: ${inner}`)
+    )
+    expect(marks).toEqual([])
+    const about = readPages(built.dist).find(
+      (page) => page.file === "about/index.html"
+    )
+    expect(about?.html).toMatch(
+      /<h3[^>]*>Plain words, <span class="accent">audienceHeading<\/span><\/h3>/
+    )
+  })
+
+  // Perf run 3: a CTA heading lost its question mark.
+  test("the punctuation after a marked clause is kept", () => {
+    expect(accentParts("Ready to clear *your list*?").tail).toBe("?")
+    if (!built) throw new Error("the build did not run")
+    const html = readPages(built.dist)
+      .map((page) => page.html)
+      .join("")
+    expect(html).toContain('<span class="accent">ctaHeading</span>?</h2>')
   })
 
   test("an h1 and a title never show the marks", () => {

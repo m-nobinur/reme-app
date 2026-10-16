@@ -1,4 +1,5 @@
 ---
+import { plain } from "../../accent"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 
@@ -34,7 +35,7 @@ const {
         <ol class="step-list">
           {items.map((item) => (
             <li>
-              {item.title && <h3>{item.title}</h3>}
+              {item.title && <h3>{plain(item.title)}</h3>}
               {item.body && <p data-copy="step_body">{item.body}</p>}
             </li>
           ))}

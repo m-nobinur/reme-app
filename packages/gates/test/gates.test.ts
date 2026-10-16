@@ -61,6 +61,7 @@ const LD = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
   name: "BrightClean",
+  url: "https://brightclean.example/",
   telephone: "+15550142",
   email: "hello@brightclean.invalid",
 })
@@ -287,6 +288,27 @@ describe("the structured data gate", () => {
     expect(checkStructuredData(pages(home(undefined, faq({})))).passed).toBe(
       false
     )
+  })
+
+  it("fails a LocalBusiness, WebSite or Service without its url, so a lead cannot pass by deleting it", () => {
+    for (const type of ["LocalBusiness", "WebSite", "Service"]) {
+      const ld = (extra: Record<string, unknown>) =>
+        JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": type,
+          name: "BrightClean",
+          ...extra,
+        })
+      expect(
+        checkStructuredData(
+          pages(home(undefined, ld({ url: "https://brightclean.example/" })))
+        ).passed,
+        type
+      ).toBe(true)
+      const result = checkStructuredData(pages(home(undefined, ld({}))))
+      expect(result.passed, type).toBe(false)
+      expect(result.message).toContain("without url")
+    }
   })
 
   it("fails JSON that does not parse, a missing context, an unknown type or a missing name", () => {

@@ -232,6 +232,43 @@ const visibleText = (node: TreeNode): string =>
       ? (node.value ?? "")
       : (node.childNodes ?? []).map(visibleText).join(" ")
 
+/** JSON-LD keys whose values are addresses or codes, never prose. */
+const NOT_PROSE = new Set([
+  "@id",
+  "@context",
+  "@type",
+  "url",
+  "sameAs",
+  "image",
+  "logo",
+  "item",
+  "telephone",
+  "email",
+])
+
+/** The prose strings of a JSON-LD block (names, descriptions, answers), not its addresses. Unparsable text is the structured data gate's to fail. */
+function proseOf(json: string): string {
+  const strings = (value: unknown, key = ""): string[] =>
+    NOT_PROSE.has(key)
+      ? []
+      : typeof value === "string"
+        ? [value]
+        : Array.isArray(value)
+          ? value.flatMap((v) => strings(v, key))
+          : value && typeof value === "object"
+            ? Object.entries(value).flatMap(([k, v]) => strings(v, k))
+            : []
+  try {
+    return strings(JSON.parse(json)).join(" ")
+  } catch {
+    return ""
+  }
+}
+
+/** URLs, emails and bare host names: addresses, spelled as they are, never words to check. */
+const ADDRESSES =
+  /(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}\b(?:\/\S*)?/gi
+
 function read(html: string): Read {
   const out: Read = {
     title: "",
@@ -265,7 +302,7 @@ function read(html: string): Read {
       )
         extra.push(attr(child, "content") ?? "")
       if (tag === "script" && attr(child, "type") === "application/ld+json")
-        extra.push(textOf(child))
+        extra.push(proseOf(textOf(child)))
       if (
         tag === "meta" &&
         attr(child, "name") === "robots" &&
@@ -293,7 +330,9 @@ function read(html: string): Read {
   }
   const tree = parse(html) as unknown as TreeNode
   walk(tree, "", false)
-  out.said = [squash(visibleText(tree)), out.title, ...extra].join(" ")
+  out.said = [squash(visibleText(tree)), out.title, ...extra]
+    .join(" ")
+    .replace(ADDRESSES, " ")
   return out
 }
 
@@ -373,6 +412,17 @@ const slipFor = (word: string, term: string) => {
   if (oneOff(a, b) && shared < shorter - 2) return true
   return shorter >= 10 && shared >= 8 && levenshtein(a, b) <= 3
 }
+
+/**
+ * Everyday words that sit one slip from another trade's: a gutter clearer
+ * writes "cleaning" and a cleaner "clearing", and neither is a typo.
+ * shortcut: a short list, not a dictionary; grow it when a real word is flagged.
+ */
+const COMMON = new Set(
+  "cleaning clearing cleaner clearer painting planting planning pointing printing plumbing heating healing sealing dealing fitting fixing mowing moving roofing".split(
+    " "
+  )
+)
 
 const stringsOf = (value: unknown): string[] =>
   typeof value === "string"
@@ -528,7 +578,13 @@ export function copyFindings(
     // A word one slip away from a service name or the trade is a misspelling.
     const slips = new Set<string>()
     for (const word of wordsOf(page.said)) {
-      if (word.length < 6 || words.known.has(word) || slips.has(word)) continue
+      if (
+        word.length < 6 ||
+        words.known.has(word) ||
+        COMMON.has(word) ||
+        slips.has(word)
+      )
+        continue
       const real = [...words.terms].find((term) => slipFor(word, term))
       if (!real) continue
       slips.add(word)

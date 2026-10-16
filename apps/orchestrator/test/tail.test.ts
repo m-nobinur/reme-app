@@ -238,6 +238,7 @@ describe("the build at the end of a report", () => {
       "src/layouts/Photo.astro",
       "src/components/Hero/Hero.astro",
       "src/components/custom/Mine.astro",
+      "src/structured-data.ts",
     ]) {
       mkdirSync(dirname(join(site, file)), { recursive: true })
       writeFileSync(join(site, file), `starter ${file}\n`)
@@ -328,6 +329,18 @@ describe("the build at the end of a report", () => {
       "starter src/layouts/Photo.astro\n"
     )
     expect(ran).toEqual([])
+  })
+
+  it("fails the report when the lead deleted a field from the JSON-LD code, and puts it back", async () => {
+    let file = ""
+    const { outcome } = await finish("exit 0", (site) => {
+      file = join(site, "src/structured-data.ts")
+      writeFileSync(file, "no url\n")
+    })
+    await expect(outcome).rejects.toThrow(
+      /src\/structured-data\.ts belong to the starter and are read-only/
+    )
+    expect(readFileSync(file, "utf8")).toBe("starter src/structured-data.ts\n")
   })
 
   /** The pipeline places a photo, the photos are sealed, then the lead acts. */
