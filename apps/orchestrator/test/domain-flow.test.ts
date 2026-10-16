@@ -80,11 +80,13 @@ function fakeKit() {
   }
   const events: { type: string; payload: { key: string; text: string } }[] = []
   const keys = new Set<string>()
+  const writes = { n: 0 }
   const db = {
     select: () => ({ from: () => ({ where: async () => [row] }) }),
     update: () => ({
       set: (values: object) => ({
         where: () => {
+          writes.n++
           Object.assign(row, values)
           return { returning: async () => [{ id: row.id }] }
         },
@@ -107,7 +109,7 @@ function fakeKit() {
   const kit = {
     withOrg: async (_: unknown, fn: (db: unknown) => unknown) => fn(db),
   } as unknown as Tenancy
-  return { kit, row, events }
+  return { kit, row, events, writes }
 }
 
 afterEach(() => {
@@ -117,7 +119,7 @@ afterEach(() => {
 
 describe("a look", () => {
   it("tells the owner about a planted A record exactly once, then goes ready when it is fixed", async () => {
-    const { kit, row } = fakeKit()
+    const { kit, row, writes } = fakeKit()
     const pending = {
       [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
       [`${BASE}/h-${WWW}`]: () => hostname(WWW, "pending", "initializing"),
@@ -142,6 +144,8 @@ describe("a look", () => {
     expect(again).toMatchObject({ status: "conflicting_record" })
     expect(again).not.toHaveProperty("say")
     expect(row.state).toBe("awaiting_dns")
+    // A look that finds what the last one did writes nothing.
+    expect(writes.n).toBe(1)
 
     vi.unstubAllGlobals()
     stubNet(
@@ -235,6 +239,22 @@ describe("a look", () => {
 })
 
 describe("the check", () => {
+  it("reads neither DNS nor Cloudflare before the hostnames exist", async () => {
+    const fetched = stubNet()
+    const row = {
+      name: NAME,
+      cfIds: {},
+      primaryHost: WWW,
+      needsTxt: false,
+      ownership: {},
+    }
+    expect(await currentCheck(env, row)).toEqual({
+      check: { status: "not_found" },
+      primary: WWW,
+    })
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
   it("serves on www and calls a failed read unknown_error, not a throw", async () => {
     stubNet({
       [`${BASE}/h-${WWW}`]: () => hostname(WWW, "pending", "initializing"),

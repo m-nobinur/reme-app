@@ -17,10 +17,12 @@ import {
   orgs,
   pgCode,
   postAssistantMessage,
+  type SQL,
   sql,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
+import { canonical } from "@workspace/facade"
 import {
   alreadyPointsAtUs,
   apexMode,
@@ -123,12 +125,63 @@ async function readDomain(db: OrgScopedDb, domainId: string) {
   return row
 }
 
-async function slugHostOf(db: OrgScopedDb, env: Env, orgId: string) {
-  const [org] = await db
-    .select({ slug: orgs.slug })
-    .from(orgs)
-    .where(eq(orgs.id, orgId))
-  return org ? siteHost(org.slug, env.SITE_HOST_SUFFIX) : null
+/** The newest claim `where` picks, with its org's slug host, in one read. */
+async function readClaim(
+  db: OrgScopedDb,
+  env: Pick<Env, "SITE_HOST_SUFFIX">,
+  where: SQL
+) {
+  const [found] = await db
+    .select({ row: domains, slug: orgs.slug })
+    .from(domains)
+    .innerJoin(orgs, eq(orgs.id, domains.orgId))
+    .where(where)
+    .orderBy(sql`${domains.createdAt} desc`)
+    .limit(1)
+  return found
+    ? { row: found.row, slug: siteHost(found.slug, env.SITE_HOST_SUFFIX) }
+    : undefined
+}
+
+/**
+ * The claim moved to `to` with its event, only from a state in `from`. The
+ * update names those states rather than trusting the read before it, so a
+ * write that committed in between wins: an activation that lost to a
+ * removal moves nothing and gets false.
+ */
+async function moveTo(
+  db: OrgScopedDb,
+  row: DomainRow,
+  to: DomainState,
+  from: readonly DomainState[],
+  set: Partial<DomainRow>,
+  event: { type: string; payload: Record<string, unknown> }
+): Promise<boolean> {
+  const moved = await db
+    .update(domains)
+    .set({ ...set, state: to })
+    .where(
+      sql`${domains.id} = ${row.id} and ${domains.state} in (${sql.join(
+        from.map((state) => sql`${state}`),
+        sql`, `
+      )})`
+    )
+    .returning({ id: domains.id })
+  if (moved.length === 0) return false
+  await appendEvent(db, {
+    orgId: row.orgId,
+    assignmentId: null,
+    staffId: null,
+    ...event,
+  })
+  return true
+}
+
+/** A claim's custom hostnames deleted; one already gone is done. */
+async function dropHostnames(env: CloudflareEnv, cfIds: unknown) {
+  for (const id of Object.values(cfIds as CfIds)) {
+    if (id) await deleteHostname(env, id)
+  }
 }
 
 /**
@@ -311,7 +364,8 @@ async function ownedByTxt(
 /**
  * The domain's check now, from public DNS and its two custom hostnames, and
  * the host it would be served on. Never throws: a failed read is
- * `unknown_error`, which the Workflow looks past.
+ * `unknown_error`, which the Workflow looks past. Before any hostname exists
+ * the check is `not_found` whatever DNS says, so DNS is not read.
  */
 export async function currentCheck(
   env: CloudflareEnv,
@@ -320,8 +374,10 @@ export async function currentCheck(
     "name" | "cfIds" | "primaryHost" | "needsTxt" | "ownership"
   >
 ): Promise<{ check: DomainCheck; primary: string }> {
+  const ids = row.cfIds as CfIds
+  if (!ids.apex && !ids.www)
+    return { check: { status: "not_found" }, primary: row.primaryHost }
   try {
-    const ids = row.cfIds as CfIds
     const [inspection, apex, www] = await Promise.all([
       inspect(row.name),
       ids.apex ? getHostname(env, ids.apex) : null,
@@ -364,24 +420,27 @@ export async function currentCheck(
  * kept in `cf_ids`, with each one's ownership TXT in `ownership`. Each id is stored as soon as its hostname exists, so a
  * retry after the second create fails still owns the first. `gone` for a
  * claim no longer connecting, `held` when Cloudflare has a hostname this
- * claim does not own.
+ * claim does not own. `sub` is whether the name is a subdomain, when the
+ * caller has just read its zone.
  */
 export async function claimHostnames(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  domainId: string
-): Promise<"gone" | "held" | CfIds> {
+  domainId: string,
+  sub?: boolean
+): Promise<"gone" | "held" | { ids: CfIds; ownership: Ownership }> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return "gone"
   const ids = { ...(row.cfIds as CfIds) }
   const ownership = { ...(row.ownership as Ownership) }
-  const sub = (await zoneApex(row.name)).apex !== row.name
+  sub ??= (await zoneApex(row.name)).apex !== row.name
   const hosts = [
     ...(sub ? [] : [["www", `www.${row.name}`] as const]),
     ["apex", row.name] as const,
   ]
   for (const [key, host] of hosts) {
+    const before = canonical([ids, ownership])
     try {
       const hostname = await ensureHostname(env, host, { id: ids[key] })
       ids[key] = hostname.id
@@ -394,6 +453,8 @@ export async function claimHostnames(
         return "held"
       throw error
     }
+    // A hostname this claim already held and stored needs no write.
+    if (canonical([ids, ownership]) === before) continue
     await kit.withOrg({ orgId }, (db) =>
       db
         .update(domains)
@@ -401,7 +462,7 @@ export async function claimHostnames(
         .where(eq(domains.id, domainId))
     )
   }
-  return ids
+  return { ids, ownership }
 }
 
 export type Seen =
@@ -436,10 +497,9 @@ export async function look(
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
-  const text =
-    JSON.stringify(row.lastCheck) === JSON.stringify(check)
-      ? null
-      : statusText(check, row.name, seen.primary)
+  // jsonb keeps keys in its own order, so the stored check is compared canonically.
+  const same = canonical(row.lastCheck) === canonical(check)
+  const text = same ? null : statusText(check, row.name, seen.primary)
   const button =
     check.status === "conflicting_record" ||
     check.status === "invalid_configuration"
@@ -452,16 +512,19 @@ export async function look(
     check.status === "pending_certificate" || check.status === "valid"
       ? "verifying"
       : "awaiting_dns"
-  const updated = await kit.withOrg({ orgId }, (db) =>
-    db
-      .update(domains)
-      .set({ lastCheck: check, state, primaryHost: seen.primary })
-      .where(
-        sql`${domains.id} = ${domainId} and ${domains.state} in ('awaiting_dns', 'verifying')`
-      )
-      .returning({ id: domains.id })
-  )
-  if (updated.length === 0) return { gone: true }
+  // A quiet look writes nothing; a removal since the read is the next look's.
+  if (!same || state !== row.state || seen.primary !== row.primaryHost) {
+    const updated = await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ lastCheck: check, state, primaryHost: seen.primary })
+        .where(
+          sql`${domains.id} = ${domainId} and ${domains.state} in ('awaiting_dns', 'verifying')`
+        )
+        .returning({ id: domains.id })
+    )
+    if (updated.length === 0) return { gone: true }
+  }
   return {
     gone: false,
     at: Date.now(),
@@ -504,24 +567,25 @@ export async function activateDomain(
   domainId: string
 ): Promise<Say | null> {
   const done = await kit.withOrg({ orgId }, async (db) => {
-    const row = await readDomain(db, domainId)
-    if (!row || (row.state !== "active" && !connecting(row.state))) return null
-    if (row.state !== "active") {
-      await db
-        .update(domains)
-        .set({ state: "active", activatedAt: new Date() })
-        .where(eq(domains.id, domainId))
-      await appendEvent(db, {
-        orgId,
-        assignmentId: null,
-        staffId: null,
-        type: "domain.activated",
-        payload: { domain_id: domainId, primary_host: row.primaryHost },
-      })
-    }
-    return { row, slug: await slugHostOf(db, env, orgId) }
+    const claim = await readClaim(db, env, eq(domains.id, domainId))
+    if (!claim) return null
+    const { row } = claim
+    return row.state === "active" ||
+      (await moveTo(
+        db,
+        row,
+        "active",
+        CONNECTING,
+        { activatedAt: new Date() },
+        {
+          type: "domain.activated",
+          payload: { domain_id: domainId, primary_host: row.primaryHost },
+        }
+      ))
+      ? claim
+      : null
   })
-  if (!done?.slug) return null
+  if (!done) return null
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
   return {
     key: `${domainId}:active`,
@@ -539,35 +603,30 @@ export async function activateDomain(
  * hostnames are deleted, and what to tell the owner is returned.
  */
 export async function expireDomain(
-  env: Env,
+  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
   kit: Tenancy,
   orgId: string,
   domainId: string,
   reason: "timeout" | "held"
 ): Promise<Say | null> {
   const found = await kit.withOrg({ orgId }, async (db) => {
-    const row = await readDomain(db, domainId)
-    if (!row || (row.state !== "failed" && !connecting(row.state))) return null
-    if (row.state !== "failed") {
-      await db
-        .update(domains)
-        .set({ state: "failed" })
-        .where(eq(domains.id, domainId))
-      await appendEvent(db, {
-        orgId,
-        assignmentId: null,
-        staffId: null,
-        type: "domain.failed",
-        payload: { domain_id: domainId, reason },
-      })
-    }
-    return { row, slug: await slugHostOf(db, env, orgId) }
+    const claim = await readClaim(db, env, eq(domains.id, domainId))
+    if (!claim) return null
+    return claim.row.state === "failed" ||
+      (await moveTo(
+        db,
+        claim.row,
+        "failed",
+        CONNECTING,
+        {},
+        { type: "domain.failed", payload: { domain_id: domainId, reason } }
+      ))
+      ? claim
+      : null
   })
   if (!found) return null
-  for (const id of Object.values(found.row.cfIds as CfIds)) {
-    if (id) await deleteHostname(env, id)
-  }
-  const where = found.slug ? ` Your site stays on ${found.slug}.` : ""
+  await dropHostnames(env, found.row.cfIds)
+  const where = ` Your site stays on ${found.slug}.`
   const name = found.row.name
   return reason === "held"
     ? {
@@ -656,7 +715,9 @@ export async function connect(
     ...(provider && { provider }),
   }
   const pointed = alreadyPointsAtUs(inspection)
-  let claimed: Refusal | { id: string; created: boolean; needsTxt: boolean }
+  let claimed:
+    | Refusal
+    | { id: string; created: boolean; needsTxt: boolean; ownership: unknown }
   try {
     claimed = await kit.withOrg({ orgId }, async (db) => {
       const [held] = await db
@@ -664,6 +725,7 @@ export async function connect(
           id: domains.id,
           state: domains.state,
           needsTxt: domains.needsTxt,
+          ownership: domains.ownership,
         })
         .from(domains)
         .where(
@@ -676,7 +738,7 @@ export async function connect(
           "domain.in_use",
           `${name} is already live on this site.`
         )
-      if (held) return { id: held.id, created: false, needsTxt: held.needsTxt }
+      if (held) return { ...held, created: false }
       if (!(await activeDeployment(db, orgId)))
         return refuse(
           409,
@@ -720,7 +782,7 @@ export async function connect(
         type: "domain.connect_requested",
         payload: { domain_id: row.id, name, approval_id: approvalId },
       })
-      return { id: row.id, created: true, needsTxt }
+      return { id: row.id, created: true, needsTxt, ownership: {} }
     })
   } catch (error) {
     if (pgCode(error) === "23505")
@@ -733,26 +795,26 @@ export async function connect(
     throw error
   }
   if ("refused" in claimed) return claimed
+  let ownership = claimed.ownership as Ownership
   if (claimed.created) {
     // A guarded claim needs its hostnames now, for their TXT; claimed before
     // the Workflow starts so the two never race to create one.
     if (claimed.needsTxt) {
-      await claimHostnames(env, kit, orgId, claimed.id).catch(() => {
-        // The Workflow claims it with retries; asking again gives the TXT.
-      })
+      const made = await claimHostnames(
+        env,
+        kit,
+        orgId,
+        claimed.id,
+        !!inspection.sub
+      ).catch(() => null)
+      // A failure here is the Workflow's to retry; asking again gives the TXT.
+      if (made && typeof made === "object") ownership = made.ownership
     }
     await start(env, orgId, claimed.id)
   }
   const status = claimed.created ? 201 : 200
   if (!claimed.needsTxt)
     return { status, output: ConnectDomainOutput.parse(base) }
-  const [row] = await kit.withOrg({ orgId }, (db) =>
-    db
-      .select({ ownership: domains.ownership })
-      .from(domains)
-      .where(eq(domains.id, claimed.id))
-  )
-  const ownership = (row?.ownership ?? {}) as Ownership
   // www first, as the card lists it; jsonb keeps its own key order.
   const txt = [`www.${name}`, name].flatMap((host) => {
     const own = ownership[host]
@@ -794,17 +856,6 @@ async function start(env: Env, orgId: string, domainId: string) {
   }
 }
 
-/** The org's newest row for a name, removed ones included. */
-async function latestFor(db: OrgScopedDb, name: string) {
-  const [row] = await db
-    .select()
-    .from(domains)
-    .where(eq(domains.name, name))
-    .orderBy(sql`${domains.createdAt} desc`)
-    .limit(1)
-  return row
-}
-
 /**
  * `POST /domains/{name}/check`: the check now, for a claim still connecting,
  * and a nudge so its Workflow looks too; the stored state for any other. A
@@ -819,7 +870,12 @@ export async function checkNow(
 ): Promise<Refusal | CheckDomainOutput> {
   const name = normalizeName(rawName)
   if (!name) return invalid()
-  const row = await kit.withOrg({ orgId }, (db) => latestFor(db, name))
+  // The org's newest row for the name, removed ones included.
+  const row = (
+    await kit.withOrg({ orgId }, (db) =>
+      readClaim(db, env, eq(domains.name, name))
+    )
+  )?.row
   if (!row)
     return refuse(
       404,
@@ -870,22 +926,21 @@ export async function remove(
   const name = normalizeName(rawName)
   if (!name) return invalid()
   const found = await kit.withOrg({ orgId }, async (db) => {
-    const row = await latestFor(db, name)
-    if (!row) return null
-    if (row.state !== "removed") {
-      await db
-        .update(domains)
-        .set({ state: "removed", removedAt: new Date() })
-        .where(eq(domains.id, row.id))
-      await appendEvent(db, {
-        orgId,
-        assignmentId: null,
-        staffId: null,
-        type: "domain.removed",
-        payload: { domain_id: row.id, was: row.state },
-      })
-    }
-    return { row, slug: await slugHostOf(db, env, orgId) }
+    const claim = await readClaim(db, env, eq(domains.name, name))
+    // From any state, so a removal racing an activation still removes it.
+    if (claim)
+      await moveTo(
+        db,
+        claim.row,
+        "removed",
+        ["awaiting_dns", "verifying", "active", "failed"],
+        { removedAt: new Date() },
+        {
+          type: "domain.removed",
+          payload: { domain_id: claim.row.id, was: claim.row.state },
+        }
+      )
+    return claim
   })
   if (!found)
     return refuse(
@@ -909,9 +964,7 @@ export async function remove(
 
 /** A claim's custom hostnames deleted and its Workflow ended; both idempotent. */
 async function revoke(env: Env, row: Pick<DomainRow, "id" | "cfIds">) {
-  for (const id of Object.values(row.cfIds as CfIds)) {
-    if (id) await deleteHostname(env, id)
-  }
+  await dropHostnames(env, row.cfIds)
   try {
     const instance = await env.DOMAINS.get(domainInstanceId(row.id))
     await instance.terminate()
@@ -932,11 +985,11 @@ export async function repoint(
   orgId: string,
   domainId: string
 ): Promise<void> {
-  const { row, slug } = await kit.withOrg({ orgId }, async (db) => ({
-    row: await readDomain(db, domainId),
-    slug: await slugHostOf(db, env, orgId),
-  }))
-  if (!row || !slug) return
+  const claim = await kit.withOrg({ orgId }, (db) =>
+    readClaim(db, env, eq(domains.id, domainId))
+  )
+  if (!claim) return
+  const { row, slug } = claim
   if (row.state === "removed") {
     // Only a domain that went live has pointers; a later live claim on the
     // same name is put back by the `writePointer` below.
@@ -958,18 +1011,33 @@ export async function repoint(
  * longer has raises the alert only, since the owner cannot fix it. The check is kept in `last_check` in the same transaction as
  * the alert, so the next sweep finds no change and raises nothing; a domain
  * back to valid is recorded quietly. `hour` keys the message.
+ *
+ * A claim still connecting an hour past its deadline is one its Workflow
+ * never ended (a create that failed, an instance that errored), and fails
+ * here as it would there, so the 72-hour bound holds without the Workflow.
  */
 export async function sweepDomains(
-  env: CloudflareEnv,
+  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
   kit: Tenancy,
   orgId: string,
   hour: string
 ): Promise<Say[]> {
+  const stale = new Date(Date.now() - DEADLINE_MS - 60 * MINUTE).toISOString()
   const rows = await kit.withOrg({ orgId }, (db) =>
-    db.select().from(domains).where(eq(domains.state, "active"))
+    db
+      .select()
+      .from(domains)
+      .where(
+        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.createdAt} < ${stale}::timestamptz)`
+      )
   )
   const says: Say[] = []
   for (const row of rows) {
+    if (connecting(row.state)) {
+      const say = await expireDomain(env, kit, orgId, row.id, "timeout")
+      if (say) says.push(say)
+      continue
+    }
     const ids = row.cfIds as CfIds
     const id = row.primaryHost === row.name ? ids.apex : ids.www
     if (!id) continue
@@ -981,7 +1049,7 @@ export async function sweepDomains(
         : hostname.ssl?.status !== "active"
           ? { status: "pending_certificate" }
           : { status: "valid" }
-    if (JSON.stringify(row.lastCheck) === JSON.stringify(check)) continue
+    if (canonical(row.lastCheck) === canonical(check)) continue
     const before = row.lastCheck === null ? null : JSON.stringify(row.lastCheck)
     const raised = await kit.withOrg({ orgId }, async (db) => {
       const changed = await db

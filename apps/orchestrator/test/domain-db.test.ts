@@ -6,13 +6,16 @@ import {
   checkNow,
   claimHostnames,
   connect,
+  DEADLINE_MS,
   expireDomain,
+  look,
   postStatus,
   remove,
   repoint,
   revokeDomains,
   sweepDomains,
 } from "../src/domain-flow.ts"
+import { writePointer } from "../src/publish.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
 
@@ -293,9 +296,8 @@ describe.skipIf(!url)("custom domains against a database", () => {
     const row = await rowOf(site.orgId, name)
     const domainId = row?.id ?? ""
 
-    expect(await claimHostnames(env, kit, site.orgId, domainId)).toEqual({
-      www: `h-www.${name}`,
-      apex: `h-${name}`,
+    expect(await claimHostnames(env, kit, site.orgId, domainId)).toMatchObject({
+      ids: { www: `h-www.${name}`, apex: `h-${name}` },
     })
     // A retried claim adopts what it stored and creates nothing more.
     await claimHostnames(env, kit, site.orgId, domainId)
@@ -470,7 +472,11 @@ describe.skipIf(!url)("custom domains against a database", () => {
       })
     )
     vi.stubGlobal("fetch", read)
-    const env = { CF_DOMAINS_TOKEN: "token", CF_DOMAINS_ZONE_ID: "zone" }
+    const env = {
+      CF_DOMAINS_TOKEN: "token",
+      CF_DOMAINS_ZONE_ID: "zone",
+      SITE_HOST_SUFFIX: SUFFIX,
+    } as unknown as Env
     const alerts = async () =>
       (
         await kit.withOrg({ orgId: site.orgId }, (db) =>
@@ -564,5 +570,225 @@ describe.skipIf(!url)("custom domains against a database", () => {
       status: { status: "pending_certificate" },
       next_step: expect.stringContaining(`records for ${sub}`),
     })
+  })
+
+  it("holds one live claim per subdomain, and asks for the TXT when its record already reaches us", async () => {
+    const name = unique()
+    const sub = `book.${name}`
+    stubNet({
+      [`${sub} SOA`]: {
+        Status: 0,
+        Authority: [{ name, type: 6, TTL: 60, data: "ns. host. 1 1 1 1 1" }],
+      },
+      // Left from an earlier tenant elsewhere: it reaches us before any claim.
+      [`${sub} A`]: {
+        Status: 0,
+        Answer: [
+          { name: sub, type: 5, TTL: 60, data: "domains.remeai.co.uk." },
+        ],
+      },
+    })
+    const site = await published()
+    const { env, created } = domainEnv(site.store)
+    const body = { name: sub, approval_id: "a" }
+    expect(await connect(env, kit, site.orgId, body)).toMatchObject({
+      status: 201,
+      output: {
+        steps: [
+          { type: "CNAME", name: "book", value: "domains.remeai.co.uk" },
+          {
+            type: "TXT",
+            name: "_cf-custom-hostname.book",
+            value: `v-${sub}`,
+          },
+        ],
+      },
+    })
+    expect(await rowOf(site.orgId, sub)).toMatchObject({
+      needsTxt: true,
+      cfIds: { apex: `h-${sub}` },
+    })
+    expect(created).toHaveLength(1)
+
+    const other = await published()
+    expect(await connect(env, kit, other.orgId, body)).toMatchObject({
+      status: 409,
+      code: "domain.in_use",
+    })
+  })
+
+  it("counts subdomains towards the pending claims an org may hold", async () => {
+    const name = unique()
+    const subs = ["a", "b", "c", "d"].map((s) => `${s}.${name}`)
+    stubNet({
+      // No record at any of them yet, under a zone in use.
+      ...Object.fromEntries(
+        subs.map((sub) => [
+          `${sub} SOA`,
+          {
+            Status: 3,
+            Authority: [{ name, type: 6, TTL: 60, data: "ns. h. 1 1 1 1 1" }],
+          },
+        ])
+      ),
+      [`${name} A`]: {
+        Status: 0,
+        Answer: [{ name, type: 1, TTL: 60, data: "192.0.2.10" }],
+      },
+    })
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    for (const sub of subs.slice(0, 3)) {
+      expect(
+        await connect(env, kit, site.orgId, { name: sub, approval_id: "a" })
+      ).toMatchObject({ status: 201 })
+    }
+    expect(
+      await connect(env, kit, site.orgId, { name: subs[3], approval_id: "a" })
+    ).toMatchObject({ status: 409, code: "domain.too_many_pending" })
+  })
+
+  it("tells the owner about a record in the way once, however many looks find it", async () => {
+    const name = unique()
+    const www = `www.${name}`
+    stubNet(
+      {
+        [`${www} A`]: {
+          Status: 0,
+          Answer: [{ name: www, type: 1, TTL: 60, data: "192.0.2.10" }],
+        },
+      },
+      { active: true }
+    )
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await claimHostnames(env, kit, site.orgId, domainId)
+    expect(await look(env, kit, site.orgId, domainId, 1)).toMatchObject({
+      status: "conflicting_record",
+      say: { text: expect.stringContaining("192.0.2.10") },
+    })
+    // jsonb gives the stored check back with its keys in another order.
+    const again = await look(env, kit, site.orgId, domainId, 2)
+    expect(again).toMatchObject({ status: "conflicting_record" })
+    expect(again).not.toHaveProperty("say")
+  })
+
+  it("lets a removal that commits during an activation win", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying" })
+        .where(eq(domains.id, domainId))
+    )
+    const slugBefore = site.store.pointers.get(`host:${site.slug}`)
+    let activation: Promise<unknown> = Promise.resolve()
+    await kit.withOrg({ orgId: site.orgId }, async (db) => {
+      await db
+        .update(domains)
+        .set({ state: "removed", removedAt: new Date() })
+        .where(eq(domains.id, domainId))
+      activation = activateDomain(env, kit, site.orgId, domainId)
+      // Commit only once the activation's write waits on this row's lock.
+      for (let i = 0; i < 100; i++) {
+        const [waiting] = await kit.withOrg({ orgId: site.orgId }, (other) =>
+          other.execute<{ n: number }>(
+            sql`select count(*)::int as n from pg_locks where not granted and locktype = 'transactionid'`
+          )
+        )
+        if ((waiting?.n ?? 0) > 0) break
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+    })
+    expect(await activation).toBeNull()
+    expect(await rowOf(site.orgId, name)).toMatchObject({ state: "removed" })
+    expect(await typesOf(site.orgId, "domain.activated")).toEqual([])
+    expect(site.store.pointers.get(`host:${site.slug}`)).toBe(slugBefore)
+  })
+
+  it("fails a claim still connecting past its deadline when its Workflow never did", async () => {
+    const net = stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await claimHostnames(env, kit, site.orgId, domainId)
+    const age = (ms: number) =>
+      kit.withOrg({ orgId: site.orgId }, (db) =>
+        db
+          .update(domains)
+          .set({ createdAt: new Date(Date.now() - ms) })
+          .where(eq(domains.id, domainId))
+      )
+    const HOUR = 60 * 60 * 1000
+    // Inside the deadline and its hour of grace: the Workflow's to end.
+    await age(DEADLINE_MS + HOUR / 2)
+    expect(await sweepDomains(env, kit, site.orgId, "2026101906")).toEqual([])
+    expect(await rowOf(site.orgId, name)).toMatchObject({
+      state: "awaiting_dns",
+    })
+    await age(DEADLINE_MS + 2 * HOUR)
+    expect(await sweepDomains(env, kit, site.orgId, "2026101906")).toEqual([
+      expect.objectContaining({
+        key: `${domainId}:failed`,
+        text: expect.stringContaining(`within 3 days`),
+      }),
+    ])
+    expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
+    expect([...net.deleted].sort((a, b) => a.localeCompare(b))).toEqual([
+      `h-${name}`,
+      `h-www.${name}`,
+    ])
+  })
+
+  it("keeps the domain's pointers through a later publish and a rollback", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    const www = `www.${name}`
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying" })
+        .where(eq(domains.id, domainId))
+    )
+    await activateDomain(env, kit, site.orgId, domainId)
+    const read = (host: string) =>
+      JSON.parse(site.store.pointers.get(`host:${host}`) ?? "null")
+    // A publish and a rollback are each a new deployment row and then the
+    // publisher's `pointer` step, `writePointer` for the slug host it was
+    // given; the row's kind plays no part in the pointer.
+    for (const configVersion of [2, 3]) {
+      await kit.withOrg({ orgId: site.orgId }, (db) =>
+        db.insert(deployments).values({
+          orgId: site.orgId,
+          siteId: site.orgId,
+          revisionId: site.revisionId,
+          configVersion,
+          kind: "rollback",
+        })
+      )
+      expect(
+        await writePointer(env, kit, site.orgId, site.orgId, site.slug)
+      ).toEqual({ host: www })
+      expect(read(www)).toMatchObject({
+        config_version: configVersion,
+        canonical_host: www,
+        origin_host: site.slug,
+      })
+      expect(read(name)).toEqual({ redirect_to: www })
+      expect(read(site.slug)).toEqual({ redirect_to: www })
+    }
   })
 })
