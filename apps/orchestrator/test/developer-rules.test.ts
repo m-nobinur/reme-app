@@ -414,6 +414,16 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("no two steps on the site share their words")
   })
 
+  it("spells service names as given and keeps scenarios free of invented places and customers", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "Spell each service name in business.offerings, and the trade in business.industry, exactly as given"
+    )
+    expect(rules).toContain('("conservative" for "conservatory")')
+    expect(rules).toContain("no street, building, shop or customer")
+    expect(rules).toContain("A flat above a shop in Bishopston")
+  })
+
   it("keeps who the business is and what a service includes to the facts", () => {
     const rules = text(false)
     expect(rules).toContain(
