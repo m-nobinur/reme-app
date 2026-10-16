@@ -538,11 +538,15 @@ function DetailsForm({
 function Checkout({
   publishableKey,
   clientSecret,
+  onComplete,
 }: {
   publishableKey: string
   clientSecret: string
+  onComplete: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  const complete = useRef(onComplete)
+  complete.current = onComplete
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     const element = host.current
@@ -550,7 +554,9 @@ function Checkout({
     element.focus()
     let live = true
     let unmount: (() => void) | null = null
-    mountCheckout(element, publishableKey, clientSecret).then(
+    mountCheckout(element, publishableKey, clientSecret, () =>
+      complete.current()
+    ).then(
       (done) => {
         if (live) unmount = done
         else done()
@@ -612,10 +618,13 @@ const REREAD_MS = 5000
  * The purchase's status, read when the card shows and again every few
  * seconds while registering. `undefined` until the first read answers; a
  * read that fails counts as none, and the api refuses a second payment.
+ * `paid` is Checkout's word that the payment completed on this page: the
+ * hold is authorised even while the webhook has not reached the row yet.
  */
 function usePurchaseStatus(
   purchase: DomainPurchase | null,
-  name: string
+  name: string,
+  paid: boolean
 ): PurchaseStatus | null | undefined {
   const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
     purchase ? undefined : null
@@ -625,9 +634,9 @@ function usePurchaseStatus(
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
     const read = async () => {
-      const next = await purchase
-        .status(name)
-        .then(purchaseStatusOf, () => null)
+      const next =
+        (await purchase.status(name).then(purchaseStatusOf, () => null)) ??
+        (paid ? "authorised" : null)
       if (!live) return
       setStatus(next)
       if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
@@ -637,7 +646,7 @@ function usePurchaseStatus(
       live = false
       clearTimeout(timer)
     }
-  }, [purchase, name])
+  }, [purchase, name, paid])
   return status
 }
 
@@ -663,7 +672,8 @@ function Purchase({
   const [details, setDetails] = useState(initial)
   const [phase, setPhase] = useState<Phase>({ at: "review" })
   const edit = useRef<HTMLButtonElement>(null)
-  const status = usePurchaseStatus(purchase, name)
+  const [paid, setPaid] = useState(false)
+  const status = usePurchaseStatus(purchase, name, paid)
 
   if (status) {
     // A tick only for a purchase that went through, or a test one that did.
@@ -785,6 +795,7 @@ function Purchase({
           {phase.at === "paying" ? (
             <Checkout
               clientSecret={phase.client_secret}
+              onComplete={() => setPaid(true)}
               publishableKey={phase.publishable_key}
             />
           ) : phase.at === "refused" ? (

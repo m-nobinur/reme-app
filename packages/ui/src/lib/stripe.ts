@@ -16,6 +16,7 @@ export type EmbeddedCheckout = {
 type Stripe = {
   createEmbeddedCheckoutPage: (options: {
     fetchClientSecret: () => Promise<string>
+    onComplete?: () => void
   }) => Promise<EmbeddedCheckout>
 }
 
@@ -54,12 +55,15 @@ let current: EmbeddedCheckout | null = null
 
 /**
  * Mounts embedded Checkout in `element` and returns what unmounts it. Any
- * Checkout already on the page is destroyed first.
+ * Checkout already on the page is destroyed first. `onComplete` runs when
+ * the payment completes on the page, which is every payment that needs no
+ * redirect: the api asks for `redirect_on_completion: if_required`.
  */
 export async function mountCheckout(
   element: HTMLElement,
   publishableKey: string,
-  clientSecret: string
+  clientSecret: string,
+  onComplete: () => void
 ): Promise<() => void> {
   const Stripe = await stripeGlobal()
   let stripe = instances.get(publishableKey)
@@ -71,6 +75,7 @@ export async function mountCheckout(
   current = null
   const checkout = await stripe.createEmbeddedCheckoutPage({
     fetchClientSecret: async () => clientSecret,
+    onComplete,
   })
   current = checkout
   checkout.mount(element)

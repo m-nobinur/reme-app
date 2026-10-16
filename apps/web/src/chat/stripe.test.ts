@@ -11,10 +11,13 @@ it("loads Stripe.js from js.stripe.com once and keeps one Checkout on the page",
     createEmbeddedCheckoutPage: vi.fn(
       async ({
         fetchClientSecret,
+        onComplete,
       }: {
         fetchClientSecret: () => Promise<string>
+        onComplete?: () => void
       }) => {
         expect(await fetchClientSecret()).toMatch(/^cs_test_/)
+        expect(onComplete).toBe(done)
         const checkout = { mount: vi.fn(), destroy: vi.fn() }
         made.push(checkout)
         return checkout
@@ -22,12 +25,13 @@ it("loads Stripe.js from js.stripe.com once and keeps one Checkout on the page",
     ),
   }))
   const element = document.createElement("div")
+  const done = () => undefined
   // Kept off the page: the test plays the network's part.
   const added = vi
     .spyOn(document.head, "appendChild")
     .mockImplementation((node) => node)
 
-  const first = mountCheckout(element, "pk_test_1", "cs_test_1")
+  const first = mountCheckout(element, "pk_test_1", "cs_test_1", done)
   const script = added.mock.calls[0]?.[0] as HTMLScriptElement | undefined
   expect(script?.src).toBe(STRIPE_JS)
   ;(window as { Stripe?: unknown }).Stripe = Stripe
@@ -36,7 +40,12 @@ it("loads Stripe.js from js.stripe.com once and keeps one Checkout on the page",
   expect(made[0]?.mount).toHaveBeenCalledWith(element)
 
   // A second Checkout replaces the first, with the same Stripe instance.
-  const unmountSecond = await mountCheckout(element, "pk_test_1", "cs_test_2")
+  const unmountSecond = await mountCheckout(
+    element,
+    "pk_test_1",
+    "cs_test_2",
+    done
+  )
   expect(made[0]?.destroy).toHaveBeenCalledOnce()
   expect(Stripe).toHaveBeenCalledOnce()
   expect(added).toHaveBeenCalledOnce()

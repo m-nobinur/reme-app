@@ -228,7 +228,8 @@ it("mounts Checkout with the client secret the api returned for the details show
   expect(stripe.mount).toHaveBeenCalledWith(
     card.container.querySelector("[data-slot=domain-checkout]"),
     "pk_test_1",
-    "cs_x"
+    "cs_x",
+    expect.any(Function)
   )
   // A keyboard owner lands on the payment form, not the page.
   expect(document.activeElement?.getAttribute("data-slot")).toBe(
@@ -238,6 +239,26 @@ it("mounts Checkout with the client secret the api returned for the details show
   expect(buttons(card.container)).toEqual([])
   await card.unmount()
   expect(stripe.unmount).toHaveBeenCalledOnce()
+})
+
+it("shows the hold as authorised once Checkout completes on the page", async () => {
+  // The api still reads the row as awaiting payment: the webhook is behind.
+  const purchase = purchaseOf(
+    { outcome: "open", publishable_key: "pk_test_1", client_secret: "cs_x" },
+    { state: "awaiting_payment", test: false }
+  )
+  const card = await draw(
+    "buy_domain",
+    { args: BUY, result: AWAITING },
+    purchase
+  )
+  await press(card.container, "Continue to pay £8")
+  const complete = stripe.mount.mock.calls[0]?.[3] as () => void
+  await act(async () => complete())
+  expect(card.container.textContent).toContain("Payment approved.")
+  expect(card.container.querySelector("[data-slot=domain-checkout]")).toBeNull()
+  expect(stripe.unmount).toHaveBeenCalledOnce()
+  await card.unmount()
 })
 
 it("says buying is off, with nothing to retry, when the app has no Checkout", async () => {
