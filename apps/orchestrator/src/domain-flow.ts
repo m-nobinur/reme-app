@@ -26,6 +26,7 @@ import {
   apexMode,
   CAA_FOR_US,
   type CloudflareEnv,
+  CNAME_TARGET,
   type CustomHostname,
   DomainError,
   deleteHostname,
@@ -915,6 +916,82 @@ export async function repoint(
     // A closed org keeps no pointer at all; anything else is a failure.
     if ((error as { code?: string }).code !== "org.closed") throw error
   }
+}
+
+/**
+ * The daily look at an org's live domains, the sweep's domain chunk: the
+ * primary host's custom hostname read again. A hostname Cloudflare calls
+ * `moved` (its DNS left us) or a certificate no longer active raises one
+ * `alert.raised` and returns one message for the owner; one Cloudflare no
+ * longer has raises the alert only, since the owner cannot fix it. The check is kept in `last_check` in the same transaction as
+ * the alert, so the next sweep finds no change and raises nothing; a domain
+ * back to valid is recorded quietly. `hour` keys the message.
+ */
+export async function sweepDomains(
+  env: CloudflareEnv,
+  kit: Tenancy,
+  orgId: string,
+  hour: string
+): Promise<Say[]> {
+  const rows = await kit.withOrg({ orgId }, (db) =>
+    db.select().from(domains).where(eq(domains.state, "active"))
+  )
+  const says: Say[] = []
+  for (const row of rows) {
+    const ids = row.cfIds as CfIds
+    const id = row.primaryHost === row.name ? ids.apex : ids.www
+    if (!id) continue
+    const hostname = await getHostname(env, id)
+    const check: DomainCheck = !hostname
+      ? { status: "not_found" }
+      : hostname.status === "moved"
+        ? { status: "invalid_configuration" }
+        : hostname.ssl?.status !== "active"
+          ? { status: "pending_certificate" }
+          : { status: "valid" }
+    if (JSON.stringify(row.lastCheck) === JSON.stringify(check)) continue
+    const before = row.lastCheck === null ? null : JSON.stringify(row.lastCheck)
+    const raised = await kit.withOrg({ orgId }, async (db) => {
+      const changed = await db
+        .update(domains)
+        .set({ lastCheck: check })
+        .where(
+          sql`${domains.id} = ${row.id} and ${domains.state} = 'active' and ${domains.lastCheck} is not distinct from ${before}::jsonb`
+        )
+        .returning({ id: domains.id })
+      if (changed.length === 0 || check.status === "valid") return false
+      await appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: {
+          kind: `domain.${check.status}`,
+          domain_id: row.id,
+          primary_host: row.primaryHost,
+        },
+      })
+      return true
+    })
+    // A hostname Cloudflare lost is ours to fix: the alert, no message.
+    if (!raised || check.status === "not_found") continue
+    const primary = row.primaryHost
+    const key = `${row.id}:sweep:${hour}`
+    if (check.status === "pending_certificate") {
+      says.push({
+        key,
+        text: `The secure certificate for ${primary} isn't active right now, so visitors may see a warning. I'm keeping an eye on it.`,
+      })
+      continue
+    }
+    const button = settingsButton(row.provider)
+    says.push({
+      key,
+      text: `${primary} no longer points at your website, so visitors there won't reach it. Point its record back at ${CNAME_TARGET} and it comes back on its own.`,
+      ...(button && { button }),
+    })
+  }
+  return says
 }
 
 /**

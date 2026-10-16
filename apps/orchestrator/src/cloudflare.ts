@@ -40,6 +40,8 @@ import {
   takeSnapshot,
 } from "./brief.ts"
 import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
+import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
+import { SAY_RETRIES } from "./domain-workflow.ts"
 import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
@@ -1412,6 +1414,9 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
 /** Orgs per sweep step: idempotent work, so a retried step redoing a finished org changes nothing. */
 const SWEEP_CHUNK = 50
 
+/** The UTC hour whose sweep also looks at every live custom domain, once a day. */
+export const DOMAIN_SWEEP_HOUR = "06"
+
 /** The hour the sweep runs for, `YYYYMMDDHH`, which is also its instance id's suffix. */
 export const sweepHour = (at: number) =>
   new Date(at).toISOString().slice(0, 13).replace(/[-T]/g, "")
@@ -1483,6 +1488,55 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
       totals.redriven += counts.redriven
       totals.deleted += counts.deleted
       totals.failed += counts.failed
+    }
+    // Once a day, every live custom domain (domain-flow.ts): a hostname that
+    // moved or a certificate gone inactive raises one alert, and each message
+    // is posted in a step of its own so a busy chat retries the post alone.
+    if (event.payload.hour.endsWith(DOMAIN_SWEEP_HOUR)) {
+      for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+        const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+        const says = await step.do(
+          `domains ${i / SWEEP_CHUNK + 1}`,
+          async () => {
+            const kit = kitFor()
+            const found: { orgId: string; say: Say }[] = []
+            try {
+              for (const orgId of chunk) {
+                try {
+                  for (const say of await sweepDomains(
+                    this.env,
+                    kit,
+                    orgId,
+                    event.payload.hour
+                  )) {
+                    found.push({ orgId, say })
+                  }
+                } catch (error) {
+                  console.error(
+                    JSON.stringify({
+                      sweep: event.payload.hour,
+                      org_id: orgId,
+                      code: failureCode(error),
+                    })
+                  )
+                }
+              }
+            } finally {
+              await kit.close()
+            }
+            return found
+          }
+        )
+        for (const { orgId, say } of says) {
+          try {
+            await step.do(`say ${say.key}`, SAY_RETRIES, () =>
+              withKit(this.env, (kit) => postStatus(kit, orgId, say))
+            )
+          } catch {
+            // The chat stayed busy past every retry; the alert row keeps it.
+          }
+        }
+      }
     }
     // The run's one line, for the alert on a sweep that deletes nothing for a week.
     console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))

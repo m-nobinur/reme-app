@@ -322,6 +322,18 @@ vi.mock("../src/retention.ts", () => ({
     return { parked: 1, redriven: 0, deleted: 2 }
   },
 }))
+// The daily domain look finds one message for org-1; its post is a step of its own.
+vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
+  sweepDomains: async (
+    _env: unknown,
+    _kit: unknown,
+    orgId: string,
+    hour: string
+  ) =>
+    orgId === "org-1" ? [{ key: `dom-1:sweep:${hour}`, text: "moved" }] : [],
+  postStatus: async () => undefined,
+}))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
   // What a quick edit's accessibility gate finds after its preview; none left is a pass.
@@ -989,7 +1001,11 @@ describe("an interrupted Developer run", () => {
 })
 
 describe("the sweep Workflow's step names", () => {
-  const sweep = async (orgs: number, failing: string[] = []) => {
+  const sweep = async (
+    orgs: number,
+    failing: string[] = [],
+    hour = "2026091612"
+  ) => {
     orgList.length = 0
     for (let i = 1; i <= orgs; i++) orgList.push(`org-${i}`)
     sweepFailures.clear()
@@ -1009,7 +1025,7 @@ describe("the sweep Workflow's step names", () => {
       HYPERDRIVE: { connectionString: "postgres://stub" },
     } as unknown as Env
     const totals = await new SweepWorkflow({} as never, env).run(
-      { payload: { hour: "2026091612" } } as never,
+      { payload: { hour } } as never,
       step as never
     )
     return { names, totals }
@@ -1039,6 +1055,12 @@ describe("the sweep Workflow's step names", () => {
       deleted: 98,
       failed: 2,
     })
+  })
+
+  it("looks at live domains once a day, after the orgs, and posts each message in its own step", async () => {
+    const daily = await sweep(51, [], "2026091606")
+    expect(daily.names).toEqual(steps.SweepWorkflow["daily domains"])
+    expect(daily.totals.orgs).toBe(51)
   })
 
   it("names the hour the way the cron does", () => {

@@ -683,7 +683,15 @@
   },
   "SweepWorkflow": {
     "one chunk": ["list orgs", "sweep 1"],
-    "two chunks": ["list orgs", "sweep 1", "sweep 2"]
+    "two chunks": ["list orgs", "sweep 1", "sweep 2"],
+    "daily domains": [
+      "list orgs",
+      "sweep 1",
+      "sweep 2",
+      "domains 1",
+      "say dom-1:sweep:2026091606",
+      "domains 2"
+    ]
   },
   "DomainWorkflow": {
     "live": [
