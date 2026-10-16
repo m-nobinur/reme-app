@@ -14,8 +14,10 @@ import {
   ConnectDomainInput,
   ConnectDomainOutput,
   type DnsRecord,
+  RemoveDomainInput,
+  RemoveDomainOutput,
 } from "@workspace/contracts"
-import { Decision } from "@workspace/ui/components/assistant/decision"
+import { Decision, Done } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
 import { decisionView } from "@workspace/ui/lib/tool-state"
@@ -183,6 +185,35 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
   />
 )
 ConnectDomain.displayName = "ConnectDomain"
+
+/**
+ * Taking the website off a connected domain. The yes is the owner's approval;
+ * what it does is small and says so: the website goes back to its own address
+ * and nothing is deleted where the domain is managed.
+ */
+export const RemoveDomain: ToolCallMessagePartComponent = (props) => (
+  <Decision
+    busy="Removing"
+    cancelled="Not removed. You sent a message instead."
+    refused="The domain could not be removed."
+    detail={() =>
+      "Your website goes back to its own address. Nothing is deleted at your domain's provider."
+    }
+    done={() => (
+      <Done>
+        {RemoveDomainInput.safeParse(props.args).data?.name ?? "The domain"} is
+        no longer connected. Your website is back on its own address.
+      </Done>
+    )}
+    no="Keep it"
+    props={props}
+    slot="remove-domain"
+    title={(input) => `Take your website off ${input.name}?`}
+    view={decisionView(props, RemoveDomainInput, RemoveDomainOutput)}
+    yes="Remove"
+  />
+)
+RemoveDomain.displayName = "RemoveDomain"
 
 /** Where a checked domain stands, as one plain sentence. */
 export function domainStatusText(

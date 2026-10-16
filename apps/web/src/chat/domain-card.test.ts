@@ -263,3 +263,56 @@ it("draws a domain check in the transcript as that one sentence", async () => {
   )
   await card.unmount()
 })
+
+it("asks before taking the website off a domain, and says nothing is deleted", async () => {
+  const card = await draw({
+    toolName: "remove_domain",
+    approval: { approved: undefined },
+  })
+  expect(card.container.querySelector("h3")?.textContent).toBe(
+    `Take your website off ${NAME}?`
+  )
+  expect(card.container.textContent).toContain(
+    "Your website goes back to its own address. Nothing is deleted at your domain's provider."
+  )
+  expect(buttons(card.container)).toEqual(["Remove", "Keep it"])
+  const [yes, no] = card.container.querySelectorAll("button")
+  await act(async () => yes?.click())
+  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
+  await act(async () => no?.click())
+  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: false })
+  await card.unmount()
+})
+
+it("says the domain is no longer connected once removed, and what a refusal or a no leaves", async () => {
+  const removed = await draw({
+    toolName: "remove_domain",
+    ...done({ outcome: "removed" }),
+  })
+  expect(removed.container.textContent).toContain(
+    `${NAME} is no longer connected. Your website is back on its own address.`
+  )
+  expect(buttons(removed.container)).toEqual([])
+  await removed.unmount()
+
+  const refused = await draw({
+    toolName: "remove_domain",
+    ...done({
+      outcome: "refused",
+      error: { code: "domain.not_found", message: "written for the model" },
+    }),
+  })
+  expect(refused.container.textContent).toContain(
+    "The domain could not be removed."
+  )
+  await refused.unmount()
+
+  const kept = await draw({
+    toolName: "remove_domain",
+    isError: true,
+    result: { error: "denied" },
+    approval: { approved: false },
+  })
+  expect(kept.container.textContent).toContain("You said not now.")
+  await kept.unmount()
+})
