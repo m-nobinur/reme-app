@@ -590,7 +590,7 @@ const STATUS_TEXT: Record<PurchaseStatus, (name: string) => string> = {
     `${name} is registered to your business. Your website goes on it in the next few minutes.`,
   registered: (name) => `${name} is yours, and your website is on it.`,
   test: (name) =>
-    `This was a test purchase: paid in test mode and registered in Cloudflare's sandbox. ${name} is not live on the internet, and no real money moved.`,
+    `Test purchase complete: paid in test mode, registered in Cloudflare's sandbox, not live on the internet. No real money moved for ${name}.`,
   failed: (name) =>
     `${name} could not be registered, so your card was not charged.`,
   price_changed: (name) =>
