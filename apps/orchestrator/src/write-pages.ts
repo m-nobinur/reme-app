@@ -290,12 +290,14 @@ export function reconcilePhotos(
 }
 
 /**
- * A build of the site as it stands into a scratch directory, for its image
- * cache: Astro keys an encoded image by the photo's path, size, format and
- * quality, never the page or the output directory, so the lead's own build
- * reuses every one. Its result does not matter.
+ * A build of the site as it stands, for its image cache: Astro keys an
+ * encoded image by the photo's path, size, format and quality, never the
+ * page, so the lead's own build reuses every one. Into the site's own dist,
+ * which the lead's build replaces: Astro renames assets into the output
+ * directory, and an outDir under /tmp fails with EXDEV in the sandbox image.
+ * Its result does not matter.
  */
-export const WARM_BUILD = `cd ${SITE_ROOT} && timeout 300 ./node_modules/.bin/astro build --outDir /tmp/reme-warm > /tmp/reme-warm.log 2>&1; rm -rf /tmp/reme-warm; true`
+export const WARM_BUILD = `cd ${SITE_ROOT} && timeout 300 ./node_modules/.bin/astro build > /tmp/reme-warm.log 2>&1; true`
 
 /**
  * Runs `build` again while there is something new for it, never two at once
