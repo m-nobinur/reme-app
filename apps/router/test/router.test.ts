@@ -736,11 +736,11 @@ describe("a custom domain", () => {
     }
   })
 
-  it("passes an unknown host inside the zone through on production", async () => {
+  it("answers 404 for an unknown host inside the zone on production, never passing it through", async () => {
     for (const host of ["nobody-here.remeai.co.uk", "a.b.remeai.co.uk"]) {
       const { res, seen } = await passedThrough(host, "/")
-      expect(res.status, host).toBe(299)
-      expect(seen, host).toEqual([`https://${host}/`])
+      expect(res.status, host).toBe(404)
+      expect(seen, host).toEqual([])
     }
   })
 })
@@ -1253,17 +1253,18 @@ live("a published host, against a real database", () => {
     )
   })
 
-  // The other half of issue #90: the same miss, on the environment whose route
-  // is the whole zone. Nothing here was ever published under that name, so it
-  // is another name's request and goes back to Cloudflare rather than 404.
-  it("passes a production host through when no business holds the slug", async () => {
+  // The same miss, on the environment whose route is the whole zone. Handed
+  // back, the name met the zone's `100::` record and Cloudflare's 522
+  // (measured on v0.1.23), so it is this router's 404 there too.
+  it("answers 404 for a production host no business holds, passing nothing through", async () => {
     const host = `nobody-here${PROD_SUFFIX}`
     const { res, seen } = await passedThrough(host, "/", {
       ...prodEnv,
       HYPERDRIVE: { connectionString: url },
     } as unknown as Env)
-    expect(res.status).toBe(299)
-    expect(seen).toEqual([`https://${host}/`])
+    expect(res.status).toBe(404)
+    expect(await res.text()).toBe("No site here.")
+    expect(seen).toEqual([])
     expect(pointers.has(`host:${host}`)).toBe(false)
   })
 
