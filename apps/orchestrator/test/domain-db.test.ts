@@ -648,6 +648,19 @@ describe.skipIf(!url)("custom domains against a database", () => {
     ).toMatchObject({ status: 409, code: "domain.too_many_pending" })
   })
 
+  it("holds the pending bound when connects arrive at once", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const answers = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        connect(env, kit, site.orgId, { name: unique(), approval_id: "a" })
+      )
+    )
+    const statuses = answers.map((a) => a.status).sort()
+    expect(statuses).toEqual([201, 201, 201, 409, 409, 409])
+  })
+
   it("tells the owner about a record in the way once, however many looks find it", async () => {
     const name = unique()
     const www = `www.${name}`
