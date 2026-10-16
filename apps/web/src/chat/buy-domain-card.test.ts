@@ -357,7 +357,7 @@ it.each([
   [
     "test",
     { state: "verifying", test: true, outcome: "test_registered" },
-    "This was a test purchase",
+    "Test purchase complete: paid in test mode, registered in Cloudflare's sandbox, not live on the internet.",
   ],
   [
     "failed",
@@ -447,6 +447,10 @@ it("reads every purchase outcome in the card's words", () => {
   expect(of({ state: "awaiting_payment", test: false })).toBeNull()
   expect(of({ state: "verifying", test: true })).toBe("authorised")
   expect(of({ state: "active", test: true })).toBe("test")
+  // A sandbox purchase ends removed, never active, and still reads as a test.
+  expect(of({ state: "removed", test: true, outcome: "test_registered" })).toBe(
+    "test"
+  )
   expect(of({ state: "failed", test: false, outcome: "price_changed" })).toBe(
     "price_changed"
   )
