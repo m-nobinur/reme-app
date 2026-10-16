@@ -14736,6 +14736,238 @@
         ],
         "additionalProperties": false
       },
+      "CheckDomainInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "CheckDomainOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "checked"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "awaiting_dns",
+                  "verifying",
+                  "active",
+                  "failed",
+                  "removed"
+                ]
+              },
+              "status": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not_found"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "unknown_error"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "conflicting_record"
+                      },
+                      "conflicts": {
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "A",
+                                "AAAA",
+                                "ALIAS",
+                                "CAA",
+                                "CNAME",
+                                "TXT"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 253
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 512
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "conflicts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "pending_verification"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "invalid_configuration"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "pending_certificate"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "valid"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "next_step": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "outcome",
+              "state",
+              "status",
+              "next_step"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "CompletionReport": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14958,6 +15190,162 @@
           "source"
         ],
         "additionalProperties": false
+      },
+      "ConnectDomainInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectDomainOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "connecting"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "domain_connect",
+                  "records"
+                ]
+              },
+              "email_affected": {
+                "type": "boolean"
+              },
+              "steps": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "A",
+                        "AAAA",
+                        "ALIAS",
+                        "CAA",
+                        "CNAME",
+                        "TXT"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "name",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "apex": {
+                "type": "string",
+                "enum": [
+                  "alias",
+                  "forward"
+                ]
+              },
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "\\S"
+                  },
+                  "settings_url": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "pattern": "^https:\\/\\/[^\\s]+$"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "method",
+              "email_affected",
+              "apex"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "Conversation": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -15409,7 +15797,9 @@
                 "request_change",
                 "answer_question",
                 "create_reminder",
-                "record_review"
+                "record_review",
+                "check_domain",
+                "connect_domain"
               ]
             }
           },
@@ -16624,7 +17014,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 },
                 "description": {
@@ -16955,6 +17347,176 @@
                         "testimonials.review_1",
                         "testimonials.review_2"
                       ]
+                    }
+                  },
+                  "domains": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 253,
+                          "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "awaiting_dns",
+                            "verifying",
+                            "active",
+                            "failed",
+                            "removed"
+                          ]
+                        },
+                        "last_check": {
+                          "anyOf": [
+                            {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "not_found"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unknown_error"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "conflicting_record"
+                                    },
+                                    "conflicts": {
+                                      "minItems": 1,
+                                      "maxItems": 10,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "A",
+                                              "AAAA",
+                                              "ALIAS",
+                                              "CAA",
+                                              "CNAME",
+                                              "TXT"
+                                            ]
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 253
+                                          },
+                                          "value": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 512
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "name",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "conflicts"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "pending_verification"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "invalid_configuration"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "pending_certificate"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "valid"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "state",
+                        "last_check"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "expected_seconds": {
@@ -20721,6 +21283,410 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "check_domain"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "checked"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "awaiting_dns",
+                          "verifying",
+                          "active",
+                          "failed",
+                          "removed"
+                        ]
+                      },
+                      "status": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "not_found"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "unknown_error"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "conflicting_record"
+                              },
+                              "conflicts": {
+                                "minItems": 1,
+                                "maxItems": 10,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "A",
+                                        "AAAA",
+                                        "ALIAS",
+                                        "CAA",
+                                        "CNAME",
+                                        "TXT"
+                                      ]
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 253
+                                    },
+                                    "value": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 512
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "name",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "conflicts"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "pending_verification"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "invalid_configuration"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "pending_certificate"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "const": "valid"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "next_step": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "state",
+                      "status",
+                      "next_step"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "connect_domain"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "connecting"
+                      },
+                      "method": {
+                        "type": "string",
+                        "enum": [
+                          "domain_connect",
+                          "records"
+                        ]
+                      },
+                      "email_affected": {
+                        "type": "boolean"
+                      },
+                      "steps": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "A",
+                                "AAAA",
+                                "ALIAS",
+                                "CAA",
+                                "CNAME",
+                                "TXT"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 253
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 512
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "apex": {
+                        "type": "string",
+                        "enum": [
+                          "alias",
+                          "forward"
+                        ]
+                      },
+                      "provider": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          },
+                          "settings_url": {
+                            "type": "string",
+                            "maxLength": 300,
+                            "pattern": "^https:\\/\\/[^\\s]+$"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "method",
+                      "email_affected",
+                      "apex"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -20783,7 +21749,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 }
               },
@@ -20881,7 +21849,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 }
               },
@@ -20972,7 +21942,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 }
               },
@@ -21062,7 +22034,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 }
               },
@@ -21152,7 +22126,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
-                    "record_review"
+                    "record_review",
+                    "check_domain",
+                    "connect_domain"
                   ]
                 }
               },
@@ -21435,6 +22411,176 @@
                 "testimonials.review_1",
                 "testimonials.review_2"
               ]
+            }
+          },
+          "domains": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "awaiting_dns",
+                    "verifying",
+                    "active",
+                    "failed",
+                    "removed"
+                  ]
+                },
+                "last_check": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "not_found"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "unknown_error"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "conflicting_record"
+                            },
+                            "conflicts": {
+                              "minItems": 1,
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "A",
+                                      "AAAA",
+                                      "ALIAS",
+                                      "CAA",
+                                      "CNAME",
+                                      "TXT"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 253
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 512
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "name",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "conflicts"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "pending_verification"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "invalid_configuration"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "pending_certificate"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "valid"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "state",
+                "last_check"
+              ],
+              "additionalProperties": false
             }
           },
           "expected_seconds": {
@@ -22025,6 +23171,194 @@
           "ornament",
           "image_style",
           "voice"
+        ],
+        "additionalProperties": false
+      },
+      "DnsRecord": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AAAA",
+              "ALIAS",
+              "CAA",
+              "CNAME",
+              "TXT"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "DomainCheck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "not_found"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "unknown_error"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "conflicting_record"
+              },
+              "conflicts": {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "A",
+                        "AAAA",
+                        "ALIAS",
+                        "CAA",
+                        "CNAME",
+                        "TXT"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "name",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "status",
+              "conflicts"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "pending_verification"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "invalid_configuration"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "pending_certificate"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "valid"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "DomainProvider": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "settings_url": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "^https:\\/\\/[^\\s]+$"
+          }
+        },
+        "required": [
+          "name"
         ],
         "additionalProperties": false
       },
@@ -24869,6 +26203,21 @@
           }
         ]
       },
+      "RedirectPointer": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "redirect_to": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          }
+        },
+        "required": [
+          "redirect_to"
+        ],
+        "additionalProperties": false
+      },
       "Reminder": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -27608,6 +28957,165 @@
         ],
         "additionalProperties": false
       },
+      "ServerButtonPart": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "data-button"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              },
+              "action": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "ask"
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "open"
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 2048,
+                        "pattern": "^https:\\/\\/[^\\s]+$"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "action"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "type",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "ServerMessage": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "text": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "pattern": "\\S"
+            }
+          },
+          "button": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              },
+              "action": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "ask"
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "open"
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 2048,
+                        "pattern": "^https:\\/\\/[^\\s]+$"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "action"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
       "SetFactsRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -28759,6 +30267,11 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
+          },
+          "canonical_host": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
           }
         },
         "required": [

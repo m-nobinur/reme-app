@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest"
-import { previewHost, siteHost, siteUrl } from "../src/site.ts"
+import { previewHost, siteHost, siteUrl, slugFor } from "../src/site.ts"
+
+describe("slugFor", () => {
+  const org = "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e"
+
+  it("keeps a name's own words and ends with the org's id", () => {
+    expect(slugFor("Bright Clean", org)).toBe("bright-clean-9f1c0b52")
+  })
+
+  it.each([
+    ["Preview", "site-preview-9f1c0b52"],
+    ["Preview Cleaning", "site-preview-cleaning-9f1c0b52"],
+    ["Domains", "site-domains-9f1c0b52"],
+    ["domains!", "site-domains-9f1c0b52"],
+  ])("puts a reserved word, %s, behind site-", (name, slug) => {
+    expect(slugFor(name, org)).toBe(slug)
+  })
+
+  it("leaves a name that only starts with domains alone", () => {
+    expect(slugFor("Domains Cleaning", org)).toBe("domains-cleaning-9f1c0b52")
+  })
+})
 
 describe("siteUrl", () => {
   it("keeps staging and production on https with no port", () => {

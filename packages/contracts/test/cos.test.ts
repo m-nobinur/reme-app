@@ -51,8 +51,8 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the seven tools, in order", () => {
-    const seven = [
+  it("has exactly the nine tools, in order", () => {
+    const nine = [
       "get_workspace",
       "get_facts",
       "get_preview",
@@ -60,9 +60,11 @@ describe("COS_TOOLS", () => {
       "answer_question",
       "create_reminder",
       "record_review",
+      "check_domain",
+      "connect_domain",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(seven)
-    expect(CosToolName.options).toStrictEqual(seven)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(nine)
+    expect(CosToolName.options).toStrictEqual(nine)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -88,7 +90,13 @@ describe("COS_TOOLS", () => {
       })
       expect(open).toBe(0)
       expect(
-        keys.filter((k) => k === "org_id" || k.endsWith("_staff_id"))
+        keys.filter(
+          (k) =>
+            k === "org_id" ||
+            k.endsWith("_staff_id") ||
+            k === "cf_ids" ||
+            /cloudflare|hostname_id/.test(k)
+        )
       ).toStrictEqual([])
       expect(formats.filter((f) => f === "uri")).toStrictEqual([])
     }
@@ -187,6 +195,23 @@ describe("CosWorkspace", () => {
   const withQuestion = (over: object) => ({
     ...workspace,
     questions: [{ ...question, ...over }],
+  })
+
+  it("accepts a workspace with no domains field", () => {
+    const { domains: _domains, ...before } = samples.CosWorkspace as {
+      domains: unknown
+    }
+    expect(verdict("CosWorkspace", CosWorkspace, before)).toEqual(ACCEPTED)
+  })
+
+  it("refuses eleven domains", () => {
+    const [domain] = (samples.CosWorkspace as { domains: unknown[] }).domains
+    expect(
+      verdict("CosWorkspace", CosWorkspace, {
+        ...workspace,
+        domains: Array(11).fill(domain),
+      })
+    ).toEqual(REFUSED)
   })
 
   it.each([

@@ -128,7 +128,7 @@ export const SiteField = z.discriminatedUnion("kind", [
 export const SiteFields = z.record(z.string().min(1), SiteField)
 
 /** A hostname: lower-case DNS labels, each 1 to 63 characters. */
-const Hostname = z
+export const Hostname = z
   .string()
   .max(253)
   .regex(
@@ -169,7 +169,19 @@ export const SitePointer = z.strictObject({
   site_id: Uuid,
   revision_id: Uuid,
   config_version: z.int().positive(),
+  /**
+   * The owner's primary host, when the site has an active custom domain: the
+   * router rewrites the slug host baked into the build to it. Absent before.
+   */
+  canonical_host: Hostname.optional(),
 })
+
+/**
+ * A pointer for a host that sends its visitors elsewhere, under
+ * `host:{hostname}`: the other half of a custom domain and the slug host once
+ * the domain is active. The router answers 301 and keeps the path and query.
+ */
+export const RedirectPointer = z.strictObject({ redirect_to: Hostname })
 
 /**
  * The header the router puts on an HTML page it serves for a published host,
@@ -210,6 +222,7 @@ export function parseSiteRevision(
 export type ComponentManifest = z.infer<typeof ComponentManifest>
 export type PreviewClaim = z.infer<typeof PreviewClaim>
 export type SitePointer = z.infer<typeof SitePointer>
+export type RedirectPointer = z.infer<typeof RedirectPointer>
 export type SiteField = z.infer<typeof SiteField>
 export type SiteFields = z.infer<typeof SiteFields>
 
@@ -234,8 +247,9 @@ export function slugFor(name: string, orgId: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
   // `preview-` opens a preview host (ADR-030), so a name whose slug would
-  // start that way, "Preview" alone included, gets a `site-` in front.
-  const reserved = `${words}-`.startsWith("preview-")
+  // start that way, "Preview" alone included, gets a `site-` in front. So
+  // does "Domains": `domains` is the Cloudflare for SaaS fallback origin.
+  const reserved = `${words}-`.startsWith("preview-") || words === "domains"
   const base = (reserved ? `site-${words}` : words).slice(0, 40)
   return [base, orgId.slice(0, 8)].filter(Boolean).join("-")
 }
