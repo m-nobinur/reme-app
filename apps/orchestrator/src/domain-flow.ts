@@ -60,7 +60,13 @@ import {
  * R8: ids only. `settle` is the short instance a removal starts, which only
  * rewrites the pointers once more after `SETTLE`.
  */
-export type DomainParams = { org_id: string; domain_id: string; settle?: true }
+export type DomainParams = {
+  org_id: string
+  domain_id: string
+  settle?: true
+  /** A purchase: wait for the payment, register, capture, serve. */
+  buy?: true
+}
 export const domainInstanceId = (domainId: string) => `domain-${domainId}`
 const settleInstanceId = (domainId: string) => `domain-${domainId}-removed`
 
@@ -126,7 +132,7 @@ async function readDomain(db: OrgScopedDb, domainId: string) {
 }
 
 /** The newest claim `where` picks, with its org's slug host, in one read. */
-async function readClaim(
+export async function readClaim(
   db: OrgScopedDb,
   env: Pick<Env, "SITE_HOST_SUFFIX">,
   where: SQL
@@ -149,7 +155,7 @@ async function readClaim(
  * write that committed in between wins: an activation that lost to a
  * removal moves nothing and gets false.
  */
-async function moveTo(
+export async function moveTo(
   db: OrgScopedDb,
   row: DomainRow,
   to: DomainState,
@@ -654,7 +660,7 @@ export type Refusal = {
   code: string
   message: string
 }
-const refuse = (
+export const refuse = (
   status: Refusal["status"],
   errorClass: Refusal["class"],
   code: string,
@@ -850,11 +856,16 @@ export async function connect(
 }
 
 /** The claim's Workflow, created; one already there is fine. */
-async function start(env: Env, orgId: string, domainId: string) {
+export async function start(
+  env: Env,
+  orgId: string,
+  domainId: string,
+  buy?: true
+) {
   try {
     await env.DOMAINS.create({
       id: domainInstanceId(domainId),
-      params: { org_id: orgId, domain_id: domainId },
+      params: { org_id: orgId, domain_id: domainId, ...(buy && { buy }) },
     })
   } catch {
     // Already created: the id is the claim's.
