@@ -282,7 +282,7 @@ const untyped = (what: string) =>
   failure(400, {
     class: "validation",
     code: "contact.not_typed",
-    message: `That ${what} is not one the owner typed in this conversation. Ask for it, then propose the change again.`,
+    message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. Name it in the change, as the owner typed it, then propose again.`,
     detail: {},
   })
 
@@ -291,13 +291,14 @@ const untyped = (what: string) =>
  * before the change starts, so the build reads the number the owner gave and
  * the content gate agrees with the site. The model proposes the value; it is
  * recorded only when the owner's own messages in `sessionId` hold the digits
- * or the address, so a number the model made up never becomes a fact.
+ * or the address, so a number the model made up never becomes a fact. The
+ * change text, which the owner reads on the card, must name it too.
  * Null when there is nothing to record or it is recorded, else the refusal.
  */
 async function recordContact(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   sessionId: string,
-  contact: CosChangeRequest["contact"]
+  { contact, text }: CosChangeRequest
 ): Promise<Response | null> {
   if (!contact?.phone && !contact?.email) return null
   const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
@@ -316,11 +317,23 @@ async function recordContact(
     .join("\n")
   const stated: FactValue[] = []
   if (contact.phone) {
-    if (!phoneFromOwner(contact.phone, said)) return untyped("phone number")
+    if (
+      !(
+        phoneFromOwner(contact.phone, said) &&
+        phoneFromOwner(contact.phone, text)
+      )
+    )
+      return untyped("phone number")
     stated.push({ key: "business.phone", value: { e164: contact.phone } })
   }
   if (contact.email) {
-    if (!emailFromOwner(contact.email, said)) return untyped("email address")
+    if (
+      !(
+        emailFromOwner(contact.email, said) &&
+        emailFromOwner(contact.email, text)
+      )
+    )
+      return untyped("email address")
     stated.push({ key: "business.email", value: { address: contact.email } })
   }
   try {
@@ -354,7 +367,7 @@ export async function startOwnerChange(
   approvalId: string
 ): Promise<Response> {
   return (
-    (await recordContact(context, sessionId, input.contact)) ??
+    (await recordContact(context, sessionId, input)) ??
     startChange(
       context.env,
       context.kit,

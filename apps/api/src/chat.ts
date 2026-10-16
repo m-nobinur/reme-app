@@ -2,7 +2,7 @@ import {
   BuildSummary,
   ChatRequest,
   type ChatResult,
-  type CosChangeRequest,
+  CosChangeRequest,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
@@ -1706,12 +1706,14 @@ async function approve(
   let done: ToolPart = { ...call, state: "output-denied", approval }
   if (turn.approved) {
     // The orchestrator checks change_kind again; an unknown one runs full.
+    const input = CosChangeRequest.safeParse(call.input)
+    if (!input.success) return answerInvalid()
     const output = await changed(
       env,
       kit,
       owner,
       id,
-      call.input as CosChangeRequest,
+      input.data,
       turn.approval_id
     )
     if (output instanceof Response) return output

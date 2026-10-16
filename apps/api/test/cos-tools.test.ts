@@ -676,6 +676,27 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       }
     )
 
+    it("refuses a typed number the change text the owner approves does not name", async () => {
+      const turn = await turnOf(me, [
+        "Change the phone number to 0117 496 0125",
+      ])
+      const stub = creating(me)
+      const output = await requestChange(
+        context(me, stub),
+        {
+          text: "Update the contact details",
+          contact: { phone: "+441174960125" },
+        },
+        crypto.randomUUID(),
+        turn
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { code: "contact.not_typed" },
+      })
+      expect(stub.calls).toHaveLength(0)
+    })
+
     it("refuses as the closed shape, detail dropped", async () => {
       const stub = stubOrchestrator(() =>
         Response.json(
