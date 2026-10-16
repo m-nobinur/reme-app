@@ -733,7 +733,16 @@ export const samples: Record<ContractName, unknown> = {
     name: "GoDaddy",
     settings_url: "https://dcc.godaddy.com/manage/dns",
   },
+  DomainPurchaseStatus: {
+    name: "brightclean.com",
+    state: "removed",
+    test: true,
+    outcome: "test_registered",
+  },
   DomainRegistration: {
+    sandbox: false,
+    status: "registered",
+    outcome: "registered",
     years: 1,
     auto_renew: true,
     expires_at: LATER,

@@ -1,5 +1,5 @@
 {
-  "id": "c71ac6de-9239-4194-9450-752d061e6e7d",
+  "id": "865ab85a-d979-40eb-aee8-2e8c013c55b5",
   "prevId": "aa2e14fc-487c-4f1c-ab6a-6648e39742e3",
   "version": "7",
   "dialect": "postgresql",
@@ -1389,6 +1389,12 @@
         },
         "registration": {
           "name": "registration",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registrant": {
+          "name": "registrant",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

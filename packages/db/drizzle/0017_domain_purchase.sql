@@ -6,6 +6,7 @@ DROP INDEX "domains_live_name";--> statement-breakpoint
 ALTER TABLE "domains" ADD COLUMN "stripe" jsonb;--> statement-breakpoint
 ALTER TABLE "domains" ADD COLUMN "price" jsonb;--> statement-breakpoint
 ALTER TABLE "domains" ADD COLUMN "registration" jsonb;--> statement-breakpoint
+ALTER TABLE "domains" ADD COLUMN "registrant" jsonb;--> statement-breakpoint
 ALTER TABLE "orgs" ADD COLUMN "stripe_customer_id" text;--> statement-breakpoint
 CREATE UNIQUE INDEX "domains_live_name" ON "domains" USING btree ("name") WHERE state < 'failed';--> statement-breakpoint
 ALTER TABLE "orgs" ADD CONSTRAINT "orgs_stripe_customer_key" UNIQUE("stripe_customer_id");--> statement-breakpoint
