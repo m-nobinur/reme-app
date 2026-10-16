@@ -6764,7 +6764,7 @@ export interface components {
         }
     DomainPrice: {
       /** @enum {string} */
-      tld: "co.uk" | "uk" | "com"
+      tld: "co.uk" | "uk" | "com" | "net"
       retail_gbp: number
       cost_usd: number
     }
@@ -6772,10 +6772,42 @@ export interface components {
       name: string
       settings_url?: string
     }
+    DomainPurchaseStatus: {
+      name: string
+      /** @enum {string} */
+      state:
+        | "awaiting_payment"
+        | "awaiting_dns"
+        | "verifying"
+        | "active"
+        | "failed"
+        | "abandoned"
+        | "removed"
+      test: boolean
+      /** @enum {string} */
+      outcome?:
+        | "registered"
+        | "test_registered"
+        | "payment_released"
+        | "price_changed"
+        | "unavailable"
+        | "expired"
+    }
     DomainRegistration: {
-      years: number
-      auto_renew: boolean
-      expires_at: string | null
+      sandbox: boolean
+      status?: string
+      /** @enum {string} */
+      outcome?:
+        | "registered"
+        | "test_registered"
+        | "payment_released"
+        | "price_changed"
+        | "unavailable"
+        | "expired"
+      years?: number
+      auto_renew?: boolean
+      /** Format: date-time */
+      expires_at?: string
       /** @enum {string} */
       registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
     }

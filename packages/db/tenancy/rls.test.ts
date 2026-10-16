@@ -1657,15 +1657,40 @@ describe("domains hold their shape", () => {
   const APPROVAL_A = "00000000-0000-4000-a000-000000000013"
   const APPROVAL_B = "00000000-0000-4000-b000-000000000013"
 
+  const PRICE = { tld: "com", retail_gbp: 12, cost_usd: 10.46 }
+
   const domain = (
     tx: TransactionSql,
-    options: { org?: string; name?: string; host?: string; state?: string }
+    options: {
+      org?: string
+      name?: string
+      host?: string
+      state?: string
+      origin?: string
+      method?: string
+      price?: object | null
+    }
   ) => tx`
-    insert into domains (org_id, site_id, name, primary_host, origin, method, state)
+    insert into domains (org_id, site_id, name, primary_host, origin, method, state, price)
     values (${options.org ?? ORG_A}, ${options.org ?? ORG_A},
       ${options.name ?? "newco.example.com"},
       ${options.host ?? options.name ?? "newco.example.com"},
-      'connected', 'records', ${options.state ?? "awaiting_dns"})`
+      ${options.origin ?? "connected"}, ${options.method ?? "records"},
+      ${options.state ?? "awaiting_dns"},
+      ${options.price ? JSON.stringify(options.price) : null}::jsonb)`
+
+  /** A purchase of `name` by `org`, waiting on its Checkout unless `state` says. */
+  const purchase = (
+    tx: TransactionSql,
+    options: { org?: string; name?: string; state?: string }
+  ) =>
+    domain(tx, {
+      state: "awaiting_payment",
+      ...options,
+      origin: "purchased",
+      method: "purchased",
+      price: PRICE,
+    })
 
   it("refuses a second live claim on a name, in any org", async () => {
     for (const state of ["awaiting_dns", "verifying", "active"]) {
@@ -1676,6 +1701,64 @@ describe("domains hold their shape", () => {
         state
       ).toBe(UNIQUE)
     }
+    // A purchase waiting on payment holds the name too.
+    expect(
+      await inTransaction((tx) =>
+        purchase(tx, { org: ORG_B, name: DOMAIN_OF.a })
+      )
+    ).toBe(UNIQUE)
+  })
+
+  it("lets an expired purchase free its name, and holds it while unpaid", async () => {
+    const name = "buyme.example.com"
+    expect(
+      await inTransaction(async (tx) => {
+        await purchase(tx, { name })
+        await purchase(tx, { org: ORG_B, name })
+      })
+    ).toBe(UNIQUE)
+    expect(
+      await inTransaction(async (tx) => {
+        await purchase(tx, { name, state: "abandoned" })
+        await purchase(tx, { org: ORG_B, name })
+      })
+    ).toBeUndefined()
+  })
+
+  it("prices a purchase, and lets only a purchase wait on payment", async () => {
+    for (const [why, options] of [
+      ["a connect waiting on payment", { state: "awaiting_payment" }],
+      ["a connect abandoned", { state: "abandoned" }],
+      [
+        "a purchase with no price",
+        { origin: "purchased", method: "purchased", state: "awaiting_payment" },
+      ],
+      [
+        "a purchase pointed by records",
+        { origin: "purchased", method: "records", price: PRICE },
+      ],
+      [
+        "a connect with the purchased method",
+        { method: "purchased", price: PRICE },
+      ],
+    ] as const) {
+      expect(await inTransaction((tx) => domain(tx, options)), why).toBe(CHECK)
+    }
+    for (const state of ["awaiting_payment", "verifying", "active"]) {
+      expect(
+        await inTransaction((tx) => purchase(tx, { state })),
+        state
+      ).toBeUndefined()
+    }
+  })
+
+  it("gives each org its own Stripe customer", async () => {
+    expect(
+      await inTransaction(async (tx) => {
+        await tx`update orgs set stripe_customer_id = 'cus_tenancy' where id = ${ORG_A}`
+        await tx`update orgs set stripe_customer_id = 'cus_tenancy' where id = ${ORG_B}`
+      })
+    ).toBe(UNIQUE)
   })
 
   it("lets a name be claimed again once the claim ended", async () => {

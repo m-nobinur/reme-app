@@ -10,6 +10,7 @@ import {
   DomainName,
   DomainPaymentEvent,
   DomainProvider,
+  DomainRegistration,
   DomainTld,
   ErrorEnvelope,
   RemoveDomainOutput,
@@ -249,6 +250,7 @@ describe("sellableTld", () => {
     ["brightclean.co.uk", "co.uk"],
     ["brightclean.uk", "uk"],
     ["brightclean.com", "com"],
+    ["brightclean.net", "net"],
   ])("sells %s as %s", (name, tld) => {
     expect(sellableTld(name)).toBe(tld)
   })
@@ -322,6 +324,23 @@ describe("DomainPaymentEvent", () => {
     }
     expect(verdict("DomainPaymentEvent", DomainPaymentEvent, event)).toEqual(
       ACCEPTED
+    )
+  })
+})
+
+describe("DomainRegistration", () => {
+  it("accepts the row's first shape, the sandbox flag alone", () => {
+    expect(
+      verdict("DomainRegistration", DomainRegistration, { sandbox: true })
+    ).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["no sandbox flag", { status: "registered" }],
+    ["an outcome of its own", { sandbox: true, outcome: "refunded" }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("DomainRegistration", DomainRegistration, value)).toEqual(
+      REFUSED
     )
   })
 })
