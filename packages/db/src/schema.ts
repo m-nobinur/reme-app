@@ -1190,8 +1190,13 @@ export const domains = pgTable(
     stripe: jsonb("stripe"),
     /** A purchase's `DomainPrice`, from the price table and the live check. */
     price: jsonb("price"),
-    /** A bought domain's `DomainRegistration`. The registrant itself is never stored. */
+    /** A purchase's `DomainRegistration`: the sandbox flag, status and outcome. */
     registration: jsonb("registration"),
+    /**
+     * The registrant's `RegistrantDetails`, held only while the purchase is
+     * open: the update that records its outcome sets this back to null.
+     */
+    registrant: jsonb("registrant"),
     createdAt,
     activatedAt: timestamp("activated_at", { withTimezone: true }),
     removedAt: timestamp("removed_at", { withTimezone: true }),
