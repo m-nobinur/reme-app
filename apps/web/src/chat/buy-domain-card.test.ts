@@ -464,6 +464,36 @@ it("reads a registering purchase again until it settles", async () => {
   await card.unmount()
 })
 
+it("says a Checkout that expired while open timed out", async () => {
+  vi.useFakeTimers()
+  const reads: (Read | null)[] = [
+    null,
+    null,
+    { state: "abandoned", test: false, outcome: "expired" },
+  ]
+  const purchase = {
+    checkout: vi.fn(async () => ({
+      outcome: "open" as const,
+      publishable_key: "pk_test_1",
+      client_secret: "cs_x",
+    })),
+    status: vi.fn(async () => {
+      const read = reads.shift()
+      return read ? { name: NAME, ...read } : null
+    }),
+  }
+  const card = await draw(
+    "buy_domain",
+    { args: BUY, result: AWAITING },
+    purchase
+  )
+  await press(card.container, "Continue to pay £8")
+  await act(async () => vi.advanceTimersByTimeAsync(20_000))
+  expect(card.container.textContent).toContain("timed out before it was made")
+  vi.useRealTimers()
+  await card.unmount()
+})
+
 it("reads every purchase outcome in the card's words", () => {
   const of = (read: Read) => purchaseStatusOf({ name: NAME, ...read })
   expect(purchaseStatusOf(null)).toBeNull()

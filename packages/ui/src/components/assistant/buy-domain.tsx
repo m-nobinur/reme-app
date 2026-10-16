@@ -615,6 +615,9 @@ const TICKED = new Set<PurchaseStatus>([
 /** Statuses that change on their own, so the card reads them again. */
 const MOVING = new Set<PurchaseStatus>(["authorised", "serving"])
 const REREAD_MS = 5000
+// While Checkout is open, so an expired one says so instead of Stripe's
+// "You're all done here", which reads the same for paid and timed out.
+const PAYING_REREAD_MS = 20_000
 
 /**
  * The purchase's status, read when the card shows and again every few
@@ -622,11 +625,13 @@ const REREAD_MS = 5000
  * read that fails counts as none, and the api refuses a second payment.
  * `paid` is Checkout's word that the payment completed on this page: the
  * hold is authorised even while the webhook has not reached the row yet.
+ * `paying` keeps reading an unpaid purchase, which the webhook may expire.
  */
 function usePurchaseStatus(
   purchase: DomainPurchase | null,
   name: string,
-  paid: boolean
+  paid: boolean,
+  paying: boolean
 ): PurchaseStatus | null | undefined {
   const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
     purchase ? undefined : null
@@ -642,13 +647,14 @@ function usePurchaseStatus(
       if (!live) return
       setStatus(next)
       if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
+      else if (!next && paying) timer = setTimeout(read, PAYING_REREAD_MS)
     }
     void read()
     return () => {
       live = false
       clearTimeout(timer)
     }
-  }, [purchase, name, paid])
+  }, [purchase, name, paid, paying])
   return status
 }
 
@@ -675,7 +681,7 @@ function Purchase({
   const [phase, setPhase] = useState<Phase>({ at: "review" })
   const edit = useRef<HTMLButtonElement>(null)
   const [paid, setPaid] = useState(false)
-  const status = usePurchaseStatus(purchase, name, paid)
+  const status = usePurchaseStatus(purchase, name, paid, phase.at === "paying")
 
   if (status) {
     // A tick only for a purchase that went through, or a test one that did.

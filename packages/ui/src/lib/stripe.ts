@@ -59,7 +59,24 @@ let current: EmbeddedCheckout | null = null
  * the payment completes on the page, which is every payment that needs no
  * redirect: the api asks for `redirect_on_completion: if_required`.
  */
-export async function mountCheckout(
+export function mountCheckout(
+  element: HTMLElement,
+  publishableKey: string,
+  clientSecret: string,
+  onComplete: () => void
+): Promise<() => void> {
+  // Mounts run one at a time: two in flight (React's dev double effect) would
+  // both create before either is current, and Stripe refuses the second.
+  const run = queue.then(() =>
+    mountNow(element, publishableKey, clientSecret, onComplete)
+  )
+  queue = run.catch(() => undefined)
+  return run
+}
+
+let queue: Promise<unknown> = Promise.resolve()
+
+async function mountNow(
   element: HTMLElement,
   publishableKey: string,
   clientSecret: string,
