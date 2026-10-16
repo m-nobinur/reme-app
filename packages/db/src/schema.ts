@@ -159,11 +159,14 @@ export const orgs = pgTable(
      * a primary key wearing a disguise.
      */
     workosOrganizationId: text("workos_organization_id"),
+    /** The org's one Stripe Customer, made on its first domain purchase. */
+    stripeCustomerId: text("stripe_customer_id"),
     createdAt,
     updatedAt,
   },
   (t) => [
     unique("orgs_workos_organization_key").on(t.workosOrganizationId),
+    unique("orgs_stripe_customer_key").on(t.stripeCustomerId),
     // The tenant root carries no org_id: it scopes on its own key.
     pgPolicy("orgs_org_isolation", {
       for: "all",
@@ -1117,29 +1120,34 @@ export const reminders = pgTable(
   ]
 )
 
-/**
- * Where a domain came from. Only `connected` while the buy path is parked; it
- * adds `purchased` with its own expand migration.
- */
-export const domainOrigin = pgEnum("domain_origin", ["connected"])
+/** `DomainOrigin`: connected by the owner, or bought through Reme. */
+export const domainOrigin = pgEnum("domain_origin", ["connected", "purchased"])
 
-/** How the owner points the domain at Reme. */
+/** `ConnectMethod`: how the domain points at Reme. */
 export const connectMethod = pgEnum("connect_method", [
   "records",
   "domain_connect",
+  "purchased",
 ])
 
-/** `DomainState`. `removed` rows stay, so a later claim on the name can ask for a TXT. */
+/**
+ * `DomainState`. `removed` rows stay, so a later claim on the name can ask
+ * for a TXT. Order matters: a claim is live while its state sorts before
+ * `failed` (`domains_live_name`), so a new live state goes before it.
+ */
 export const domainState = pgEnum("domain_state", [
+  "awaiting_payment",
   "awaiting_dns",
   "verifying",
   "active",
   "failed",
+  "abandoned",
   "removed",
 ])
 
 /**
- * A custom domain an owner connected to their site. `name` is the zone apex,
+ * A custom domain an owner connected to their site, or bought through Reme
+ * (`origin = 'purchased'`, priced, waiting on Checkout until paid). `name` is the zone apex,
  * lowercase and punycode; `primary_host` is the apex or its `www.`. Postgres is
  * the truth and the router's `host:` pointers in KV are a cache of the active
  * rows. A name has one live row across all orgs, so that index is a plain
@@ -1178,6 +1186,12 @@ export const domains = pgTable(
     approvalId: uuid("approval_id").unique(),
     /** The last `DomainCheck`. */
     lastCheck: jsonb("last_check"),
+    /** A purchase's `DomainStripe`: Stripe ids only, never a secret or card data. */
+    stripe: jsonb("stripe"),
+    /** A purchase's `DomainPrice`, from the price table and the live check. */
+    price: jsonb("price"),
+    /** A bought domain's `DomainRegistration`. The registrant itself is never stored. */
+    registration: jsonb("registration"),
     createdAt,
     activatedAt: timestamp("activated_at", { withTimezone: true }),
     removedAt: timestamp("removed_at", { withTimezone: true }),
@@ -1198,10 +1212,17 @@ export const domains = pgTable(
       "domains_primary_host_of_name",
       sql`primary_host in (name, 'www.' || name)`
     ),
-    // One live claim on a name, across orgs.
-    uniqueIndex("domains_live_name")
-      .on(t.name)
-      .where(sql`state not in ('removed', 'failed')`),
+    // A purchase is bought and priced, and only a purchase waits on payment.
+    // `::text` because 0017 adds these enum values, and Postgres refuses a
+    // new value as a literal in the transaction that added it.
+    check(
+      "domains_purchase_shape",
+      sql`(origin::text = 'purchased') = (method::text = 'purchased') and (origin::text <> 'purchased' or price is not null) and (origin::text = 'purchased' or state::text not in ('awaiting_payment', 'abandoned'))`
+    ),
+    // One live claim on a name, across orgs; an expired Checkout frees it.
+    // The live states are the ones sorting before `failed` (see
+    // `domainState`): an index predicate takes no `::text`, which is stable.
+    uniqueIndex("domains_live_name").on(t.name).where(sql`state < 'failed'`),
     index("domains_org_state_idx").on(t.orgId, t.state),
     orgIsolation("domains"),
   ]

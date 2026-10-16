@@ -120,6 +120,13 @@
       "when": 1792141961652,
       "tag": "0016_domain_takeover_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792162870666,
+      "tag": "0017_domain_purchase",
+      "breakpoints": true
     }
   ]
 }

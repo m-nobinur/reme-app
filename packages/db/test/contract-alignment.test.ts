@@ -2,7 +2,10 @@ import {
   ApprovalDecision,
   Assignment,
   AssignmentState,
+  ConnectMethod,
   Conversation,
+  DomainOrigin,
+  DomainState,
   EventEnvelope,
   FactProvenance,
   FactRecord,
@@ -33,7 +36,10 @@ import {
   approvalDecision,
   assignmentPriority,
   assignmentState,
+  connectMethod,
   conversationKind,
+  domainOrigin,
+  domainState,
   factSource,
   reminderSource,
   siteRevisionStatus,
@@ -96,6 +102,12 @@ describe("enums match the contract", () => {
   it("reminder sources", () => {
     expect(reminderSource.enumValues).toEqual(Reminder.shape.source.options)
   })
+
+  it("domain states, origins and connect methods", () => {
+    expect(domainState.enumValues).toEqual(DomainState.options)
+    expect(domainOrigin.enumValues).toEqual(DomainOrigin.options)
+    expect(connectMethod.enumValues).toEqual(ConnectMethod.options)
+  })
 })
 
 describe("rows map onto contracts", () => {
@@ -139,6 +151,7 @@ describe("rows map onto contracts", () => {
     slug: "brightclean",
     name: "Brightclean Cleaning Co. (fixture)",
     workosOrganizationId: "org_fixture_brightclean",
+    stripeCustomerId: null,
     createdAt: now,
     updatedAt: now,
   }
