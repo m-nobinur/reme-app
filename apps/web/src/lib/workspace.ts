@@ -11,7 +11,9 @@ import type { Workspace, WorkspacePoll } from "./api/types"
 
 /**
  * The panel polls `/workspace`, cheaply, until a push channel replaces it:
- * every 3 s while a build is queued or runs (publishing included), 30 s
+ * every 3 s while a build is queued or runs (publishing included), backing
+ * off to 5, 8 and 10 s while consecutive reads come back unchanged and
+ * snapping back to 3 s on a change, a focus or an owner action; 30 s
  * otherwise, 60 s after a failed read. A hidden tab with nothing in flight
  * does not poll; with a build in flight it keeps its pace, because a tab
  * can be hidden to the page and still be the one the owner is watching. A
@@ -20,6 +22,9 @@ import type { Workspace, WorkspacePoll } from "./api/types"
  * unchanged workspace answers 304 and keeps what is shown.
  */
 export const INTERVAL = { building: 3_000, idle: 30_000, error: 60_000 }
+
+/** The pace of a build in flight by the number of unchanged reads in a row; the last step holds. */
+export const BUILDING_BACKOFF = [INTERVAL.building, 5_000, 8_000, 10_000]
 
 /** A read that has not answered by now counts as failed, so it cannot hold up every read behind it. */
 export const READ_LIMIT_MS = 20_000
@@ -58,6 +63,7 @@ export function startPolling({
 }): Poller {
   let current = initial
   let failed = false
+  let unchanged = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let inFlight: Promise<void> | null = null
   // The read queued behind one already under way, shared by every caller
@@ -76,7 +82,7 @@ export function startPolling({
     const delay = failed
       ? INTERVAL.error
       : busy
-        ? INTERVAL.building
+        ? BUILDING_BACKOFF[Math.min(unchanged, BUILDING_BACKOFF.length - 1)]
         : INTERVAL.idle
     timer = setTimeout(tick, delay)
   }
@@ -108,6 +114,7 @@ export function startPolling({
         ])
         if (began !== generation) return
         failed = false
+        unchanged = next === "unchanged" ? unchanged + 1 : 0
         if (next !== "unchanged") {
           current = next
           onChange(current, false)
@@ -115,6 +122,7 @@ export function startPolling({
       } catch {
         if (began !== generation) return
         failed = true
+        unchanged = 0
         onChange(current, true)
       } finally {
         clearTimeout(limit)
@@ -129,17 +137,22 @@ export function startPolling({
 
   // Back in view or focused: read now, unless a read is already on its way.
   const onWake = () => {
-    if (page.hidden) schedule()
-    else if (!inFlight) void tick()
+    if (page.hidden) return schedule()
+    unchanged = -1 // the read it starts is not a quiet one
+    if (!inFlight) void tick()
   }
   page.addEventListener("visibilitychange", onWake)
   page.addEventListener("focus", onWake)
   schedule()
 
   return {
-    refresh: tick,
+    refresh: () => {
+      unchanged = -1
+      return tick()
+    },
     adopt: (workspace) => {
       generation++
+      unchanged = 0
       current = workspace
       failed = false
       schedule()
