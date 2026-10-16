@@ -27,6 +27,7 @@ import {
 } from "vitest"
 import {
   answerQuestion,
+  CONNECT_RETRY_MS,
   checkDomain,
   connectDomain,
   createReminder,
@@ -34,6 +35,7 @@ import {
   getPreview,
   getWorkspace,
   recordReview,
+  removeDomain,
   requestChange,
   type ToolContext,
   ToolFailed,
@@ -50,7 +52,7 @@ import {
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
- * The CoS's seven tool bodies on a live connection, the orchestrator stood in
+ * The CoS's tool bodies on a live connection, the orchestrator stood in
  * for. What they return is what the model reads, so every output is kept and
  * walked at the end for anything a model must never see.
  */
@@ -1291,6 +1293,66 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       }
     )
 
+    const passing = (code: string) =>
+      Response.json(
+        {
+          class: "transient",
+          code,
+          message: "Try again in a minute.",
+          detail: {},
+          occurred_at: AT,
+        },
+        { status: 503 }
+      )
+
+    /** A connect whose first answer is `first`, then `then`, run past the retry pause. */
+    async function connectThrough(first: Response, then: () => Response) {
+      const answers = [first]
+      const stub = stubOrchestrator(() => answers.shift() ?? then())
+      vi.useFakeTimers({ toFake: ["setTimeout"] })
+      try {
+        const connected = connectDomain(
+          context(me, stub),
+          { name: "blip.example" },
+          "approval-blip"
+        ).then(
+          (output) => ({ output, error: null }),
+          (error: unknown) => ({ output: null, error })
+        )
+        await vi.advanceTimersByTimeAsync(CONNECT_RETRY_MS)
+        return { ...(await connected), stub }
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    it.each(["dns.unavailable", "domain.records_pending"])(
+      "asks once more under the same key after a passing %s, so one approval survives it",
+      async (code) => {
+        const { output, stub } = await connectThrough(passing(code), () =>
+          Response.json(connecting)
+        )
+        expect(kept("connect_domain", output)).toEqual(connecting)
+        expect(
+          stub.calls.map((c) => c.request.headers.get("idempotency-key"))
+        ).toEqual(["approval-blip", "approval-blip"])
+      }
+    )
+
+    it("throws when the second look fails too, and never retries any other 503", async () => {
+      const twice = await connectThrough(passing("dns.unavailable"), () =>
+        passing("dns.unavailable")
+      )
+      expect(twice.error).toBeInstanceOf(ToolFailed)
+      expect(twice.stub.calls).toHaveLength(2)
+      const down = await connectThrough(
+        passing("orchestrator.unavailable"),
+        () => Response.json(connecting)
+      )
+      expect(down.error).toBeInstanceOf(ToolFailed)
+      expect(down.stub.calls).toHaveLength(1)
+    })
+
     it("throws, never refuses, when the orchestrator answers off the contract", async () => {
       const stub = stubOrchestrator(() =>
         Response.json({ ...connecting, cf_hostname_id: "abc" })
@@ -1299,6 +1361,79 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         connectDomain(
           context(me, stub),
           { name: "odd.example" },
+          crypto.randomUUID()
+        )
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("remove_domain", () => {
+    it("deletes the domain under the approval as key, and says it is removed", async () => {
+      const approval = crypto.randomUUID()
+      const stub = stubOrchestrator(() => new Response(null, { status: 204 }))
+      const output = kept(
+        "remove_domain",
+        await removeDomain(
+          context(me, stub),
+          { name: "sparkleclean.co.uk" },
+          approval
+        )
+      )
+      expect(output).toEqual({ outcome: "removed" })
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("DELETE")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/sparkleclean.co.uk"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe(approval)
+    })
+
+    it("refuses as the closed shape when the orchestrator holds no such domain, and throws on a 503", async () => {
+      const refusal = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "resource",
+            code: "domain.not_found",
+            message: "gone.example isn't connected to this site.",
+            detail: { org_id: other.orgId },
+            occurred_at: AT,
+          },
+          { status: 404 }
+        )
+      )
+      expect(
+        kept(
+          "remove_domain",
+          await removeDomain(
+            context(me, refusal),
+            { name: "gone.example" },
+            crypto.randomUUID()
+          )
+        )
+      ).toEqual({
+        outcome: "refused",
+        error: {
+          class: "resource",
+          code: "domain.not_found",
+          message: "gone.example isn't connected to this site.",
+        },
+      })
+      const down = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "transient",
+            code: "orchestrator.unavailable",
+            message: "down",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 503 }
+        )
+      )
+      await expect(
+        removeDomain(
+          context(me, down),
+          { name: "gone.example" },
           crypto.randomUUID()
         )
       ).rejects.toBeInstanceOf(ToolFailed)

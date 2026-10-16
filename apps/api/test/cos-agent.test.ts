@@ -554,10 +554,12 @@ describe("the CoS's model and price", () => {
     expect(activeTools("act")).toContain("create_reminder")
   })
 
-  it("reads a domain in Ask mode, and connects one only in Act mode", () => {
+  it("reads a domain in Ask mode, and connects or removes one only in Act mode", () => {
     expect(activeTools("ask")).toContain("check_domain")
-    expect(activeTools("ask")).not.toContain("connect_domain")
-    expect(activeTools("act")).toContain("connect_domain")
+    for (const act of ["connect_domain", "remove_domain"] as const) {
+      expect(activeTools("ask")).not.toContain(act)
+      expect(activeTools("act")).toContain(act)
+    }
   })
 
   it("labels a reminder call with the owner's words before it has an output", () => {
@@ -1524,7 +1526,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await s.state(asking, "cancelled")
   })
 
-  it("waits for the owner's yes before connect_domain, and reads check_domain without asking", async () => {
+  it("waits for the owner's yes before connect_domain and remove_domain, and reads check_domain without asking", async () => {
     const id = await conversation(me)
     const stub = stubOrchestrator()
     const done = await turn(
@@ -1542,6 +1544,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               id: "call_connect",
               tool: "connect_domain",
               input: { name: "sparkleclean.co.uk" },
+            },
+            {
+              id: "call_remove",
+              tool: "remove_domain",
+              input: { name: "old.example" },
             }
           )
         ).model,
@@ -1550,13 +1557,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     expect(done.response.status, done.text).toBe(200)
     // The check ran (this org holds no such domain, so it was refused here);
-    // the connect waits on its card and nothing reached the orchestrator.
+    // the connect and the removal wait on their cards and nothing reached
+    // the orchestrator.
     expect(waiting(await tailOf(me, id)).map((p) => p.type)).toEqual([
       "tool-connect_domain",
+      "tool-remove_domain",
     ])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     expect(stub.calls).toHaveLength(0)
   })
 

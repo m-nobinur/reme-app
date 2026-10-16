@@ -13,15 +13,7 @@ import {
   PreviewLink,
   SetFactsRequest,
 } from "@workspace/contracts"
-import {
-  approvals,
-  assignments,
-  eq,
-  memberships,
-  sql,
-  type Tenancy,
-  users,
-} from "@workspace/db"
+import { approvals, assignments, type Tenancy } from "@workspace/db"
 import { readPhoto, uploadAssets } from "./assets.ts"
 import {
   bridge,
@@ -34,6 +26,7 @@ import {
 } from "./changes.ts"
 import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
+import { removal } from "./cos/tools.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import {
@@ -161,12 +154,7 @@ async function decide(
   })
 }
 
-/**
- * `DELETE /domains/{name}`: the owner takes a connected domain off the site.
- * The org's owner only, checked as account deletion checks it; the
- * orchestrator does the removal (`remove` in domain-flow.ts), answers 204,
- * and its refusals are relayed.
- */
+/** `DELETE /domains/{name}`: the owner takes a connected domain off the site (`removal`). */
 async function removeDomain(
   request: Request,
   env: Env,
@@ -176,31 +164,7 @@ async function removeDomain(
 ) {
   const key = idempotencyKey(request)
   if (!key) return keyMissing()
-  const [own] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({ role: memberships.role })
-      .from(memberships)
-      .innerJoin(users, eq(users.id, memberships.userId))
-      .where(
-        sql`${memberships.status} = 'active' and ${users.workosUserId} = ${owner.session.workosUserId}`
-      )
-  )
-  if (own?.role !== "owner") {
-    return failure(403, {
-      class: "permission",
-      code: "domain.not_owner",
-      message: "Only the owner can remove a domain.",
-      detail: {},
-    })
-  }
-  const result = await bridge(env, owner, `/domains/${name}`, {
-    method: "DELETE",
-    key,
-  })
-  if (result.status === 204) return new Response(null, { status: 204 })
-  return relay(result, () => {
-    throw new Error("a removal answers 204 and no body")
-  })
+  return removal({ env, kit, owner }, name, key)
 }
 
 export async function ownerRoute(

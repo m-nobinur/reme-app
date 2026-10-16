@@ -45,7 +45,7 @@ import {
 
 export type Owner = { orgId: string; session: NonNullable<Session> }
 
-type Bridged = { status: number; body: unknown }
+export type Bridged = { status: number; body: unknown }
 
 /**
  * How long a change may take, reads and every call over the binding
