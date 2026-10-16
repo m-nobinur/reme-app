@@ -181,6 +181,13 @@ describe("the workspace tag", () => {
     expect(one).toBe('"015abd7f5cc57a2dd94b7590f04ad808"')
   })
 
+  it("carries the chat's newest message after a dot, as the chat reads it back", async () => {
+    expect(await etag('{"a":1}', "msg_9")).toBe(
+      '"015abd7f5cc57a2dd94b7590f04ad808.msg_9"'
+    )
+    expect(await etag('{"a":1}', null)).toBe(await etag('{"a":1}'))
+  })
+
   it("matches If-None-Match lists and weak forms, and nothing else", () => {
     expect(unchanged('"x"', '"x"')).toBe(true)
     expect(unchanged('"y", W/"x"', '"x"')).toBe(true)

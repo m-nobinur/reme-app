@@ -9,10 +9,11 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
+import { useLiveWorkspace } from "@/lib/workspace"
 import { planNote } from "./blueprint-plan"
-import { toUIMessage } from "./history"
+import { followThread, tailOf, toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
   blueprintChanges,
@@ -125,6 +126,31 @@ export function useConversationRuntime({
       })
       .catch(() => undefined)
   }
+  // A message the assistant posted on its own: the polled tag names it, and
+  // the thread reads its rows again between turns. Through a ref, because a
+  // read lands after the render that started it.
+  const latest = useRef(chat)
+  latest.current = chat
+  const [follow] = useState(() =>
+    followThread({
+      read: () => {
+        const remoteId = aui.threadListItem.getState().remoteId
+        return remoteId
+          ? getConversationMessages({ data: { id: remoteId } })
+          : Promise.resolve(null)
+      },
+      now: () => ({
+        idle: ["ready", "error"].includes(latest.current.status),
+        messages: latest.current.messages,
+      }),
+      apply: (rows) => latest.current.setMessages(rows.map(toUIMessage)),
+    })
+  )
+  const tail = tailOf(useLiveWorkspace().workspace?.etag)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a turn ending is a time to read a tail it held back.
+  useEffect(() => {
+    void follow(tail)
+  }, [follow, tail, chat.status])
   // The owner's thumb on a reply. It is kept on the chat's own message, so
   // the next update keeps it pressed, and sent with a key of this press's
   // own, so up, down, up records three ratings and a retry of one records

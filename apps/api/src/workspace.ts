@@ -25,6 +25,8 @@ import {
 import {
   approvals,
   assignments,
+  conversationMessages,
+  conversations,
   currentFacts,
   eq,
   events,
@@ -721,35 +723,80 @@ export async function readWorkspace(
   config: SiteConfig,
   now = new Date()
 ): Promise<WorkspaceStatus> {
+  return kit.withOrg({ orgId }, (db) => statusOf(db, config, now))
+}
+
+/**
+ * `/workspace`'s body and its tag, in one transaction. The tag also names
+ * the newest message of the conversation the chat opens, which the body
+ * does not carry, so a message the assistant posts with no owner turn
+ * changes the tag and the chat reads that thread again.
+ */
+export async function readTaggedWorkspace(
+  kit: Tenancy,
+  orgId: string,
+  config: SiteConfig
+): Promise<{ body: string; etag: string }> {
   return kit.withOrg({ orgId }, async (db) => {
-    // Issued together, so postgres.js pipelines them on the transaction's one
-    // connection instead of paying a round trip each.
-    const [builds, approvalItems, questions, feed, current, site, notes] =
-      await Promise.all([
-        readBuilds(db),
-        readApprovals(db),
-        readQuestions(db),
-        readFeed(db, PANEL_HOURS, 10),
-        readFacts(db),
-        readSite(db, config),
-        readReminderNotes(db),
-      ])
-    const missing = missingFacts(current)
-    return WorkspaceStatus.parse({
-      site,
-      builds,
-      expected_seconds: EXPECTED_SECONDS,
-      attention: orderAttention(approvalItems, questions, feed),
-      missing_facts: missing,
-      assistant_name: assistantName(current),
-      reminders: {
-        notes,
-        derived: deriveReminders(
-          { approvals: approvalItems, questions, builds, missing },
-          now
-        ),
-      },
-    })
+    const [status, tail] = await Promise.all([
+      statusOf(db, config, new Date()),
+      newestMessage(db),
+    ])
+    const body = JSON.stringify(status)
+    return { body, etag: await etag(body, tail) }
+  })
+}
+
+/**
+ * The tail of the newest open conversation, the one the rail's Chat icon
+ * opens and `postAssistantMessage` posts to: by
+ * `conversations_org_updated_idx`, then `conversation_messages_conversation_seq_idx`.
+ */
+async function newestMessage(db: OrgScopedDb): Promise<string | null> {
+  const [row] = await db.execute<{ id: string }>(sql`
+    select m.id from ${conversations} c
+    cross join lateral (
+      select id from ${conversationMessages}
+      where conversation_id = c.id order by seq desc limit 1
+    ) m
+    where c.archived_at is null
+    order by c.updated_at desc, c.id desc
+    limit 1`)
+  return row?.id ?? null
+}
+
+async function statusOf(
+  db: OrgScopedDb,
+  config: SiteConfig,
+  now: Date
+): Promise<WorkspaceStatus> {
+  // Issued together, so postgres.js pipelines them on the transaction's one
+  // connection instead of paying a round trip each.
+  const [builds, approvalItems, questions, feed, current, site, notes] =
+    await Promise.all([
+      readBuilds(db),
+      readApprovals(db),
+      readQuestions(db),
+      readFeed(db, PANEL_HOURS, 10),
+      readFacts(db),
+      readSite(db, config),
+      readReminderNotes(db),
+    ])
+  const missing = missingFacts(current)
+  return WorkspaceStatus.parse({
+    site,
+    builds,
+    expected_seconds: EXPECTED_SECONDS,
+    attention: orderAttention(approvalItems, questions, feed),
+    missing_facts: missing,
+    assistant_name: assistantName(current),
+    reminders: {
+      notes,
+      derived: deriveReminders(
+        { approvals: approvalItems, questions, builds, missing },
+        now
+      ),
+    },
   })
 }
 
@@ -764,10 +811,16 @@ export async function readActivity(
 /**
  * A strong validator over the body itself. The body carries no clock, so an
  * unchanged workspace hashes the same on every poll, and anything that
- * changes what the owner would see changes the tag.
+ * changes what the owner would see changes the tag. `tail`, a message id,
+ * follows a dot as it is, so the chat can read it back (`tailOf` in
+ * `apps/web/src/chat/history.ts`).
  */
-export async function etag(body: string): Promise<string> {
-  return `"${(await sha256Hex(body)).slice(0, 32)}"`
+export async function etag(
+  body: string,
+  tail: string | null = null
+): Promise<string> {
+  const hash = (await sha256Hex(body)).slice(0, 32)
+  return tail ? `"${hash}.${tail}"` : `"${hash}"`
 }
 
 /** Whether an `If-None-Match` header names this tag, weak or strong. */

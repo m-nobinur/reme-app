@@ -29,10 +29,9 @@ import { conversationRoute } from "./conversations.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import {
-  etag,
   readActivity,
   readFacts,
-  readWorkspace,
+  readTaggedWorkspace,
   unchanged,
 } from "./workspace.ts"
 
@@ -164,12 +163,8 @@ export async function ownerRoute(
   const { pathname } = new URL(request.url)
   const method = request.method
   if (pathname === "/workspace" && method === "GET") {
-    const status = await readWorkspace(kit, owner.orgId, env)
-    const body = JSON.stringify(status)
-    const headers = {
-      etag: await etag(body),
-      "cache-control": "private, no-cache",
-    }
+    const { body, etag } = await readTaggedWorkspace(kit, owner.orgId, env)
+    const headers = { etag, "cache-control": "private, no-cache" }
     if (unchanged(request.headers.get("if-none-match"), headers.etag)) {
       return new Response(null, { status: 304, headers })
     }

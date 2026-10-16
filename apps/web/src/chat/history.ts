@@ -120,6 +120,57 @@ export function conversationHistory(
 }
 
 /**
+ * The chat's newest message as the `/workspace` tag names it after the
+ * body's hash (`etag` in `apps/api/src/workspace.ts`), or null.
+ */
+export const tailOf = (etag: string | null | undefined): string | null =>
+  etag?.match(/^(?:W\/)?"[0-9a-f]{32}\.([A-Za-z0-9_-]{1,64})"$/)?.[1] ?? null
+
+/**
+ * Reads the open thread again when the polled tag names a message it does
+ * not hold, which is one the assistant posted with no owner turn. Given each
+ * tag's tail: the first is what the history load already read; one that
+ * arrives mid-turn waits for the turn to end; and a read that lands after
+ * a turn began, or the thread changed, is dropped. The composer is never
+ * touched, so a half-typed message stays.
+ *
+ * shortcut: a post the owner's send overtakes before the next poll sees it
+ * shows when the thread next opens; have a turn report its stored parent if
+ * that gap matters.
+ */
+export function followThread({
+  read,
+  now,
+  apply,
+}: {
+  /** The open thread's stored rows, or null when it is not stored yet. */
+  read: () => Promise<TransportedMessage[] | null>
+  now: () => { idle: boolean; messages: readonly { id: string }[] }
+  apply: (rows: TransportedMessage[]) => void
+}): (tail: string | null) => Promise<void> {
+  let seen: string | null | undefined
+  return async (tail) => {
+    if (seen === undefined) {
+      seen = tail
+      return
+    }
+    const { idle, messages } = now()
+    if (!tail || tail === seen || !idle) return
+    const prior = seen
+    seen = tail
+    if (messages.some((m) => m.id === tail)) return
+    try {
+      const rows = await read()
+      const after = now()
+      if (rows && after.idle && after.messages === messages) apply(rows)
+    } catch {
+      // Tried again on the next change of tail or turn.
+      seen = prior
+    }
+  }
+}
+
+/**
  * Whether a navigation is a new "New chat" press. Only a new, defined state
  * is one: a replace navigation or a rail link carries none, and treating
  * that as a press would wipe a new chat's first send.

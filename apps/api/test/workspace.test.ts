@@ -10,7 +10,11 @@ import {
 import {
   approvals as approvalRows,
   assignments,
+  conversationMessages,
+  conversations,
   eq,
+  postAssistantMessage,
+  serverMessageId,
   sql,
   staff,
   steerKeyHash,
@@ -608,7 +612,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   it("answers an unchanged poll with 304 and no body", async () => {
     const first = await workspace(busy)
     const tag = first.headers.get("etag") as string
-    expect(tag).toMatch(/^"[0-9a-f]{32}"$/)
+    // The body's hash, then the chat's newest message: onboarding's opening.
+    expect(tag).toMatch(/^"[0-9a-f]{32}\.[A-Za-z0-9_-]{1,64}"$/)
     expect(first.headers.get("cache-control")).toBe("private, no-cache")
     const again = await workspace(busy, { "if-none-match": tag })
     expect(again.status).toBe(304)
@@ -629,6 +634,43 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(after.headers.get("etag")).not.toBe(tag)
     const body = WorkspaceStatus.parse(await after.json())
     expect(body.missing_facts).toEqual(REQUIRED.slice(1))
+  })
+
+  it("changes the tag when the assistant posts in the chat, the body unchanged", async () => {
+    const poster = await owner(kit, url as string, "poster")
+    const id = crypto.randomUUID()
+    await kit.withOrg({ orgId: poster.orgId }, async (db) => {
+      await db.insert(conversations).values({
+        id,
+        orgId: poster.orgId,
+        kind: "assistant",
+        createdByStaffId: poster.chiefId,
+      })
+      await db.insert(conversationMessages).values({
+        conversationId: id,
+        id: "said_1",
+        orgId: poster.orgId,
+        format: "ai-sdk/v6",
+        content: {
+          role: "assistant",
+          parts: [{ type: "text", text: "Hi", state: "done" }],
+        },
+      })
+    })
+    const first = await workspace(poster)
+    const tag = first.headers.get("etag") as string
+    expect(tag).toMatch(/^"[0-9a-f]{32}\.said_1"$/)
+    const posted = await postAssistantMessage(kit, {
+      orgId: poster.orgId,
+      key: "live:poster",
+      message: { text: ["Your website is live."] },
+    })
+    expect(posted).toBe("posted")
+    const after = await workspace(poster, { "if-none-match": tag })
+    expect(after.status).toBe(200)
+    expect(after.headers.get("etag")).toBe(
+      tag.replace("said_1", serverMessageId("live:poster"))
+    )
   })
 
   it("names the assistant once the owner chose a name", async () => {
