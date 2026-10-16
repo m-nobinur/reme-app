@@ -280,9 +280,6 @@ async function checkRegistrant(
 /** Open purchases one org may hold at once (plan, Security: squatting). */
 export const MAX_OPEN_PURCHASES = 3
 
-/** The live purchase states: a claim the name is held by. */
-const OPEN = sql`${domains.state} in ('awaiting_payment', 'awaiting_dns', 'verifying', 'active')`
-
 /**
  * `POST /domains/buy`, the `buy_domain` tool: a name free now and under the
  * cap, details that suit its extension, a published site, and then the
@@ -327,7 +324,9 @@ export async function buy(
           origin: domains.origin,
         })
         .from(domains)
-        .where(sql`${domains.name} = ${name} and ${OPEN}`)
+        .where(
+          sql`${domains.name} = ${name} and ${domains.state} in ('awaiting_payment', 'awaiting_dns', 'verifying', 'active')`
+        )
       if (open?.state === "awaiting_payment") {
         await db
           .update(domains)
