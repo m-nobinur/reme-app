@@ -1109,22 +1109,28 @@ describe("the onboarding copy", () => {
     // Every line, every org, industry and tone: slow when the suite runs in parallel.
     timeout: 30_000,
   }, () => {
+    // Each distinct line once: most lines repeat across orgs and industries,
+    // and checking every copy timed the test out under the parallel suite.
+    const seen = new Map<string, [string, string, string]>()
     for (const org of ORGS) {
       for (const industry of INDUSTRY_VOICES) {
         for (const { id: tone } of TONES) {
           for (const [name, text] of lines(voice({ org, industry, tone }))) {
-            expect(text, name).not.toMatch(/[—–]/)
-            expect(text, name).not.toMatch(
-              /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
-            )
-            expect(text, name).not.toMatch(/\d+\s*(?:an hour|per hour|\/h)/i)
-            expect(text, name).not.toMatch(/\(s?he\/|\(they\//)
-            expect(text, name).not.toMatch(/\bReme\b/)
-            if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
-            if (tone === "professional") expect(text, name).not.toContain("!")
+            seen.set(`${tone}\u0000${name}\u0000${text}`, [tone, name, text])
           }
         }
       }
+    }
+    for (const [tone, name, text] of seen.values()) {
+      expect(text, name).not.toMatch(/[—–]/)
+      expect(text, name).not.toMatch(
+        /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
+      )
+      expect(text, name).not.toMatch(/\d+\s*(?:an hour|per hour|\/h)/i)
+      expect(text, name).not.toMatch(/\(s?he\/|\(they\//)
+      expect(text, name).not.toMatch(/\bReme\b/)
+      if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
+      if (tone === "professional") expect(text, name).not.toContain("!")
     }
   })
 
