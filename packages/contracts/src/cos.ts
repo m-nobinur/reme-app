@@ -14,6 +14,7 @@ import { ToolCallId } from "./ids.ts"
 import {
   BuildSummary,
   CreateReminderRequest,
+  E164,
   FactValue,
   FactValueKey,
   OwnerAnswerText,
@@ -94,6 +95,28 @@ export const CosWorkspace = z.strictObject({
 
 /** `get_facts`'s output: the org's current values, without their records. */
 export const CosFacts = z.strictObject({ facts: z.array(FactValue) })
+
+/**
+ * `request_change`'s input: the owner's change, and the new phone or email
+ * when the owner typed it in full. The tool records it as the owner's word
+ * only if its digits or address appear in what the owner wrote.
+ */
+export const CosChangeRequest = OwnerChangeRequest.extend({
+  contact: z
+    .strictObject({
+      phone: E164.optional().describe(
+        "The new business phone number in E.164, exactly the digits the owner typed in full. Omit it when they gave none."
+      ),
+      email: z
+        .email()
+        .max(254)
+        .optional()
+        .describe(
+          "The new business email address, exactly as the owner typed it. Omit it when they gave none."
+        ),
+    })
+    .optional(),
+})
 
 /** `get_preview`'s input: the build whose preview to check. */
 export const GetPreviewInput = z.strictObject({ assignment_id: Uuid })
@@ -217,7 +240,7 @@ export const COS_TOOLS = {
   get_workspace: { input: Empty, output: CosWorkspace },
   get_facts: { input: Empty, output: CosFacts },
   get_preview: { input: GetPreviewInput, output: GetPreviewOutput },
-  request_change: { input: OwnerChangeRequest, output: RequestChangeOutput },
+  request_change: { input: CosChangeRequest, output: RequestChangeOutput },
   answer_question: { input: AnswerQuestionInput, output: AnswerQuestionOutput },
   create_reminder: {
     input: CreateReminderRequest,
@@ -405,6 +428,7 @@ export const CosFeedback = z.strictObject({
 
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
+export type CosChangeRequest = z.infer<typeof CosChangeRequest>
 export type GetPreviewInput = z.infer<typeof GetPreviewInput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>

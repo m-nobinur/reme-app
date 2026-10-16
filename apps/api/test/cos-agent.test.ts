@@ -304,6 +304,8 @@ describe("the CoS's change kinds", () => {
   it("tells the model to quote the measured wait, not a fixed one", () => {
     expect(INSTRUCTIONS).toContain("expected_seconds.quick.p50")
     expect(INSTRUCTIONS).toContain("Never use a fixed time of your own")
+    // A quick edit can move to a longer build, so the time is never a promise.
+    expect(INSTRUCTIONS).toContain("Never promise that time")
   })
 
   it("carries expected_seconds and each build's lane in the workspace the model reads", () => {

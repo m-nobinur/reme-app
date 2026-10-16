@@ -1,13 +1,12 @@
 import {
   BuildSummary,
-  type ChangeKind,
   ChatRequest,
   type ChatResult,
+  type CosChangeRequest,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
   OnboardingPlan,
-  type OwnerChangeRequest,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -31,7 +30,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
-import { type Owner, startChange, stateFacts } from "./changes.ts"
+import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
@@ -63,7 +62,7 @@ import {
   settle,
   streamTurn,
 } from "./cos/run.ts"
-import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
+import { getWorkspace, startOwnerChange, type ToolFailed } from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
@@ -1538,7 +1537,8 @@ async function advance(
     env,
     kit,
     owner,
-    ONBOARDING_GOAL,
+    id,
+    { text: ONBOARDING_GOAL },
     `onboarding:${id}`
   )
   if (output instanceof Response) throw new Refusal(output)
@@ -1706,14 +1706,13 @@ async function approve(
   let done: ToolPart = { ...call, state: "output-denied", approval }
   if (turn.approved) {
     // The orchestrator checks change_kind again; an unknown one runs full.
-    const { text, change_kind } = call.input as OwnerChangeRequest
     const output = await changed(
       env,
       kit,
       owner,
-      text,
-      turn.approval_id,
-      change_kind
+      id,
+      call.input as CosChangeRequest,
+      turn.approval_id
     )
     if (output instanceof Response) return output
     done = { ...call, state: "output-available", approval, output }
@@ -1752,11 +1751,16 @@ async function changed(
   env: Env,
   kit: Tenancy,
   owner: Owner,
-  text: string,
-  key: string,
-  changeKind?: ChangeKind
+  sessionId: string,
+  input: CosChangeRequest,
+  key: string
 ): Promise<RequestChangeOutput | Response> {
-  const response = await startChange(env, kit, owner, text, key, changeKind)
+  const response = await startOwnerChange(
+    { env, kit, owner },
+    sessionId,
+    input,
+    key
+  )
   const body: unknown = await response.clone().json()
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }
@@ -2319,7 +2323,8 @@ async function startPlannedBuild(
     p.env,
     p.kit,
     p.owner,
-    ONBOARDING_GOAL,
+    p.id,
+    { text: ONBOARDING_GOAL },
     `onboarding:${p.id}`
   )
   const shownBuild: Part[] =
