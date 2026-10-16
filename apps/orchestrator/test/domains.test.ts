@@ -268,6 +268,38 @@ describe("the DoH inspector", () => {
     })
   })
 
+  it("finds a subdomain's own zone when its CNAME to us already exists, not the target's", async () => {
+    stubNet(
+      {},
+      {
+        // The live answer for site.mnobinur.dev on 2026-10-16: the SOA query
+        // follows the CNAME, so its authority names our own zone.
+        "book.sparklecleanbristol.co.uk SOA": {
+          Status: 0,
+          Answer: [
+            {
+              name: "book.sparklecleanbristol.co.uk",
+              type: 5,
+              TTL: 300,
+              data: "domains.remeai.co.uk.",
+            },
+          ],
+          Authority: [
+            {
+              name: "remeai.co.uk",
+              type: 6,
+              TTL: 1800,
+              data: "ns. dns. 1 1 1 1 1",
+            },
+          ],
+        },
+      }
+    )
+    const inspection = await inspect("book.sparklecleanbristol.co.uk")
+    expect(inspection.apex).toBe("sparklecleanbristol.co.uk")
+    expect(inspection.sub).toBe("book.sparklecleanbristol.co.uk")
+  })
+
   it("reads a subdomain alone and asks for its own CNAME, with no www and no apex line", async () => {
     stubNet(
       {},

@@ -256,7 +256,17 @@ async function hostRecords(host: string): Promise<HostRecords> {
 export async function zoneApex(
   name: string
 ): Promise<{ apex: string; missing: boolean }> {
-  const soa = await doh(bare(name), "SOA")
+  const host = bare(name)
+  const soa = await doh(host, "SOA")
+  // A name holding a CNAME is never a zone apex, and its SOA answer follows
+  // the CNAME to the target's zone: ask its parent instead.
+  if (
+    soa.answers.some((x) => x.type === TYPES.CNAME && bare(x.name) === host)
+  ) {
+    const parent = host.slice(host.indexOf(".") + 1)
+    if (!parent.includes(".")) throw new DomainError("domain.not_found")
+    return { apex: (await zoneApex(parent)).apex, missing: false }
+  }
   const zone = [...soa.answers, ...soa.authority].find(
     (x) => x.type === TYPES.SOA
   )
