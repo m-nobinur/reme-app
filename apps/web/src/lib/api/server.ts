@@ -4,12 +4,15 @@ import type { Conversation } from "@workspace/contracts"
 import {
   BlueprintReviewOutput,
   ChangeKind,
+  DomainName,
   GOAL_MAX,
   MessageFeedback,
+  RegistrantDetails,
   Reminder,
   Timestamp,
   Uuid,
 } from "@workspace/contracts"
+import type { CheckoutStart } from "@workspace/ui/components/assistant/buy-domain"
 import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
@@ -258,6 +261,39 @@ export const askForChanges = createServerFn({ method: "POST" })
       return { done: false, reason: "Write what should change first." }
     }
     return await source.requestChange(data.text, data.key, data.changeKind)
+  })
+
+/**
+ * The Checkout a domain purchase is paid in, with Stripe's public key to
+ * mount it. Without the key this environment does not sell domains, and
+ * the api is not asked.
+ */
+export const startDomainCheckout = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return {
+      name: DomainName.parse(data.name),
+      details: RegistrantDetails.parse(data.details),
+      key: keyOf(data.key),
+    }
+  })
+  .handler(async ({ data }): Promise<CheckoutStart> => {
+    const publishable = process.env.STRIPE_PUBLISHABLE_KEY
+    if (!publishable) {
+      return { outcome: "refused", code: "domain.buy_unavailable" }
+    }
+    const result = await source.domainCheckout(
+      data.name,
+      data.details,
+      data.key
+    )
+    return "refused" in result
+      ? { outcome: "refused", code: result.refused }
+      : {
+          outcome: "open",
+          publishable_key: publishable,
+          client_secret: result.client_secret,
+        }
   })
 
 export const createReminder = createServerFn({ method: "POST" })

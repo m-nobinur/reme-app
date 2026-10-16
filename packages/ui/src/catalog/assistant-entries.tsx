@@ -28,6 +28,11 @@ import {
   type BlueprintCardProps,
   SiteNameProvider,
 } from "@workspace/ui/components/assistant/blueprint-card"
+import {
+  type DomainPurchase,
+  DomainPurchaseProvider,
+  type PurchaseStatus,
+} from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
@@ -1408,6 +1413,99 @@ const REMOVE_DOMAIN_STATES = decisionStates(
   refusal("domain.not_found", "That domain is not connected.")
 )
 
+const offer = (name: string, price: number, why: string) => ({
+  name,
+  price_gbp_year: price,
+  why,
+})
+
+// What find_domain answers: the best pick and three others, none free, and
+// a search still running.
+const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
+  ask("I don't have a website address. Can you sort one?"),
+  cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
+  cosCall("find_domain", "find_found", {
+    args: {},
+    result: {
+      outcome: "found",
+      best: offer(DOMAIN, 8, "Short, matches your name, and .co.uk says UK."),
+      options: [
+        offer("sparklecleanbristol.co.uk", 8, "Says where you work."),
+        offer("sparkleclean.uk", 8, "The shortest UK ending."),
+        offer("sparklecleanbristol.com", 12, "Known everywhere."),
+      ],
+    },
+  }),
+  cosCall("find_domain", "find_none", {
+    args: { query: "sparkle" },
+    result: refusal("domain.unavailable", "That name isn't free to register."),
+  }),
+]
+
+const REGISTRANT = {
+  name: "Jane Smith",
+  organization: "Sparkle Clean",
+  email: "jane@sparkleclean.example",
+  phone: "+447700900123",
+  address: {
+    street: "12 Mill Lane",
+    city: "Bristol",
+    postal_code: "BS1 4AB",
+    country_code: "GB",
+  },
+}
+
+/** A buy_domain call for `name`, ready for payment. */
+const buying = (id: string, name: string, price = 8) =>
+  cosCall("buy_domain", `buy_${id}`, {
+    args: { name, registrant: REGISTRANT, registrant_type: "STRA" },
+    result: {
+      outcome: "awaiting_payment",
+      name,
+      price_gbp: price,
+      checkout: "embedded",
+    },
+  })
+
+// Each purchase after payment has its own name, so the catalog's status
+// reads one state per card.
+const PAID: Record<string, PurchaseStatus> = {
+  "authorised.co.uk": "authorised",
+  "registered.co.uk": "registered",
+  "testpurchase.co.uk": "test",
+  "failed.co.uk": "failed",
+  "abandoned.co.uk": "abandoned",
+}
+
+// No Stripe in the catalog: Continue answers as an environment without
+// buying does.
+const CATALOG_PURCHASE: DomainPurchase = {
+  checkout: async () => ({
+    outcome: "refused",
+    code: "domain.buy_unavailable",
+  }),
+  status: (name) => PAID[name] ?? null,
+}
+
+const BUY_DOMAIN_STATES: ThreadMessageLike[] = [
+  cosCall(
+    "buy_domain",
+    "buy_running",
+    { args: { name: DOMAIN, registrant: REGISTRANT } },
+    IN_FLIGHT
+  ),
+  buying("awaiting", DOMAIN),
+  buying("com", "sparklecleanbristol.com", 12),
+  ...Object.keys(PAID).map((name) => buying(name, name)),
+  cosCall("buy_domain", "buy_refused", {
+    args: { name: DOMAIN, registrant: REGISTRANT, registrant_type: "STRA" },
+    result: refusal(
+      "domain.buy_unavailable",
+      "Buying a domain isn't available yet."
+    ),
+  }),
+]
+
 /** A check_domain call by where the domain stands; one message each. */
 const check = (id: string, status: unknown, state = "verifying") =>
   cosCall("check_domain", `check_${id}`, {
@@ -2240,6 +2338,20 @@ const assistantCatalog = [
     name: "RemoveDomain",
     render: () => (
       <FixtureThread height="h-[180rem]" messages={REMOVE_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "FindDomain",
+    render: () => (
+      <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "BuyDomain",
+    render: () => (
+      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+      </DomainPurchaseProvider>
     ),
   },
   {

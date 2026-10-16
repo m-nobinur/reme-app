@@ -10,9 +10,11 @@ import type {
   CreateReminderRequest,
   DecisionRequest,
   DerivedReminder,
+  DomainCheckout,
   FactRecord,
   FactValueKey,
   MessageFeedback,
+  RegistrantDetails,
   Reminder,
   WorkspaceStatus,
 } from "@workspace/contracts"
@@ -280,6 +282,12 @@ export type OwnerDataSource = {
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
+  /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
+  domainCheckout: (
+    name: string,
+    details: RegistrantDetails,
+    key: string
+  ) => Promise<DomainCheckout | { refused: string | null }>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */

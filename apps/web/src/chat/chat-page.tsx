@@ -14,6 +14,7 @@ import {
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
+import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
@@ -38,6 +39,7 @@ import { usePlanCard } from "./blueprint-plan"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
+import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SiteReadyCard } from "./site-ready"
@@ -179,6 +181,11 @@ export function ChatPage() {
     [questions]
   )
 
+  const purchase = useMemo(
+    () => domainPurchase(live.workspace),
+    [live.workspace]
+  )
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
@@ -205,23 +212,25 @@ export function ChatPage() {
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
               <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                <Thread
-                  after={
-                    <>
-                      {plan.card}
-                      <SiteReadyCard />
-                      <BuildStopped />
-                    </>
-                  }
-                  briefing={briefing.line}
-                  components={{ ToolFallback: Approval }}
-                  mode={mode}
-                  placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
-                  questionPlaceholder={`Or tell ${assistantOf(live.workspace)} something else…`}
-                  quickActions={OWNER_QUICK_ACTIONS}
-                  reveal={onboarding ? OPENING_REVEAL : undefined}
-                  stored={id}
-                />
+                <DomainPurchaseProvider value={purchase}>
+                  <Thread
+                    after={
+                      <>
+                        {plan.card}
+                        <SiteReadyCard />
+                        <BuildStopped />
+                      </>
+                    }
+                    briefing={briefing.line}
+                    components={{ ToolFallback: Approval }}
+                    mode={mode}
+                    placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
+                    questionPlaceholder={`Or tell ${assistantOf(live.workspace)} something else…`}
+                    quickActions={OWNER_QUICK_ACTIONS}
+                    reveal={onboarding ? OPENING_REVEAL : undefined}
+                    stored={id}
+                  />
+                </DomainPurchaseProvider>
               </SaveDesignAnswerProvider>
             </UploadPhotosProvider>
           </CosToolsProvider>

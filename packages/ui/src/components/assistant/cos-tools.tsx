@@ -16,6 +16,10 @@ import {
   RecordReviewInput,
   RecordReviewOutput,
 } from "@workspace/contracts"
+import {
+  BuyDomain,
+  FindDomain,
+} from "@workspace/ui/components/assistant/buy-domain"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
 import {
   ConnectDomain,
@@ -432,4 +436,6 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   record_review: RecordReview,
   connect_domain: ConnectDomain,
   remove_domain: RemoveDomain,
+  find_domain: FindDomain,
+  buy_domain: BuyDomain,
 }
