@@ -229,6 +229,10 @@ it("mounts Checkout with the client secret the api returned for the details show
     "pk_test_1",
     "cs_x"
   )
+  // A keyboard owner lands on the payment form, not the page.
+  expect(document.activeElement?.getAttribute("data-slot")).toBe(
+    "domain-checkout"
+  )
   // Paying is under way: the details are fixed in this Checkout.
   expect(buttons(card.container)).toEqual([])
   await card.unmount()
@@ -257,7 +261,7 @@ it("reads a refusal by its code and offers to try again", async () => {
     purchase
   )
   await press(card.container, "Continue to pay £8")
-  expect(card.container.textContent).toContain(
+  expect(card.container.querySelector("[role=alert]")?.textContent).toContain(
     "That domain's price has changed, so nothing was charged."
   )
   expect(buttons(card.container)).toEqual(["Edit details", "Try again"])
@@ -335,6 +339,10 @@ it.each([
     expect(card.container.textContent).toContain(line)
     expect(buttons(card.container)).toEqual([])
     expect(purchase.status).toHaveBeenCalledWith(NAME)
+    // A tick only where the purchase went through.
+    expect(card.container.querySelector("svg") !== null).toBe(
+      status !== "failed" && status !== "abandoned"
+    )
     await card.unmount()
   }
 )

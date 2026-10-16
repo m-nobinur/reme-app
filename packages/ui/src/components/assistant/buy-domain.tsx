@@ -104,6 +104,9 @@ function Offer({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
       <div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+        {best ? (
+          <span className={cn(META, "text-primary")}>Best pick</span>
+        ) : null}
         <span className="break-all font-medium">{offer.name}</span>
         <span className={META}>{offer.why}</span>
       </div>
@@ -493,6 +496,7 @@ function Checkout({
   useEffect(() => {
     const element = host.current
     if (!element) return
+    element.focus()
     let live = true
     let unmount: (() => void) | null = null
     mountCheckout(element, publishableKey, clientSecret).then(
@@ -510,11 +514,14 @@ function Checkout({
   return failed ? (
     <Problem text="The payment form did not load. Check your connection and try again." />
   ) : (
+    // Focus moves here as the pay button gives way to it, so a keyboard
+    // owner lands on the payment form rather than the page.
     <section
       aria-label="Payment"
-      className="min-h-96 overflow-hidden rounded-2xl"
+      className="min-h-96 overflow-hidden rounded-2xl outline-none"
       data-slot="domain-checkout"
       ref={host}
+      tabIndex={-1}
     />
   )
 }
@@ -556,7 +563,9 @@ function Purchase({
   const status = purchase?.status(name) ?? null
 
   if (status) {
-    const Icon = status === "failed" ? null : CheckCircleIcon
+    // A tick only for a purchase that went through, or a test one that did.
+    const Icon =
+      status === "failed" || status === "abandoned" ? null : CheckCircleIcon
     return (
       <section
         className="my-3 flex max-w-md flex-col gap-1"
@@ -625,6 +634,7 @@ function Purchase({
             {phase.at === "paying" ? null : (
               <div>
                 <Button
+                  className="-ms-2.5"
                   onClick={() => setPhase({ at: "editing" })}
                   ref={edit}
                   size="sm"
@@ -677,12 +687,14 @@ function Purchase({
             />
           ) : phase.at === "refused" ? (
             <>
-              <Problem
-                text={refusalText(
-                  phase.code,
-                  "The payment could not be started. Try again."
-                )}
-              />
+              <div role="alert">
+                <Problem
+                  text={refusalText(
+                    phase.code,
+                    "The payment could not be started. Try again."
+                  )}
+                />
+              </div>
               {phase.code === "domain.buy_unavailable" ? null : (
                 <div>
                   <Button onClick={pay} size="sm" type="button">
