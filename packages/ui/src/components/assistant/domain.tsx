@@ -65,12 +65,15 @@ function CopyValue({ value }: { value: string }) {
 /** One change to make: "Set www to CNAME", then the value to copy. */
 function Step({ record }: { record: DnsRecord }) {
   return (
-    <li className="flex flex-col gap-1">
-      <span>
-        Set <code className="font-medium">{record.name}</code> to{" "}
-        <strong className="font-medium">{record.type}</strong>
-      </span>
-      <CopyValue value={record.value} />
+    // Not a flex item itself: `display: flex` on an `li` drops its number.
+    <li>
+      <div className="flex flex-col gap-1">
+        <span>
+          Set <code className="font-medium">{record.name}</code> to{" "}
+          <strong className="font-medium">{record.type}</strong>
+        </span>
+        <CopyValue value={record.value} />
+      </div>
     </li>
   )
 }
@@ -106,20 +109,27 @@ function WaitButton() {
   )
 }
 
-function Records({ output, name }: { output: Connecting; name: string }) {
-  const { provider, steps } = output
+/** The records to add; only drawn when there is at least one. */
+function Records({
+  output,
+  steps,
+  name,
+}: {
+  output: Connecting
+  steps: DnsRecord[]
+  name: string
+}) {
+  const { provider } = output
   // The apex line is a step of its own, so the count matches the list; a
   // subdomain has none.
-  const changes = steps?.length ? steps.length + (output.apex ? 1 : 0) : 0
+  const changes = steps.length + (output.apex ? 1 : 0)
   return (
     <div className="flex flex-col gap-3" data-slot="domain-records">
       <p className="text-sm">
         {provider
           ? `Your domain's settings are at ${provider.name}.`
           : "Make these changes where you manage your domain."}{" "}
-        {changes
-          ? `${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `
-          : ""}
+        {`${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `}
         {output.email_affected
           ? "These may touch your email, so ask whoever set it up before you change anything."
           : "Your email is not affected."}
@@ -138,17 +148,15 @@ function Records({ output, name }: { output: Connecting; name: string }) {
           </a>
         </div>
       ) : null}
-      {steps?.length ? (
-        <ol className="flex list-decimal flex-col gap-3 ps-5 text-sm marker:text-muted-foreground">
-          {steps.map((record) => (
-            <Step
-              key={`${record.type}|${record.name}|${record.value}`}
-              record={record}
-            />
-          ))}
-          {output.apex ? <li>{apexText(output.apex, name)}</li> : null}
-        </ol>
-      ) : null}
+      <ol className="flex list-decimal flex-col gap-3 ps-5 text-sm marker:text-muted-foreground">
+        {steps.map((record) => (
+          <Step
+            key={`${record.type}|${record.name}|${record.value}`}
+            record={record}
+          />
+        ))}
+        {output.apex ? <li>{apexText(output.apex, name)}</li> : null}
+      </ol>
       <p className={META}>
         I'll watch for the change and message you. There's no need to tell me
         when it's done.
@@ -167,10 +175,11 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
       "Only your website's address changes. I'll show you what to change where your domain is managed."
     }
     done={(output) =>
-      output?.outcome === "connecting" ? (
+      output?.outcome === "connecting" && output.steps?.length ? (
         <Records
           name={ConnectDomainInput.safeParse(props.args).data?.name ?? ""}
           output={output}
+          steps={output.steps}
         />
       ) : (
         <p className="text-sm">Connecting. I'll message you when it's live.</p>

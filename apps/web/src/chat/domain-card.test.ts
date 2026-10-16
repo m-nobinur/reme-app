@@ -80,6 +80,15 @@ const done = (output: unknown) => ({
 const buttons = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].map((b) => b.textContent?.trim())
 
+/** Presses the card's yes, then its no, and checks what each told the thread. */
+async function answer(card: Awaited<ReturnType<typeof draw>>) {
+  const [yes, no] = card.container.querySelectorAll("button")
+  await act(async () => yes?.click())
+  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
+  await act(async () => no?.click())
+  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: false })
+}
+
 afterEach(() => {
   store.isLast = true
   store.isRunning = false
@@ -92,11 +101,7 @@ it("asks for the owner's yes through the existing approval flow", async () => {
     `Put your website on ${NAME}.`
   )
   expect(buttons(card.container)).toEqual(["Connect", "Cancel"])
-  const [yes, no] = card.container.querySelectorAll("button")
-  await act(async () => yes?.click())
-  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
-  await act(async () => no?.click())
-  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: false })
+  await answer(card)
   await card.unmount()
 })
 
@@ -122,6 +127,31 @@ it("shows the records, a copy button for each value, and the provider button", a
       b.getAttribute("aria-label")
     )
   ).toEqual(["Copy domains.remeai.co.uk", "Copy abc123"])
+  await card.unmount()
+})
+
+it("keeps every step a list item, so each shows its number", async () => {
+  const card = await draw(done(RECORDS))
+  // `display: flex` on an `li` drops its marker, so none of them may carry it.
+  for (const item of card.container.querySelectorAll("ol > li")) {
+    expect(item.className.split(" ")).not.toContain("flex")
+  }
+  await card.unmount()
+})
+
+it("says it is connecting, and offers no wait button, when there are no records to show", async () => {
+  const card = await draw(
+    done({
+      outcome: "connecting",
+      method: "domain_connect",
+      email_affected: false,
+    })
+  )
+  expect(card.container.textContent).toContain(
+    "Connecting. I'll message you when it's live."
+  )
+  expect(card.container.querySelector("ol")).toBeNull()
+  expect(buttons(card.container)).toEqual([])
   await card.unmount()
 })
 
@@ -276,11 +306,7 @@ it("asks before taking the website off a domain, and says nothing is deleted", a
     "Your website goes back to its own address. Nothing is deleted at your domain's provider."
   )
   expect(buttons(card.container)).toEqual(["Remove", "Keep it"])
-  const [yes, no] = card.container.querySelectorAll("button")
-  await act(async () => yes?.click())
-  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
-  await act(async () => no?.click())
-  expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: false })
+  await answer(card)
   await card.unmount()
 })
 
