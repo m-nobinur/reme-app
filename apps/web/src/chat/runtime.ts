@@ -233,6 +233,10 @@ export function useConversationRuntime({
     },
     {
       cancelPendingToolCallsOnSend: false,
+      // A turn is one stored row that grows, and an owner row separates
+      // turns, so two assistant rows in a row are never one reply: a message
+      // the assistant posted on its own is a message of its own.
+      joinStrategy: "none",
       suggestions,
       adapters: { feedback },
     }

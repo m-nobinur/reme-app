@@ -304,6 +304,32 @@ async function matches(container: HTMLElement, history: unknown) {
   ).toEqual([])
 }
 
+it("a message the assistant posted on its own is a message of its own, with its own time", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const [first] = start.messages
+  const posted = {
+    ...first,
+    id: "srv_0123456789abcdef",
+    parent_id: first?.id ?? null,
+    content: {
+      role: "assistant",
+      parts: [{ type: "text", text: "Your domain is live." }],
+      metadata: { custom: { createdAt: "2026-09-26T19:45:00.000Z" } },
+    },
+  }
+  const container = await open({ messages: [first, posted] })
+  const roots = container.querySelectorAll(
+    '[data-slot="aui_assistant-message-root"]'
+  )
+  expect(roots).toHaveLength(2)
+  expect(roots[1]?.textContent).toContain("Your domain is live.")
+  expect(
+    roots[1]?.querySelector('[data-slot="aui_assistant-message-footer"]')
+  ).not.toBeNull()
+})
+
 it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {
