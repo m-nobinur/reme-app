@@ -46,6 +46,7 @@
     "./site-config": "./src/site-config.ts",
     "./brand": "./src/brand.ts",
     "./copy-check": "./src/copy-check.ts",
+    "./icons": "./src/icons.ts",
     "./manifests.json": "./manifests.json",
     "./size-budget.json": "./size-budget.json",
     "./directions.json": "./src/directions.json"

@@ -532,6 +532,28 @@ describe("the copy gate's field check, per writer before the build", () => {
     ])
   })
 
+  // Perf run 2: 55 characters with "Brightside Care", 91 on the page.
+  it("counts a title as the page shows it, the business name added, and finds a shared one", () => {
+    const business = "Brightside Window and Gutter Care"
+    const titled = {
+      businessName: business,
+      homeTitle: "Window and Gutter Cleaning in Bristol | Brightside Care",
+      service1Title: "Window Cleaning Bristol",
+      service2Title: "Gutter Clearing Bristol",
+      service3Title: `Fascia Cleaning | ${business}`,
+      service4Title: "Window Cleaning Bristol",
+    }
+    expect(fieldFindings(titled, ["homeTitle"])).toEqual([
+      `homeTitle shows as "Window and Gutter Cleaning in Bristol | Brightside Care | ${business}", 91 characters, because a title that does not contain businessName exactly gets " | ${business}" after it; write 50 to 60 in all, or name the business exactly within that`,
+    ])
+    expect(fieldFindings(titled, ["service2Title", "service3Title"])).toEqual(
+      []
+    )
+    expect(fieldFindings(titled, ["service1Title"])).toEqual([
+      "service1Title is the same as service4Title; each page needs its own title",
+    ])
+  })
+
   it("passes fields that meet the gate, and counts the about body only on the about page", () => {
     expect(
       fieldFindings(

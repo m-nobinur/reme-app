@@ -87,6 +87,10 @@ const BANNED = BANNED_PHRASES.map((phrase) => ({
   ),
 }))
 
+/** The stock phrases a text says, in list order; the writers' field check reads it too. */
+export const bannedIn = (text: string) =>
+  BANNED.filter(({ pattern }) => pattern.test(text)).map(({ phrase }) => phrase)
+
 /** What a visitor reads on a page, the title and the description included. */
 const textOf = (html: string) =>
   decode(
@@ -152,10 +156,8 @@ export function copyFindings(pages: readonly BuiltPage[]): string[] {
     const text = textOf(html)
     if (text.includes(EM_DASH))
       say("has an em dash; use a comma, a colon or two sentences")
-    for (const { phrase, pattern } of BANNED) {
-      if (pattern.test(text))
-        say(`says "${phrase}"; say what the business does instead`)
-    }
+    for (const phrase of bannedIn(text))
+      say(`says "${phrase}"; say what the business does instead`)
   }
   return found
 }

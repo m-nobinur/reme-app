@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { WriterTask } from "../src/fanout.ts"
+import { pageCheck, sandboxFindings, type WriterTask } from "../src/fanout.ts"
 import type { PhotoFile } from "../src/photo-step.ts"
 import {
   createWarmer,
@@ -223,6 +223,42 @@ describe("write_pages's fan-out", () => {
     expect(lines[1]).toMatch(
       /^- about: failed \(The reply was not JSON.*\)\. Its fields are yours: aboutHeading\.$/
     )
+  })
+})
+
+describe("a writer's own check, before the lead sees its fields", () => {
+  // Perf run 2: titles came back 91 characters as shown, four icons were
+  // guesses, and the lead spent its integration turns on both.
+  const source = [
+    "const values = {",
+    '  businessName: "Brightside Window and Gutter Care",',
+    '  service1Title: "Window Cleaning in Bristol | Brightside Care",',
+    '  service1Icon: "sparkles",',
+    `  service1Body: "A seamless clean ${String.fromCharCode(0x2014)} every pane, every sill, inside and out, across Bristol homes and flats.",`,
+    "}",
+  ].join("\n")
+  const prompt =
+    "Page service. Service 1's own page. Your fields: service1Title, service1Icon, service1Body."
+
+  it("names the shown title's length, an unknown icon, an em dash and a stock phrase", () => {
+    const check = pageCheck(source, prompt) ?? ""
+    expect(check).toContain(
+      'service1Title shows as "Window Cleaning in Bristol | Brightside Care | Brightside Window and Gutter Care", 80 characters'
+    )
+    expect(check).toContain(
+      'service1Icon "sparkles" is not an icon; name one of: broom,'
+    )
+    expect(check).toContain("service1Body has an em dash")
+    expect(check).toContain('service1Body says "seamless"')
+  })
+
+  it("passes fields the build's copy check passes", () => {
+    expect(
+      sandboxFindings(
+        { service1Icon: "sparkle", service1Body: "Every pane, by hand." },
+        ["service1Icon", "service1Body"]
+      )
+    ).toEqual([])
   })
 })
 
