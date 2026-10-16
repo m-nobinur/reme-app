@@ -2,14 +2,18 @@
 // (apps/orchestrator/src/shots.ts): `node /tmp/shots.mjs <url> <outDir> <cropMax>`.
 //
 // Per width: the whole home page as `home-<w>.png` (the review card's image),
-// and viewport-height pieces of it, top to bottom, as `crop-<w>-<n>.png` from
-// 1, at most `cropMax` of them (the design critic's pictures: a model refuses
-// an image over 8000 px and scales a tall one to about 1568 px on its long
-// edge, so a full page reaches it unreadable).
+// and, at the critic's widths only, viewport-height pieces of it, top to
+// bottom, as `crop-<w>-<n>.jpg` from 1, at most `cropMax` of them (the design
+// critic's pictures: a model refuses an image over 8000 px and scales a tall
+// one to about 1568 px on its long edge, so a full page reaches it unreadable;
+// a picture costs its pixels, so the critic gets phone and desktop, not tablet,
+// and JPEG keeps the request small).
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 
 export const WIDTHS = [390, 768, 1440]
+export const CROP_WIDTHS = [390, 1440]
+export const CROP_QUALITY = 70
 export const HEIGHT = 900
 
 // Runs in the page. A full-page capture never scrolls, so a lazy image below
@@ -68,11 +72,15 @@ export async function shoot(browser, url, dir, cropMax) {
       const total = await page.evaluate(
         () => document.documentElement.scrollHeight
       )
-      const parts = Math.min(cropMax, Math.ceil(total / HEIGHT))
+      const parts = CROP_WIDTHS.includes(width)
+        ? Math.min(cropMax, Math.ceil(total / HEIGHT))
+        : 0
       for (let n = 0; n < parts; n++) {
         const y = n * HEIGHT
         await page.screenshot({
-          path: `${dir}/crop-${width}-${n + 1}.png`,
+          path: `${dir}/crop-${width}-${n + 1}.jpg`,
+          type: "jpeg",
+          quality: CROP_QUALITY,
           fullPage: true,
           clip: { x: 0, y, width, height: Math.min(HEIGHT, total - y) },
         })

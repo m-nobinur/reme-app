@@ -24,6 +24,8 @@ export async function completeOnce(
     images?: { data: string; mimeType: string }[]
     /** Pins one provider for the cache, per assignment. */
     sessionId: string
+    /** "none" for a call whose prompt is never read twice: a write costs more than an uncached read. Default "long". */
+    cacheRetention?: "none" | "short" | "long"
     schema?: { name: string; schema: Record<string, unknown> }
   }
 ): Promise<{ text: string; usage: Usage; model: string }> {
@@ -64,7 +66,7 @@ export async function completeOnce(
     {
       reasoning: call.effort,
       maxTokens: call.maxTokens,
-      cacheRetention: "long",
+      cacheRetention: call.cacheRetention ?? "long",
       sessionId: call.sessionId,
       ...(call.schema
         ? {

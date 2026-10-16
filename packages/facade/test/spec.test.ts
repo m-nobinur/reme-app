@@ -138,6 +138,7 @@ describe("the roles", () => {
       page: { model: sonnet, effort: "medium", maxTokens: 16_000 },
       copy: { model: haiku, effort: "low", maxTokens: 8_000 },
       critic: { model: sonnet, effort: "medium", maxTokens: 4_000 },
+      critic_recheck: { model: haiku, effort: "low", maxTokens: 2_000 },
       quick_copy: { model: haiku, effort: "low", maxTokens: 4_000 },
       quick_section: { model: sonnet, effort: "low", maxTokens: 16_000 },
     })

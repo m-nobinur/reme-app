@@ -16,16 +16,17 @@ import {
 } from "@workspace/facade"
 import { RULES, TELLS } from "@workspace/gates/rubric"
 import { creationChoices } from "./brief.ts"
-import { CROPS_MAX, cropKey, VIEWPORTS } from "./shots.ts"
+import { CROP_WIDTHS, CROPS_MAX, cropKey } from "./shots.ts"
 import type { Ids } from "./state.ts"
 import type { Artifacts } from "./validate.ts"
 
 /**
  * The design critic (ADR-038, BA5): after the lead's build and before the
- * gates, one vision call on the `critic` role reads the home page at 390,
- * 768 and 1440 px, as pieces one screen tall, with the Blueprint and the
+ * gates, one vision call on the `critic` role reads the home page at 390 and
+ * 1440 px, as JPEG pieces one screen tall, with the Blueprint and the
  * twelve rules, and returns at most five concrete fixes, or none. The lead
- * gets one repair round; a second look then records which fixes held. It is
+ * gets one repair round; a second look, on the cheaper `critic_recheck` role
+ * and shown only the pieces the repair changed, then records which fixes held. It is
  * advice: a failed call, a reply that does not parse or screenshots that were
  * not taken mean a look that did not run (`ran: false`, never "no findings"),
  * and the build goes on. The gates stay code. Rules and tells are EV2's data in
@@ -35,10 +36,10 @@ import type { Artifacts } from "./validate.ts"
 export const FIXES_MAX = 5
 
 /** The widths the screenshots are taken at, in the order the critic is told. */
-export const WIDTHS = VIEWPORTS
+export const WIDTHS = CROP_WIDTHS
 
-/** One viewport-height piece of the home page, base64 PNG. Never a whole page: a model refuses over 8000 px and shrinks a tall image to about 1568 px. */
-export type Piece = { width: number; data: string }
+/** One viewport-height piece of the home page, base64 JPEG, `part` counting screens from the top. Never a whole page: a model refuses over 8000 px and shrinks a tall image to about 1568 px. */
+export type Piece = { width: number; part: number; data: string }
 
 export type Fix = {
   page: string
@@ -82,6 +83,7 @@ export type Complete = (call: {
   user: string
   images: { data: string; mimeType: string }[]
   sessionId: string
+  cacheRetention?: "none"
   schema: { name: string; schema: Record<string, unknown> }
 }) => Promise<{ text: string; usage: unknown; model: string }>
 
@@ -92,7 +94,7 @@ export function criticPrompt(input: {
   pieces?: readonly Piece[]
 }): { system: string; user: string } {
   const system = [
-    "You are the design critic at Reme. A small business's website has just been built from a Blueprint. You are shown its home page at 390, 768 and 1440 px wide, each cut into pieces the height of a screen, top to bottom. Say what a studio's art director would send back, and nothing else.",
+    "You are the design critic at Reme. A small business's website has just been built from a Blueprint. You are shown its home page at 390 and 1440 px wide, each cut into pieces the height of a screen, top to bottom. Say what a studio's art director would send back, and nothing else.",
     "",
     `Return at most ${FIXES_MAX} fixes, the most visible first, or none when the site holds. Each fix names the page, the section, the problem you can see in the screenshots and the change that fixes it, in one sentence each. A change is something the builder can do with the site's own components, their variants and fields, or its theme: reword a heading, move or swap a section's variant, drop a section, fix a colour or a spacing. Never ask for a claim the business has not made, a photo that is not there, a new section the Blueprint does not list, or a number, name or review you cannot see in the Blueprint.`,
     "",
@@ -108,15 +110,17 @@ export function criticPrompt(input: {
     "The Blueprint this site was built from:",
     JSON.stringify(input.blueprint),
     "",
-    "Screenshots, in order, the home page from the top in pieces one screen tall (a long page shows only its first pieces):",
+    "Screenshots, in order, the home page in pieces one screen tall (a long page shows only its first pieces), each with its place counted in screens from the top:",
     ...WIDTHS.map((w) => {
-      const count = (input.pieces ?? []).filter((p) => p.width === w).length
-      return `- ${w} px wide: ${count} piece${count === 1 ? "" : "s"}`
+      const parts = (input.pieces ?? [])
+        .filter((p) => p.width === w)
+        .map((p) => p.part)
+      return `- ${w} px wide: ${parts.length} piece${parts.length === 1 ? "" : "s"}${parts.length ? `, screens ${parts.join(", ")}` : ""}`
     }),
     ...(input.earlier?.length
       ? [
           "",
-          "You asked for these fixes on the build before this one. List one again only if it still shows, and list anything new you now see:",
+          "You asked for these fixes on the build before this one. List one again only if it still shows, and list anything new you now see. Only the pieces that changed since that build are shown: a fix about a part of the page that is not in them was not carried out, so list it again.",
           JSON.stringify(input.earlier),
         ]
       : []),
@@ -177,6 +181,8 @@ export async function critique(input: {
   /** The pieces of the home page, in `WIDTHS` order and top to bottom within a width. */
   images: Piece[]
   earlier?: readonly Fix[]
+  /** Why the look is not made though pictures exist. */
+  skip?: string
 }): Promise<Critiqued> {
   const calls: Call[] = []
   if (input.images.length === 0) {
@@ -184,7 +190,7 @@ export async function critique(input: {
       fixes: [],
       calls,
       ran: false,
-      errors: ["no screenshots were taken"],
+      errors: [input.skip ?? "no screenshots were taken"],
     }
   }
   const prompt = criticPrompt({ ...input, pieces: input.images })
@@ -197,9 +203,11 @@ export async function critique(input: {
       user: prompt.user,
       images: input.images.map((p) => ({
         data: p.data,
-        mimeType: "image/png",
+        mimeType: "image/jpeg",
       })),
       sessionId: input.sessionId,
+      // A look's pictures are read once: a cache write would cost more than the read it never gets.
+      cacheRetention: "none",
       schema: SCHEMA,
     })
     calls.push({ usage: reply.usage, model: reply.model })
@@ -292,6 +300,18 @@ const base64 = (bytes: Uint8Array) => {
   return btoa(out)
 }
 
+/** The pieces whose picture differs from the same screen of the build before (or that the build before did not have): what the repair changed. */
+export function changedPieces(
+  now: readonly Piece[],
+  before: readonly Piece[]
+): Piece[] {
+  return now.filter(
+    (p) =>
+      before.find((b) => b.width === p.width && b.part === p.part)?.data !==
+      p.data
+  )
+}
+
 export type CritiqueStep = {
   round: 1 | 2
   /** Round 1: what to repair. Round 2: what still shows, plus anything new. */
@@ -333,43 +353,70 @@ export async function critiqueRound(input: {
       )
       .limit(1)
     if (done) return { done: stepOf(round, done.payload) }
+    const [first] =
+      round === 2
+        ? await db
+            .select({ payload: events.payload })
+            .from(events)
+            .where(
+              sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'design.critiqued'`
+            )
+            .limit(1)
+        : []
     const [row] = await db
       .select()
       .from(assignments)
       .where(eq(assignments.id, ids.assignmentId))
     if (!row) throw new Error("assignment.not_found")
     const choices = await creationChoices(db, ids)
-    return { done: null, row, model: choices.model }
+    const before = (first?.payload as { revision_id?: string } | undefined)
+      ?.revision_id
+    return { done: null, row, model: choices.model, before }
   })
   if (read.done) return read.done
   const { row } = read
 
-  const images: Piece[] = []
-  for (const width of WIDTHS) {
-    // Top to bottom; a page shorter than the cap has fewer pieces, and the first gap ends the width.
-    for (let part = 1; part <= CROPS_MAX; part++) {
-      const shot = await env.SITES.get(
-        cropKey(ids.orgId, revisionId, width, part)
-      )
-      if (!shot) break
-      images.push({
-        width,
-        data: base64(new Uint8Array(await shot.arrayBuffer())),
-      })
+  const piecesOf = async (revision: string) => {
+    const pieces: Piece[] = []
+    for (const width of WIDTHS) {
+      // Top to bottom; a page shorter than the cap has fewer pieces, and the first gap ends the width.
+      for (let part = 1; part <= CROPS_MAX; part++) {
+        const shot = await env.SITES.get(
+          cropKey(ids.orgId, revision, width, part)
+        )
+        if (!shot) break
+        pieces.push({
+          width,
+          part,
+          data: base64(new Uint8Array(await shot.arrayBuffer())),
+        })
+      }
     }
+    return pieces
   }
-  const route = modelRouting(env, read.model).critic
+  const taken = await piecesOf(revisionId)
+  // The recheck sees only what the repair changed; with no look before it to compare to, all of it.
+  const images =
+    round === 2 && read.before
+      ? changedPieces(taken, await piecesOf(read.before))
+      : taken
+  const role = round === 1 ? "critic" : "critic_recheck"
+  const route = modelRouting(env, read.model)[role]
   const looked = await critique({
     complete: input.complete ?? ((call) => completeOnce(env, call)),
     route: {
       model: route?.model ?? "",
-      effort: ROLES.critic.effort,
-      maxTokens: route?.max_output_tokens ?? ROLES.critic.maxTokens,
+      effort: ROLES[role].effort,
+      maxTokens: route?.max_output_tokens ?? ROLES[role].maxTokens,
     },
     sessionId: ids.assignmentId,
     blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
     images,
     earlier: input.earlier,
+    // Pictures were taken but none changed: the repair left the page as it was.
+    ...(taken.length > 0 && images.length === 0
+      ? { skip: "no screenshot changed since the first look" }
+      : {}),
   })
   const payload = payloadOf(looked, round, input.earlier)
   const step = stepOf(round, payload)
@@ -381,7 +428,7 @@ export async function critiqueRound(input: {
         staffId: row.staffId,
         type: "runtime.turn",
         payload: {
-          role: "critic",
+          role,
           model: call.model,
           response: { usage: call.usage },
         },

@@ -6,8 +6,11 @@
 /** The widths the preview's screenshots are taken at; the router serves them by these names. */
 export const VIEWPORTS = [390, 768, 1440] as const
 
-/** The most viewport-height pieces of the home page the critic gets per width. */
-export const CROPS_MAX = 8
+/** The widths the critic is shown: phone and desktop. A picture costs its pixels, and a tablet width added a third of them. */
+export const CROP_WIDTHS = [390, 1440] as const
+
+/** The most viewport-height pieces of the home page the critic gets per width (it was 8: 24 pictures, about 28k tokens a look). */
+export const CROPS_MAX = 5
 
 /** The capture script, written to /tmp in the sandbox and run there. */
 export const SHOTS_SCRIPT = Object.values(
@@ -24,4 +27,4 @@ export const cropKey = (
   revisionId: string,
   width: number,
   part: number
-) => `sites/${orgId}/${revisionId}/critic/home-${width}-${part}.png`
+) => `sites/${orgId}/${revisionId}/critic/home-${width}-${part}.jpg`

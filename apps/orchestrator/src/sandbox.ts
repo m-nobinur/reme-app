@@ -4,7 +4,13 @@ import {
   type Sandbox,
 } from "@cloudflare/sandbox"
 import { restore, SITE_ROOT } from "./revise.ts"
-import { CROPS_MAX, cropKey, SHOTS_SCRIPT, VIEWPORTS } from "./shots.ts"
+import {
+  CROP_WIDTHS,
+  CROPS_MAX,
+  cropKey,
+  SHOTS_SCRIPT,
+  VIEWPORTS,
+} from "./shots.ts"
 
 /**
  * The sandbox as the orchestrator uses it (ADR-031): one container per site,
@@ -475,7 +481,7 @@ export async function takeScreenshots(
     ].join("; ")
     await sandbox.writeFile("/tmp/shots.mjs", SHOTS_SCRIPT)
     await sandbox.exec(
-      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png; ${script}`,
+      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
       { timeout: 120_000 }
     )
     const bytes = async (path: string) => {
@@ -492,9 +498,11 @@ export async function takeScreenshots(
         await env.SITES.put(`${prefix}screenshots/home-${w}.png`, full)
         taken++
       }
+    }
+    for (const w of CROP_WIDTHS) {
       const parts = await Promise.all(
         Array.from({ length: CROPS_MAX }, (_, n) =>
-          bytes(`/tmp/crop-${w}-${n + 1}.png`)
+          bytes(`/tmp/crop-${w}-${n + 1}.jpg`)
         )
       )
       // A page shorter than the cap leaves the later pieces unmade.
