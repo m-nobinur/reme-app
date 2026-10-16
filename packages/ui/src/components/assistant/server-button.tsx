@@ -1,4 +1,5 @@
 import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
+import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import type { ServerButton } from "@workspace/contracts"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 
@@ -24,6 +25,8 @@ function ServerButtonPart({ data }: { data: ServerButton }) {
         target="_blank"
       >
         {label}
+        <ArrowSquareOutIcon aria-hidden />
+        <span className="sr-only"> (opens in a new tab)</span>
       </a>
     )
   }
