@@ -8,14 +8,14 @@ import { FILLED } from "./fixture"
 // text column beside an empty one, and no two pages open on the same picture.
 
 /** The blueprint's inner pages name text_led, whose photo is an inset beside the text. */
-const TEXT_LED = Object.fromEntries(
-  Object.entries(layout).map(([page, sections]) => [
-    page,
-    sections.map((s) =>
-      s.kind === "hero" ? { ...s, variant: "text_led" } : s
-    ),
-  ])
-) as unknown as typeof layout
+const withVariant = (variant: string) =>
+  Object.fromEntries(
+    Object.entries(layout).map(([page, sections]) => [
+      page,
+      sections.map((s) => (s.kind === "hero" ? { ...s, variant } : s)),
+    ])
+  ) as unknown as typeof layout
+const TEXT_LED = withVariant("text_led")
 
 const image = (r: number, g: number, b: number) =>
   sharp({
@@ -26,6 +26,7 @@ const image = (r: number, g: number, b: number) =>
 
 let bare: Built | undefined
 let photos: Built | undefined
+let bleed: Built | undefined
 beforeAll(async () => {
   const files = {
     "src/assets/uploads/hero.jpg": await image(200, 60, 60),
@@ -33,7 +34,22 @@ beforeAll(async () => {
     "src/assets/uploads/weekly.jpg": await image(60, 60, 200),
     "src/assets/photos/one.jpg": await image(200, 200, 60),
   }
-  ;[bare, photos] = await Promise.all([
+  const withPhotos = {
+    ...FILLED,
+    aboutImage: "/uploads/about.jpg",
+    aboutImageAlt: "A hallway in daylight",
+    // The home hero's photo again, and the about page's: both must be dropped.
+    contactImage: "/uploads/hero.jpg",
+    contactImageAlt: "The hero's living room",
+    service1HeaderImage: "/uploads/weekly.jpg",
+    service1HeaderImageAlt: "A tidy kitchen",
+    service2HeaderImage: "/uploads/about.jpg",
+    service2HeaderImageAlt: "The about page's hallway",
+    // A card's photo is never the header's: service 3 has a card photo only.
+    service3Image: "/uploads/weekly.jpg",
+    service3ImageAlt: "A card photo",
+  }
+  ;[bare, photos, bleed] = await Promise.all([
     build({
       site: {
         ...FILLED,
@@ -44,22 +60,14 @@ beforeAll(async () => {
       layout: TEXT_LED,
     }),
     build({
-      site: {
-        ...FILLED,
-        aboutImage: "/uploads/about.jpg",
-        aboutImageAlt: "A hallway in daylight",
-        // The home hero's photo again, and the about page's: both must be dropped.
-        contactImage: "/uploads/hero.jpg",
-        contactImageAlt: "The hero's living room",
-        service1HeaderImage: "/uploads/weekly.jpg",
-        service1HeaderImageAlt: "A tidy kitchen",
-        service2HeaderImage: "/uploads/about.jpg",
-        service2HeaderImageAlt: "The about page's hallway",
-        // A card's photo is never the header's: service 3 has a card photo only.
-        service3Image: "/uploads/weekly.jpg",
-        service3ImageAlt: "A card photo",
-      },
+      site: withPhotos,
       layout: TEXT_LED,
+      files,
+      standIns: false,
+    }),
+    build({
+      site: withPhotos,
+      layout: withVariant("dark_center"),
       files,
       standIns: false,
     }),
@@ -68,6 +76,7 @@ beforeAll(async () => {
 afterAll(() => {
   clean(bare)
   clean(photos)
+  clean(bleed)
 })
 
 const headerOf = (html: string) =>
@@ -126,6 +135,23 @@ describe("a page header with a photo", () => {
     }
     const home = pages.find((p) => p.file === "index.html")
     expect(Math.max(...widths(home?.html ?? ""))).toBeGreaterThan(960)
+  })
+
+  test("offers a full-bleed header up to its source width, and still holds every other photo to 960", () => {
+    const widths = (html: string) =>
+      [...html.matchAll(/<source[^>]*srcset="([^"]+)"/g)].flatMap((m) =>
+        (m[1] ?? "")
+          .split(",")
+          .map((c) => Number.parseInt(c.trim().split(/\s+/)[1] ?? "", 10))
+      )
+    const about = pagesOf(bleed).find((p) => p.file === "about/index.html")
+    expect(headerOf(about?.html ?? "")).toContain("hero-dark_center")
+    expect(Math.max(...widths(headerOf(about?.html ?? "")))).toBe(1600)
+    // The services page shows a card photo: not a header, so 960.
+    for (const page of pagesOf(bleed).filter((p) => p.file !== "index.html")) {
+      const rest = page.html.replace(headerOf(page.html), "")
+      expect(Math.max(0, ...widths(rest)), page.file).toBeLessThanOrEqual(960)
+    }
   })
 
   test("never repeats the home hero's photo or another header's", () => {

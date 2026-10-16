@@ -55,9 +55,12 @@ const SIZES = {
 // a detailed photo at 75 was 341 KiB there (45: 122 to 136 KiB on the same
 // two), while a screen that fetches 1920 or more is dense enough to hide it.
 const HERO_WIDTHS = [640, 960, 1280, 1920, 2560]
-// An inner page's header photo sits in a box a third to a half of the screen
-// wide, so 960 is its 2x width. Only the home hero goes up to 2560.
+// An inner page's header photo in a split or inset box is a third to a half of
+// the screen wide, so 960 is its 2x width. A wash or dark_center header spans
+// the screen (the whole width, or the right half of it), so it goes to 1920.
+// Only the home hero goes up to 2560.
 const HEADER_WIDTHS = [640, 960]
+const FULL_BLEED_HEADER_WIDTHS = [640, 960, 1280, 1920]
 const HERO_QUALITY = 75
 const heroAvifQuality = (width: number) =>
   width <= 640
@@ -127,7 +130,13 @@ const actions = Astro.slots.has("default")
               src={photo.src}
               alt={photo.alt}
               sizes={SIZES[variant ?? "wash"]}
-              widths={inner ? HEADER_WIDTHS : HERO_WIDTHS}
+              widths={
+                !inner
+                  ? HERO_WIDTHS
+                  : variant === "wash" || variant === "dark_center"
+                    ? FULL_BLEED_HEADER_WIDTHS
+                    : HEADER_WIDTHS
+              }
               quality={HERO_QUALITY}
               avifQuality={heroAvifQuality}
               priority
