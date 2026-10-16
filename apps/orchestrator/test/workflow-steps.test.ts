@@ -57,8 +57,13 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   return { AgentInstanceExistsError: InstanceExists }
 })
 const dispatched: { message: unknown; photosSettled?: boolean }[] = []
-// Whether the photo step had settled when the Developer was dispatched.
-const photoStep = vi.hoisted(() => ({ settled: false }))
+// Whether the photo step had settled when the Developer was dispatched,
+// whether it throws, and every event type the Workflow appended.
+const photoStep = vi.hoisted(() => ({
+  settled: false,
+  fail: false,
+  appended: [] as string[],
+}))
 // The real module underneath, so the gate reasons the Workflow matches on are
 // the ones the gate actually emits. Only the agent entry point is stood in for.
 vi.mock("@workspace/facade", async (importOriginal) => ({
@@ -83,7 +88,10 @@ const ROW = {
 }
 const orgList: string[] = []
 vi.mock("@workspace/db", () => ({
-  appendEvent: async () => "e",
+  appendEvent: async (_db: unknown, event: { type: string }) => {
+    photoStep.appended.push(event.type)
+    return "e"
+  },
   assignments: {},
   facts: {},
   eq: () => ({}),
@@ -281,6 +289,7 @@ vi.mock("../src/photo-step.ts", () => ({
     photoStep.settled = false
     await new Promise((resolve) => setTimeout(resolve, 5))
     photoStep.settled = true
+    if (photoStep.fail) throw new Error("every draw failed")
     return photoFiles
   },
 }))
@@ -430,6 +439,7 @@ type Setup = {
   skipReview?: boolean
   critic?: typeof script.critic
   quiet?: number[]
+  photosFail?: boolean
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
@@ -569,6 +579,14 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ],
   // ADR-038: a first build plans; the console's builds from the plan at once.
   ["planned build", [completion], { lane: full }, { outcome: "preview_ready" }],
+  // The photo step throws for good: one step logs `site.photos_failed`, which
+  // ends write_pages's wait, and the build goes on without the photos.
+  [
+    "photos failed",
+    [completion],
+    { lane: full, photosFail: true },
+    { outcome: "preview_ready" },
+  ],
   // BA5: the critic finds two things, the lead is sent back once and the
   // second look finds them fixed.
   [
@@ -648,9 +666,14 @@ describe("the assignment Workflow's step names", () => {
     script.planned = []
     script.critic = [...(setup.critic ?? [])]
     script.quiet = [...(setup.quiet ?? [])]
+    photoStep.fail = setup.photosFail ?? false
+    photoStep.appended.length = 0
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
+    expect(photoStep.appended.includes("site.photos_failed")).toBe(
+      Boolean(setup.photosFail)
+    )
   })
 
   it("keeps a round's deadline through a stale nudge, and resumes on its answer", async () => {
@@ -878,6 +901,7 @@ describe("the assignment Workflow's step names", () => {
         "superseded before accessibility",
         "section change",
         "planned build",
+        "photos failed",
         "design critique repaired",
         "owner reviews the plan",
         "owner changes the plan",

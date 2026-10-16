@@ -5,6 +5,7 @@ import {
   createWarmer,
   fieldLines,
   followPhotos,
+  landedOf,
   parseReply,
   reconcilePhotos,
   setValues,
@@ -193,8 +194,8 @@ describe("write_pages's fan-out", () => {
       staggerMs: 0,
       sleep: async () => undefined,
       edit: site.edit,
-      call: async (index, attempt, user) => {
-        users.push(`${index}.${attempt}`)
+      call: async (index, attempt, user, strict) => {
+        users.push(`${index}.${attempt}${strict ? " strict" : ""}`)
         if (index === 0 && attempt === 2) fix = user
         if (index === 1) return "not json"
         // A closing heading the copy check refuses: it repeats the about page's.
@@ -203,11 +204,13 @@ describe("write_pages's fan-out", () => {
           : reply({ ctaHeading: "Questions about the garden" }, "Fixed.")
       },
     })
+    // Only the retry after an unparsable reply asks for the schema: a strict
+    // call misses the writers' shared prompt cache.
     expect([...users].sort((a, b) => a.localeCompare(b))).toEqual([
       "0.1",
       "0.2",
       "1.1",
-      "1.2",
+      "1.2 strict",
     ])
     // The fix call sees its own reply and the findings, after its field's line.
     expect(fix).toContain('  ctaHeading: "",')
@@ -291,6 +294,58 @@ describe("the photos while the pages are written", () => {
         timeoutMs: 1,
       })
     ).toEqual({ files: [], timedOut: false })
+  })
+
+  it("stops waiting the moment the Workflow says the photo step failed, with what had landed", async () => {
+    const progress = {
+      type: "build.progress",
+      payload: {
+        stage: "photos",
+        item: "home_hero",
+        status: "generated",
+        key: "k1",
+        content_type: "image/jpeg",
+      },
+    }
+    // Before any settlement it waits; a fallback row is no photo.
+    expect(
+      landedOf([
+        progress,
+        {
+          type: "build.progress",
+          payload: { stage: "photos", item: "about_hero", status: "fallback" },
+        },
+      ])
+    ).toEqual({ files: [file("home_hero", "k1")], settled: null })
+    const failed = [
+      progress,
+      { type: "site.photos_failed", payload: { reason: "Error: draw" } },
+    ]
+    expect(landedOf(failed).settled).toEqual([file("home_hero", "k1")])
+    // The step's own final list wins when it exists.
+    expect(
+      landedOf([
+        progress,
+        { type: "site.photos", payload: { step: { files: [] } } },
+      ]).settled
+    ).toEqual([])
+    // One poll and no sleep: nothing waits out the five minutes.
+    let polls = 0
+    const got = await followPhotos({
+      slots: ["home_hero", "about_hero"],
+      landed: async () => {
+        polls++
+        return landedOf(failed)
+      },
+      place: async () => undefined,
+      pollMs: 2000,
+      timeoutMs: 5 * 60_000,
+      sleep: () => {
+        throw new Error("waited")
+      },
+    })
+    expect(polls).toBe(1)
+    expect(got).toEqual({ files: [file("home_hero", "k1")], timedOut: false })
   })
 
   it("points each slot's field at the photo as it landed, or empties it", () => {

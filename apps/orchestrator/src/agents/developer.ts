@@ -61,7 +61,6 @@ import {
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
 import { instructions, sectionInstructions } from "../instructions.ts"
-import type { PhotoFile } from "../photo-step.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
@@ -80,6 +79,7 @@ import {
   createWarmer,
   followPhotos,
   type Landed,
+  landedOf,
   reconcilePhotos,
   replySchema,
   WARM_BUILD,
@@ -588,7 +588,12 @@ export const writePagesTool = (current: Session) =>
         page: pageInstructions(brief),
         copy: copyInstructions(brief),
       }
-      const call = (index: number, attempt: 1 | 2, user: string) =>
+      const call = (
+        index: number,
+        attempt: 1 | 2,
+        user: string,
+        strict: boolean
+      ) =>
         step.do(`writer ${index + 1}.${attempt}`, async () => {
           const task = tasks[index] as (typeof tasks)[number]
           const route = roles[task.agent]
@@ -599,10 +604,8 @@ export const writePagesTool = (current: Session) =>
             system: systems[task.agent],
             user,
             sessionId: assignmentId,
-            // The retry goes without the schema, in case a provider refused
-            // one this wide (the home page's is 64 fields); the prompt and
-            // `parseReply` hold the shape either way.
-            ...(attempt === 1
+            // Strict only to retry an unparsable reply (write-pages.ts).
+            ...(strict
               ? { schema: replySchema(fieldsOfPrompt(task.prompt)) }
               : {}),
           })
@@ -617,36 +620,23 @@ export const writePagesTool = (current: Session) =>
         })
 
       // The photo step's progress rows carry each slot's key as it lands;
-      // its `site.photos` event is the final list.
+      // its `site.photos` event is the final list, and a `site.photos_failed`
+      // from the Workflow settles it with what landed.
       const slots = plan.images
         .filter((s) => s.source === "generated" && !s.asset_id)
         .map((s) => s.id)
       const landed = (): Promise<Landed> =>
-        current.kit.withOrg({ orgId }, async (db) => {
-          const rows = await db
-            .select({ type: events.type, payload: events.payload })
-            .from(events)
-            .where(
-              sql`${events.assignmentId} = ${assignmentId} and (${events.type} = 'site.photos' or (${events.type} = 'build.progress' and ${events.payload}->>'stage' = 'photos' and ${events.payload}->>'key' is not null))`
-            )
-            .orderBy(events.eventId)
-          const settled = rows.find((r) => r.type === "site.photos")
-          return {
-            files: rows
-              .filter((r) => r.type === "build.progress")
-              .map(({ payload: p }) => ({
-                slot_id: String(p.item),
-                status: p.status as PhotoFile["status"],
-                key: p.key as string,
-                content_type: (p.content_type as string | null) ?? null,
-              }))
-              .filter((f) => f.status !== "fallback"),
-            settled: settled
-              ? ((settled.payload.step as { files?: PhotoFile[] } | undefined)
-                  ?.files ?? [])
-              : null,
-          }
-        })
+        current.kit.withOrg({ orgId }, async (db) =>
+          landedOf(
+            await db
+              .select({ type: events.type, payload: events.payload })
+              .from(events)
+              .where(
+                sql`${events.assignmentId} = ${assignmentId} and (${events.type} in ('site.photos', 'site.photos_failed') or (${events.type} = 'build.progress' and ${events.payload}->>'stage' = 'photos' and ${events.payload}->>'key' is not null))`
+              )
+              .orderBy(events.eventId)
+          )
+        )
       const warm = createWarmer(() => sandbox.exec(WARM_BUILD))
       const following = followPhotos({
         slots,

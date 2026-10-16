@@ -145,8 +145,19 @@ export async function writePages(input: {
   tasks: readonly WriterTask[]
   max: number
   staggerMs: number
-  /** One model call; `attempt` 2 is the retry or the check's fix. */
-  call: (index: number, attempt: 1 | 2, user: string) => Promise<string>
+  /**
+   * One model call; `attempt` 2 is the retry or the check's fix. `strict`
+   * asks for the reply schema, which only the retry after an unparsable
+   * reply does: in the paid check of 2026-10-16 every strict call missed the
+   * writers' shared prompt cache (a service writer $0.068 strict, $0.018
+   * without), and every reply without it parsed in full.
+   */
+  call: (
+    index: number,
+    attempt: 1 | 2,
+    user: string,
+    strict: boolean
+  ) => Promise<string>
   /** Read, change and write the site config, one change at a time. */
   edit: (change: (source: string) => string) => Promise<string>
   onWritten?: (task: WriterTask) => void
@@ -164,14 +175,15 @@ export async function writePages(input: {
       let second = false
       let reply: Reply
       try {
-        reply = parseReply(await call(index, 1, user), fields)
+        reply = parseReply(await call(index, 1, user, false), fields)
       } catch (thrown) {
         second = true
         reply = parseReply(
           await call(
             index,
             2,
-            `${user}\n<previous_reply_failed>\n${message(thrown)}\n</previous_reply_failed>`
+            `${user}\n<previous_reply_failed>\n${message(thrown)}\n</previous_reply_failed>`,
+            true
           ),
           fields
         )
@@ -185,7 +197,8 @@ export async function writePages(input: {
             await call(
               index,
               2,
-              `${user}\n<your_reply>\n${JSON.stringify(reply.values)}\n</your_reply>\n${check}`
+              `${user}\n<your_reply>\n${JSON.stringify(reply.values)}\n</your_reply>\n${check}`,
+              false
             ),
             fields
           )
@@ -221,6 +234,39 @@ export async function writePages(input: {
 
 /** What the photo step has said so far: slots made, and the final list once it is done. */
 export type Landed = { files: PhotoFile[]; settled: PhotoFile[] | null }
+
+/**
+ * The photo step's events, in log order, as `followPhotos` reads them: each
+ * progress row with a key is a slot made; `site.photos` is the final list;
+ * `site.photos_failed`, which the Workflow writes when the step throws,
+ * settles it with what had landed, so nothing waits on a step that is over.
+ */
+export function landedOf(
+  rows: readonly { type: string; payload: Record<string, unknown> }[]
+): Landed {
+  const files = rows
+    .filter((r) => r.type === "build.progress" && r.payload.key)
+    .map(
+      ({ payload: p }): PhotoFile => ({
+        slot_id: String(p.item),
+        status: p.status as PhotoFile["status"],
+        key: p.key as string,
+        content_type: (p.content_type as string | null) ?? null,
+      })
+    )
+    .filter((f) => f.status !== "fallback")
+  const done = rows.find((r) => r.type === "site.photos")
+  const failed = rows.some((r) => r.type === "site.photos_failed")
+  return {
+    files,
+    settled: done
+      ? ((done.payload.step as { files?: PhotoFile[] } | undefined)?.files ??
+        [])
+      : failed
+        ? files
+        : null,
+  }
+}
 
 /**
  * The plan's generated photos into the site as each is made, while the

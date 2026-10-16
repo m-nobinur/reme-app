@@ -386,14 +386,24 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // the pages (each writer names its slot's planned path). The lead's
     // `write_pages` places each one as its progress row lands and, once the
     // `site.photos` event is written, empties the fields of slots that fell
-    // back. Started before "developer", so the recorded step order holds; a
-    // step that throws costs the site its photos, not the build.
+    // back. Started before "developer", so the recorded step order holds. A
+    // step that throws costs the site its photos, not the build: its
+    // `site.photos_failed` event tells `write_pages` to stop waiting at once.
     const photos = route.plan
       ? step
           .do("photos", () =>
             run((kit) => makePhotos({ env: this.env, kit, ids }))
           )
-          .catch(() => null)
+          .catch(async (error: unknown) => {
+            await step.do("photos failed", () =>
+              run((kit) =>
+                appendAudit(kit, ids, "site.photos_failed", {
+                  reason: String(error).slice(0, 300),
+                })
+              )
+            )
+            return null
+          })
       : null
 
     /**
