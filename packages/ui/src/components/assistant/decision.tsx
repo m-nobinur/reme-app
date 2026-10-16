@@ -40,6 +40,8 @@ type DecisionProps<I, O> = {
   /** What a yes does, shown while the owner decides. */
   detail: (input: I) => ReactNode
   yes: string
+  /** The cancel button's label. */
+  no?: string
   busy: string
   /** What a cancel by a typed message left undone. */
   cancelled: string
@@ -58,6 +60,7 @@ export function Decision<I, O>({
   title,
   detail,
   yes,
+  no = "Not now",
   busy,
   cancelled,
   refused,
@@ -138,7 +141,7 @@ export function Decision<I, O>({
             type="button"
             variant="outline"
           >
-            Not now
+            {no}
           </Button>
         </div>
       ) : view.state === "done" ? (

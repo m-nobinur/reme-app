@@ -6,6 +6,8 @@ import { CaretDownIcon } from "@phosphor-icons/react"
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
+  CheckDomainInput,
+  CheckDomainOutput,
   CosFacts,
   CosWorkspace,
   CreateReminderOutput,
@@ -15,6 +17,10 @@ import {
   RecordReviewOutput,
 } from "@workspace/contracts"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
+import {
+  ConnectDomain,
+  domainStatusText,
+} from "@workspace/ui/components/assistant/domain"
 import {
   Collapsible,
   CollapsibleContent,
@@ -253,6 +259,45 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+/**
+ * Where a domain stands, as one plain sentence: a domain check is quick and
+ * the assistant says what to do, so there is nothing to open.
+ */
+const DomainRead: ToolCallMessagePartComponent = (props) => {
+  const view = readView(props, CheckDomainOutput)
+  const name =
+    CheckDomainInput.safeParse(props.args).data?.name ?? "Your domain"
+  if (view.state === "done") {
+    return (
+      <p
+        className="px-1 py-1.5 text-muted-foreground text-sm"
+        data-slot="cos-read-domain"
+      >
+        {view.output.outcome === "checked"
+          ? domainStatusText(name, view.output)
+          : refusalText(
+              view.output.error.code,
+              "I couldn't check that domain."
+            )}
+      </p>
+    )
+  }
+  return (
+    <Read
+      labels={{
+        working: "Checking your domain",
+        done: "",
+        failed: "Could not check your domain",
+        cancelled: "Stopped checking your domain",
+      }}
+      slot="cos-read-domain"
+      view={view}
+    >
+      {() => null}
+    </Read>
+  )
+}
+
 /* Decisions ------------------------------------------------------------- */
 
 /**
@@ -376,6 +421,7 @@ export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
   get_workspace: WorkspaceRead,
   get_facts: FactsRead,
   get_preview: PreviewRead,
+  check_domain: DomainRead,
 }
 
 /** The Chief of Staff's cards that wait on the owner, by tool name. */
@@ -383,4 +429,5 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   answer_question: AnswerQuestion,
   create_reminder: CreateReminder,
   record_review: RecordReview,
+  connect_domain: ConnectDomain,
 }
