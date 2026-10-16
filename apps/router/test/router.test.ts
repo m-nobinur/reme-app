@@ -13,25 +13,77 @@ import app from "../src/index.ts"
  * asks. A real URL, in the live cases below, reaches the real kit.
  */
 const closed = vi.hoisted(() => new Set<string>())
+/**
+ * The stub's other rows, for the custom-domain cases, which the shared local
+ * database cannot run until it holds migration 0015: an org's slug, its one
+ * published revision, and its active domain as `name` and `primary_host`.
+ */
+const stubbed = vi.hoisted(() => ({
+  slugs: new Map<string, string>(),
+  revisions: new Map<string, string>(),
+  domains: new Map<string, { name: string; primaryHost: string }>(),
+}))
 vi.mock("@workspace/db", async (importOriginal) => {
   const real = await importOriginal<typeof import("@workspace/db")>()
   type Stub = { stubOrg: string }
+  const isStub = (db: unknown): db is Stub =>
+    typeof db === "object" && db !== null && "stubOrg" in db
+  const isStubKit = (kit: unknown) =>
+    typeof kit === "object" && kit !== null && "stub" in kit
+  // `select().from(t)`, then `orderBy().limit()` or `where()`: the org's
+  // slug from `orgs`, its newest deployment from anything else.
+  const select = (orgId: string) => () => ({
+    from: (table: unknown) => {
+      const revisionId = stubbed.revisions.get(orgId)
+      const rows =
+        table === real.orgs
+          ? [{ slug: stubbed.slugs.get(orgId) }]
+          : revisionId
+            ? [{ siteId: orgId, revisionId, configVersion: 1 }]
+            : []
+      const query = {
+        orderBy: () => query,
+        limit: async () => rows,
+        where: async () => rows,
+      }
+      return query
+    },
+  })
   return {
     ...real,
     tenancy: (connection: string, options?: { max?: number }) =>
       connection === "postgres://stub"
         ? {
+            stub: true,
             close: async () => undefined,
             withOrg: async (
               ctx: { orgId: string },
               fn: (db: Stub) => Promise<unknown>
-            ) => fn({ stubOrg: ctx.orgId }),
+            ) => fn({ stubOrg: ctx.orgId, select: select(ctx.orgId) } as Stub),
           }
         : real.tenancy(connection, options),
     orgOpen: async (db: unknown) =>
-      typeof db === "object" && db !== null && "stubOrg" in db
-        ? !closed.has((db as Stub).stubOrg)
-        : real.orgOpen(db as never),
+      isStub(db) ? !closed.has(db.stubOrg) : real.orgOpen(db as never),
+    resolveOrgBySlug: async (kit: unknown, slug: string) =>
+      isStubKit(kit)
+        ? ([...stubbed.slugs].find(([, s]) => s === slug)?.[0] ?? null)
+        : real.resolveOrgBySlug(kit as never, slug),
+    resolveDomainHost: async (kit: unknown, host: string) => {
+      if (!isStubKit(kit)) return real.resolveDomainHost(kit as never, host)
+      const name = host.replace(/^www\./, "")
+      const found = [...stubbed.domains].find(([, d]) => d.name === name)
+      return found
+        ? {
+            orgId: found[0],
+            siteId: found[0],
+            primaryHost: found[1].primaryHost,
+          }
+        : null
+    },
+    activeDomainHost: async (db: unknown) =>
+      isStub(db)
+        ? (stubbed.domains.get(db.stubOrg)?.primaryHost ?? null)
+        : real.activeDomainHost(db as never),
   }
 })
 
@@ -440,6 +492,7 @@ describe("hosts", () => {
 
   it("hands every production service hostname back to Cloudflare, unchanged", async () => {
     for (const host of [
+      "remeai.co.uk",
       "api.remeai.co.uk",
       "orchestrator.remeai.co.uk",
       "preview.remeai.co.uk",
@@ -515,6 +568,179 @@ describe("hosts", () => {
         code: "route.not_implemented",
         detail: {},
       })
+    }
+  })
+})
+
+describe("a custom domain", () => {
+  // A business on staging whose slug host has handed over to its own domain:
+  // `sparkle.co.uk` is primary and `www.` redirects to it.
+  const DOMAIN_ORG = "10000001-0000-4000-8000-000000000005"
+  const DOMAIN_REV = "10000001-0000-4000-8000-000000000006"
+  const SLUG_HOST = `sparkle${SUFFIX}`
+  const DOMAIN = "sparkle.co.uk"
+  const baked = `https://${SLUG_HOST}`
+  revision(DOMAIN_ORG, DOMAIN_REV, {
+    files: {
+      "index.html": "a".repeat(64),
+      "sitemap-0.xml": "b".repeat(64),
+      "robots.txt": "c".repeat(64),
+      "_astro/index.C1.css": "d".repeat(64),
+    },
+  })
+  const dist = `sites/${DOMAIN_ORG}/${DOMAIN_REV}/dist/`
+  objects.set(
+    `${dist}index.html`,
+    `<link rel="canonical" href="${baked}/"><meta property="og:url" content="${baked}/"><a href="https://other${SUFFIX}/">a friend</a>`
+  )
+  objects.set(
+    `${dist}sitemap-0.xml`,
+    `<loc>${baked}/</loc><loc>${baked}/contact/</loc>`
+  )
+  objects.set(`${dist}robots.txt`, `Sitemap: ${baked}/sitemap-index.xml`)
+  objects.set(`${dist}_astro/index.C1.css`, `/* ${baked} */`)
+  const sitePointer = {
+    org_id: DOMAIN_ORG,
+    site_id: DOMAIN_ORG,
+    revision_id: DOMAIN_REV,
+    config_version: 1,
+  }
+  const domainPointer = {
+    ...sitePointer,
+    canonical_host: DOMAIN,
+    origin_host: SLUG_HOST,
+  }
+  /** The org in the stub database, so a KV miss has a row to find. */
+  function inPostgres(domain: boolean) {
+    stubbed.slugs.set(DOMAIN_ORG, "sparkle")
+    stubbed.revisions.set(DOMAIN_ORG, DOMAIN_REV)
+    if (domain) {
+      stubbed.domains.set(DOMAIN_ORG, { name: DOMAIN, primaryHost: DOMAIN })
+    }
+  }
+  afterEach(() => {
+    for (const map of Object.values(stubbed)) map.clear()
+    for (const host of [DOMAIN, `www.${DOMAIN}`, SLUG_HOST]) {
+      pointers.delete(`host:${host}`)
+    }
+  })
+
+  it("serves its pointer and names the domain in canonical, og:url, sitemap and robots", async () => {
+    pointers.set(`host:${DOMAIN}`, domainPointer)
+    const page = await (await get(DOMAIN, "/")).text()
+    expect(page).toBe(
+      `<link rel="canonical" href="https://${DOMAIN}/"><meta property="og:url" content="https://${DOMAIN}/"><a href="https://other${SUFFIX}/">a friend</a>`
+    )
+    expect(await (await get(DOMAIN, "/sitemap-0.xml")).text()).toBe(
+      `<loc>https://${DOMAIN}/</loc><loc>https://${DOMAIN}/contact/</loc>`
+    )
+    expect(await (await get(DOMAIN, "/robots.txt")).text()).toBe(
+      `Sitemap: https://${DOMAIN}/sitemap-index.xml`
+    )
+    // Only the three page types: an asset is served as it was built.
+    expect(await (await get(DOMAIN, "/_astro/index.C1.css")).text()).toBe(
+      `/* ${baked} */`
+    )
+  })
+
+  it("leaves a page alone without both hosts in the pointer", async () => {
+    pointers.set(`host:${DOMAIN}`, { ...sitePointer, canonical_host: DOMAIN })
+    expect(await (await get(DOMAIN, "/")).text()).toContain(`${baked}/`)
+  })
+
+  it("gives a rewritten page a weak validator naming the host, and answers it 304", async () => {
+    withEdgeCache()
+    pointers.set(`host:${DOMAIN}`, domainPointer)
+    const first = await get(DOMAIN, "/")
+    const tag = first.headers.get("etag")
+    expect(tag).toBe(`W/"${dist}index.html:${DOMAIN}"`)
+    await first.text()
+    const again = await get(DOMAIN, "/", {
+      headers: { "if-none-match": tag ?? "" },
+    })
+    expect(again.status).toBe(304)
+    expect(await again.text()).toBe("")
+    // The file's own validator is not this representation's.
+    const stale = await get(DOMAIN, "/", {
+      headers: { "if-none-match": `"${dist}index.html"` },
+    })
+    expect(stale.status).toBe(200)
+  })
+
+  it("sends www to the apex and the slug host to the domain, keeping path and query", async () => {
+    pointers.set(`host:www.${DOMAIN}`, { redirect_to: DOMAIN })
+    pointers.set(`host:${SLUG_HOST}`, { redirect_to: DOMAIN })
+    for (const host of [`www.${DOMAIN}`, SLUG_HOST]) {
+      const res = await get(host, "/contact/?ref=card&x=1")
+      expect(res.status, host).toBe(301)
+      expect(res.headers.get("location"), host).toBe(
+        `https://${DOMAIN}/contact/?ref=card&x=1`
+      )
+      expect(res.headers.get("cache-control"), host).toBe("no-cache")
+    }
+    expect(reads).toEqual([])
+  })
+
+  it("answers a KV miss on the slug host of an org with an active domain with the 301", async () => {
+    inPostgres(true)
+    const res = await get(SLUG_HOST, "/contact/?a=1")
+    expect(res.status).toBe(301)
+    expect(res.headers.get("location")).toBe(`https://${DOMAIN}/contact/?a=1`)
+    expect(pointers.get(`host:${SLUG_HOST}`)).toEqual({ redirect_to: DOMAIN })
+    expect(reads).toEqual([])
+  })
+
+  it("still serves the slug host on a KV miss when the org has no domain", async () => {
+    inPostgres(false)
+    const res = await get(SLUG_HOST, "/")
+    expect(res.status).toBe(200)
+    expect(pointers.get(`host:${SLUG_HOST}`)).toEqual(sitePointer)
+  })
+
+  it("rebuilds a domain's pointers on a KV miss, behind the limiter", async () => {
+    inPostgres(true)
+    const res = await get(DOMAIN, "/")
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain(`href="https://${DOMAIN}/"`)
+    expect(pointers.get(`host:${DOMAIN}`)).toEqual(domainPointer)
+    const www = await get(`www.${DOMAIN}`, "/?q=1")
+    expect(www.status).toBe(301)
+    expect(www.headers.get("location")).toBe(`https://${DOMAIN}/?q=1`)
+    expect(askers).toHaveLength(2)
+    pointers.delete(`host:${DOMAIN}`)
+    limited = true
+    expect((await get(DOMAIN, "/")).status).toBe(429)
+  })
+
+  it("answers 410 for a closed org's domain", async () => {
+    inPostgres(true)
+    closed.add(DOMAIN_ORG)
+    try {
+      expect((await get(DOMAIN, "/")).status).toBe(410)
+      expect(pointers.has(`host:${DOMAIN}`)).toBe(false)
+    } finally {
+      closed.delete(DOMAIN_ORG)
+    }
+  })
+
+  it("answers 404 for an unknown host outside the zone, never passing it through", async () => {
+    for (const environment of [env, prodEnv]) {
+      const { res, seen } = await passedThrough(
+        "unknown.example",
+        "/",
+        environment
+      )
+      expect(res.status).toBe(404)
+      expect(await res.text()).toBe("No site here.")
+      expect(seen).toEqual([])
+    }
+  })
+
+  it("passes an unknown host inside the zone through on production", async () => {
+    for (const host of ["nobody-here.remeai.co.uk", "a.b.remeai.co.uk"]) {
+      const { res, seen } = await passedThrough(host, "/")
+      expect(res.status, host).toBe(299)
+      expect(seen, host).toEqual([`https://${host}/`])
     }
   })
 })
