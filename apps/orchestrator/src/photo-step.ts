@@ -60,7 +60,9 @@ export function applyPhotos(
   const images = slots.flatMap((s) => {
     if (fell.has(s.id)) return []
     const got = kept.get(s.id)
-    return got?.asset_id ? [{ ...s, asset_id: got.asset_id }] : [s]
+    return got?.asset_id
+      ? [{ ...s, asset_id: got.asset_id, ...(got.alt ? { alt: got.alt } : {}) }]
+      : [s]
   })
   return {
     images,

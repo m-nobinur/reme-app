@@ -18,6 +18,9 @@ import { parse } from "parse5"
  *   anywhere a visitor or a search engine reads it, JSON-LD included;
  * - a town in the service-area chips, or a near-miss spelling of one in any
  *   copy, that the service-area fact does not name exactly;
+ * - a word in any copy that is a near-miss of one of the business's own terms
+ *   (a service name, the trade, a noun in the facts' descriptions): "conservative
+ *   roofs" for "conservatory roofs";
  * - a service page without its "what is included" or "who it suits" block,
  *   an about page without its principles or its visit steps, or a contact
  *   page without its note on what to send;
@@ -147,7 +150,14 @@ const FILLER = new Set(
 export type CopyFinding = {
   file: string
   node: string
-  problem: "duplicate" | "stock" | "short" | "leak" | "town" | "missing"
+  problem:
+    | "duplicate"
+    | "stock"
+    | "short"
+    | "leak"
+    | "town"
+    | "term"
+    | "missing"
   text: string
   detail: string
 }
@@ -324,10 +334,86 @@ const oneOff = (a: string, b: string) => {
   return rest(a) === rest(b) || rest(a) === b.slice(i) || a.slice(i) === rest(b)
 }
 
-/** Every copy finding on the built site, in page order. `areas` is the service-area fact's text. */
+const levenshtein = (a: string, b: string) => {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i]
+    for (let j = 1; j <= b.length; j++)
+      next.push(
+        Math.min(
+          (row[j] ?? 0) + 1,
+          (next[j - 1] ?? 0) + 1,
+          (row[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1)
+        )
+      )
+    row = next
+  }
+  return row[b.length] ?? 0
+}
+
+const singular = (word: string) =>
+  word
+    .replace(/ies$/, "y")
+    .replace(/([sx]|[cs]h)es$/, "$1")
+    .replace(/s$/, "")
+
+/**
+ * A word that is a slip for one of the business's terms, not another form of
+ * it: one letter off before the last two (a different ending is another word,
+ * "cleaned" for "cleaner"), or a long word sharing all but its ending with one
+ * and within three edits ("conservative" for "conservatory").
+ */
+const slipFor = (word: string, term: string) => {
+  const a = singular(word)
+  const b = singular(term)
+  if (a === b || Math.min(a.length, b.length) < 6) return false
+  let shared = 0
+  while (a[shared] && a[shared] === b[shared]) shared++
+  const shorter = Math.min(a.length, b.length)
+  if (oneOff(a, b) && shared < shorter - 2) return true
+  return shorter >= 10 && shared >= 8 && levenshtein(a, b) <= 3
+}
+
+const stringsOf = (value: unknown): string[] =>
+  typeof value === "string"
+    ? [value]
+    : Array.isArray(value)
+      ? value.flatMap(stringsOf)
+      : value && typeof value === "object"
+        ? Object.values(value).flatMap(stringsOf)
+        : []
+
+/** The facts that describe the work: service names, the trade, how it runs, who for. */
+const TERM_KEYS = new Set([
+  "business.offerings",
+  "business.industry",
+  "business.tagline",
+  "business.overview",
+  "business.audience",
+  "business.proof",
+])
+
+/** What the copy may say: every word in the facts, and those of them that name the work. */
+export function factWords(facts: readonly FactRecord[]) {
+  const known = new Set<string>()
+  const terms = new Set<string>()
+  for (const fact of facts)
+    for (const word of stringsOf(fact.value).flatMap(wordsOf)) {
+      known.add(word)
+      if (TERM_KEYS.has(fact.key) && word.length >= 6) terms.add(word)
+    }
+  return { known, terms }
+}
+
+/**
+ * Every copy finding on the built site, in page order. `areas` is the
+ * service-area fact's text; `words` the facts' words, which hold the copy's
+ * own terms to their spelling.
+ */
 export function copyFindings(
   pages: readonly { file: string; html: string }[],
-  areas = ""
+  areas = "",
+  words: ReturnType<typeof factWords> = { known: new Set(), terms: new Set() }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
   const headings: { file: string; text: string; stems: Set<string> }[] = []
@@ -437,6 +523,22 @@ export function copyFindings(
             detail: `"${word}" looks like a misspelling of "${real}", which service_area.text names; spell places as given`,
           })
       }
+    }
+
+    // A word one slip away from a service name or the trade is a misspelling.
+    const slips = new Set<string>()
+    for (const word of wordsOf(page.said)) {
+      if (word.length < 6 || words.known.has(word) || slips.has(word)) continue
+      const real = [...words.terms].find((term) => slipFor(word, term))
+      if (!real) continue
+      slips.add(word)
+      found.push({
+        file,
+        node: "text",
+        problem: "term",
+        text: word,
+        detail: `"${word}" looks like a misspelling of "${real}", a word in the business's own facts; spell service names and the trade exactly as given, or reword if "${word}" is meant`,
+      })
     }
 
     for (const h of page.headings) {
@@ -730,7 +832,11 @@ export function checkCopy(
       null
     )
   const area = facts.find((f) => f.key === "service_area.text")?.value
-  const findings = copyFindings(pages, typeof area === "string" ? area : "")
+  const findings = copyFindings(
+    pages,
+    typeof area === "string" ? area : "",
+    factWords(facts)
+  )
   const first = findings[0]
   if (!first)
     return verdict(

@@ -1,3 +1,4 @@
+import type { FactRecord } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
   COPY_WORDS,
@@ -5,6 +6,7 @@ import {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  factWords,
   fieldFindings,
   HEADING_NEAR,
   TITLE_CHARS,
@@ -334,6 +336,69 @@ describe("the copy gate", () => {
       ).toEqual([])
       // Without the fact there is nothing to hold the towns to.
       expect(copyFindings(site(chips("Fiton")))).toEqual([])
+    })
+
+    it("fails a word one slip from a service name or the trade, and passes real forms and other words", () => {
+      const fact = (key: string, value: unknown) =>
+        ({ key, value }) as unknown as FactRecord
+      const own = factWords([
+        fact("business.name", { name: "Brightside Window and Gutter Care" }),
+        fact("business.offerings", {
+          items: [
+            "window cleaning",
+            "gutter clearing",
+            "fascia and soffit cleaning",
+            "conservatory roof cleaning",
+          ],
+        }),
+        fact("business.industry", { name: "Window and gutter cleaning" }),
+      ])
+      const site = (main: string) => [
+        page(
+          "index.html",
+          "Brightside window and gutter care in Bristol and Clifton",
+          `<h1>Window cleaning</h1>${main}`
+        ),
+      ]
+      const slips = (main: string) =>
+        copyFindings(site(main), "", own)
+          .filter((f) => f.problem === "term")
+          .map((f) => f.text)
+      // The run's typo, in the home subhead and the footer.
+      expect(
+        slips(
+          "<p>Windows, gutters, fascias and conservative roofs, cleaned for homeowners.</p>"
+        )
+      ).toEqual(["conservative"])
+      expect(slips("<p>Cleering gutters and gutter clearing.</p>")).toEqual([
+        "cleering",
+      ])
+      expect(slips("<p>Winndow cleaning for homes.</p>")).toEqual(["winndow"])
+      // Plurals, other forms and ordinary words are not slips.
+      expect(
+        slips(
+          "<p>Conservatories, conservatory roofs, gutters, fascias, cleaner windows, cleaned by hand, planning ahead.</p>"
+        )
+      ).toEqual([])
+      // A word the facts themselves use is theirs, whatever it resembles.
+      expect(
+        copyFindings(site("<p>Conservative roofs.</p>"), "", {
+          ...own,
+          known: new Set([...own.known, "conservative"]),
+        })
+      ).toEqual([])
+      // Without the facts there is nothing to hold the words to.
+      expect(copyFindings(site("<p>Conservative roofs.</p>"))).toEqual([])
+      const checked = (html: string) =>
+        checkCopy(site(html), true, [
+          fact("business.offerings", { items: ["conservatory roof cleaning"] }),
+        ])
+      expect(checked("<p>Conservative roofs.</p>")).toMatchObject({
+        passed: false,
+      })
+      expect(checked("<p>Conservatory roofs.</p>").message).not.toContain(
+        "misspelling"
+      )
     })
 
     it("fails a service page missing its included or who-it-suits block, naming which", () => {

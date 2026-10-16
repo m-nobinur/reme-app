@@ -20,7 +20,7 @@ export const HOUSE_STYLE =
 /** The places a trade's photos are set in, which the prompt writer picks its scenes from. */
 const SETTING: Record<IndustryId, string> = {
   cleaning:
-    "homes and offices just cleaned: white walls, light oak, soft grey stone, linen, a window onto greenery",
+    "homes and offices just cleaned: white walls, light oak, soft grey stone, linen, a window onto greenery; for outdoor work (gutters, fascias, roofs, glass from outside), the clean outside of a house in daylight",
   chauffeur:
     "a clean dark car at a hotel or venue entrance, leather and stitching details, polished paint, calm evening or daylight",
   legal:
