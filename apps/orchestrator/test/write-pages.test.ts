@@ -203,7 +203,7 @@ describe("write_pages's fan-out", () => {
           : reply({ ctaHeading: "Questions about the garden" }, "Fixed.")
       },
     })
-    expect(users.toSorted((a, b) => a.localeCompare(b))).toEqual([
+    expect([...users].sort((a, b) => a.localeCompare(b))).toEqual([
       "0.1",
       "0.2",
       "1.1",

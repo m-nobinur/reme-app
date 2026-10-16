@@ -599,7 +599,12 @@ export const writePagesTool = (current: Session) =>
             system: systems[task.agent],
             user,
             sessionId: assignmentId,
-            schema: replySchema(fieldsOfPrompt(task.prompt)),
+            // The retry goes without the schema, in case a provider refused
+            // one this wide (the home page's is 64 fields); the prompt and
+            // `parseReply` hold the shape either way.
+            ...(attempt === 1
+              ? { schema: replySchema(fieldsOfPrompt(task.prompt)) }
+              : {}),
           })
           await logTurn(
             current.kit,
