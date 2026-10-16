@@ -149,6 +149,8 @@ export type PhotoResult = {
   cost_usd: number | null
   /** Why a slot fell back, for the log. */
   reason: string | null
+  /** What the drawn photo shows, from its defect check or its final subject: the slot's alt and caption. Unset when reused or not drawn. */
+  alt?: string
 }
 
 type Stored = { arrayBuffer: () => Promise<ArrayBuffer> }
@@ -221,9 +223,17 @@ const Prompts = z.object({
 export const PHOTO_DISTINCT =
   "Every slot gets a different subject, tied to the service or section its idea names: its own place, object and activity, so no two photos share a scene, a composition or a main prop. Only the style line repeats. Do not reuse the hero's scene in another slot. "
 
-/** A Bristol terrace street once drew the hero of a cleaning site: it said "Bristol", not "clean". */
+/**
+ * A Bristol terrace street once drew the hero of a cleaning site: it said
+ * "Bristol", not "clean". Only the home hero: a service's own header once
+ * drew a laundry room for gutters because this rule reached every slot.
+ */
 export const PHOTO_HERO =
-  "A hero shows the core service or its result, in the customer's own space: for a cleaning business, a bright, clean, lived-in interior, never a street, skyline or exterior, even when the idea names one. The place is a light touch at most, such as a window view or a regional detail, never the subject. "
+  "The home page's hero (page home, section hero) shows the business's core service or its result in the customer's own space, never a street, skyline or place name, even when the idea names one. Whether that is an interior or an exterior comes from the service, not the trade: cleaning a home is a bright, clean, lived-in interior, while gutters, roofs or windows seen from outside are the finished exterior in daylight. The place is a light touch at most, such as a window view or a regional detail, never the subject. "
+
+/** A service's header and card show that service, indoors or out as the service is. */
+export const PHOTO_SERVICE =
+  "A service's own slot (page service, or a card) shows that service's own subject, as its idea and alt name it, and never the hero's scene or a room for an outdoor job. Interior or exterior comes from the service, not the trade: gutters, fascias, soffits, downpipes, roofs, conservatory roofs, patios and windows seen from outside are exteriors, drawn outdoors in daylight; ovens, bathrooms and carpets are interiors. "
 
 /** One Haiku call: a shared style line for the set and a subject line per slot. */
 async function writePrompts(
@@ -254,7 +264,8 @@ async function writePrompts(
               STYLE_GUIDE +
               PHOTO_DISTINCT +
               PHOTO_HERO +
-              "A hero subject is a whole room or finished space; any other slot is one area or detail of its service; a cta_band slot is a plain, calm texture. " +
+              PHOTO_SERVICE +
+              "The home hero subject is a whole room or finished space, or the whole finished exterior; any other slot is one area or detail of its service; a cta_band slot is a plain, calm texture. " +
               "Where a slot has a text side, ask for calm empty space on that side. Never ask for a face, text, a logo or a sign.",
           },
           {
@@ -265,6 +276,7 @@ async function writePrompts(
               palette: brief.palette,
               slots: slots.map(({ slot, resolution }) => ({
                 id: slot.id,
+                page: slot.page,
                 section: slot.section,
                 aspect: slot.aspect,
                 resolution,
@@ -395,7 +407,8 @@ const DEFECTS = {
     "an oversaturated, HDR, CGI or 3D-render look, crushed blacks or a colour cast",
   texture:
     "painterly, smeared or mushy texture (foliage, grass, stone or fabric that dissolves into blobs or brush strokes), over-sharpened halos, or too little fine detail for a photo shown large",
-  subject: "a picture that does not show the slot's scene",
+  subject:
+    "a picture that does not show the slot's scene, or shows another place or kind of work than the service it is for (a room for gutters, fascias, soffits, roofs or windows seen from outside, which are exteriors); 2 for such a mismatch",
   style: "a mismatch with the set's style line",
 } as const
 type Defect = keyof typeof DEFECTS
@@ -410,6 +423,8 @@ const Check = z.object({
   subject: score,
   style: score,
   note: z.string().max(400).catch(""),
+  /** What the picture shows, in a few words: the slot's alt. */
+  shows: z.string().max(200).catch(""),
 })
 export type Check = z.infer<typeof Check>
 const failedChecks = (check: Check) =>
@@ -428,7 +443,9 @@ async function inspect(
   { key, fetch }: Deps,
   drawn: Extract<Drawn, { ok: true }>,
   scene: string,
-  style: string
+  style: string,
+  /** What the slot is for: the picture must show this service. */
+  service: { idea: string; alt: string }
 ): Promise<{ check: Check; cost: number | null } | null> {
   try {
     const response = await fetch(`${OPENROUTER}/chat/completions`, {
@@ -456,12 +473,12 @@ async function inspect(
                 .map((k) => `"${k}": 0`)
                 .join(
                   ", "
-                )}, "note": "the worst defect in a few words, or empty"}`,
+                )}, "note": "the worst defect in a few words, or empty", "shows": "what the photo shows, in under twelve words"}`,
           },
           {
             role: "user",
             content: [
-              { type: "text", text: JSON.stringify({ scene, style }) },
+              { type: "text", text: JSON.stringify({ scene, service, style }) },
               {
                 type: "image_url",
                 image_url: {
@@ -691,8 +708,9 @@ export async function directPhotos(input: {
     // A model that is down for one slot is down for the rest of this build.
     const down = new Set<string>()
     const one = async (p: Planned, references: Reference[]) => {
-      const subject = subjectOf(p)
+      let subject = subjectOf(p)
       let prompt = promptFor(p, subject)
+      let shows = ""
       let refs = references
       let drawn: Drawn = {
         ok: false,
@@ -723,7 +741,11 @@ export async function directPhotos(input: {
           }
           continue
         }
-        const checked = await inspect(deps, drawn, subject, style)
+        const checked = await inspect(deps, drawn, subject, style, {
+          idea: p.slot.subject,
+          alt: p.slot.alt,
+        })
+        shows = checked?.check.shows ?? ""
         logDraw(p.slot.id, model.id, drawn, ms, checked)
         spent += (drawn.cost ?? 0) + (checked?.cost ?? 0)
         const defects = checked ? failedChecks(checked.check) : []
@@ -739,6 +761,8 @@ export async function directPhotos(input: {
         }
         if (redrawn) break
         redrawn = true
+        // The writer's subject was the wrong scene: the plan's own idea names the service.
+        if (defects.includes("subject")) subject = p.slot.subject
         prompt = promptFor(
           p,
           subject,
@@ -774,6 +798,7 @@ export async function directPhotos(input: {
         content_type: drawn.contentType,
         cost_usd: drawn.cost === null ? null : spent,
         reason: null,
+        alt: (shows || simplified(subject)).slice(0, 200),
       })
       return { content_type: drawn.contentType, b64: drawn.b64 }
     }
