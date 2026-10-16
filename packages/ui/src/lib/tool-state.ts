@@ -301,13 +301,17 @@ export const askDetailsView = (part: ToolPartView): AskDetailsView =>
  * Any other number stays as it is.
  */
 export function phoneText(e164: string): string {
-  const national = /^\+44(\d{10})$/.exec(e164)?.[1]
-  if (!national) return e164
-  // ponytail: two groupings, London-style 02x and five-then-six for the
-  // rest; a full UK numbering plan only if owners read these as wrong.
-  return national.startsWith("2")
-    ? `0${national.slice(0, 2)} ${national.slice(2, 6)} ${national.slice(6)}`
-    : `0${national.slice(0, 4)} ${national.slice(4)}`
+  const digits = /^\+44(\d{10})$/.exec(e164)?.[1]
+  if (!digits) return e164
+  const national = `0${digits}`
+  // The grouping packages/starter-site/src/phone.ts uses and tests, so the
+  // card and the site write a number alike. 02x: 3+4+4. 011x, 01x1 and 03,
+  // 05, 08: 4+3+4. Other 01xxx and 07: 5+6.
+  if (national.startsWith("02"))
+    return `${national.slice(0, 3)} ${national.slice(3, 7)} ${national.slice(7)}`
+  return /^0(?:11\d|1\d1|[358])/.test(national)
+    ? `${national.slice(0, 4)} ${national.slice(4, 7)} ${national.slice(7)}`
+    : `${national.slice(0, 5)} ${national.slice(5)}`
 }
 
 /**
