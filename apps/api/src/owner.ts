@@ -27,6 +27,7 @@ import {
 import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { removal } from "./cos/tools.ts"
+import { checkout } from "./domain-buy.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
@@ -42,7 +43,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -212,8 +213,11 @@ export async function ownerRoute(
     return conversationRoute(request, kit, owner, id, action)
   }
   if (noun === "reminders") return reminderRoute(request, kit, owner, id)
-  if (noun === "domains" && method === "DELETE") {
+  if (noun === "domains" && method === "DELETE" && !action) {
     return removeDomain(request, env, kit, owner, id)
+  }
+  if (noun === "domains" && method === "POST" && action === "checkout") {
+    return checkout(request, env, kit, owner, id)
   }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)

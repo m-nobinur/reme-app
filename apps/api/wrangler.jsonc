@@ -85,7 +85,11 @@
   ],
   // The suffix the router serves sites on (ADR-030), for the live site's host
   // in `/workspace`. The orchestrator and the router carry the same value.
-  "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk" },
+  "vars": {
+    "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
+    // Where Checkout sends an owner back after a redirect-based payment.
+    "WEB_ORIGIN": "https://staging.remeai.co.uk"
+  },
   // The orchestrator's site bucket. The api writes only the owner's photos,
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
   // the build's sandbox.
@@ -144,7 +148,10 @@
           "entrypoint": "OwnerApi"
         }
       ],
-      "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" },
+      "vars": {
+        "SITE_HOST_SUFFIX": ".remeai.co.uk",
+        "WEB_ORIGIN": "https://preview.remeai.co.uk"
+      },
       "images": { "binding": "IMAGES" },
       "r2_buckets": [
         {

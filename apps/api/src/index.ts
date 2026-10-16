@@ -11,6 +11,7 @@ import {
   type Takedown,
 } from "./account.ts"
 import { bridge, type Owner } from "./changes.ts"
+import { stripeWebhook } from "./domain-buy.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -47,7 +48,9 @@ import {
  * vendor ids that came from the sealed session. No route reads an organisation
  * from a path, a query or a body, in any spelling, so the rule that `org_id`
  * never comes from client input is a property of this file rather than a check
- * somebody has to remember to write.
+ * somebody has to remember to write. The one exception is `/webhooks/stripe`:
+ * its org is in metadata that only our own Stripe calls wrote and Stripe
+ * signed, and it reaches the domain row only under that org's RLS.
  */
 
 /**
@@ -228,6 +231,11 @@ async function route(
     return Response.json(report, {
       status: report.status === "ok" ? 200 : 503,
     })
+  }
+
+  // Stripe's, signed by Stripe: no session, no write limit.
+  if (pathname === "/webhooks/stripe" && method === "POST") {
+    return stripeWebhook(request, env)
   }
 
   const session = await readSession(request, env)
