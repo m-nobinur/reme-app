@@ -44,23 +44,28 @@ export function form(params: ParamObject): URLSearchParams {
   return out
 }
 
-/** One POST to `https://api.stripe.com/v1/{path}`, keyed when `key` is given. */
-export async function stripePost<T>(
+/**
+ * One call to `https://api.stripe.com/v1/{path}`: a POST of `params`, keyed
+ * when `key` is given, or a GET without them.
+ */
+export async function stripe<T>(
   secretKey: string,
   path: string,
-  params: ParamObject,
+  params?: ParamObject,
   key?: string
 ): Promise<T> {
   const headers = new Headers({
     authorization: `Bearer ${secretKey}`,
-    "content-type": "application/x-www-form-urlencoded",
     "stripe-version": STRIPE_VERSION,
   })
+  if (params) {
+    headers.set("content-type", "application/x-www-form-urlencoded")
+  }
   if (key) headers.set("idempotency-key", key)
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: "POST",
+    method: params ? "POST" : "GET",
     headers,
-    body: form(params),
+    body: params ? form(params) : null,
     signal: AbortSignal.timeout(10_000),
   })
   const body = (await response.json().catch(() => null)) as {

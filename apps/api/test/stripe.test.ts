@@ -4,7 +4,7 @@ import {
   form,
   STRIPE_VERSION,
   StripeFailed,
-  stripePost,
+  stripe,
   verifyStripeSignature,
 } from "../src/stripe.ts"
 
@@ -81,15 +81,15 @@ describe("form", () => {
   })
 })
 
-describe("stripePost", () => {
+describe("stripe", () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it("sends the key, the pinned version and the idempotency key", async () => {
     const fetch = vi.fn(async () => Response.json({ id: "cus_1" }))
     vi.stubGlobal("fetch", fetch)
-    expect(
-      await stripePost("sk_test_1", "customers", { name: "A" }, "k1")
-    ).toEqual({ id: "cus_1" })
+    expect(await stripe("sk_test_1", "customers", { name: "A" }, "k1")).toEqual(
+      { id: "cus_1" }
+    )
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
     const headers = new Headers(init.headers)
     expect(url).toBe("https://api.stripe.com/v1/customers")
@@ -99,6 +99,16 @@ describe("stripePost", () => {
     expect(String(init.body)).toBe("name=A")
   })
 
+  it("reads with a GET and no body when given no params", async () => {
+    const fetch = vi.fn(async () => Response.json({ id: "pi_1" }))
+    vi.stubGlobal("fetch", fetch)
+    await stripe("sk_test_1", "payment_intents/pi_1")
+    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+    expect(init.method).toBe("GET")
+    expect(init.body).toBeNull()
+    expect(new Headers(init.headers).has("content-type")).toBe(false)
+  })
+
   it("throws Stripe's status and error code", async () => {
     vi.stubGlobal("fetch", async () =>
       Response.json(
@@ -106,7 +116,7 @@ describe("stripePost", () => {
         { status: 400 }
       )
     )
-    const failed = await stripePost("sk", "customers", {}).catch((e) => e)
+    const failed = await stripe("sk", "customers", {}).catch((e) => e)
     expect(failed).toBeInstanceOf(StripeFailed)
     expect(failed).toMatchObject({ status: 400, code: "resource_missing" })
   })
