@@ -4,6 +4,11 @@
 // typecheck error about a private property. Callers take the tag from here.
 export { asc, eq, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
+export {
+  type Posted,
+  postAssistantMessage,
+  serverMessageId,
+} from "./assistant-messages.ts"
 export { activeDomainHost } from "./domains.ts"
 export {
   type AppendEvent,
