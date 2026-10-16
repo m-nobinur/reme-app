@@ -8,6 +8,7 @@ import {
   conversations,
   departments,
   deployments,
+  domains,
   events,
   facts,
   memberships,
@@ -108,6 +109,8 @@ export async function clearOrgs(
   await tx
     .delete(assignmentTransitions)
     .where(inArray(assignmentTransitions.orgId, ids))
+  // A domain cites its approval, so it goes before the approvals.
+  await tx.delete(domains).where(inArray(domains.orgId, ids))
   // A reminder and a message cite their conversation, and a conversation its
   // creator.
   await tx.delete(reminders).where(inArray(reminders.orgId, ids))
