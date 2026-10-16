@@ -26,7 +26,52 @@ const script = vi.hoisted(() => ({
   busy: false,
   /** Whether every wait is ended by a `check` nudge. */
   nudged: false,
+  /** The buy branch's answers, step by step. */
+  buy: {
+    payments: [] as string[],
+    started: {} as unknown,
+    reads: [] as unknown[],
+    ready: [] as unknown[],
+    live: false,
+  },
 }))
+vi.mock("../src/registrar.ts", () => ({ registrarLive: () => script.buy.live }))
+vi.mock("../src/domain-buy.ts", async (importOriginal) => {
+  const say = (key: string) => ({ key, text: key })
+  return {
+    ...(await importOriginal<typeof import("../src/domain-buy.ts")>()),
+    paymentState: async () => script.buy.payments.shift() ?? "gone",
+    abandonUnpaid: async () => {
+      script.calls.push("abandon")
+    },
+    startRegistration: async () => script.buy.started,
+    readRegistration: async () => script.buy.reads.shift() ?? { gone: true },
+    registrationFailed: async (...args: unknown[]) => {
+      script.calls.push(`not registered ${String(args[4])}`)
+      return say("failed")
+    },
+    captureRegistered: async () => {
+      script.calls.push("capture")
+      return script.buy.live ? say("registered") : null
+    },
+    subscribeRenewal: async () => {
+      script.calls.push("renewal")
+    },
+    finishSandbox: async () => {
+      script.calls.push("test")
+      return say("test")
+    },
+    serveBought: async () => {
+      script.calls.push("serve")
+      return true
+    },
+    boughtReady: async () => script.buy.ready.shift() ?? { gone: true },
+    servingStalled: async () => {
+      script.calls.push("stalled")
+      return say("stalled")
+    },
+  }
+})
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   withKit: async (_env: unknown, fn: (kit: unknown) => unknown) => fn({}),
@@ -54,6 +99,7 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
 }))
 
 const { nextWait } = await import("../src/domain-flow.ts")
+const { HOLD_MS, PAYMENT_ROUNDS } = await import("../src/domain-buy.ts")
 const { DomainWorkflow, MAX_CHECKS, SAY_RETRIES } = await import(
   "../src/domain-workflow.ts"
 )
@@ -78,7 +124,7 @@ const at = (
 async function drive(
   seen: Seen[],
   claim: unknown = { apex: "a", www: "w" },
-  extra: { settle?: true } = {}
+  extra: { settle?: true; buy?: true } = {}
 ) {
   script.claim = claim
   script.seen = [...seen]
@@ -116,6 +162,7 @@ beforeEach(() => {
   script.calls.length = 0
   script.busy = false
   script.nudged = false
+  script.buy = { payments: [], started: {}, reads: [], ready: [], live: false }
 })
 
 describe("the domain Workflow", () => {
@@ -236,5 +283,131 @@ describe("the domain Workflow", () => {
     expect(during.names).toEqual(steps.DomainWorkflow["removed while waiting"])
     expect(during.result).toEqual({ outcome: "removed" })
     expect(script.calls).toEqual([])
+  })
+})
+
+const registering = (state: string, completed: boolean, ms = 0) => ({
+  gone: false,
+  at: T0 + ms,
+  status: { state, completed },
+})
+
+describe("the domain Workflow, buying", () => {
+  const buy = () => drive([], undefined, { buy: true })
+
+  it("in the sandbox: waits for the payment, registers, captures, subscribes and says it was a test", async () => {
+    script.buy.payments = ["waiting", "paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "in_progress", completed: false },
+    }
+    script.buy.reads = [registering("succeeded", true)]
+    const { names, waits, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["bought in the sandbox"])
+    expect(waits).toEqual(["35 minutes", "10 seconds"])
+    expect(result).toEqual({ outcome: "test" })
+    expect(script.calls).toEqual(["capture", "renewal", "test", "say test"])
+  })
+
+  it("live: registers, captures, says so, serves, and activates once the domain answers", async () => {
+    script.buy.live = true
+    script.buy.payments = ["paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "succeeded", completed: true },
+    }
+    script.buy.ready = [
+      { gone: false, ready: false, at: T0 + MIN },
+      { gone: false, ready: true, at: T0 + 2 * MIN },
+    ]
+    const { names, waits, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["bought and served"])
+    expect(waits).toEqual([MIN, "30 seconds"])
+    expect(result).toEqual({ outcome: "active" })
+    expect(script.calls).toEqual([
+      "capture",
+      "say registered",
+      "renewal",
+      "serve",
+      "activate",
+      "say live",
+      "repoint",
+    ])
+  })
+
+  it("abandons a purchase nobody paid for after its rounds", async () => {
+    script.buy.payments = Array(PAYMENT_ROUNDS + 1).fill("waiting")
+    const { names, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["purchase abandoned"])
+    expect(result).toEqual({ outcome: "abandoned" })
+    expect(script.calls).toEqual(["abandon"])
+  })
+
+  it("ends at once for a purchase that closed while it waited", async () => {
+    script.buy.payments = ["gone"]
+    const { names, result } = await buy()
+    expect(names).toEqual(["payment 1"])
+    expect(result).toEqual({ outcome: "abandoned" })
+  })
+
+  it("says why when the name was taken or its price rose after the payment", async () => {
+    script.buy.payments = ["paid"]
+    script.buy.started = { gone: false, say: { key: "taken", text: "taken" } }
+    const { names, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["purchase refused"])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual(["say taken"])
+  })
+
+  it("releases the hold when the registration fails", async () => {
+    script.buy.payments = ["paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "pending", completed: false },
+    }
+    script.buy.reads = [registering("failed", true)]
+    const { names, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["registration failed"])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual(["not registered failed", "say failed"])
+  })
+
+  it("gives up on a registration still unfinished when the hold nears its end", async () => {
+    script.buy.payments = ["paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "action_required", completed: false },
+    }
+    script.buy.reads = [
+      registering("action_required", false, MIN),
+      registering("action_required", false, HOLD_MS),
+    ]
+    const { result, waits } = await buy()
+    expect(result).toEqual({ outcome: "failed" })
+    expect(waits).toEqual(["10 seconds", "30 seconds"])
+    expect(script.calls).toEqual([
+      "not registered action_required",
+      "say failed",
+    ])
+  })
+
+  it("flags a bought domain that never answers, and leaves it registered", async () => {
+    script.buy.live = true
+    script.buy.payments = ["paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "succeeded", completed: true },
+    }
+    script.buy.ready = [{ gone: false, ready: false, at: T0 + 25 * HOUR }]
+    const { names, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["bought, never served"])
+    expect(result).toEqual({ outcome: "stalled" })
+    expect(script.calls).toContain("stalled")
+    expect(script.calls).not.toContain("activate")
   })
 })

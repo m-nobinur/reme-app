@@ -1150,11 +1150,16 @@ export async function revokeDomains(
   kit: Tenancy,
   orgId: string
 ): Promise<void> {
+  // A purchase that is paid for and registering holds the owner's money:
+  // its Workflow finishes it (capture or release) and the row is left alone.
+  // shortcut: such a purchase then stays `verifying` on a closed org, its
+  // activation refused; settle it by hand if a takedown ever lands mid-purchase.
+  const kept = sql`${domains.state} <> 'removed' and not (${domains.origin} = 'purchased' and ${domains.state} = 'verifying')`
   const held = await kit.withOrg({ orgId }, (db) =>
     db
       .select({ id: domains.id, cfIds: domains.cfIds })
       .from(domains)
-      .where(sql`${domains.state} <> 'removed'`)
+      .where(kept)
   )
   // The hostnames before the rows, so a retried takedown still finds them.
   // Failed claims are included: their hostnames are deleted again, idempotently.
@@ -1163,6 +1168,6 @@ export async function revokeDomains(
     db
       .update(domains)
       .set({ state: "removed", removedAt: new Date() })
-      .where(sql`${domains.state} <> 'removed'`)
+      .where(kept)
   )
 }

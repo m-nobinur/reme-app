@@ -6,6 +6,7 @@ import {
   type DomainOffer,
   DomainPaymentEvent,
   DomainPrice,
+  DomainRegistration,
   DomainStripe,
   FindDomainInput,
   type FindDomainOutput,
@@ -76,6 +77,13 @@ import {
  */
 
 type DomainRow = typeof domains.$inferSelect
+
+/** The row's registration with `set` merged, checked against the contract. */
+const merged = (row: DomainRow, set: Partial<DomainRegistration>) =>
+  DomainRegistration.parse({
+    ...(row.registration as DomainRegistration | null),
+    ...set,
+  })
 
 /** How a purchase ended, as `registration.outcome` keeps it for the card. */
 export type Outcome =
@@ -269,6 +277,9 @@ async function checkRegistrant(
   }
 }
 
+/** Open purchases one org may hold at once (plan, Security: squatting). */
+export const MAX_OPEN_PURCHASES = 3
+
 /** The live purchase states: a claim the name is held by. */
 const OPEN = sql`${domains.state} in ('awaiting_payment', 'awaiting_dns', 'verifying', 'active')`
 
@@ -302,7 +313,7 @@ export async function buy(
   if (invalid) return invalid
   const { registrant, registrant_type, company_number } = parsed.data
   const held = { registrant, registrant_type, company_number }
-  let created: Refusal | boolean
+  let created: Refusal | { id: string } | false
   try {
     created = await kit.withOrg({ orgId }, async (db) => {
       // Key 4, as `connect`: one claim per org at a time.
@@ -338,6 +349,21 @@ export async function buy(
           "site.not_published",
           "Publish the site first, then buy a domain for it."
         )
+      // An unpaid purchase holds its name from every other org, so an org
+      // holds few at once, each abandoned by its Workflow if never paid.
+      const [buying] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(domains)
+        .where(
+          sql`${domains.origin} = 'purchased' and ${domains.state} in ('awaiting_payment', 'verifying')`
+        )
+      if ((buying?.n ?? 0) >= MAX_OPEN_PURCHASES)
+        return refuse(
+          409,
+          "resource",
+          "domain.too_many_pending",
+          "There are already three domain purchases open. Finish or wait for one first."
+        )
       const [row] = await db
         .insert(domains)
         .values({
@@ -351,13 +377,12 @@ export async function buy(
           onCloudflare: true,
           price: priced.price,
           registrant: held,
-          registration: {
+          registration: DomainRegistration.parse({
             sandbox: !registrarLive(env),
             years: 1,
             auto_renew: true,
-            expires_at: null,
             ...(registrant_type && { registrant_type }),
-          },
+          }),
         })
         .returning({ id: domains.id })
       if (!row) throw new Error("domains insert returned nothing")
@@ -368,7 +393,7 @@ export async function buy(
         type: "domain.buy_requested",
         payload: { domain_id: row.id, name, price: priced.price },
       })
-      return true
+      return row
     })
   } catch (error) {
     // Another org holds the name live: the unique index says so.
@@ -376,7 +401,9 @@ export async function buy(
       return fromEnvelope(409, BUY_REFUSALS.unavailable)
     throw error
   }
-  if (typeof created === "object") return created
+  if (created && "refused" in created) return created
+  // Started now, so a purchase nobody pays for is abandoned and frees its name.
+  if (created) await start(env, orgId, created.id, true)
   return {
     status: created ? 201 : 200,
     output: {
@@ -469,7 +496,7 @@ async function close(
   to: "failed" | "abandoned" | "removed",
   from: readonly ("awaiting_payment" | "verifying")[],
   outcome: Outcome,
-  extra: Record<string, unknown> = {}
+  extra: Partial<DomainRegistration> = {}
 ): Promise<boolean> {
   return moveTo(
     db,
@@ -478,11 +505,7 @@ async function close(
     from,
     {
       registrant: null,
-      registration: {
-        ...(row.registration as Record<string, unknown>),
-        ...extra,
-        outcome,
-      },
+      registration: merged(row, { ...extra, outcome }),
       ...(to === "removed" && { removedAt: new Date() }),
     },
     { type: `domain.${outcome}`, payload: { domain_id: row.id } }
@@ -494,17 +517,12 @@ async function setRegistration(
   kit: Tenancy,
   orgId: string,
   row: DomainRow,
-  set: Record<string, unknown>
+  set: Partial<DomainRegistration>
 ) {
   await kit.withOrg({ orgId }, (db) =>
     db
       .update(domains)
-      .set({
-        registration: {
-          ...(row.registration as Record<string, unknown>),
-          ...set,
-        },
-      })
+      .set({ registration: merged(row, set) })
       .where(eq(domains.id, row.id))
   )
 }
@@ -592,7 +610,8 @@ async function apply(
   event: DomainPaymentEvent
 ): Promise<void> {
   const stripe = DomainStripe.partial().safeParse(row.stripe ?? {}).data ?? {}
-  const registration = (row.registration ?? {}) as Record<string, unknown>
+  const registration =
+    DomainRegistration.partial().safeParse(row.registration ?? {}).data ?? {}
   switch (event.type) {
     case "paid": {
       if (row.state === "verifying" || row.state === "active") return
@@ -935,13 +954,14 @@ export async function captureRegistered(
       .update(domains)
       .set({
         registrant: null,
-        registration: {
-          ...(row.registration as Record<string, unknown>),
+        registration: merged(row, {
           status: "registered",
-          expires_at: registration?.expires_at ?? null,
           auto_renew: registration?.auto_renew ?? true,
-          ...(!sandbox && { outcome: "registered" }),
-        },
+          ...(registration?.expires_at && {
+            expires_at: registration.expires_at,
+          }),
+          ...(!sandbox && { outcome: "registered" as const }),
+        }),
       })
       .where(eq(domains.id, domainId))
   )

@@ -106,11 +106,11 @@ describe("the registrar client", () => {
 
   it("searches in the table's endings and keeps only those", async () => {
     const calls = stub({
-      [`GET ${SANDBOX}/domain-search?q=sparkle&extensions=co.uk%2Cuk%2Ccom&limit=10`]:
+      [`GET ${SANDBOX}/domain-search?q=sparkle&extensions=co.uk%2Cuk%2Ccom%2Cnet&limit=10`]:
         envelope({
           domains: [
             { name: "sparkle.com", registrable: true },
-            { name: "sparkle.net", registrable: true },
+            { name: "sparkle.org", registrable: true },
           ],
         }),
     })
@@ -135,7 +135,8 @@ describe("the registrar client", () => {
     expect(sellable(priced("5.30"))).toBe(5.3)
     expect(sellable(priced("6.51"))).toBeNull()
     expect(sellable(priced("5.30", "premium"))).toBeNull()
-    expect(sellable({ ...priced("5.30"), name: "a.net" })).toBeNull()
+    expect(sellable({ ...priced("5.30"), name: "a.org" })).toBeNull()
+    expect(sellable({ ...priced("5.30"), name: "book.a.co.uk" })).toBeNull()
   })
 
   it("reads .co.uk's registrant rules from Cloudflare's schema, and none for .com", async () => {
@@ -298,12 +299,15 @@ describe("the name ranker", () => {
       "sparkleclean.co.uk",
       "sparkleclean.com",
       "sparkleclean.uk",
+      "sparkleclean.net",
       "sparklecleanbristol.co.uk",
       "sparklecleanbristol.com",
       "sparklecleanbristol.uk",
       "sparkleclean-bristol.co.uk",
+      "sparklecleanbristol.net",
       "sparkleclean-bristol.com",
       "sparkleclean-bristol.uk",
+      "sparkleclean-bristol.net",
     ])
     expect(ranked.some((r) => r.name.includes("cleaning"))).toBe(false)
     expect(ranked[0]?.why).toMatch(/business name/)

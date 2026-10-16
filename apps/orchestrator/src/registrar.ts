@@ -452,6 +452,7 @@ export function candidates(facts: RankFacts): Ranked[] {
     "co.uk": [30, ".co.uk tells customers you're UK-based"],
     com: [25, ".com is the one people guess"],
     uk: [20, ".uk is short and UK-based"],
+    net: [15, ".net is a common alternative"],
   }
   const seen = new Set<string>()
   const out: Ranked[] = []
