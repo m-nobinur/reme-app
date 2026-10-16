@@ -29,12 +29,8 @@ import { conversationRoute } from "./conversations.ts"
 import { removal } from "./cos/tools.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
-import {
-  readActivity,
-  readFacts,
-  readTaggedWorkspace,
-  unchanged,
-} from "./workspace.ts"
+import { readActivity, readFacts, unchanged } from "./workspace.ts"
+import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /**
  * The owner's routes. The org is the one `index.ts` resolved from the sealed
