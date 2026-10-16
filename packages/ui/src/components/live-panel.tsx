@@ -358,6 +358,10 @@ function StepDetail({
           Reading the home page at phone, tablet and desktop widths.
         </p>
       ) : null
+    case "polishing":
+      return at === "now" ? (
+        <p className={META}>Making the changes the design review asked for.</p>
+      ) : null
     case "fixing":
       return at === "now" ? (
         <p className={META}>

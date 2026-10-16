@@ -423,7 +423,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(Math.round((shown?.review_ms ?? 0) / 60_000)).toBe(15)
 
     // The lead reports, though no page builder said so: the pages tick, and
-    // the design look is the step it is on until it asks for nothing.
+    // the design look is the step it is on until it answers.
     const stepsNow = async () => {
       const now = WorkspaceStatus.parse(await (await workspace(who)).json())
       const rows = now.builds[0]?.activity ?? []
@@ -435,7 +435,13 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(
       looking.rows.find((r) => r.id === "writing")?.items?.map((i) => i.done)
     ).toEqual([true, true])
-    await s.event(build, "design.critiqued", { ran: true, fixes: [] })
+    // It asks for a change: the lead polishes until it reports again, then the checks.
+    await s.event(build, "design.critiqued", {
+      ran: true,
+      fixes: [{ page: "home", section: "hero" }],
+    })
+    expect((await stepsNow()).at).toBe("polishing")
+    await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
 
     // The gates send it back: a repair of its own, until the lead reports again.
@@ -449,7 +455,9 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       "planning",
       "photos",
       "writing",
+      "assembling",
       "design",
+      "polishing",
       "fixing",
       "checking",
     ])

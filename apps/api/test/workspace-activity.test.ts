@@ -146,10 +146,11 @@ describe("build activity rows", () => {
     const asked = { type: "design.critiqued", fixes: 2 }
     const repairing = { type: "assignment.state_changed" }
     expect(at("implementing", [])).toBe("writing")
-    // The lead's report ends the pages and starts the look, which the fix round keeps.
+    // The lead's report ends the pages and starts the look; if the look asks
+    // for changes the lead polishes until it reports again, and then it is checking.
     expect(at("implementing", [reported])).toBe("design")
-    expect(at("implementing", [reported, asked])).toBe("design")
-    expect(at("implementing", [reported, asked, reported])).toBe("design")
+    expect(at("implementing", [reported, asked])).toBe("polishing")
+    expect(at("implementing", [reported, asked, reported])).toBe("checking")
     // A look that asked for nothing, did not run, or was checked is over.
     expect(
       at("implementing", [reported, { type: "design.critiqued", fixes: 0 }])
@@ -173,12 +174,12 @@ describe("build activity rows", () => {
     expect(at("implementing", [...looked, repairing, reported])).toBe(
       "checking"
     )
-    // The repair row stays once there has been one, done, before the checks.
+    // The polish and repair rows stay once there has been one, done, before the checks.
     const rows = activityFor(
       "full",
       "validating",
       {},
-      { plan, marks: [...looked, repairing, reported] }
+      { plan, marks: [reported, asked, reported, repairing, reported] }
     )
     expect(rows.map((r) => [r.id, r.done === r.total])).toEqual([
       ["planning", true],
@@ -186,6 +187,7 @@ describe("build activity rows", () => {
       ["writing", true],
       ["assembling", true],
       ["design", true],
+      ["polishing", true],
       ["fixing", true],
       ["checking", false],
     ])
@@ -202,6 +204,85 @@ describe("build activity rows", () => {
         (r) => r.id
       )
     ).toEqual(["planning", "writing", "checking"])
+  })
+
+  // Perf run 3: the panel held "Looking over the design" from the lead's report
+  // to the preview, though the critic, the lead's fix round, two gate rounds
+  // and the checks all ran in that time. These are that build's events in
+  // order (state, and the marks readBuilds selects), with the time each landed.
+  it("shows each step of perf run 3's late build while it runs, and every one it passed", () => {
+    const plan = Blueprint.parse(PLAN)
+    const R = { type: "assignment.completion_reported" }
+    const critiqued = { type: "design.critiqued", fixes: 5 }
+    const rechecked = { type: "design.rechecked", fixes: 5 }
+    const repaired = { type: "assignment.state_changed" }
+    const sequence: [string, AssignmentState, Mark[], string[]][] = [
+      // The lead reported at 09:06:58, the critic read the screens until 09:07:24.
+      ["09:06:58", "implementing", [R], ["design"]],
+      // Five fixes asked; the lead made three of them until 09:08:06.
+      ["09:07:24", "implementing", [R, critiqued], ["polishing"]],
+      // Reported again: the recheck, the screenshots and axe, then the gates.
+      ["09:08:06", "implementing", [R, critiqued, R], ["checking"]],
+      ["09:08:24", "implementing", [R, critiqued, R, rechecked], ["checking"]],
+      ["09:08:25.1", "validating", [R, critiqued, R, rechecked], ["checking"]],
+      // The copy gate failed: back to the lead at once, for 24 s.
+      [
+        "09:08:25.3",
+        "implementing",
+        [R, critiqued, R, rechecked, repaired],
+        ["fixing"],
+      ],
+      [
+        "09:08:49.3",
+        "validating",
+        [R, critiqued, R, rechecked, repaired, R],
+        ["checking"],
+      ],
+      [
+        "09:08:59.5",
+        "implementing",
+        [R, critiqued, R, rechecked, repaired, R, repaired],
+        ["fixing"],
+      ],
+      [
+        "09:09:57.8",
+        "validating",
+        [R, critiqued, R, rechecked, repaired, R, repaired, R],
+        ["checking"],
+      ],
+    ]
+    for (const [at, state, marks, now] of sequence) {
+      const rows = activityFor(
+        "full",
+        state,
+        { photos: { done: 8, total: 8 }, pages: { done: 6, total: 6 } },
+        { plan, marks }
+      )
+      for (const row of rows) BuildActivity.parse(row)
+      expect(
+        rows.filter((r) => r.now).map((r) => r.id),
+        at
+      ).toEqual(now)
+      // Whatever it is on, every step before it in the order reads as done.
+      const here = rows.findIndex((r) => r.now)
+      expect(
+        rows.slice(0, here).every((r) => r.done === r.total),
+        at
+      ).toBe(true)
+    }
+    // A step that ran for under a second is still on the list, done.
+    const brief = activityFor(
+      "full",
+      "implementing",
+      {},
+      { plan, marks: [R, critiqued, R, rechecked, repaired] }
+    )
+    expect(brief.map((r) => [r.id, r.done === r.total]).slice(-4)).toEqual([
+      ["design", true],
+      ["polishing", true],
+      ["fixing", false],
+      ["checking", false],
+    ])
   })
 
   // Perf run 2 sat on "Writing the pages 6 of 6" for 2 min 20 s while the
