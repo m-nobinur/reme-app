@@ -56,6 +56,8 @@ import {
   GetPreviewOutput,
   RecordReviewInput,
   RecordReviewOutput,
+  RemoveDomainInput,
+  RemoveDomainOutput,
 } from "./cos.ts"
 import {
   Blueprint,
@@ -189,6 +191,8 @@ export const contracts = {
   RecordReviewInput,
   RecordReviewOutput,
   RedirectPointer,
+  RemoveDomainInput,
+  RemoveDomainOutput,
   RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,

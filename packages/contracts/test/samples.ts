@@ -904,6 +904,8 @@ export const samples: Record<ContractName, unknown> = {
   },
   RecordReviewOutput: { outcome: "recorded", slot: 1 },
   RedirectPointer: { redirect_to: "brightclean.example" },
+  RemoveDomainInput: { name: "brightclean.example" },
+  RemoveDomainOutput: { outcome: "removed" },
   RequestChangeOutput: {
     outcome: "started",
     build: {
