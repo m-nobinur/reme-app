@@ -37,6 +37,8 @@ import {
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
+  BuyDomainInput,
+  BuyDomainOutput,
   CheckDomainInput,
   CheckDomainOutput,
   ConnectDomainInput,
@@ -52,6 +54,8 @@ import {
   CosTurn,
   CosWorkspace,
   CreateReminderOutput,
+  FindDomainInput,
+  FindDomainOutput,
   GetPreviewInput,
   GetPreviewOutput,
   RecordReviewInput,
@@ -66,7 +70,17 @@ import {
   ImageSlot,
   Palette,
 } from "./design.ts"
-import { DnsRecord, DomainCheck, DomainProvider } from "./domain.ts"
+import {
+  DnsRecord,
+  DomainCheck,
+  DomainCheckout,
+  DomainCheckoutRequest,
+  DomainPaymentEvent,
+  DomainPrice,
+  DomainProvider,
+  DomainRegistration,
+  DomainStripe,
+} from "./domain.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
@@ -132,6 +146,8 @@ export const contracts = {
   AttentionItem,
   Blueprint,
   BuildSummary,
+  BuyDomainInput,
+  BuyDomainOutput,
   CapabilityCall,
   ChatRequest,
   CheckDomainInput,
@@ -164,7 +180,13 @@ export const contracts = {
   DesignDirection,
   DnsRecord,
   DomainCheck,
+  DomainCheckout,
+  DomainCheckoutRequest,
+  DomainPaymentEvent,
+  DomainPrice,
   DomainProvider,
+  DomainRegistration,
+  DomainStripe,
   ErrorEnvelope,
   EventEnvelope,
   FactList,
@@ -172,6 +194,8 @@ export const contracts = {
   FactSnapshot,
   FactValue,
   FailureReport,
+  FindDomainInput,
+  FindDomainOutput,
   FontPair,
   GetPreviewInput,
   GetPreviewOutput,
