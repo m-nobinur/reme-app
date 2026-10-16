@@ -440,6 +440,34 @@ describe("page header photos", () => {
     expect(variantOf("quote")).toBe("text_led")
   })
 
+  it("plans the plain header for an inner page with no photo slot", () => {
+    const made = fallback(CLEANING)
+    const named = {
+      ...made,
+      pages: made.pages.map((p) =>
+        p.page === "home"
+          ? p
+          : {
+              ...p,
+              sections: p.sections.map((s) =>
+                s.kind === "hero" ? { ...s, variant: "wash" } : s
+              ),
+            }
+      ),
+      images: [...made.images, header("about_hero", "about")],
+    } as Blueprint
+    const planned = withOwnerChoices(named, CLEANING)
+    const variantOf = (page: string) =>
+      planned.pages
+        .find((p) => p.page === page)
+        ?.sections.find((s) => s.kind === "hero")?.variant
+    // About and the service pages have a slot and keep their variant; Contact has none.
+    expect(variantOf("about")).toBe("wash")
+    expect(variantOf("service")).toBe("wash")
+    expect(variantOf("contact")).toBe("text_led")
+    expect(variantOf("home")).not.toBe("text_led")
+  })
+
   it("names the site fields a header photo goes in", () => {
     const made = fallback(CLEANING)
     const lines = blueprintLines({

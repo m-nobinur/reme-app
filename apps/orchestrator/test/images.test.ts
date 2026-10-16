@@ -17,6 +17,7 @@ const {
   NEVER,
   PHOTO_DISTINCT,
   PHOTO_HERO,
+  PHOTO_SERVICE,
   placeGenerated,
   QUALITY_MODELS,
 } = await import("../src/images.ts")
@@ -363,6 +364,140 @@ describe("the photo director", () => {
     ])
   })
 
+  describe("an exterior service in a cleaning set", () => {
+    const gutters = (id: string) =>
+      slot(id, "hero", {
+        page: "service",
+        subject: "Gutter clearing, a closer view of the finished work",
+        alt: "Gutter clearing",
+      })
+    const exterior = () =>
+      ({
+        images: [slot("home_hero", "hero"), gutters("service_2_hero")],
+        pages: [],
+      }) as never
+
+    it("tells the writer the home hero alone is the core service's scene, and a service is indoors or out as it is", async () => {
+      const { calls, fetcher } = openrouter()
+      await directPhotos({
+        env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+        orgId: ORG,
+        plan: exterior(),
+        brief: BRIEF,
+        fetch: fetcher,
+      })
+      const writer = calls.find((c) => c.url.endsWith("/chat/completions"))
+      const messages = writer?.body.messages as { content: string }[]
+      expect(messages[0]?.content).toContain(PHOTO_SERVICE)
+      expect(PHOTO_SERVICE).toMatch(/gutters.*exteriors/)
+      expect(PHOTO_SERVICE).toContain("never the hero's scene")
+      // The hero rule no longer rules out an exterior or reaches a service slot.
+      expect(PHOTO_HERO).not.toContain("never a street, skyline or exterior")
+      expect(PHOTO_HERO).toContain("page home, section hero")
+      // Each slot says which page it is for.
+      expect(JSON.parse(messages[1]?.content ?? "{}").slots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "service_2_hero", page: "service" }),
+          expect.objectContaining({ id: "home_hero", page: "home" }),
+        ])
+      )
+    })
+
+    it("fails a picture of the wrong place for the service, and redraws it from the plan's own subject", async () => {
+      const room = {
+        ...CLEAN,
+        subject: 2,
+        note: "a laundry room, not gutters",
+        shows: "A laundry room with a washer and dryer",
+      }
+      const { calls, fetcher } = openrouter({ verdicts: [CLEAN, room] })
+      const lines = await drawLines(async () => {
+        const out = await directPhotos({
+          env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+          orgId: ORG,
+          plan: exterior(),
+          brief: BRIEF,
+          fetch: fetcher,
+        })
+        const gutter = out.find((r) => r.slot_id === "service_2_hero")
+        expect(gutter).toMatchObject({ status: "generated" })
+        // The redraw's check named nothing, so the plan's own subject describes it.
+        expect(gutter?.alt).toBe("Gutter clearing")
+      })
+      const draws = images(calls).filter((c) =>
+        String(c.body.prompt).includes("Gutter clearing")
+      )
+      // The writer's scene was drawn first (a room), then the plan's own subject, naming the defect.
+      expect(draws).toHaveLength(1)
+      const first = images(calls).find((c) =>
+        String(c.body.prompt).includes("A bright room for service_2_hero")
+      )
+      expect(first).toBeDefined()
+      expect(String(draws[0]?.body.prompt)).toContain(
+        "avoid it: a laundry room, not gutters."
+      )
+      expect(String(draws[0]?.body.prompt)).not.toContain("A bright room for")
+      expect(
+        lines.find((l) => l.slot === "service_2_hero" && l.defects?.length)
+          ?.defects
+      ).toEqual(["subject"])
+      // The checker is told which service the slot is for.
+      const sent = checks(calls).map((c) => {
+        const content = (c.body.messages as { content: unknown }[])[1]
+          ?.content as { text?: string }[]
+        return JSON.parse(content[0]?.text ?? "{}")
+      })
+      expect(
+        sent.find((m) => m.scene.includes("service_2_hero"))
+      ).toMatchObject({
+        service: {
+          idea: "Gutter clearing, a closer view of the finished work",
+          alt: "Gutter clearing",
+        },
+      })
+    })
+
+    it("asks the check to score a room for an exterior service a defect", async () => {
+      const { calls, fetcher } = openrouter()
+      await directPhotos({
+        env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+        orgId: ORG,
+        plan: exterior(),
+        brief: BRIEF,
+        fetch: fetcher,
+      })
+      const messages = checks(calls)[0]?.body.messages as { content: string }[]
+      const system = messages[0]?.content
+      expect(system).toMatch(
+        /subject: .*service it is for.*2 for such a mismatch/
+      )
+      expect(system).toContain('"shows"')
+    })
+  })
+
+  it("describes a drawn photo by what it shows, for its alt and caption", async () => {
+    const shows = "Clean white soffit above a front porch"
+    const { fetcher } = openrouter({ verdicts: [{ ...CLEAN, shows }] })
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([["oven", "service_cards"]]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    expect(out[0]?.alt).toBe(shows)
+    // With no check, the final subject's first clause stands in.
+    const unchecked = openrouter({ verdicts: [null] })
+    const second = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([["oven", "service_cards"]]),
+      brief: BRIEF,
+      fetch: unchecked.fetcher,
+    })
+    expect(second[0]?.alt).toBe("A bright room for oven")
+  })
+
   it("leaves the section its no-photo layout after a second defect", async () => {
     const { calls, fetcher } = openrouter({ verdicts: [WARPED, WARPED] })
     const sites = bucket()
@@ -638,6 +773,24 @@ describe("the photo director", () => {
 })
 
 describe("the plan once its photos are made", () => {
+  it("takes a made photo's alt from what it shows, and keeps the plan's when none is given", () => {
+    const made = (slot_id: string, alt?: string) => ({
+      slot_id,
+      status: "generated" as const,
+      asset_id: `${slot_id}-asset`,
+      key: null,
+      content_type: null,
+      cost_usd: null,
+      reason: null,
+      ...(alt ? { alt } : {}),
+    })
+    const { images: kept } = applyPhotos(
+      [slot("a", "hero"), slot("b", "hero")] as never,
+      [made("a", "A laundry room"), made("b")]
+    )
+    expect(kept.map((s) => s.alt)).toEqual(["A laundry room", "b"])
+  })
+
   const result = (slot_id: string, status: "generated" | "fallback") => ({
     slot_id,
     status,
