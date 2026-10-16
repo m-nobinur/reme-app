@@ -4,7 +4,7 @@ import { PgDialect } from "drizzle-orm/pg-core"
 import type { Sql, TransactionSql } from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connect, connectionString } from "../src/client.ts"
-import { activeDomainHost } from "../src/domains.ts"
+import { activeDomainHost, domainHeldElsewhere } from "../src/domains.ts"
 import {
   APP_ROLE,
   ENTER_APP_ROLE,
@@ -182,6 +182,34 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
           await call("tenancy-probe-c.example.com"),
           await call(`blog.${DOMAIN_OF.a}`),
           await call(""),
+        ],
+      }
+    },
+  },
+  // The connect path's takeover guard (migration 0016): whether an org other
+  // than the context's ever held a name. A yes is the only answer it gives,
+  // so a no counts as a refusal: an org's own name, a name nobody holds.
+  domain_held_elsewhere: {
+    probe: async (raw) => {
+      const call = (org: string | null, name: string) =>
+        raw.begin(async (tx) => {
+          if (org) await tx`select set_config('app.org_id', ${org}, true)`
+          const [row] = await tx<{ held: boolean }[]>`
+            select public.domain_held_elsewhere(${name}) as held`
+          return row?.held ? "held" : null
+        })
+      return {
+        granted: [
+          await call(ORG_B, DOMAIN_OF.a),
+          await call(ORG_A, DOMAIN_OF.b.toUpperCase()),
+          // No context: every holder is another org's.
+          await call(null, DOMAIN_OF.a),
+        ],
+        refused: [
+          await call(ORG_A, DOMAIN_OF.a),
+          await call(ORG_A, DOMAIN_PENDING),
+          await call(ORG_B, "tenancy-probe-c.example.com"),
+          await call(ORG_B, ""),
         ],
       }
     },
@@ -1720,6 +1748,38 @@ describe("domains hold their shape", () => {
       )
     )
     expect(touched.count).toBe(0)
+  })
+
+  it("tells a new claim that another org held the name, removed or failed, which its own rows hide", async () => {
+    for (const state of ["removed", "failed"]) {
+      const seen: unknown[] = []
+      const code = await inTransaction(async (tx) => {
+        await tx`update domains set state = ${state} where name = ${DOMAIN_OF.a}`
+        await tx.unsafe(`set local role ${APP_ROLE}`)
+        await tx`select set_config('app.org_id', ${ORG_B}, true)`
+        const [visible] = await tx<{ n: number }[]>`
+          select count(*)::int as n from domains where name = ${DOMAIN_OF.a}`
+        const [held] = await tx<{ held: boolean }[]>`
+          select public.domain_held_elsewhere(${DOMAIN_OF.a}) as held`
+        await tx`select set_config('app.org_id', ${ORG_A}, true)`
+        const [own] = await tx<{ held: boolean }[]>`
+          select public.domain_held_elsewhere(${DOMAIN_OF.a}) as held`
+        seen.push(visible?.n, held?.held, own?.held)
+      })
+      expect(code, state).toBeUndefined()
+      // Org B sees no row, yet learns the name was held; org A's own row is not another's.
+      expect(seen, state).toEqual([0, true, false])
+    }
+    expect(
+      await withOrg({ orgId: ORG_B }, (db) =>
+        domainHeldElsewhere(db, DOMAIN_OF.a)
+      )
+    ).toBe(true)
+    expect(
+      await withOrg({ orgId: ORG_A }, (db) =>
+        domainHeldElsewhere(db, DOMAIN_OF.a)
+      )
+    ).toBe(false)
   })
 
   it("answers the router for an active host and no other, and the org for its redirect", async () => {

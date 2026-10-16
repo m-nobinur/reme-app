@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  alreadyPointsAtUs,
   CAA_FOR_US,
   CNAME_TARGET,
   type CustomHostname,
@@ -435,6 +436,34 @@ describe("the domain check", () => {
     ).toEqual({
       status: "pending_verification",
     })
+  })
+})
+
+describe("a name that already reaches us", () => {
+  it("is a CNAME to our target or our addresses, and on Cloudflare only a visible CNAME", () => {
+    // `www` CNAMEs to us: a record left from an earlier claim.
+    expect(alreadyPointsAtUs(fakeInspection())).toBe(true)
+    const elsewhere = { [APEX]: { a: ["192.0.2.10"], aaaa: [] } }
+    expect(alreadyPointsAtUs(fakeInspection({ hosts: elsewhere }))).toBe(false)
+    const flattened = { [APEX]: { a: ["104.21.0.10"], aaaa: [] } }
+    expect(alreadyPointsAtUs(fakeInspection({ hosts: flattened }))).toBe(true)
+    // The owner's own proxy shows Cloudflare addresses whatever the record is.
+    expect(
+      alreadyPointsAtUs(
+        fakeInspection({
+          onCloudflare: true,
+          hosts: { [WWW]: { a: ["104.16.1.1"], aaaa: [] } },
+        })
+      )
+    ).toBe(false)
+    expect(
+      alreadyPointsAtUs(
+        fakeInspection({
+          onCloudflare: true,
+          hosts: { [WWW]: { cname: CNAME_TARGET, a: [], aaaa: [] } },
+        })
+      )
+    ).toBe(true)
   })
 })
 

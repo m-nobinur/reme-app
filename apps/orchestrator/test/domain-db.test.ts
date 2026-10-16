@@ -62,7 +62,16 @@ function stubNet() {
             hostname: string
           }
           hostnames.set(`h-${hostname}`, hostname)
-          return envelope({ id: `h-${hostname}`, hostname, status: "pending" })
+          return envelope({
+            id: `h-${hostname}`,
+            hostname,
+            status: "pending",
+            ownership_verification: {
+              type: "txt",
+              name: `_cf-custom-hostname.${hostname}`,
+              value: `v-${hostname}`,
+            },
+          })
         }
         if (init?.method === "DELETE") {
           deleted.push(u.pathname.split("/").at(-1) ?? "")
@@ -187,6 +196,51 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(await connect(env, kit, other.orgId, body)).toMatchObject({
       status: 409,
       code: "domain.in_use",
+    })
+  })
+
+  it("asks a second org for the ownership TXT once another org held the name", async () => {
+    stubNet()
+    const first = await published()
+    const { env } = domainEnv(first.store)
+    const name = unique()
+    const body = { name, approval_id: "approval-1" }
+    expect(await connect(env, kit, first.orgId, body)).toMatchObject({
+      status: 201,
+      output: { steps: [{ type: "CNAME" }] },
+    })
+    expect(await rowOf(first.orgId, name)).toMatchObject({ needsTxt: false })
+    expect(await remove(env, kit, first.orgId, name)).toBeNull()
+
+    const second = await published()
+    const { env: env2, created } = domainEnv(second.store)
+    const answer = await connect(env2, kit, second.orgId, body)
+    const steps = [
+      { type: "CNAME", name: "www", value: "domains.remeai.co.uk" },
+      {
+        type: "TXT",
+        name: "_cf-custom-hostname.www",
+        value: `v-www.${name}`,
+      },
+      { type: "TXT", name: "_cf-custom-hostname", value: `v-${name}` },
+    ]
+    expect(answer).toMatchObject({ status: 201, output: { steps } })
+    const row = await rowOf(second.orgId, name)
+    expect(row).toMatchObject({
+      needsTxt: true,
+      cfIds: { www: `h-www.${name}`, apex: `h-${name}` },
+      ownership: {
+        [`www.${name}`]: {
+          name: `_cf-custom-hostname.www.${name}`,
+          value: `v-www.${name}`,
+        },
+      },
+    })
+    expect(created).toHaveLength(1)
+    // Asking again replays the same records from the row.
+    expect(await connect(env2, kit, second.orgId, body)).toEqual({
+      status: 200,
+      output: (answer as { output: unknown }).output,
     })
   })
 

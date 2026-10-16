@@ -1168,6 +1168,12 @@ export const domains = pgTable(
     provider: jsonb("provider"),
     /** Another org held this name before, so ownership needs a TXT record. */
     needsTxt: boolean("needs_txt").notNull().default(false),
+    /**
+     * Cloudflare's ownership TXT per host, `{[host]: {name, value}}`, kept
+     * from when the hostname was claimed so a `needs_txt` claim can be checked
+     * against it after Cloudflare stops showing it.
+     */
+    ownership: jsonb("ownership").notNull().default(sql`'{}'::jsonb`),
     /** The approval that let the connect through; one domain per approval. */
     approvalId: uuid("approval_id").unique(),
     /** The last `DomainCheck`. */
