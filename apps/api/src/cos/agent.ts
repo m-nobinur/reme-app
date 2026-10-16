@@ -141,7 +141,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "13"
+const PREFIX_VERSION = "14"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and look after their website, which a Developer agent builds.
 
@@ -205,7 +205,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   find_domain:
     "Find new domains the business could buy: names free to register now, each with its price per year, a best pick and up to four others. query is the words the owner wants in the name; omit it to start from the business name. It costs nothing and reserves nothing. Use it when the owner has no domain or connecting theirs stalled. These prices are the only domain prices you may state.",
   buy_domain:
-    "Prepare the purchase of a name find_domain offered and the owner chose. It charges nothing: the card shows the name, the price and the registrant, the owner can correct the details there, and paying on it is their consent. registrant is who the domain is registered to: the owner's full name, the business name, email, phone and postal address, from the facts and the owner's own words, never invented. For .co.uk and .uk only, give registrant_type, and company_number only with LTD or LLP and only as the owner gave it. address.state is the county; leave it out rather than repeat the city. Not for a domain the owner already has: that is connect_domain.",
+    "Prepare the purchase of a name find_domain offered and the owner chose. It charges nothing: the card shows the name, the price and the registrant, the owner can correct the details there, and paying on it is their consent. registrant is who the domain is registered to: the owner's full name, the business name, email, phone and postal address, from the facts and the owner's own words, never invented. For .co.uk and .uk only, give registrant_type, and company_number only with LTD or LLP and only as the owner gave it. address.state is the county; leave it out rather than repeat the city. Not for a domain the owner already has: that is connect_domain. Calling it again for a name already waiting shows its card again with the details refreshed, so call it whenever the owner asks to buy or see the card; never say a card is waiting without calling it.",
   record_review:
     "Record a customer's review for the website, which the owner approves on a card that asks whether the customer agreed to be quoted. Use it only with a review the owner gave you in this conversation. quote is the customer's words exactly as the owner gave them, never shortened, corrected or written by you. name is the customer's name as the owner says it may be shown, such as a first name and initial. permission is true. slot is 1 or 2: a free one from get_facts (testimonials.review_1, testimonials.review_2), or the one the owner wants replaced.",
 }

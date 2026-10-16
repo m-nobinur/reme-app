@@ -423,7 +423,10 @@ const label = (s: string) => slug(s).replace(/[^a-z0-9]/g, "")
  * no model, no network.
  */
 export function candidates(facts: RankFacts): Ranked[] {
-  const words = slug(facts.name)
+  // "sparklecleaning.com" names the brand: drop the TLD before slugging.
+  const words = slug(
+    facts.name.trim().replace(/\.[a-z]{2,}(\.[a-z]{2})?$/i, "")
+  )
     .replace(LEGAL, " ")
     .split(/\s+/)
     .filter(Boolean)

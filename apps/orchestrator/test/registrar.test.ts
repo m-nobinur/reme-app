@@ -347,6 +347,10 @@ describe("the name ranker", () => {
   it("strips accents and punctuation and gives nothing for a name with no letters", () => {
     expect(candidates({ name: "Café Fresh!" })[0]?.name).toBe("cafefresh.co.uk")
     expect(candidates({ name: "Ltd" })).toEqual([])
+    expect(candidates({ name: "sparklecleaning.com" })[0]?.name).toBe(
+      "sparklecleaning.co.uk"
+    )
+    expect(candidates({ name: "sparkle.co.uk" })[0]?.name).toBe("sparkle.co.uk")
   })
 
   it("marks digits and length down", () => {
