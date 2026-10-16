@@ -78,7 +78,14 @@ export function storage() {
       put: async (key: string, value: string) => {
         pointers.set(key, value)
       },
-      get: async (key: string) => pointers.get(key) ?? null,
+      // KV's `get(key, "json")` parses, and rejects on a value that is not JSON.
+      get: async (key: string, type?: "json") => {
+        const value = pointers.get(key) ?? null
+        return type === "json" && value !== null ? JSON.parse(value) : value
+      },
+      delete: async (key: string) => {
+        pointers.delete(key)
+      },
     },
   }
 }

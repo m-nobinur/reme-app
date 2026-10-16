@@ -95,6 +95,7 @@ import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
 export { ContainerProxy } from "@cloudflare/sandbox"
+export { DomainWorkflow } from "./domain-workflow.ts"
 
 /**
  * The container behind every site (ADR-031): egress denied by default
@@ -1214,7 +1215,10 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       run((kit) =>
         writePointer(this.env, kit, orgId, target.site_id, target.host)
       )
-    if (deployment) await step.do("pointer", point)
+    // The host the site is served on: its custom domain once one is active.
+    const served = deployment
+      ? (await step.do("pointer", point)).host
+      : target.host
 
     // The content gate runs on the live HTML with the facts the assignment
     // was validated against; a rollback has no assignment and takes the
@@ -1239,13 +1243,13 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
           ? await run((kit) => assignmentFacts(kit, { orgId, assignmentId }))
           : null
         const probe = await probeHost(
-          target.host,
+          served,
           factRecords,
           undefined,
           {
             revision_id: target.revision_id,
             config_version: deployment.config_version,
-            proof: await probeProof(target.host, this.env.PREVIEW_KEY),
+            proof: await probeProof(served, this.env.PREVIEW_KEY),
           },
           undefined,
           this.env.SITE_PORT
