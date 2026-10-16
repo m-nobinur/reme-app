@@ -250,14 +250,20 @@ async function hostRecords(host: string): Promise<HostRecords> {
   }
 }
 
-/** The zone apex above `name`, from its SOA. Throws `domain.not_found` for a name that does not exist. */
-export async function zoneApex(name: string): Promise<string> {
+/**
+ * The zone apex above `name`, from its SOA, and whether `name` itself is
+ * NXDOMAIN, as a subdomain is before its record is added. Throws
+ * `domain.not_found` when no zone answers at all.
+ */
+export async function zoneApex(
+  name: string
+): Promise<{ apex: string; missing: boolean }> {
   const soa = await doh(bare(name), "SOA")
   const zone = [...soa.answers, ...soa.authority].find(
     (x) => x.type === TYPES.SOA
   )
-  if (soa.status === 3 || !zone) throw new DomainError("domain.not_found")
-  return bare(zone.name)
+  if (!zone) throw new DomainError("domain.not_found")
+  return { apex: bare(zone.name), missing: soa.status === 3 }
 }
 
 /**
@@ -267,7 +273,7 @@ export async function zoneApex(name: string): Promise<string> {
  * `domain.not_found` for a name that does not exist.
  */
 export async function inspect(name: string): Promise<Inspection> {
-  const apex = await zoneApex(name)
+  const { apex, missing } = await zoneApex(name)
   const asked = bare(name).replace(/^www\./, "")
   const sub = asked !== apex ? asked : undefined
   const www = `www.${apex}`
@@ -280,6 +286,20 @@ export async function inspect(name: string): Promise<Inspection> {
     doh(apex, "CAA"),
     doh(apex, "MX"),
   ])
+  // A name with no records of its own is a subdomain still to be added, and
+  // only under a zone in use: one with an address, a CNAME or mail. A registry
+  // zone such as co.uk has none, so an unregistered name is still refused.
+  // shortcut: a heuristic, not the public suffix list; add the list if a
+  // registry zone with an apex address ever lets a name through.
+  if (missing) {
+    const root = sub ? await hostRecords(apex) : null
+    const inUse =
+      !!root &&
+      (!!root.cname ||
+        root.a.length + root.aaaa.length > 0 ||
+        mx.answers.some((x) => x.type === TYPES.MX))
+    if (!inUse) throw new DomainError("domain.not_found")
+  }
   const data = (answers: Answer[], type: number) =>
     answers.filter((x) => x.type === type).map((x) => x.data)
   const nameservers = data(ns.answers, TYPES.NS).map(bare)

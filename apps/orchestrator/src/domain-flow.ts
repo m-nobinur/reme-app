@@ -365,7 +365,7 @@ export async function claimHostnames(
   if (!row || !connecting(row.state)) return "gone"
   const ids = { ...(row.cfIds as CfIds) }
   const ownership = { ...(row.ownership as Ownership) }
-  const sub = (await zoneApex(row.name)) !== row.name
+  const sub = (await zoneApex(row.name)).apex !== row.name
   const hosts = [
     ...(sub ? [] : [["www", `www.${row.name}`] as const]),
     ["apex", row.name] as const,

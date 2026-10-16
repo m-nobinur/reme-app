@@ -24,9 +24,9 @@ const txtAnswer = (apex: string, value: string) => ({
   ],
 })
 
-const soaIn = (host: string, zone: string) => ({
+const soaIn = (host: string, zone: string, status = 0) => ({
   [`${host} SOA`]: {
-    Status: 0,
+    Status: status,
     Authority: [
       {
         name: zone,
@@ -278,6 +278,19 @@ describe("the DoH inspector", () => {
       { type: "CNAME", name: "book", value: CNAME_TARGET },
       { type: "CAA", name: "@", value: CAA_FOR_US },
     ])
+  })
+
+  it("takes a subdomain with no record yet when its zone is in use", async () => {
+    stubNet(
+      {},
+      soaIn("book.sparklecleanbristol.co.uk", "sparklecleanbristol.co.uk", 3)
+    )
+    const inspection = await inspect("book.sparklecleanbristol.co.uk")
+    expect(inspection.sub).toBe("book.sparklecleanbristol.co.uk")
+    expect(inspection.hosts["book.sparklecleanbristol.co.uk"]).toEqual({
+      a: [],
+      aaaa: [],
+    })
   })
 
   it("refuses a name that does not exist rather than taking the registry's zone", async () => {
