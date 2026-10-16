@@ -155,6 +155,7 @@ type DeveloperEvent =
   | { kind: "budget"; cap_usd: number; spent_usd: number }
   | { kind: "interrupted"; reason: string }
   | { kind: "unreported"; reason: string }
+  | { kind: "start_failed"; reason: string }
 
 /**
  * How long a round waits for its answer, from the block, and how long one
@@ -646,6 +647,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       // refused every time. Nothing will wake this build again.
       if (payload.kind === "unreported") {
         return fail(`unreported ${round}`, "developer.no_report")
+      }
+      // The lead threw before its first turn (its agent or tools could not be
+      // built). A resume builds the same agent, so the build ends here.
+      if (payload.kind === "start_failed") {
+        return fail(`start ${round}`, "developer.start_failed")
       }
       if (payload.kind === "interrupted") {
         const reason = GATE_REASONS.has(payload.reason)

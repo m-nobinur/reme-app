@@ -421,6 +421,9 @@ const interrupted: Wake = {
 const unreported: Wake = {
   payload: { kind: "unreported", reason: "developer.no_report" },
 }
+const cannotStart: Wake = {
+  payload: { kind: "start_failed", reason: "FacadeError" },
+}
 
 const expected: Record<string, string[]> = steps.AssignmentWorkflow
 
@@ -550,6 +553,8 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ],
   // The lead's turn ended with no accepted report: fail now, not later.
   ["developer ended without a report", [unreported], {}, { outcome: "failed" }],
+  // The lead threw before its first turn: fail now, with no resume.
+  ["developer could not start", [cannotStart], {}, { outcome: "failed" }],
   [
     "superseded a preview",
     [completion],
@@ -888,6 +893,7 @@ describe("the assignment Workflow's step names", () => {
         "developer went quiet",
         "developer still working past a wait",
         "developer ended without a report",
+        "developer could not start",
         "superseded a preview",
         "site busy then claimed",
         "pool full then provisioned",
@@ -919,6 +925,14 @@ describe("a Developer that stops without a report", () => {
       outcome: "failed",
     })
     expect(advanced.at(-1)).toEqual(["failed", "developer.no_report"])
+  })
+
+  it("fails as developer.start_failed when the lead could not start, without resuming it", async () => {
+    advanced.length = 0
+    expect(await drive([cannotStart]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
   })
 
   it("fails as developer.stalled only once a whole lead turn has nothing in the log", async () => {

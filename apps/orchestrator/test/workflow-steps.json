@@ -157,6 +157,16 @@
       "fail unreported 1",
       "destroy sandbox"
     ],
+    "developer could not start": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "fail start 1",
+      "destroy sandbox"
+    ],
     "superseded a preview": [
       "claim 1",
       "planning",
