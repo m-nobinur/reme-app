@@ -39,7 +39,11 @@ function describeFile(path: string, text: string): string {
   if (exported.length > 0) bits.push(`exports ${exported.join(", ")}`)
 
   const props = text.match(/interface Props\s*\{([^}]*)\}/)?.[1]
-  if (props) bits.push(`props {${props.trim().replace(/\s+/g, " ")}}`)
+  // The doc comments on props live in the file and the manifests; the map keeps names and types.
+  if (props) {
+    const bare = props.replace(/\/\*[\s\S]*?\*\//g, "")
+    bits.push(`props {${bare.trim().replace(/\s+/g, " ")}}`)
+  }
 
   const imported = [
     ...text.matchAll(

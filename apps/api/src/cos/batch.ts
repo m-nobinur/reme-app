@@ -41,11 +41,11 @@ export type Batch = {
 }
 
 export class BatchError extends Error {
-  constructor(
-    readonly code: string,
-    message: string
-  ) {
+  // No parameter property: `node --test` strips types and cannot compile one.
+  readonly code: string
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
     this.name = "BatchError"
   }
 }
