@@ -8,6 +8,7 @@ import { CopyIcon } from "@phosphor-icons/react"
 import {
   type AskChoiceInput,
   type Blueprint,
+  type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
   PALETTES,
@@ -31,7 +32,6 @@ import {
 import {
   type DomainPurchase,
   DomainPurchaseProvider,
-  type PurchaseStatus,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -1468,13 +1468,24 @@ const buying = (id: string, name: string, price = 8) =>
   })
 
 // Each purchase after payment has its own name, so the catalog's status
-// reads one state per card.
-const PAID: Record<string, PurchaseStatus> = {
-  "authorised.co.uk": "authorised",
-  "registered.co.uk": "registered",
-  "testpurchase.co.uk": "test",
-  "failed.co.uk": "failed",
-  "abandoned.co.uk": "abandoned",
+// read answers one state per card, as `GET /domains/{name}` would.
+const PAID: Record<string, Omit<DomainPurchaseStatus, "name">> = {
+  "authorised.co.uk": { state: "verifying", test: false },
+  "serving.co.uk": { state: "verifying", test: false, outcome: "registered" },
+  "registered.co.uk": { state: "active", test: false, outcome: "registered" },
+  "testpurchase.com": {
+    state: "verifying",
+    test: true,
+    outcome: "test_registered",
+  },
+  "failed.co.uk": { state: "failed", test: false, outcome: "payment_released" },
+  "pricechanged.co.uk": {
+    state: "failed",
+    test: false,
+    outcome: "price_changed",
+  },
+  "taken.co.uk": { state: "failed", test: false, outcome: "unavailable" },
+  "abandoned.co.uk": { state: "abandoned", test: false, outcome: "expired" },
 }
 
 // No Stripe in the catalog: Continue answers as an environment without
@@ -1484,7 +1495,10 @@ const CATALOG_PURCHASE: DomainPurchase = {
     outcome: "refused",
     code: "domain.buy_unavailable",
   }),
-  status: (name) => PAID[name] ?? null,
+  status: async (name) => {
+    const paid = PAID[name]
+    return paid ? { name, ...paid } : null
+  },
 }
 
 const BUY_DOMAIN_STATES: ThreadMessageLike[] = [

@@ -11,6 +11,7 @@ import type {
   DecisionRequest,
   DerivedReminder,
   DomainCheckout,
+  DomainPurchaseStatus,
   FactRecord,
   FactValueKey,
   MessageFeedback,
@@ -288,6 +289,8 @@ export type OwnerDataSource = {
     details: RegistrantDetails,
     key: string
   ) => Promise<DomainCheckout | { refused: string | null }>
+  /** The newest purchase of a domain, or null when there is none. */
+  domainStatus: (name: string) => Promise<DomainPurchaseStatus | null>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */

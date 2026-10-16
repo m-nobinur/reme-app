@@ -12,6 +12,7 @@ import {
   BuyDomainInput,
   BuyDomainOutput,
   type DomainOffer,
+  type DomainPurchaseStatus,
   FindDomainOutput,
   RegistrantDetails,
   type RegistrantType,
@@ -48,18 +49,68 @@ import {
  * happens after the payment is the purchase's status, read from the app.
  */
 
-/** Where a paid purchase stands, as the app reads it. */
+/** Where a paid purchase stands, in the card's words. */
 export type PurchaseStatus =
   /** The hold is authorised and the registration is under way. */
   | "authorised"
+  /** Registered; the website goes on it next. */
+  | "serving"
   /** Registered and the website is on it. */
   | "registered"
   /** A test purchase: paid in test mode, registered in Cloudflare's sandbox. */
   | "test"
   /** Registration failed and the hold was released. */
   | "failed"
+  /** The price rose past the ceiling before registering; nothing charged. */
+  | "price_changed"
+  /** Someone registered the name first; nothing charged. */
+  | "unavailable"
   /** The Checkout expired before the owner paid. */
   | "abandoned"
+  /** Registered, and later taken off the website. */
+  | "removed"
+
+/** A purchase as the api reads it, in the card's words; null while it waits on payment. */
+export function purchaseStatusOf(
+  read: DomainPurchaseStatus | null
+): PurchaseStatus | null {
+  if (!read) return null
+  switch (read.outcome) {
+    case "test_registered":
+      return "test"
+    case "payment_released":
+      return "failed"
+    case "price_changed":
+      return "price_changed"
+    case "unavailable":
+      return "unavailable"
+    case "expired":
+      return "abandoned"
+    case "registered":
+      return read.state === "active"
+        ? "registered"
+        : read.state === "removed"
+          ? "removed"
+          : "serving"
+    case undefined:
+      break
+  }
+  switch (read.state) {
+    case "awaiting_payment":
+      return null
+    case "failed":
+      return "failed"
+    case "abandoned":
+      return "abandoned"
+    case "removed":
+      return "removed"
+    case "active":
+      return read.test ? "test" : "registered"
+    case "awaiting_dns":
+    case "verifying":
+      return "authorised"
+  }
+}
 
 /** What the card mounts Checkout with, or why it cannot. */
 export type CheckoutStart =
@@ -70,8 +121,8 @@ export type CheckoutStart =
 export type DomainPurchase = {
   /** Creates the purchase's Checkout with the details as shown. */
   checkout: (name: string, details: RegistrantDetails) => Promise<CheckoutStart>
-  /** A purchase's status once paid, or null while it waits on the payment. */
-  status: (name: string) => PurchaseStatus | null
+  /** The newest purchase of that name, or null when there is none. */
+  status: (name: string) => Promise<DomainPurchaseStatus | null>
 }
 
 const DomainPurchaseContext = createContext<DomainPurchase | null>(null)
@@ -529,13 +580,65 @@ function Checkout({
 const STATUS_TEXT: Record<PurchaseStatus, (name: string) => string> = {
   authorised: (name) =>
     `Payment approved. I'm registering ${name} now and will message you when it's done.`,
+  serving: (name) =>
+    `${name} is registered to your business. Your website goes on it in the next few minutes.`,
   registered: (name) => `${name} is yours, and your website is on it.`,
   test: (name) =>
     `This was a test purchase: paid in test mode and registered in Cloudflare's sandbox. ${name} is not live on the internet, and no real money moved.`,
   failed: (name) =>
     `${name} could not be registered, so your card was not charged.`,
+  price_changed: (name) =>
+    `The price of ${name} went up before it could be registered, so your card was not charged. Ask me for a fresh price.`,
+  unavailable: (name) =>
+    `Someone registered ${name} first, so your card was not charged.`,
   abandoned: (name) =>
     `The payment for ${name} timed out before it was made. Ask me again if you still want it.`,
+  removed: (name) => `${name} is yours, and no longer on your website.`,
+}
+
+const TICKED = new Set<PurchaseStatus>([
+  "authorised",
+  "serving",
+  "registered",
+  "test",
+  "removed",
+])
+
+/** Statuses that change on their own, so the card reads them again. */
+const MOVING = new Set<PurchaseStatus>(["authorised", "serving"])
+const REREAD_MS = 5000
+
+/**
+ * The purchase's status, read when the card shows and again every few
+ * seconds while registering. `undefined` until the first read answers; a
+ * read that fails counts as none, and the api refuses a second payment.
+ */
+function usePurchaseStatus(
+  purchase: DomainPurchase | null,
+  name: string
+): PurchaseStatus | null | undefined {
+  const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
+    purchase ? undefined : null
+  )
+  useEffect(() => {
+    if (!purchase) return
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const read = async () => {
+      const next = await purchase
+        .status(name)
+        .then(purchaseStatusOf, () => null)
+      if (!live) return
+      setStatus(next)
+      if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
+    }
+    void read()
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [purchase, name])
+  return status
 }
 
 /** What the purchase card shows, by where the owner is in it. */
@@ -560,12 +663,11 @@ function Purchase({
   const [details, setDetails] = useState(initial)
   const [phase, setPhase] = useState<Phase>({ at: "review" })
   const edit = useRef<HTMLButtonElement>(null)
-  const status = purchase?.status(name) ?? null
+  const status = usePurchaseStatus(purchase, name)
 
   if (status) {
     // A tick only for a purchase that went through, or a test one that did.
-    const Icon =
-      status === "failed" || status === "abandoned" ? null : CheckCircleIcon
+    const Icon = TICKED.has(status) ? CheckCircleIcon : null
     return (
       <section
         className="my-3 flex max-w-md flex-col gap-1"
@@ -704,16 +806,19 @@ function Purchase({
               )}
             </>
           ) : (
-            <div aria-busy={phase.at === "starting"}>
+            <div aria-busy={phase.at === "starting" || status === undefined}>
+              {/* Not offered until the read says the purchase still waits. */}
               <Button
-                disabled={phase.at === "starting"}
+                disabled={phase.at === "starting" || status === undefined}
                 onClick={pay}
                 size="sm"
                 type="button"
               >
                 {phase.at === "starting"
                   ? "Opening payment"
-                  : `Continue to pay ${pounds(price)}`}
+                  : status === undefined
+                    ? "Checking the purchase"
+                    : `Continue to pay ${pounds(price)}`}
               </Button>
             </div>
           )}

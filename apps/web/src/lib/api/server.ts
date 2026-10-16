@@ -5,6 +5,7 @@ import {
   BlueprintReviewOutput,
   ChangeKind,
   DomainName,
+  type DomainPurchaseStatus,
   GOAL_MAX,
   MessageFeedback,
   RegistrantDetails,
@@ -294,6 +295,15 @@ export const startDomainCheckout = createServerFn({ method: "POST" })
           publishable_key: publishable,
           client_secret: result.client_secret,
         }
+  })
+
+/** Where a domain purchase stands, for the buy card after the payment. */
+export const getDomainPurchase = createServerFn({ method: "GET" })
+  .validator((input: unknown) => ({
+    name: DomainName.parse(record(input).name),
+  }))
+  .handler(async ({ data }): Promise<DomainPurchaseStatus | null> => {
+    return await source.domainStatus(data.name)
   })
 
 export const createReminder = createServerFn({ method: "POST" })

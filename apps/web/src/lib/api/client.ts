@@ -11,6 +11,7 @@ import {
   type CreateReminderRequest,
   DomainCheckout,
   DomainName,
+  DomainPurchaseStatus,
   ErrorEnvelope,
   FactList,
   type MessageFeedback,
@@ -564,6 +565,19 @@ async function domainCheckout(
   throw new Error(`apps/api answered ${response.status} for ${path}`)
 }
 
+/** The newest purchase of a domain in the owner's business, or null when there is none. */
+async function domainStatus(
+  name: string
+): Promise<DomainPurchaseStatus | null> {
+  const path = `/domains/${DomainName.parse(name)}`
+  const response = await call(path)
+  if (!response || response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
+  }
+  return DomainPurchaseStatus.parse(await response.json())
+}
+
 async function completeReminder(id: string): Promise<WriteOutcome> {
   const path = `/reminders/${segment(id)}`
   // Done is done: a second press is the same request.
@@ -691,6 +705,7 @@ export const apiSource: OwnerDataSource = {
   createReminder,
   completeReminder,
   domainCheckout,
+  domainStatus,
   conversations,
   conversation,
   createConversation,

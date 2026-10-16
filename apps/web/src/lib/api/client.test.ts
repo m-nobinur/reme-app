@@ -923,6 +923,18 @@ it("opens a domain's Checkout with the details shown, and hands back a refusal's
   expect(calls).toHaveLength(2)
 })
 
+it("reads a domain purchase's status, and none when the api has no such purchase", async () => {
+  const status = {
+    name: "sparkleclean.co.uk",
+    state: "verifying",
+    test: true,
+    outcome: "test_registered",
+  }
+  answers["GET /domains/sparkleclean.co.uk"] = status
+  expect(await apiSource.domainStatus("sparkleclean.co.uk")).toEqual(status)
+  expect(await apiSource.domainStatus("other.co.uk")).toBeNull()
+})
+
 it("reads the open reminders in the order /workspace lists them", async () => {
   const written = (id: string, due_at: string | null) => ({
     id,

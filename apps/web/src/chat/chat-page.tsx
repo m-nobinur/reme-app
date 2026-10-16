@@ -181,11 +181,6 @@ export function ChatPage() {
     [questions]
   )
 
-  const purchase = useMemo(
-    () => domainPurchase(live.workspace),
-    [live.workspace]
-  )
-
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
@@ -212,7 +207,7 @@ export function ChatPage() {
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
               <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                <DomainPurchaseProvider value={purchase}>
+                <DomainPurchaseProvider value={domainPurchase}>
                   <Thread
                     after={
                       <>

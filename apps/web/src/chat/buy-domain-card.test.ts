@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
+
+import type { DomainPurchaseStatus } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   type CheckoutStart,
   chooseText,
   type DomainPurchase,
   DomainPurchaseProvider,
-  type PurchaseStatus,
+  purchaseStatusOf,
   readDetails,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { act, createElement } from "react"
@@ -111,12 +113,11 @@ async function draw(
   }
 }
 
-const purchaseOf = (
-  start: CheckoutStart,
-  status: PurchaseStatus | null = null
-) => ({
+type Read = Omit<DomainPurchaseStatus, "name">
+
+const purchaseOf = (start: CheckoutStart, read: Read | null = null) => ({
   checkout: vi.fn(async () => start),
-  status: vi.fn(() => status),
+  status: vi.fn(async () => (read ? { name: NAME, ...read } : null)),
 })
 
 const buttons = (container: HTMLElement) =>
@@ -322,15 +323,35 @@ it("keeps the form open and says what is wrong when a field does not read", asyn
 })
 
 it.each([
-  ["authorised", "Payment approved. I'm registering"],
-  ["registered", `${NAME} is yours, and your website is on it.`],
-  ["test", "This was a test purchase"],
-  ["failed", "could not be registered, so your card was not charged"],
-  ["abandoned", "timed out before it was made"],
+  [
+    "authorised",
+    { state: "verifying", test: false },
+    "Payment approved. I'm registering",
+  ],
+  [
+    "registered",
+    { state: "active", test: false, outcome: "registered" },
+    `${NAME} is yours, and your website is on it.`,
+  ],
+  [
+    "test",
+    { state: "verifying", test: true, outcome: "test_registered" },
+    "This was a test purchase",
+  ],
+  [
+    "failed",
+    { state: "failed", test: false, outcome: "payment_released" },
+    "could not be registered, so your card was not charged",
+  ],
+  [
+    "abandoned",
+    { state: "abandoned", test: false, outcome: "expired" },
+    "timed out before it was made",
+  ],
 ] as const)(
   "shows a %s purchase as such, with no way to pay again",
-  async (status, line) => {
-    const purchase = purchaseOf({ outcome: "refused", code: null }, status)
+  async (status, read, line) => {
+    const purchase = purchaseOf({ outcome: "refused", code: null }, read)
     const card = await draw(
       "buy_domain",
       { args: BUY, result: AWAITING },
@@ -346,6 +367,76 @@ it.each([
     await card.unmount()
   }
 )
+
+it("offers no payment until the read says the purchase still waits on one", async () => {
+  let answer: (read: null) => void = () => undefined
+  const purchase = {
+    checkout: vi.fn(),
+    status: vi.fn(() => new Promise<null>((resolve) => (answer = resolve))),
+  }
+  const card = await draw(
+    "buy_domain",
+    { args: BUY, result: AWAITING },
+    purchase
+  )
+  const pay = () =>
+    [...card.container.querySelectorAll("button")].find(
+      (b) =>
+        b.textContent?.includes("pay") || b.textContent?.includes("Checking")
+    )
+  expect(pay()?.textContent).toBe("Checking the purchase")
+  expect(pay()?.disabled).toBe(true)
+  await act(async () => answer(null))
+  expect(pay()?.textContent).toBe("Continue to pay £8")
+  expect(pay()?.disabled).toBe(false)
+  await card.unmount()
+})
+
+it("reads a registering purchase again until it settles", async () => {
+  vi.useFakeTimers()
+  const reads: Read[] = [
+    { state: "verifying", test: false },
+    { state: "verifying", test: false, outcome: "registered" },
+    { state: "active", test: false, outcome: "registered" },
+  ]
+  const purchase = {
+    checkout: vi.fn(),
+    status: vi.fn(async () => ({ name: NAME, ...(reads.shift() as Read) })),
+  }
+  const card = await draw(
+    "buy_domain",
+    { args: BUY, result: AWAITING },
+    purchase
+  )
+  expect(card.container.textContent).toContain("Payment approved.")
+  await act(async () => vi.advanceTimersByTimeAsync(5000))
+  expect(card.container.textContent).toContain("Your website goes on it")
+  await act(async () => vi.advanceTimersByTimeAsync(5000))
+  expect(card.container.textContent).toContain("your website is on it.")
+  // Settled: no more reads.
+  await act(async () => vi.advanceTimersByTimeAsync(20000))
+  expect(purchase.status).toHaveBeenCalledTimes(3)
+  vi.useRealTimers()
+  await card.unmount()
+})
+
+it("reads every purchase outcome in the card's words", () => {
+  const of = (read: Read) => purchaseStatusOf({ name: NAME, ...read })
+  expect(purchaseStatusOf(null)).toBeNull()
+  expect(of({ state: "awaiting_payment", test: false })).toBeNull()
+  expect(of({ state: "verifying", test: true })).toBe("authorised")
+  expect(of({ state: "active", test: true })).toBe("test")
+  expect(of({ state: "failed", test: false, outcome: "price_changed" })).toBe(
+    "price_changed"
+  )
+  expect(of({ state: "failed", test: false, outcome: "unavailable" })).toBe(
+    "unavailable"
+  )
+  expect(of({ state: "removed", test: false, outcome: "registered" })).toBe(
+    "removed"
+  )
+  expect(of({ state: "abandoned", test: false })).toBe("abandoned")
+})
 
 const form = (fields: Record<string, string>) => {
   const data = new FormData()
