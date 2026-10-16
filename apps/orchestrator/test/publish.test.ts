@@ -8,6 +8,7 @@ import {
   approvals,
   assignments,
   deployments,
+  domains,
   eq,
   events,
   siteRevisions,
@@ -53,6 +54,7 @@ const {
   activate,
   activeDeployment,
   decideApproval,
+  dropDomainPointers,
   probeHost,
   redriveQueued,
   FETCH_TIMEOUT_MS,
@@ -710,6 +712,54 @@ describe("the artifact check and the probe", () => {
       revision_id: newest.revisionId,
       config_version: 3,
     })
+  })
+
+  it("serves an active custom domain on its primary host and redirects the other two there", async () => {
+    const store = storage()
+    const site = "10000001-0000-4000-8000-000000000001"
+    const newest = {
+      revisionId: "10000001-0000-4000-8000-000000000003",
+      configVersion: 3,
+    }
+    const db = {
+      execute: async () => [{ open: true }],
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            orderBy: () => ({
+              limit: async () =>
+                table === domains
+                  ? [{ primaryHost: "sparkleclean.co.uk" }]
+                  : [newest],
+            }),
+          }),
+        }),
+      }),
+    }
+    const reading = {
+      withOrg: async (_ctx: unknown, fn: (db: never) => Promise<unknown>) =>
+        fn(db as never),
+    }
+    const env = { ROUTES: store.ROUTES } as unknown as Env
+    const slug = "sparkle-stg.remeai.co.uk"
+    expect(await writePointer(env, reading as never, site, site, slug)).toEqual(
+      { host: "sparkleclean.co.uk" }
+    )
+    const read = (host: string) =>
+      JSON.parse(store.pointers.get(`host:${host}`) ?? "null")
+    expect(read("sparkleclean.co.uk")).toEqual({
+      org_id: site,
+      site_id: site,
+      revision_id: newest.revisionId,
+      config_version: 3,
+      canonical_host: "sparkleclean.co.uk",
+    })
+    for (const host of ["www.sparkleclean.co.uk", slug]) {
+      expect(read(host)).toEqual({ redirect_to: "sparkleclean.co.uk" })
+    }
+    // Removal drops the domain's two keys; the slug is pointed back after.
+    await dropDomainPointers(env, "sparkleclean.co.uk")
+    expect([...store.pointers.keys()]).toEqual([`host:${slug}`])
   })
 
   it("finds a deployment no longer live and records it once, the same way everywhere", async () => {

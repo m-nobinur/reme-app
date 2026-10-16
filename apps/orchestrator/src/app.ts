@@ -60,6 +60,7 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
+import { checkNow, connect, type Refusal, remove } from "./domain-flow.ts"
 import { PLAN_ROUNDS } from "./planner.ts"
 import {
   activeDeployment,
@@ -775,6 +776,52 @@ ownerOnly.post("/site/takedown", async (c) => {
   // One per site, which the site lock makes safe, keyed by the org.
   await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
+  return c.body(null, 204)
+})
+
+/** A domain route's refusal, as the §28.1 envelope. */
+const domainRefused = (c: Context, r: Refusal) =>
+  failure(c, r.status, {
+    class: r.class,
+    code: r.code,
+    message: r.message,
+    detail: {},
+  })
+
+/**
+ * Custom domains, connect path (domain-flow.ts): claim a domain and start
+ * its Workflow, check it now and nudge the Workflow, or remove it. The org
+ * is the bridge's; the name is the only thing the caller says.
+ */
+ownerOnly.post("/domains", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    name?: unknown
+    approval_id?: unknown
+  }
+  const result = await connect(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result.output, result.status)
+})
+
+ownerOnly.post("/domains/:name/check", async (c) => {
+  const result = await checkNow(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("name")
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.delete("/domains/:name", async (c) => {
+  const refusal = await remove(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("name")
+  )
+  if (refusal) return domainRefused(c, refusal)
   return c.body(null, 204)
 })
 

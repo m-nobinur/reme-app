@@ -4,6 +4,7 @@ import {
   ApprovalTarget,
   type FactRecord,
   parseSiteRevision,
+  RedirectPointer,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
@@ -11,6 +12,7 @@ import {
   siteUrl,
 } from "@workspace/contracts"
 import {
+  activeDomainHost,
   appendEvent,
   approvals,
   assignments,
@@ -804,40 +806,78 @@ export async function writePointer(
   host: string
 ): Promise<{ host: string }> {
   const live = await kit.withOrg({ orgId }, async (db) =>
-    (await orgOpen(db)) ? activeDeployment(db, siteId) : "closed"
+    (await orgOpen(db))
+      ? {
+          deployment: await activeDeployment(db, siteId),
+          domain: await activeDomainHost(db),
+        }
+      : "closed"
   )
   if (live === "closed") {
     throw new TransitionError("org.closed", "resource", "the org is closed")
   }
-  if (!live) throw new Error("no deployment to point at")
-  await env.ROUTES.put(
-    `host:${host}`,
-    JSON.stringify(
-      SitePointer.parse({
-        org_id: orgId,
-        site_id: siteId,
-        revision_id: live.revisionId,
-        config_version: live.configVersion,
-      })
-    )
+  const { deployment, domain } = live
+  if (!deployment) throw new Error("no deployment to point at")
+  const pointer = JSON.stringify(
+    SitePointer.parse({
+      org_id: orgId,
+      site_id: siteId,
+      revision_id: deployment.revisionId,
+      config_version: deployment.configVersion,
+      ...(domain && { canonical_host: domain }),
+    })
   )
-  return { host }
+  if (!domain) {
+    await env.ROUTES.put(`host:${host}`, pointer)
+    return { host }
+  }
+  // With an active custom domain the site is served on its primary host and
+  // the other half and the slug host send visitors there. The served host
+  // first, so no redirect ever points at a host with nothing behind it.
+  await env.ROUTES.put(`host:${domain}`, pointer)
+  const redirect = JSON.stringify(
+    RedirectPointer.parse({ redirect_to: domain })
+  )
+  await env.ROUTES.put(`host:${otherHost(domain)}`, redirect)
+  await env.ROUTES.put(`host:${host}`, redirect)
+  return { host: domain }
+}
+
+/** The other half of a custom domain: `www.x` for `x`, and `x` for `www.x`. */
+export const otherHost = (primary: string) =>
+  primary.startsWith("www.") ? primary.slice(4) : `www.${primary}`
+
+/**
+ * A removed domain's two pointers, gone before the slug host is pointed back
+ * at the site, so the canonical flips back at once. A missing key is success.
+ */
+export async function dropDomainPointers(
+  env: Pick<Env, "ROUTES">,
+  primary: string
+): Promise<void> {
+  await env.ROUTES.delete(`host:${primary}`)
+  await env.ROUTES.delete(`host:${otherHost(primary)}`)
 }
 
 /**
- * Every pointer the org's site answers on, gone (ADR-035): its one live host
- * (ADR-030). Previews carry signed claims, not pointers, and the router
- * refuses those itself for a closed org. Deleting a key that is not there is
- * success, so a repeat is too.
+ * Every pointer the org's site answers on, gone (ADR-035): its slug host
+ * (ADR-030) and an active custom domain's two hosts. Previews carry signed
+ * claims, not pointers, and the router refuses those itself for a closed org.
+ * Deleting a key that is not there is success, so a repeat is too.
  */
 export async function clearPointers(
   env: Pick<Env, "ROUTES" | "SITE_HOST_SUFFIX">,
   kit: Pick<Tenancy, "withOrg">,
   orgId: string
 ): Promise<void> {
-  const [org] = await kit.withOrg({ orgId }, (db) =>
-    db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
-  )
+  const { org, domain } = await kit.withOrg({ orgId }, async (db) => {
+    const [row] = await db
+      .select({ slug: orgs.slug })
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+    return { org: row, domain: await activeDomainHost(db) }
+  })
+  if (domain) await dropDomainPointers(env, domain)
   if (org)
     await env.ROUTES.delete(`host:${siteHost(org.slug, env.SITE_HOST_SUFFIX)}`)
 }

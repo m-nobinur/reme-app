@@ -14,32 +14,7 @@ import {
   SETTINGS_MAX_BYTES,
   settingsBase,
 } from "../src/domains.ts"
-import { DOH, SETTINGS } from "./fixtures/domains.ts"
-
-type Route = Response | (() => Response)
-
-/** Answers DoH from the recorded fixtures, settings URLs from `SETTINGS`, and anything else from `extra`. */
-function stubNet(
-  extra: Record<string, Route> = {},
-  doh: Record<string, unknown> = {}
-) {
-  const fetched = vi.fn(
-    async (input: string | URL | Request, _init?: RequestInit) => {
-      const url = String(input)
-      if (url.startsWith("https://cloudflare-dns.com/dns-query?")) {
-        const q = new URL(url).searchParams
-        const key = `${q.get("name")} ${q.get("type")}`
-        return Response.json(doh[key] ?? DOH[key] ?? { Status: 0 })
-      }
-      const route = extra[url]
-      if (route) return typeof route === "function" ? route() : route
-      if (url in SETTINGS) return Response.json(SETTINGS[url])
-      throw new Error(`unexpected fetch ${url}`)
-    }
-  )
-  vi.stubGlobal("fetch", fetched)
-  return fetched
-}
+import { stubNet } from "./fixtures/domains.ts"
 
 const txtAnswer = (apex: string, value: string) => ({
   Status: 0,
@@ -539,10 +514,12 @@ describe("the custom hostname client", () => {
     "https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames"
   const envelope = (result: unknown) =>
     Response.json({ success: true, errors: [], messages: [], result })
+  /** The claim's row, created at noon. */
+  const claim = { since: new Date("2026-10-16T12:00:00Z") }
 
   it("refuses to run without its token and zone", async () => {
     stubNet()
-    await expect(ensureHostname({}, WWW)).rejects.toThrow(
+    await expect(ensureHostname({}, WWW, claim)).rejects.toThrow(
       "domains.not_configured"
     )
   })
@@ -553,7 +530,7 @@ describe("the custom hostname client", () => {
       [`${base}?hostname.exact=${WWW}`]: envelope([]),
       [base]: envelope(created),
     })
-    expect(await ensureHostname(env, WWW)).toEqual(created)
+    expect(await ensureHostname(env, WWW, claim)).toEqual(created)
     const post = fetched.mock.calls.find(
       ([, request]) => request?.method === "POST"
     )
@@ -565,12 +542,34 @@ describe("the custom hostname client", () => {
     expect(new Headers(init.headers).get("authorization")).toBe("Bearer token")
   })
 
-  it("returns the existing hostname on a retried step instead of creating a second", async () => {
-    const existing = hostname(WWW, "pending")
+  it.each([
+    ["the id the claim holds", "2026-10-01T00:00:00Z", "id-held"],
+    [
+      "one created after the claim, by a retried step",
+      "2026-10-16T12:00:05Z",
+      undefined,
+    ],
+  ])("adopts %s instead of creating a second", async (_, created, id) => {
+    const existing = {
+      ...hostname(WWW, "pending"),
+      id: "id-held",
+      created_at: created,
+    }
     const fetched = stubNet({
       [`${base}?hostname.exact=${WWW}`]: envelope([existing]),
     })
-    expect(await ensureHostname(env, WWW)).toEqual(existing)
+    expect(await ensureHostname(env, WWW, { ...claim, id })).toEqual(existing)
+    expect(fetched).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses one an earlier claim or the other environment holds, and neither reuses nor deletes it", async () => {
+    const other = { ...hostname(WWW), created_at: "2026-10-01T00:00:00Z" }
+    const fetched = stubNet({
+      [`${base}?hostname.exact=${WWW}`]: envelope([other]),
+    })
+    await expect(ensureHostname(env, WWW, claim)).rejects.toThrow(
+      "domain.hostname_held"
+    )
     expect(fetched).toHaveBeenCalledTimes(1)
   })
 
@@ -586,7 +585,9 @@ describe("the custom hostname client", () => {
         { status: 403 }
       ),
     })
-    await expect(ensureHostname(env, WWW)).rejects.toThrow("cloudflare.1456")
+    await expect(ensureHostname(env, WWW, claim)).rejects.toThrow(
+      "cloudflare.1456"
+    )
   })
 
   it("reads a gone hostname as null and deletes one already gone without failing", async () => {

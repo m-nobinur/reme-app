@@ -3,33 +3,17 @@
  * client, the DoH inspector, provider detection for the DNS-settings button,
  * and the `DomainCheck` that decides when a domain may go live. Everything
  * here reads public DNS or our own SaaS zone; nothing writes the owner's DNS.
- *
- * shortcut: `DnsRecord`, `DomainCheck` and `DomainProvider` are declared here
- * until the contracts story merges `packages/contracts/src/domain.ts`; then
- * these become imports of the same names.
  */
-
-export type DnsRecord = {
-  type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
-  name: string
-  value: string
-}
-
-export type DomainCheck =
-  | { status: "not_found" }
-  | { status: "unknown_error" }
-  | { status: "conflicting_record"; conflicts: DnsRecord[] }
-  | { status: "pending_verification" }
-  | { status: "invalid_configuration" }
-  | { status: "pending_certificate" }
-  | { status: "valid" }
-
-export type DomainProvider = { name: string; settings_url?: string }
+import type {
+  DnsRecord,
+  DomainCheck,
+  DomainProvider,
+} from "@workspace/contracts"
 
 /** Where every connected host points: a proxied record in our SaaS zone (D0). */
 export const CNAME_TARGET = "domains.remeai.co.uk"
 /** Our own zone: never a Domain Connect settings host. */
-const OUR_ZONE = "remeai.co.uk"
+export const OUR_ZONE = "remeai.co.uk"
 
 /** A failure the caller logs by code (`failureCode` reads `name`). */
 export class DomainError extends Error {
@@ -54,6 +38,7 @@ export type CustomHostname = {
   id: string
   hostname: string
   status: string
+  created_at?: string
   ssl?: {
     status?: string
     validation_records?: Array<{ txt_name?: string; txt_value?: string }>
@@ -105,13 +90,21 @@ async function resultOf<T>(response: Response): Promise<T> {
 }
 
 /**
- * The custom hostname for `hostname`, created if it does not exist yet, so a
- * retried Workflow step never makes a second one. HTTP DCV: the certificate
- * validates once the owner's CNAME reaches us.
+ * The custom hostname for `hostname` that this claim holds, created if
+ * Cloudflare has none, so a retried Workflow step never makes a second. HTTP
+ * DCV: the certificate validates once the owner's CNAME reaches us.
+ *
+ * One that exists already is adopted only when it is this claim's: the id the
+ * row holds, or one created after the row was, which is a retried step whose
+ * create answered after its step died. Anything older belongs to an earlier
+ * claim or to the other environment sharing the zone, and is refused as
+ * `domain.hostname_held`, never reused or deleted. Cloudflare's
+ * `custom_metadata`, which could name the owner, is Enterprise only.
  */
 export async function ensureHostname(
   env: CloudflareEnv,
-  hostname: string
+  hostname: string,
+  claim: { id?: string; since: Date }
 ): Promise<CustomHostname> {
   const found = await resultOf<CustomHostname[]>(
     await customHostnames(
@@ -121,7 +114,13 @@ export async function ensureHostname(
     )
   )
   const existing = found.find((h) => h.hostname === hostname)
-  if (existing) return existing
+  if (existing) {
+    const created = Date.parse(existing.created_at ?? "")
+    if (existing.id === claim.id || created >= claim.since.getTime()) {
+      return existing
+    }
+    throw new DomainError("domain.hostname_held")
+  }
   return resultOf<CustomHostname>(
     await customHostnames(env, "POST", "", {
       hostname,
@@ -373,7 +372,14 @@ function linkFor(url: unknown): string | undefined {
   }
 }
 
-/** Domain Connect discovery: the provider's own name, and our link if we have one. */
+/**
+ * Domain Connect discovery: the provider's own name, and our link if we have
+ * one. The settings host is any public host the domain's TXT names, as the
+ * spec intends, so an unknown provider still gets its name. What bounds that:
+ * a Worker's subrequests leave through Cloudflare's public egress and reach
+ * no private network, the GET carries no credential, the answer is cut to an
+ * 80-character name, and a link is only ever one of `SETTINGS_LINKS`.
+ */
 async function discover(apex: string): Promise<DomainProvider | null> {
   const { answers } = await doh(`_domainconnect.${apex}`, "TXT")
   const base = answers
@@ -526,6 +532,23 @@ function pointsAtUs(records: HostRecords, inspection: Inspection): boolean {
   if (addresses.length === 0) return false
   if (inspection.onCloudflare) return true
   return addresses.every((a) => inspection.target.includes(a))
+}
+
+/**
+ * Whether the bare domain is served directly (an ALIAS or a flattened CNAME
+ * to us) or forwards to `www`. Its own custom hostname being active settles
+ * it; otherwise its addresses must be ours, which the owner's own Cloudflare
+ * cannot show (see `pointsAtUs`), so there only the hostname counts.
+ */
+export function apexMode(
+  inspection: Inspection,
+  apexHostname: CustomHostname | null
+): ApexMode {
+  if (apexHostname?.status === "active") return "alias"
+  const records = inspection.hosts[inspection.apex]
+  return records && !inspection.onCloudflare && pointsAtUs(records, inspection)
+    ? "alias"
+    : "forward"
 }
 
 /** Records at a host that should reach us and do not: an old A, AAAA or CNAME. */

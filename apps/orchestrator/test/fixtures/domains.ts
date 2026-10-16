@@ -5,6 +5,37 @@
  * the plan's example names so no real business is in the repo.
  */
 
+import { vi } from "vitest"
+
+type Route = Response | (() => Response)
+
+/**
+ * Stands in for `fetch`: DoH from the recorded answers (overridden by `doh`),
+ * settings URLs from `SETTINGS`, anything else from `extra`, and a throw for
+ * a URL nobody planned on. Undone by `vi.unstubAllGlobals()`.
+ */
+export function stubNet(
+  extra: Record<string, Route> = {},
+  doh: Record<string, unknown> = {}
+) {
+  const fetched = vi.fn(
+    async (input: string | URL | Request, _init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith("https://cloudflare-dns.com/dns-query?")) {
+        const q = new URL(url).searchParams
+        const key = `${q.get("name")} ${q.get("type")}`
+        return Response.json(doh[key] ?? DOH[key] ?? { Status: 0 })
+      }
+      const route = extra[url]
+      if (route) return typeof route === "function" ? route() : route
+      if (url in SETTINGS) return Response.json(SETTINGS[url])
+      throw new Error(`unexpected fetch ${url}`)
+    }
+  )
+  vi.stubGlobal("fetch", fetched)
+  return fetched
+}
+
 type DohBody = {
   Status: number
   Answer?: Array<{ name: string; type: number; TTL: number; data: string }>
@@ -141,6 +172,17 @@ export const DOH: Record<string, DohBody> = {
       },
     ],
   },
+  "sparklecleanbristol.co.uk SOA": {
+    Status: 0,
+    Answer: [
+      {
+        name: "sparklecleanbristol.co.uk",
+        type: 6,
+        TTL: 600,
+        data: "ns47.domaincontrol.com. dns.jomax.net. 2024030600 28800 7200 604800 600",
+      },
+    ],
+  },
   // The SOA for a host comes back in Authority, naming the zone.
   "www.sparklecleanbristol.co.uk SOA": {
     Status: 0,
@@ -219,6 +261,17 @@ export const DOH: Record<string, DohBody> = {
         type: 28,
         TTL: 300,
         data: "2606:4700:3030::10",
+      },
+    ],
+  },
+  "shop.sparklecleanbristol.co.uk SOA": {
+    Status: 0,
+    Authority: [
+      {
+        name: "sparklecleanbristol.co.uk",
+        type: 6,
+        TTL: 600,
+        data: "ns47.domaincontrol.com. dns.jomax.net. 2024030600 28800 7200 604800 600",
       },
     ],
   },

@@ -23,6 +23,12 @@ interface __BaseEnv_Env {
    * in `wrangler.jsonc`; `siteUrl` refuses it on a real host.
    */
   SITE_PORT?: string
+  /**
+   * Cloudflare for SaaS custom hostnames on `CF_DOMAINS_ZONE_ID`
+   * (src/domains.ts). Optional until the owner's one-time setup (D0) creates
+   * the token; without it a connect fails as `domains.not_configured`.
+   */
+  CF_DOMAINS_TOKEN?: string
   OPENROUTER_API_KEY: string
   /** The model plane's settings, set as secrets so one list says what the Worker reads. */
   REME_MODEL_PRIMARY: string

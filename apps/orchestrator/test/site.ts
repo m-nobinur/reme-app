@@ -79,6 +79,9 @@ export function storage() {
         pointers.set(key, value)
       },
       get: async (key: string) => pointers.get(key) ?? null,
+      delete: async (key: string) => {
+        pointers.delete(key)
+      },
     },
   }
 }

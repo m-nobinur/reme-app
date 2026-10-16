@@ -1,5 +1,5 @@
 {
-  "_": "The ordered step names of every Workflow path, written by test/workflow-steps.test.ts and test/publish.test.ts. A resumed instance runs the deployed code's step list against this one (open item 46, ADR-032): when this file changes, the staging deploy refuses while any instance is live. A number in a name is the round or the attempt, which a resumed instance replays identically.",
+  "_": "The ordered step names of every Workflow path, written by test/workflow-steps.test.ts, test/publish.test.ts and test/domain-workflow.test.ts. A resumed instance runs the deployed code's step list against this one (open item 46, ADR-032): when this file changes, the staging deploy refuses while any instance is live. A number in a name is the round or the attempt, which a resumed instance replays identically.",
   "AssignmentWorkflow": {
     "build": [
       "claim 1",
@@ -684,5 +684,31 @@
   "SweepWorkflow": {
     "one chunk": ["list orgs", "sweep 1"],
     "two chunks": ["list orgs", "sweep 1", "sweep 2"]
+  },
+  "DomainWorkflow": {
+    "live": [
+      "hostnames",
+      "look 1",
+      "check 1",
+      "look 2",
+      "check 2",
+      "look 3",
+      "activate"
+    ],
+    "nudged then expired": [
+      "hostnames",
+      "look 1",
+      "check 1",
+      "look 2",
+      "nudge",
+      "check 2",
+      "look 3",
+      "check 3",
+      "look 4",
+      "expire"
+    ],
+    "hostname held": ["hostnames", "held"],
+    "removed before the hostnames": ["hostnames"],
+    "removed while waiting": ["hostnames", "look 1", "check 1", "look 2"]
   }
 }
