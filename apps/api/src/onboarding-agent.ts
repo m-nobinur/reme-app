@@ -30,6 +30,7 @@ import {
   streamText,
 } from "ai"
 import type { Part, ToolPart } from "./chat.ts"
+import { emailFromOwner, phoneFromOwner } from "./contact.ts"
 import {
   openrouterModel,
   type Price,
@@ -784,20 +785,6 @@ function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
   }
 }
 
-/** The digits of `text`, for tracing a number to the owner's words. */
-const digits = (words: string) => words.replace(/\D/g, "")
-
-/** Whether an E.164 number's national digits appear in what the owner typed. */
-function phoneFromOwner(e164: string, said: string): boolean {
-  const all = digits(e164)
-  const owner = digits(said)
-  // The country code is one to three digits; the rest must be the owner's.
-  return [1, 2, 3].some((cc) => {
-    const national = all.slice(cc)
-    return national.length >= 6 && owner.includes(national)
-  })
-}
-
 /** Everything the owner has typed in the rows and this turn, for tracing contact details. */
 function ownerWords(s: PlanState): string {
   const typed = s.rows
@@ -875,7 +862,7 @@ export function checkPlan(
     }
     if (
       fact.key === "business.email" &&
-      !said.toLowerCase().includes(fact.value.address.toLowerCase())
+      !emailFromOwner(fact.value.address, said)
     ) {
       errors.push(
         "facts.business.email is not an address the owner typed; record only their address"

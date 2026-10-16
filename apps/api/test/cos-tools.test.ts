@@ -6,6 +6,7 @@ import {
   OwnerAnswerText,
 } from "@workspace/contracts"
 import {
+  appendSessionEvent,
   assignments,
   domains,
   eq,
@@ -182,6 +183,43 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
     )
     return name
+  }
+
+  /** A turn of a new conversation of `who`'s, as the agent hands it over. */
+  const turnOf = async (who: Owner, said: string[] = []) => {
+    const made = await who.call(stubOrchestrator(), "/conversations", {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+    })
+    expect(made.status).toBe(201)
+    const { id } = (await made.json()) as { id: string }
+    // What the owner typed, as the turn's opening logged it.
+    for (const [n, text] of said.entries()) {
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        appendSessionEvent(db, {
+          orgId: who.orgId,
+          staffId: who.chiefId,
+          assignmentId: null,
+          sessionId: id,
+          type: "cos.message",
+          payload: {
+            turn_id: "01J00000000000000000000000",
+            message: {
+              id: `owner-${n}`,
+              role: "user",
+              parts: [{ type: "text", text }],
+            },
+          },
+          taint: ["untrusted_input"],
+        })
+      )
+    }
+    return {
+      orgId: who.orgId,
+      staffId: who.chiefId,
+      sessionId: id,
+      turnId: "01J00000000000000000000000",
+    }
   }
 
   describe("get_workspace", () => {
@@ -498,7 +536,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Saturdays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       const again = kept(
@@ -506,7 +545,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Saturdays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       // The second run finds the build the key made and replays it.
@@ -534,7 +574,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         failed = await requestChange(
           context(me, hung),
           { text: "Add Mondays" },
-          approval
+          approval,
+          await turnOf(me)
         ).catch((error: unknown) => error)
       } finally {
         restore()
@@ -551,7 +592,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, retry),
           { text: "Add Mondays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       expect(again).toMatchObject({
@@ -559,6 +601,100 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         build: { assignment_id: made },
       })
       expect(retry.calls).toHaveLength(0)
+    })
+
+    const phoneNow = async () =>
+      (await getFacts(context(me), {})).facts.find(
+        (f) => f.key === "business.phone"
+      )?.value
+
+    it("records a number the owner typed in full as their fact, then starts the change", async () => {
+      await kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedeFact(db, {
+          orgId: me.orgId,
+          key: "business.phone",
+          factType: "business",
+          value: { e164: "+441174960123" },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+      const turn = await turnOf(me, [
+        "Please change the phone number on the website to 0117 496 0124",
+      ])
+      const stub = creating(me)
+      const approval = crypto.randomUUID()
+      const input = {
+        text: "Change the phone number to 0117 496 0124",
+        change_kind: "copy",
+        contact: { phone: "+441174960124" },
+      } as const
+      const output = kept(
+        "request_change",
+        await requestChange(context(me, stub), input, approval, turn)
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(await phoneNow()).toEqual({ e164: "+441174960124" })
+      // A replay under the same approval restates the same value and writes nothing.
+      await requestChange(context(me, stub), input, approval, turn)
+      const [held] = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(facts)
+          .where(eq(facts.key, "business.phone"))
+          .orderBy(sql`${facts.version} desc`)
+      )
+      expect(held?.value).toEqual({ e164: "+441174960124" })
+      expect(held?.provenanceSource).toBe("owner_stated")
+    })
+
+    it.each([
+      ["phone", { phone: "+441174960199" }],
+      ["email", { email: "someone@invented.example" }],
+    ])(
+      "refuses a %s the owner never typed, changes no fact and starts nothing",
+      async (_what, contact) => {
+        const before = await phoneNow()
+        const turn = await turnOf(me, [
+          "Change the phone number to 0117 496 0124",
+        ])
+        const stub = creating(me)
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, stub),
+            { text: "Change the contact details", contact },
+            crypto.randomUUID(),
+            turn
+          )
+        )
+        expect(output).toMatchObject({
+          outcome: "refused",
+          error: { class: "validation", code: "contact.not_typed" },
+        })
+        expect(stub.calls).toHaveLength(0)
+        expect(await phoneNow()).toEqual(before)
+      }
+    )
+
+    it("refuses a typed number the change text the owner approves does not name", async () => {
+      const turn = await turnOf(me, [
+        "Change the phone number to 0117 496 0125",
+      ])
+      const stub = creating(me)
+      const output = await requestChange(
+        context(me, stub),
+        {
+          text: "Update the contact details",
+          contact: { phone: "+441174960125" },
+        },
+        crypto.randomUUID(),
+        turn
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { code: "contact.not_typed" },
+      })
+      expect(stub.calls).toHaveLength(0)
     })
 
     it("refuses as the closed shape, detail dropped", async () => {
@@ -579,7 +715,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Sundays" },
-          crypto.randomUUID()
+          crypto.randomUUID(),
+          await turnOf(me)
         )
       )
       expect(output).toEqual({
@@ -949,21 +1086,6 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   })
 
   describe("create_reminder", () => {
-    /** A turn of a new conversation of `who`'s, as the agent hands it over. */
-    const turnOf = async (who: Owner) => {
-      const made = await who.call(stubOrchestrator(), "/conversations", {
-        method: "POST",
-        headers: { "idempotency-key": crypto.randomUUID() },
-      })
-      expect(made.status).toBe(201)
-      const { id } = (await made.json()) as { id: string }
-      return {
-        orgId: who.orgId,
-        staffId: who.chiefId,
-        sessionId: id,
-        turnId: "01J00000000000000000000000",
-      }
-    }
     const rowsKeyed = (who: Owner, key: string) =>
       kit.withOrg({ orgId: who.orgId }, (db) =>
         db.select().from(reminders).where(eq(reminders.idempotencyKey, key))
