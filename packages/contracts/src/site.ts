@@ -127,12 +127,15 @@ export const SiteField = z.discriminatedUnion("kind", [
 /** The starter's `fields` export: one `SiteField` per key of `site`. */
 export const SiteFields = z.record(z.string().min(1), SiteField)
 
-/** A hostname: lower-case DNS labels, each 1 to 63 characters. */
+/**
+ * A hostname: lower-case DNS labels, each 1 to 63 characters. No lookaround
+ * in the pattern: it reaches model tool schemas, and OpenAI refuses one.
+ */
 export const Hostname = z
   .string()
   .max(253)
   .regex(
-    /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/
+    /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/
   )
 
 /**

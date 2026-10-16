@@ -77,6 +77,15 @@ describe("COS_TOOLS", () => {
     expect(schema).not.toHaveProperty("allOf")
   })
 
+  // OpenAI refuses a tool whose schema has a regex lookaround (seen
+  // 2026-10-16: every turn failed over the hostname pattern).
+  it.each(tools)("%s has no lookaround in any pattern", (_name, { input }) => {
+    const patterns = JSON.stringify(z.toJSONSchema(input)).match(
+      /"pattern":"(?:[^"\\]|\\.)*"/g
+    )
+    for (const p of patterns ?? []) expect(p).not.toMatch(/\(\?[=!<]/)
+  })
+
   // The model never sees a tenancy id, and a signed link is a bearer
   // capability the tool UI fetches for itself. An open object could carry
   // either, so every object names its keys.
