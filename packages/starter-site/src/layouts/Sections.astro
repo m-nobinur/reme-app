@@ -22,7 +22,12 @@ import { directionOf } from "../directions"
 import { headerPhoto } from "../header-photo"
 import { phoneText } from "../phone"
 import { hasRoute, primaryAction } from "../routes"
-import { type LayoutPage, layout, site } from "../site-config"
+import {
+  type LayoutPage,
+  type LayoutSection,
+  layout,
+  site,
+} from "../site-config"
 import {
   type ServiceItem,
   serviceItems,
@@ -110,10 +115,23 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
   faq: direction.faq,
   cta_band: direction.cta,
 }
+// A service page always shows its service's detail, what is included and who
+// it suits, whatever the plan laid out: the copy gate fails one without them,
+// and a plan with no service_cards cost the second perf run a repair round.
+const planned = layout[page]
+const afterHero = planned.findIndex((s) => s.kind === "hero") + 1
+const sections: LayoutSection[] =
+  page === "service" && !planned.some((s) => s.kind === "service_cards")
+    ? [
+        ...planned.slice(0, afterHero),
+        { kind: "service_cards" },
+        ...planned.slice(afterHero),
+      ]
+    : planned
 ---
 
 {
-  layout[page].map(({ kind, variant }) => {
+  sections.map(({ kind, variant }) => {
     const v = (variant ?? OF_DIRECTION[kind]) as never
     switch (kind) {
       case "hero":

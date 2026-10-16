@@ -22,8 +22,9 @@ const image = (w: number, h: number) =>
 let bare: Built | undefined
 let photos: Built | undefined
 let rows: Built | undefined
+let cardless: Built | undefined
 beforeAll(async () => {
-  ;[bare, rows, photos] = await Promise.all([
+  ;[bare, rows, cardless, photos] = await Promise.all([
     build({ site: FILLED, standIns: false }),
     // The reference run's Blueprint gave a service page numbered rows, which dropped both blocks.
     build({
@@ -37,6 +38,15 @@ beforeAll(async () => {
           { kind: "faq" },
           { kind: "cta_band" },
         ],
+      },
+    }),
+    // Perf run 2's Blueprint gave the service page no service_cards at all.
+    build({
+      site: FILLED,
+      standIns: false,
+      layout: {
+        ...layout,
+        service: [{ kind: "hero" }, { kind: "faq" }, { kind: "cta_band" }],
       },
     }),
     build({
@@ -57,6 +67,7 @@ beforeAll(async () => {
 afterAll(() => {
   clean(bare)
   clean(rows)
+  clean(cardless)
   clean(photos)
 })
 
@@ -80,6 +91,7 @@ describe("a service page's included and who-it-suits blocks", () => {
   test.each([
     ["the default layout", () => bare],
     ["a layout that asks for numbered rows", () => rows],
+    ["a layout with no service_cards", () => cardless],
   ])("show on every service page with %s", (_name, get) => {
     const pages = pagesOf(get()).filter((p) =>
       /^services\/[^/]+\/index\.html$/.test(p.file)
