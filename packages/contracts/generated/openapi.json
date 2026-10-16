@@ -11924,6 +11924,197 @@
         ],
         "additionalProperties": false
       },
+      "BuyDomainInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          },
+          "registrant": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S",
+                "description": "The owner's full legal name, first and last."
+              },
+              "organization": {
+                "description": "The business's registered or trading name.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "email": {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "phone": {
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "address": {
+                "type": "object",
+                "properties": {
+                  "street": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "postal_code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20,
+                    "pattern": "\\S"
+                  },
+                  "country_code": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "ISO 3166-1 alpha-2, such as GB."
+                  }
+                },
+                "required": [
+                  "street",
+                  "city",
+                  "postal_code",
+                  "country_code"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "email",
+              "phone",
+              "address"
+            ],
+            "additionalProperties": false
+          },
+          "registrant_type": {
+            "description": "Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.",
+            "type": "string",
+            "enum": [
+              "STRA",
+              "LTD",
+              "LLP",
+              "PTNR",
+              "IND"
+            ]
+          },
+          "company_number": {
+            "description": "The Companies House number, required with LTD and LLP.",
+            "type": "string",
+            "pattern": "^[A-Z0-9]{8}$"
+          }
+        },
+        "required": [
+          "name",
+          "registrant"
+        ],
+        "additionalProperties": false
+      },
+      "BuyDomainOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "awaiting_payment"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+              },
+              "price_gbp": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "checkout": {
+                "type": "string",
+                "const": "embedded"
+              }
+            },
+            "required": [
+              "outcome",
+              "name",
+              "price_gbp",
+              "checkout"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "CapabilityCall": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -14764,10 +14955,12 @@
               "state": {
                 "type": "string",
                 "enum": [
+                  "awaiting_payment",
                   "awaiting_dns",
                   "verifying",
                   "active",
                   "failed",
+                  "abandoned",
                   "removed"
                 ]
               },
@@ -15799,7 +15992,9 @@
                 "record_review",
                 "check_domain",
                 "connect_domain",
-                "remove_domain"
+                "remove_domain",
+                "find_domain",
+                "buy_domain"
               ]
             }
           },
@@ -17017,7 +17212,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 },
                 "description": {
@@ -17364,10 +17561,12 @@
                         "state": {
                           "type": "string",
                           "enum": [
+                            "awaiting_payment",
                             "awaiting_dns",
                             "verifying",
                             "active",
                             "failed",
+                            "abandoned",
                             "removed"
                           ]
                         },
@@ -21312,10 +21511,12 @@
                       "state": {
                         "type": "string",
                         "enum": [
+                          "awaiting_payment",
                           "awaiting_dns",
                           "verifying",
                           "active",
                           "failed",
+                          "abandoned",
                           "removed"
                         ]
                       },
@@ -21775,6 +21976,259 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "find_domain"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "found"
+                      },
+                      "best": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 253,
+                            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                          },
+                          "price_gbp_year": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "why": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "price_gbp_year",
+                          "why"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "options": {
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "maxLength": 253,
+                              "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                            },
+                            "price_gbp_year": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "why": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "price_gbp_year",
+                            "why"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "best",
+                      "options"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "buy_domain"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "awaiting_payment"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                      },
+                      "price_gbp": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "checkout": {
+                        "type": "string",
+                        "const": "embedded"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "name",
+                      "price_gbp",
+                      "checkout"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -21840,7 +22294,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 }
               },
@@ -21941,7 +22397,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 }
               },
@@ -22035,7 +22493,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 }
               },
@@ -22128,7 +22588,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 }
               },
@@ -22221,7 +22683,9 @@
                     "record_review",
                     "check_domain",
                     "connect_domain",
-                    "remove_domain"
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain"
                   ]
                 }
               },
@@ -22520,10 +22984,12 @@
                 "state": {
                   "type": "string",
                   "enum": [
+                    "awaiting_payment",
                     "awaiting_dns",
                     "verifying",
                     "active",
                     "failed",
+                    "abandoned",
                     "removed"
                   ]
                 },
@@ -23434,6 +23900,350 @@
           }
         ]
       },
+      "DomainCheckout": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          },
+          "price_gbp": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "client_secret": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "name",
+          "price_gbp",
+          "client_secret",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "DomainCheckoutRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "registrant": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S",
+                "description": "The owner's full legal name, first and last."
+              },
+              "organization": {
+                "description": "The business's registered or trading name.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "email": {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "phone": {
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "address": {
+                "type": "object",
+                "properties": {
+                  "street": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "postal_code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20,
+                    "pattern": "\\S"
+                  },
+                  "country_code": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "ISO 3166-1 alpha-2, such as GB."
+                  }
+                },
+                "required": [
+                  "street",
+                  "city",
+                  "postal_code",
+                  "country_code"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "email",
+              "phone",
+              "address"
+            ],
+            "additionalProperties": false
+          },
+          "registrant_type": {
+            "description": "Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.",
+            "type": "string",
+            "enum": [
+              "STRA",
+              "LTD",
+              "LLP",
+              "PTNR",
+              "IND"
+            ]
+          },
+          "company_number": {
+            "description": "The Companies House number, required with LTD and LLP.",
+            "type": "string",
+            "pattern": "^[A-Z0-9]{8}$"
+          }
+        },
+        "required": [
+          "registrant"
+        ],
+        "additionalProperties": false
+      },
+      "DomainPaymentEvent": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "paid"
+              },
+              "event_id": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^evt_[A-Za-z0-9_]+$"
+              },
+              "domain_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "checkout_session": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^cs_[A-Za-z0-9_]+$"
+              },
+              "payment_intent": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^pi_[A-Za-z0-9_]+$"
+              }
+            },
+            "required": [
+              "type",
+              "event_id",
+              "domain_id",
+              "checkout_session",
+              "payment_intent"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "expired"
+              },
+              "event_id": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^evt_[A-Za-z0-9_]+$"
+              },
+              "domain_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "checkout_session": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^cs_[A-Za-z0-9_]+$"
+              }
+            },
+            "required": [
+              "type",
+              "event_id",
+              "domain_id",
+              "checkout_session"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "renewal_paid"
+              },
+              "event_id": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^evt_[A-Za-z0-9_]+$"
+              },
+              "domain_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "subscription": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^sub_[A-Za-z0-9_]+$"
+              },
+              "invoice": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^in_[A-Za-z0-9_]+$"
+              }
+            },
+            "required": [
+              "type",
+              "event_id",
+              "domain_id",
+              "subscription",
+              "invoice"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "renewal_failed"
+              },
+              "event_id": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^evt_[A-Za-z0-9_]+$"
+              },
+              "domain_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "subscription": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^sub_[A-Za-z0-9_]+$"
+              },
+              "invoice": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^in_[A-Za-z0-9_]+$"
+              }
+            },
+            "required": [
+              "type",
+              "event_id",
+              "domain_id",
+              "subscription",
+              "invoice"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "subscription_ended"
+              },
+              "event_id": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^evt_[A-Za-z0-9_]+$"
+              },
+              "domain_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "subscription": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^sub_[A-Za-z0-9_]+$"
+              }
+            },
+            "required": [
+              "type",
+              "event_id",
+              "domain_id",
+              "subscription"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "DomainPrice": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "tld": {
+            "type": "string",
+            "enum": [
+              "co.uk",
+              "uk",
+              "com",
+              "net"
+            ]
+          },
+          "retail_gbp": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "cost_usd": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "tld",
+          "retail_gbp",
+          "cost_usd"
+        ],
+        "additionalProperties": false
+      },
       "DomainProvider": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -23452,6 +24262,131 @@
         },
         "required": [
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "DomainPurchaseStatus": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "awaiting_payment",
+              "awaiting_dns",
+              "verifying",
+              "active",
+              "failed",
+              "abandoned",
+              "removed"
+            ]
+          },
+          "test": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "registered",
+              "test_registered",
+              "payment_released",
+              "price_changed",
+              "unavailable",
+              "expired"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "state",
+          "test"
+        ],
+        "additionalProperties": false
+      },
+      "DomainRegistration": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sandbox": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,40}$"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "registered",
+              "test_registered",
+              "payment_released",
+              "price_changed",
+              "unavailable",
+              "expired"
+            ]
+          },
+          "years": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "auto_renew": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "registrant_type": {
+            "type": "string",
+            "enum": [
+              "STRA",
+              "LTD",
+              "LLP",
+              "PTNR",
+              "IND"
+            ]
+          }
+        },
+        "required": [
+          "sandbox"
+        ],
+        "additionalProperties": false
+      },
+      "DomainStripe": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "customer": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^cus_[A-Za-z0-9_]+$"
+          },
+          "checkout_session": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^cs_[A-Za-z0-9_]+$"
+          },
+          "payment_intent": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^pi_[A-Za-z0-9_]+$"
+          },
+          "subscription": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^sub_[A-Za-z0-9_]+$"
+          }
+        },
+        "required": [
+          "customer",
+          "checkout_session"
         ],
         "additionalProperties": false
       },
@@ -25239,6 +26174,145 @@
           "reported_at"
         ],
         "additionalProperties": false
+      },
+      "FindDomainInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Words the owner wants in the name. Omit it to start from the business name.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FindDomainOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "found"
+              },
+              "best": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 253,
+                    "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                  },
+                  "price_gbp_year": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "why": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "name",
+                  "price_gbp_year",
+                  "why"
+                ],
+                "additionalProperties": false
+              },
+              "options": {
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 253,
+                      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                    },
+                    "price_gbp_year": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "why": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "price_gbp_year",
+                    "why"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "outcome",
+              "best",
+              "options"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "FontPair": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

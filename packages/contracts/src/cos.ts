@@ -7,8 +7,10 @@ import {
   DnsRecord,
   DomainCheck,
   DomainName,
+  DomainOffer,
   DomainProvider,
   DomainState,
+  RegistrantDetails,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
 import {
@@ -229,6 +231,54 @@ export const RemoveDomainOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/** `find_domain`'s input: what to search around, or nothing to start from the business name. */
+export const FindDomainInput = z.strictObject({
+  query: Text(100)
+    .optional()
+    .describe(
+      "Words the owner wants in the name. Omit it to start from the business name."
+    ),
+})
+
+/**
+ * `find_domain`'s output: names free to register now, at the price table's
+ * price. The model quotes no other price. None free is `domain.unavailable`.
+ */
+export const FindDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("found"),
+    best: DomainOffer,
+    options: z.array(DomainOffer).max(4),
+  }),
+  Refused,
+])
+
+/**
+ * `buy_domain`'s input: a name `find_domain` offered and its registrant.
+ * It prepares the purchase and moves no money: the owner's payment in
+ * Checkout is the consent.
+ */
+export const BuyDomainInput = z.strictObject({
+  name: DomainName,
+  ...RegistrantDetails.shape,
+})
+
+/**
+ * `buy_domain`'s output: the purchase waits on the owner's payment in the
+ * card's embedded Checkout. Refused with `domain.unavailable`,
+ * `domain.registrant_invalid`, `domain.price_changed` or
+ * `domain.buy_unavailable`.
+ */
+export const BuyDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("awaiting_payment"),
+    name: DomainName,
+    price_gbp: z.int().positive(),
+    checkout: z.literal("embedded"),
+  }),
+  Refused,
+])
+
 const Empty = z.strictObject({})
 
 /**
@@ -250,6 +300,8 @@ export const COS_TOOLS = {
   check_domain: { input: CheckDomainInput, output: CheckDomainOutput },
   connect_domain: { input: ConnectDomainInput, output: ConnectDomainOutput },
   remove_domain: { input: RemoveDomainInput, output: RemoveDomainOutput },
+  find_domain: { input: FindDomainInput, output: FindDomainOutput },
+  buy_domain: { input: BuyDomainInput, output: BuyDomainOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -396,6 +448,16 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("remove_domain"),
     output: COS_TOOLS.remove_domain.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("find_domain"),
+    output: COS_TOOLS.find_domain.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("buy_domain"),
+    output: COS_TOOLS.buy_domain.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -442,6 +504,10 @@ export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
 export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type RemoveDomainInput = z.infer<typeof RemoveDomainInput>
 export type RemoveDomainOutput = z.infer<typeof RemoveDomainOutput>
+export type FindDomainInput = z.infer<typeof FindDomainInput>
+export type FindDomainOutput = z.infer<typeof FindDomainOutput>
+export type BuyDomainInput = z.infer<typeof BuyDomainInput>
+export type BuyDomainOutput = z.infer<typeof BuyDomainOutput>
 export type CosTurn = z.infer<typeof CosTurn>
 export type CosPrefix = z.infer<typeof CosPrefix>
 export type CosContext = z.infer<typeof CosContext>

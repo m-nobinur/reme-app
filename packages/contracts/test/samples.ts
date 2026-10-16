@@ -12,6 +12,21 @@ const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
 const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
 const CONVERSATION = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
 const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+const REGISTRANT = {
+  registrant: {
+    name: "Jane Smith",
+    organization: "Bright Clean",
+    email: "jane@brightclean.example",
+    phone: "+447700900123",
+    address: {
+      street: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+      country_code: "GB",
+    },
+  },
+  registrant_type: "STRA",
+}
 
 const BLUEPRINT = {
   direction: "calm_daylight",
@@ -366,6 +381,13 @@ export const samples: Record<ContractName, unknown> = {
     created_at: NOW,
     updated_at: NOW,
   },
+  BuyDomainInput: { name: "brightclean.co.uk", ...REGISTRANT },
+  BuyDomainOutput: {
+    outcome: "awaiting_payment",
+    name: "brightclean.co.uk",
+    price_gbp: 8,
+    checkout: "embedded",
+  },
   CapabilityCall: {
     call_id: "8192a3b4-c5d6-4192-a354-8f9001122334",
     org_id: ORG,
@@ -692,9 +714,44 @@ export const samples: Record<ContractName, unknown> = {
     value: "sites.remeai.co.uk",
   },
   DomainCheck: { status: "valid" },
+  DomainCheckout: {
+    name: "brightclean.co.uk",
+    price_gbp: 8,
+    client_secret: "cs_1_sec_2",
+    expires_at: LATER,
+  },
+  DomainCheckoutRequest: REGISTRANT,
+  DomainPaymentEvent: {
+    type: "paid",
+    event_id: "evt_1Q2w3E4r5T6y",
+    domain_id: "8a9b0c1d-2e3f-4a5b-9c6d-7e8f9a0b1c2d",
+    checkout_session: "cs_test_a1B2c3",
+    payment_intent: "pi_3Q2w3E4r5T6y",
+  },
+  DomainPrice: { tld: "co.uk", retail_gbp: 8, cost_usd: 5.3 },
   DomainProvider: {
     name: "GoDaddy",
     settings_url: "https://dcc.godaddy.com/manage/dns",
+  },
+  DomainPurchaseStatus: {
+    name: "brightclean.com",
+    state: "removed",
+    test: true,
+    outcome: "test_registered",
+  },
+  DomainRegistration: {
+    sandbox: false,
+    status: "registered",
+    outcome: "registered",
+    years: 1,
+    auto_renew: true,
+    expires_at: LATER,
+    registrant_type: "STRA",
+  },
+  DomainStripe: {
+    customer: "cus_Q2w3E4r5T6y",
+    checkout_session: "cs_test_a1B2c3",
+    payment_intent: "pi_3Q2w3E4r5T6y",
   },
   ErrorEnvelope: {
     class: "permission",
@@ -799,6 +856,22 @@ export const samples: Record<ContractName, unknown> = {
     last_checkpoint_ref: "checkpoint:01JZ8QK5M7N9P0R2T4V6W8X0Y2",
     attempt: 2,
     reported_at: NOW,
+  },
+  FindDomainInput: { query: "bright clean bristol" },
+  FindDomainOutput: {
+    outcome: "found",
+    best: {
+      name: "brightclean.co.uk",
+      price_gbp_year: 8,
+      why: "Short, matches the business name, and .co.uk says UK-based.",
+    },
+    options: [
+      {
+        name: "brightcleanbristol.co.uk",
+        price_gbp_year: 8,
+        why: "Names the city customers search for.",
+      },
+    ],
   },
   FontPair: {
     id: "outfit_figtree",
