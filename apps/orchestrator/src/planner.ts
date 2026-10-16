@@ -478,22 +478,28 @@ function withContentBlocks(pages: Blueprint["pages"]): Blueprint["pages"] {
 /**
  * An inner page whose header has a photo draws it as a split_frame hero, the
  * photo beside the copy: text_led's portrait inset is too small to carry a
- * header's photo.
+ * header's photo. A page with no photo slot (the budget went elsewhere) is
+ * text_led, so the plan names the plain header it will show.
  */
 function splitHeaders(blueprint: Blueprint): Blueprint["pages"] {
-  return blueprint.pages.map((page) =>
-    page.page !== "home" &&
-    blueprint.images.some((s) => s.page === page.page && s.section === "hero")
-      ? {
-          ...page,
-          sections: page.sections.map((s) =>
-            s.kind === "hero" && s.variant === "text_led"
+  return blueprint.pages.map((page) => {
+    if (page.page === "home") return page
+    const photo = blueprint.images.some(
+      (s) => s.page === page.page && s.section === "hero"
+    )
+    return {
+      ...page,
+      sections: page.sections.map((s) =>
+        s.kind !== "hero"
+          ? s
+          : photo
+            ? s.variant === "text_led"
               ? { ...s, variant: "split_frame" }
               : s
-          ),
-        }
-      : page
-  ) as Blueprint["pages"]
+            : { ...s, variant: "text_led" }
+      ),
+    }
+  }) as Blueprint["pages"]
 }
 
 /**
