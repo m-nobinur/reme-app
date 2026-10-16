@@ -25,8 +25,8 @@ export const serverMessageId = (key: string) =>
  * message only, and while the onboarding script still runs there, because
  * the script reads that conversation's cards.
  *
- * Not written to the CoS session log: `cos.message` belongs to a turn, so the
- * model learns what changed from the workspace context, not from this row.
+ * Not written to the CoS session log here: `cos.message` belongs to a turn,
+ * so apps/api/src/chat.ts logs this row on the owner's next typed turn.
  */
 export async function postAssistantMessage(
   kit: Tenancy,
