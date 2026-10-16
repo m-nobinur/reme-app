@@ -174,6 +174,12 @@ export const SitePointer = z.strictObject({
    * router rewrites the slug host baked into the build to it. Absent before.
    */
   canonical_host: Hostname.optional(),
+  /**
+   * The slug host the build baked in (`astro build --site`), written beside
+   * `canonical_host` so the router can rewrite it without opening Postgres.
+   * The router rewrites only when both are present.
+   */
+  origin_host: Hostname.optional(),
 })
 
 /**
