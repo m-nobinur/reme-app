@@ -47,7 +47,7 @@ export type CustomHostname = {
   verification_errors?: string[]
 }
 
-const CF_API = "https://api.cloudflare.com/client/v4"
+export const CF_API = "https://api.cloudflare.com/client/v4"
 export const CF_TIMEOUT_MS = 10_000
 
 async function customHostnames(
@@ -74,7 +74,7 @@ async function customHostnames(
 }
 
 /** The `result` of a v4 envelope, or the first error's code as the failure. */
-async function resultOf<T>(response: Response): Promise<T> {
+export async function resultOf<T>(response: Response): Promise<T> {
   const json = (await response.json().catch(() => ({}))) as {
     success?: boolean
     errors?: Array<{ code?: number }>
