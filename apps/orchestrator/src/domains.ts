@@ -38,7 +38,6 @@ export type CustomHostname = {
   id: string
   hostname: string
   status: string
-  created_at?: string
   ssl?: {
     status?: string
     validation_records?: Array<{ txt_name?: string; txt_value?: string }>
@@ -94,17 +93,20 @@ async function resultOf<T>(response: Response): Promise<T> {
  * Cloudflare has none, so a retried Workflow step never makes a second. HTTP
  * DCV: the certificate validates once the owner's CNAME reaches us.
  *
- * One that exists already is adopted only when it is this claim's: the id the
- * row holds, or one created after the row was, which is a retried step whose
- * create answered after its step died. Anything older belongs to an earlier
- * claim or to the other environment sharing the zone, and is refused as
- * `domain.hostname_held`, never reused or deleted. Cloudflare's
+ * One that exists already is adopted only when the row holds its id. Any
+ * other belongs to an earlier claim or to the other environment sharing the
+ * zone, and is refused as `domain.hostname_held`, never reused, so this
+ * environment never deletes a hostname it did not create. Cloudflare's
  * `custom_metadata`, which could name the owner, is Enterprise only.
+ *
+ * shortcut: a step that dies after its create answered but before the id is
+ * stored leaves that hostname unowned, and the claim fails as held. Delete it
+ * by hand from the zone's Custom Hostnames page if that ever happens.
  */
 export async function ensureHostname(
   env: CloudflareEnv,
   hostname: string,
-  claim: { id?: string; since: Date }
+  claim: { id?: string }
 ): Promise<CustomHostname> {
   const found = await resultOf<CustomHostname[]>(
     await customHostnames(
@@ -115,10 +117,7 @@ export async function ensureHostname(
   )
   const existing = found.find((h) => h.hostname === hostname)
   if (existing) {
-    const created = Date.parse(existing.created_at ?? "")
-    if (existing.id === claim.id || created >= claim.since.getTime()) {
-      return existing
-    }
+    if (existing.id === claim.id) return existing
     throw new DomainError("domain.hostname_held")
   }
   return resultOf<CustomHostname>(

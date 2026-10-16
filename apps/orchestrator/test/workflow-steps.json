@@ -693,8 +693,11 @@
       "look 2",
       "check 2",
       "look 3",
-      "activate"
+      "activate",
+      "settle",
+      "pointers again"
     ],
+    "removal settles": ["settle", "pointers again"],
     "nudged then expired": [
       "hostnames",
       "look 1",

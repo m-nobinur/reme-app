@@ -38,6 +38,9 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
     script.calls.push("activate")
     return true
   },
+  repoint: async () => {
+    script.calls.push("repoint")
+  },
 }))
 
 const { DomainWorkflow } = await import("../src/domain-workflow.ts")
@@ -48,15 +51,23 @@ const HOUR = 60 * MIN
 const at = (ms: number, status = "pending_verification", ready = false): Seen =>
   ({ gone: false, at: T0 + ms, status, ready }) as Seen
 
-async function drive(seen: Seen[], claim: unknown = { apex: "a", www: "w" }) {
+async function drive(
+  seen: Seen[],
+  claim: unknown = { apex: "a", www: "w" },
+  extra: { settle?: true } = {}
+) {
   script.claim = claim
   script.seen = [...seen]
   const names: string[] = []
-  const waits: number[] = []
+  const waits: (number | string)[] = []
   const step = {
     do: async (name: string, fn: () => Promise<unknown>) => {
       names.push(name)
       return fn()
+    },
+    sleep: async (name: string, duration: string) => {
+      names.push(name)
+      waits.push(duration)
     },
     waitForEvent: async (name: string, options: { timeout: number }) => {
       names.push(name)
@@ -66,7 +77,7 @@ async function drive(seen: Seen[], claim: unknown = { apex: "a", www: "w" }) {
   }
   const result = await new DomainWorkflow({} as never, {} as never).run(
     {
-      payload: { org_id: "org", domain_id: "dom" },
+      payload: { org_id: "org", domain_id: "dom", ...extra },
       timestamp: new Date(T0),
     } as never,
     step as never
@@ -79,16 +90,26 @@ beforeEach(() => {
 })
 
 describe("the domain Workflow", () => {
-  it("looks on the backoff and activates once a look is ready", async () => {
+  it("looks on the backoff, activates once a look is ready, and points again after it settles", async () => {
     const { names, waits, result } = await drive([
       at(1000),
       at(2 * MIN, "conflicting_record"),
       at(7 * MIN, "valid", true),
     ])
     expect(names).toEqual(steps.DomainWorkflow.live)
-    expect(waits).toEqual([2 * MIN, 5 * MIN])
+    expect(waits).toEqual([2 * MIN, 5 * MIN, "30 seconds"])
     expect(result).toEqual({ outcome: "active" })
-    expect(script.calls).toEqual(["activate"])
+    expect(script.calls).toEqual(["activate", "repoint"])
+  })
+
+  it("a removal's instance only points again after it settles", async () => {
+    const { names, waits, result } = await drive([], undefined, {
+      settle: true,
+    })
+    expect(names).toEqual(steps.DomainWorkflow["removal settles"])
+    expect(waits).toEqual(["30 seconds"])
+    expect(result).toEqual({ outcome: "removed" })
+    expect(script.calls).toEqual(["repoint"])
   })
 
   it("nudges once after 24 hours and fails at 72, leaving activation untouched", async () => {

@@ -46,8 +46,20 @@ import {
  * both written from the row. The Workflow class is in domain-workflow.ts.
  */
 
-export type DomainParams = { org_id: string; domain_id: string }
+/**
+ * R8: ids only. `settle` is the short instance a removal starts, which only
+ * rewrites the pointers once more after `SETTLE`.
+ */
+export type DomainParams = { org_id: string; domain_id: string; settle?: true }
 export const domainInstanceId = (domainId: string) => `domain-${domainId}`
+const settleInstanceId = (domainId: string) => `domain-${domainId}-removed`
+
+/**
+ * How long after a state flip the pointers are written again: the router's
+ * KV-miss path writes back what it read from Postgres, and a read from just
+ * before the flip can land after our first write.
+ */
+export const SETTLE = "30 seconds"
 
 /** A claim that is still connecting. */
 const CONNECTING = ["awaiting_dns", "verifying"] as const
@@ -114,6 +126,30 @@ export function normalizeName(raw: unknown): string | null {
   return name
 }
 
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+/**
+ * A status key as an event's key: 26 Crockford characters from its SHA-256,
+ * the shape of `events.idempotency_key` (a ULID), as `eventKey` in
+ * apps/api/src/http.ts makes them, so the org's unique index refuses a repeat.
+ */
+async function eventKey(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`domain.status:${key}`)
+  )
+  // 128 bits as 26 base-32 digits: the first is at most 3, inside a ULID's 0 to 7.
+  let n = new Uint8Array(digest)
+    .slice(0, 16)
+    .reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n)
+  let out = ""
+  for (let i = 0; i < 26; i++) {
+    out = CROCKFORD[Number(n % 32n)] + out
+    n /= 32n
+  }
+  return out
+}
+
 /**
  * The one way a domain's progress reaches the owner. Keyed, so a retried step
  * says it once.
@@ -127,6 +163,7 @@ export async function postStatus(
   key: string,
   text: string
 ): Promise<void> {
+  const idempotencyKey = await eventKey(key)
   try {
     await kit.withOrg({ orgId }, (db) =>
       appendEvent(db, {
@@ -135,7 +172,7 @@ export async function postStatus(
         staffId: null,
         type: "domain.status",
         payload: { key, text },
-        idempotencyKey: `domain-status:${key}`,
+        idempotencyKey,
       })
     )
   } catch (error) {
@@ -228,8 +265,10 @@ export async function currentCheck(
 
 /**
  * The claim's two custom hostnames, the apex and `www`, created or found and
- * kept in `cf_ids`. `gone` for a claim no longer connecting, `held` when
- * Cloudflare has a hostname this claim does not own.
+ * kept in `cf_ids`. Each id is stored as soon as its hostname exists, so a
+ * retry after the second create fails still owns the first. `gone` for a
+ * claim no longer connecting, `held` when Cloudflare has a hostname this
+ * claim does not own.
  */
 export async function claimHostnames(
   env: Env,
@@ -239,26 +278,23 @@ export async function claimHostnames(
 ): Promise<"gone" | "held" | CfIds> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return "gone"
-  const owned = row.cfIds as CfIds
-  let ids: CfIds
-  try {
-    const www = await ensureHostname(env, `www.${row.name}`, {
-      id: owned.www,
-      since: row.createdAt,
-    })
-    const apex = await ensureHostname(env, row.name, {
-      id: owned.apex,
-      since: row.createdAt,
-    })
-    ids = { apex: apex.id, www: www.id }
-  } catch (error) {
-    if (error instanceof DomainError && error.name === "domain.hostname_held")
-      return "held"
-    throw error
+  const ids = { ...(row.cfIds as CfIds) }
+  const hosts = [
+    ["www", `www.${row.name}`],
+    ["apex", row.name],
+  ] as const
+  for (const [key, host] of hosts) {
+    try {
+      ids[key] = (await ensureHostname(env, host, { id: ids[key] })).id
+    } catch (error) {
+      if (error instanceof DomainError && error.name === "domain.hostname_held")
+        return "held"
+      throw error
+    }
+    await kit.withOrg({ orgId }, (db) =>
+      db.update(domains).set({ cfIds: ids }).where(eq(domains.id, domainId))
+    )
   }
-  await kit.withOrg({ orgId }, (db) =>
-    db.update(domains).set({ cfIds: ids }).where(eq(domains.id, domainId))
-  )
   return ids
 }
 
@@ -665,25 +701,85 @@ export async function remove(
       "domain.not_found",
       `${name} isn't connected to this site.`
     )
-  if (found.row.state === "active") {
-    await dropDomainPointers(env, found.row.primaryHost)
-    if (found.slug) {
-      try {
-        await writePointer(env, kit, orgId, found.row.siteId, found.slug)
-      } catch (error) {
-        // A closed org keeps no pointer at all; anything else is a failure.
-        if ((error as { code?: string }).code !== "org.closed") throw error
-      }
-    }
+  await repoint(env, kit, orgId, found.row.id)
+  await revoke(env, found.row)
+  try {
+    await env.DOMAINS.create({
+      id: settleInstanceId(found.row.id),
+      params: { org_id: orgId, domain_id: found.row.id, settle: true },
+    })
+  } catch {
+    // Already settling: a repeated removal.
   }
-  for (const id of Object.values(found.row.cfIds as CfIds)) {
+  return null
+}
+
+/** A claim's custom hostnames deleted and its Workflow ended; both idempotent. */
+async function revoke(env: Env, row: Pick<DomainRow, "id" | "cfIds">) {
+  for (const id of Object.values(row.cfIds as CfIds)) {
     if (id) await deleteHostname(env, id)
   }
   try {
-    const instance = await env.DOMAINS.get(domainInstanceId(found.row.id))
+    const instance = await env.DOMAINS.get(domainInstanceId(row.id))
     await instance.terminate()
   } catch {
     // Already ended, or never started.
   }
-  return null
+}
+
+/**
+ * The pointers once more, from the row as Postgres has it now: an active
+ * domain's three are rewritten, a removed one's two are dropped and the slug
+ * host pointed back at the site. Anything else has no pointers of its own.
+ * Run straight after a state flip and again after `SETTLE`.
+ */
+export async function repoint(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<void> {
+  const { row, slug } = await kit.withOrg({ orgId }, async (db) => ({
+    row: await readDomain(db, domainId),
+    slug: await slugHostOf(db, env, orgId),
+  }))
+  if (!row || !slug) return
+  if (row.state === "removed") {
+    // Only a domain that went live has pointers; a later live claim on the
+    // same name is put back by the `writePointer` below.
+    if (row.activatedAt) await dropDomainPointers(env, row.primaryHost)
+  } else if (row.state !== "active") return
+  try {
+    await writePointer(env, kit, orgId, row.siteId, slug)
+  } catch (error) {
+    // A closed org keeps no pointer at all; anything else is a failure.
+    if ((error as { code?: string }).code !== "org.closed") throw error
+  }
+}
+
+/**
+ * Account deletion (ADR-035): every claim the org still holds is removed and
+ * its custom hostnames deleted. The takedown route clears the pointers
+ * first, while the active row still names them; a closed org gets none back.
+ */
+export async function revokeDomains(
+  env: Env,
+  kit: Tenancy,
+  orgId: string
+): Promise<void> {
+  const held = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ id: domains.id, cfIds: domains.cfIds })
+      .from(domains)
+      .where(sql`${domains.state} <> 'removed'`)
+  )
+  // The hostnames before the rows, so a retried takedown still finds them.
+  // Failed claims are included: their hostnames are deleted again, idempotently.
+  for (const row of held) await revoke(env, row)
+  await kit.withOrg({ orgId }, (db) =>
+    db
+      .update(domains)
+      .set({ state: "removed", removedAt: new Date() })
+      .where(sql`${domains.state} <> 'removed'`)
+  )
 }

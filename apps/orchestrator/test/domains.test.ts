@@ -514,12 +514,10 @@ describe("the custom hostname client", () => {
     "https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames"
   const envelope = (result: unknown) =>
     Response.json({ success: true, errors: [], messages: [], result })
-  /** The claim's row, created at noon. */
-  const claim = { since: new Date("2026-10-16T12:00:00Z") }
 
   it("refuses to run without its token and zone", async () => {
     stubNet()
-    await expect(ensureHostname({}, WWW, claim)).rejects.toThrow(
+    await expect(ensureHostname({}, WWW, {})).rejects.toThrow(
       "domains.not_configured"
     )
   })
@@ -530,7 +528,7 @@ describe("the custom hostname client", () => {
       [`${base}?hostname.exact=${WWW}`]: envelope([]),
       [base]: envelope(created),
     })
-    expect(await ensureHostname(env, WWW, claim)).toEqual(created)
+    expect(await ensureHostname(env, WWW, {})).toEqual(created)
     const post = fetched.mock.calls.find(
       ([, request]) => request?.method === "POST"
     )
@@ -542,32 +540,22 @@ describe("the custom hostname client", () => {
     expect(new Headers(init.headers).get("authorization")).toBe("Bearer token")
   })
 
-  it.each([
-    ["the id the claim holds", "2026-10-01T00:00:00Z", "id-held"],
-    [
-      "one created after the claim, by a retried step",
-      "2026-10-16T12:00:05Z",
-      undefined,
-    ],
-  ])("adopts %s instead of creating a second", async (_, created, id) => {
-    const existing = {
-      ...hostname(WWW, "pending"),
-      id: "id-held",
-      created_at: created,
-    }
+  it("adopts the hostname whose id the claim holds instead of creating a second", async () => {
+    const existing = { ...hostname(WWW, "pending"), id: "id-held" }
     const fetched = stubNet({
       [`${base}?hostname.exact=${WWW}`]: envelope([existing]),
     })
-    expect(await ensureHostname(env, WWW, { ...claim, id })).toEqual(existing)
+    expect(await ensureHostname(env, WWW, { id: "id-held" })).toEqual(existing)
     expect(fetched).toHaveBeenCalledTimes(1)
   })
 
-  it("refuses one an earlier claim or the other environment holds, and neither reuses nor deletes it", async () => {
-    const other = { ...hostname(WWW), created_at: "2026-10-01T00:00:00Z" }
+  it("refuses one it does not hold, however new, and neither reuses nor deletes it", async () => {
+    // Even one made after the claim: it may be the other environment's.
+    const other = { ...hostname(WWW), id: "id-other" }
     const fetched = stubNet({
       [`${base}?hostname.exact=${WWW}`]: envelope([other]),
     })
-    await expect(ensureHostname(env, WWW, claim)).rejects.toThrow(
+    await expect(ensureHostname(env, WWW, {})).rejects.toThrow(
       "domain.hostname_held"
     )
     expect(fetched).toHaveBeenCalledTimes(1)
@@ -585,7 +573,7 @@ describe("the custom hostname client", () => {
         { status: 403 }
       ),
     })
-    await expect(ensureHostname(env, WWW, claim)).rejects.toThrow(
+    await expect(ensureHostname(env, WWW, {})).rejects.toThrow(
       "cloudflare.1456"
     )
   })

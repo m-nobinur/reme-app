@@ -824,7 +824,7 @@ export async function writePointer(
       site_id: siteId,
       revision_id: deployment.revisionId,
       config_version: deployment.configVersion,
-      ...(domain && { canonical_host: domain }),
+      ...(domain && { canonical_host: domain, origin_host: host }),
     })
   )
   if (!domain) {

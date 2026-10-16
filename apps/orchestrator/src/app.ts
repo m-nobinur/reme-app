@@ -60,7 +60,13 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
-import { checkNow, connect, type Refusal, remove } from "./domain-flow.ts"
+import {
+  checkNow,
+  connect,
+  type Refusal,
+  remove,
+  revokeDomains,
+} from "./domain-flow.ts"
 import { PLAN_ROUNDS } from "./planner.ts"
 import {
   activeDeployment,
@@ -776,6 +782,7 @@ ownerOnly.post("/site/takedown", async (c) => {
   // One per site, which the site lock makes safe, keyed by the org.
   await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
+  await revokeDomains(c.env, c.get("kit"), orgId)
   return c.body(null, 204)
 })
 

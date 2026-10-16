@@ -753,6 +753,7 @@ describe("the artifact check and the probe", () => {
       revision_id: newest.revisionId,
       config_version: 3,
       canonical_host: "sparkleclean.co.uk",
+      origin_host: slug,
     })
     for (const host of ["www.sparkleclean.co.uk", slug]) {
       expect(read(host)).toEqual({ redirect_to: "sparkleclean.co.uk" })
