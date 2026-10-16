@@ -12,7 +12,7 @@ import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
-import { act, createElement } from "react"
+import { act, createElement, useEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
@@ -175,6 +175,7 @@ afterEach(async () => {
   }
   mounted = []
   vi.unstubAllGlobals()
+  churn = false
 })
 
 /** The runtime the chat page builds per thread. */
@@ -186,10 +187,24 @@ const useThreadRuntime = () =>
     suggestions: [{ prompt: "Build my website" }],
   })
 
+/** The chat page re-renders on every workspace poll and builds its runtime hook inline. */
+let churn = false
+
 function Chat() {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!churn) return
+    const timer = setInterval(() => tick((n) => n + 1), 15)
+    return () => clearInterval(timer)
+  }, [])
+  const useInline = () =>
+    useConversationRuntime({
+      onFinish: () => undefined,
+      suggestions: [{ prompt: "Build my website" }],
+    })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
-    runtimeHook: useThreadRuntime,
+    runtimeHook: churn ? useInline : useThreadRuntime,
     threadId: ID,
   })
   return createElement(
@@ -1480,4 +1495,58 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
     results: (turn(1) as { results: object }).results,
     reply: { text: "Which pages should the site have?: Everything" },
   })
+})
+
+/** A reply that streams over time, as the planner's words do. */
+const slowReply = () => {
+  const encoder = new TextEncoder()
+  const frame = (chunk: object) =>
+    encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`)
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 60))
+  return Promise.resolve(
+    new Response(
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (const chunk of [
+            { type: "start", messageId: "reply-1" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Lovely, " },
+            { type: "text-delta", id: "t1", delta: "I am starting " },
+            { type: "text-delta", id: "t1", delta: "your site now." },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]) {
+            controller.enqueue(frame(chunk))
+            await pause()
+          }
+          controller.close()
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } }
+    )
+  )
+}
+
+it("shows the whole reply when the tab is hidden while it streams", async () => {
+  churn = true
+  // A hidden tab runs the first animation frame at most, then none.
+  let requested = 0
+  vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => {
+    if (requested++ === 0) setTimeout(() => run(performance.now()), 30)
+    return requested
+  })
+  vi.stubGlobal("cancelAnimationFrame", () => undefined)
+  const chat = await openTray()
+  turns.push(
+    () => Promise.resolve(new Response(null, { status: 200 })),
+    slowReply
+  )
+  await pick(chat, "Everything")
+  await press(chat, "Build my site")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  await vi.waitFor(() =>
+    expect(chat.textContent).toContain("Lovely, I am starting your site now.")
+  )
 })

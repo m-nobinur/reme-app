@@ -10,6 +10,8 @@ import {
   fieldFindings,
   TITLE_CHARS,
 } from "@workspace/gates"
+import { bannedIn } from "@workspace/starter-site/copy-check"
+import { ICONS, iconPath } from "@workspace/starter-site/icons"
 import { blueprintLines } from "./blueprint.ts"
 import type { Brief } from "./brief.ts"
 import {
@@ -165,17 +167,49 @@ export function pageCheck(
 ): string | null {
   const owned = fieldsOfPrompt(prompt)
   if (owned.length === 0) return null
-  const found = fieldFindings(
-    siteValues(source),
-    owned,
-    pageOfPrompt(prompt) ?? undefined
-  )
+  const values = siteValues(source)
+  const found = [
+    ...fieldFindings(values, owned, pageOfPrompt(prompt) ?? undefined),
+    ...sandboxFindings(values, owned),
+  ]
   if (found.length === 0) return null
   return [
     "The copy gate's check of your fields, before the build, found:",
     ...found.map((line) => `- ${line}`),
     "Fix exactly these in one more reply, then stop. This check runs once.",
   ].join("\n")
+}
+
+const EM_DASH = String.fromCharCode(0x2014)
+
+/**
+ * The rules of the build's own copy check (packages/starter-site
+ * copy-check.ts and its icon check) that one field can break: an em dash, a
+ * stock phrase, an icon src/icons.ts does not hold. In perf run 2 the lead
+ * fixed four guessed icons after its first build; a writer fixes its own.
+ */
+export function sandboxFindings(
+  values: Readonly<Record<string, string>>,
+  owned: readonly string[]
+): string[] {
+  return owned.flatMap((name) => {
+    const text = (values[name] ?? "").trim()
+    if (!text) return []
+    if (/Icon$/.test(name))
+      return iconPath(text)
+        ? []
+        : [
+            `${name} "${text}" is not an icon; name one of: ${Object.keys(ICONS).join(", ")}`,
+          ]
+    return [
+      ...(text.includes(EM_DASH)
+        ? [`${name} has an em dash; use a comma, a colon or two sentences`]
+        : []),
+      ...bannedIn(text).map(
+        (phrase) => `${name} says "${phrase}"; say what the business does`
+      ),
+    ]
+  })
 }
 
 /** One writer's task: its agent, its prompt, and the task it waits for. */
@@ -323,7 +357,7 @@ export const pageInstructions = (brief: Brief) =>
  * 165, so it is told to write once, by feel, and stop.
  */
 export const COPY_WRITER_RULES = [
-  `- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the copy gate accepts ${TITLE_CHARS.min} to ${TITLE_CHARS.max} and ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} and fails any line outside, so a title over ${TITLE_CHARS.max} or a description under ${DESCRIPTION_CHARS.min} is a repair round. No two pages share a title or a description.`,
+  `- Never count characters, measure or script anything: aim for a title of about 55 characters naming the page and the business exactly as businessName (the page adds " | " and businessName after any title that does not contain it), and a description of one sentence of about 150; the copy gate accepts ${TITLE_CHARS.min} to ${TITLE_CHARS.max} and ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} and fails any line outside, so a title over ${TITLE_CHARS.max} or a description under ${DESCRIPTION_CHARS.min} is a repair round. No two pages share a title or a description.`,
   `- The FAQ follows the copy brief: up to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks. Ask only what you can answer in full from the facts or from how the trade usually works, promising nothing for this business that a fact does not. Leave a question out rather than answer that you do not know: never write "our facts don't say", "isn't set out", "not stated" or any note about what you were told. The copy gate fails it. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
 ].join("\n")
 

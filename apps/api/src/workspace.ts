@@ -75,7 +75,15 @@ export const EXPECTED_SECONDS = {
 } as const
 
 /** The steps in the order a full build reaches them; the photos row travels with the pages. */
-const ORDER = ["planning", "writing", "design", "fixing", "checking"] as const
+const ORDER = [
+  "planning",
+  "writing",
+  "assembling",
+  "design",
+  "polishing",
+  "fixing",
+  "checking",
+] as const
 type Step = (typeof ORDER)[number]
 
 /**
@@ -93,9 +101,11 @@ const REPAIRED = "assignment.state_changed"
 
 /**
  * The step a build is on, or null in a state that is not one of them. After
- * the lead's first report a planned build is being looked over until a look
- * asks for nothing or the second has run; a move into `repairing` that no
- * report has followed is the lead fixing what the gates found.
+ * the lead's first report a planned build is being looked over until the look
+ * answers; if it asked for changes the lead is polishing until it reports
+ * again, and from that report on the build is being checked (the recheck, the
+ * screenshots, then the gates). A move into `repairing` that no report has
+ * followed is the lead fixing what the gates found.
  */
 function stepOf(
   state: AssignmentState,
@@ -110,11 +120,16 @@ function stepOf(
   const reported = types.lastIndexOf(REPORTED)
   if (types.lastIndexOf(REPAIRED) > reported) return "fixing"
   if (reported < 0) return "writing"
-  const asked = marks.find((m) => m.type === "design.critiqued")
-  const looked =
-    marks.some((m) => m.type === "design.rechecked") ||
-    (asked !== undefined && !asked.fixes)
-  return planned && !looked ? "design" : "checking"
+  if (!planned) return "checking"
+  const critiqued = types.indexOf("design.critiqued")
+  // The look has not answered: the critic is reading the screens.
+  if (critiqued < 0) return "design"
+  // It asked for fixes and the lead has not reported again: the lead is making
+  // them. Once it has, the recheck, the screenshots and the gates are all
+  // checking, whether or not the recheck's own event has landed yet.
+  return marks[critiqued]?.fixes && reported < critiqued
+    ? "polishing"
+    : "checking"
 }
 
 /** Counts from the parallel builder's `build.progress` events (BA4), by stage. */
@@ -158,8 +173,14 @@ export function activityFor(
     marks = [],
   }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
 ): BuildActivity[] {
-  const at = stepOf(state, marks, Boolean(plan))
-  if (lane === "quick" || !at) return []
+  const reached = stepOf(state, marks, Boolean(plan))
+  if (lane === "quick" || !reached) return []
+  // Every page written and no report yet: the lead is putting the site
+  // together, which took 2 min 20 s in perf run 2 under "6 of 6".
+  const written =
+    progress.pages !== undefined && progress.pages.done >= progress.pages.total
+  const at: Step =
+    reached === "writing" && plan && written ? "assembling" : reached
   const now = ORDER.indexOf(at)
   const passed = (step: Step) => ORDER.indexOf(step) < now
   const photos =
@@ -198,6 +219,7 @@ export function activityFor(
     done: passed("writing") || pagesDone.has(page),
   }))
   const repaired = marks.some((m) => m.type === REPAIRED)
+  const polished = marks.some((m) => m.type === "design.critiqued" && m.fixes)
   return [
     row("planning", "Planning the layout", passed("planning")),
     ...(photos
@@ -207,9 +229,17 @@ export function activityFor(
       ...row("writing", "Writing the pages", passed("writing"), progress.pages),
       ...(pages ? { items: pages } : {}),
     },
-    // BA5's look before the gates runs only on a planned build.
+    // A planned build's pages are written in parallel and put together by
+    // the lead; BA5's look before the gates runs only on a planned build.
     ...(plan
-      ? [row("design", "Looking over the design", passed("design"))]
+      ? [
+          row("assembling", "Putting the site together", passed("assembling")),
+          row("design", "Looking over the design", passed("design")),
+          // Only when the look asked for changes; a short one still shows, done.
+          ...(polished || at === "polishing"
+            ? [row("polishing", "Polishing the design", passed("polishing"))]
+            : []),
+        ]
       : []),
     ...(repaired || at === "fixing"
       ? [row("fixing", "Fixing what the checks found", passed("fixing"))]

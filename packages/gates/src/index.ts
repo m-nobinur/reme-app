@@ -44,6 +44,7 @@ export {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  factWords,
   fieldFindings,
   NEAR as HEADING_NEAR,
   STOCK_HEADINGS,
@@ -233,12 +234,16 @@ export function checkLinks(
   return pass("links", `${count} links checked`)
 }
 
-/** The schema.org types the starter emits, and the properties each must carry. */
+/**
+ * The schema.org types the starter emits, and the properties each must carry.
+ * The platform builds with `--site`, so the starter always writes `url`: one
+ * missing was deleted, not left out, and costs the site its search listing.
+ */
 const REQUIRED: Record<string, readonly string[]> = {
-  LocalBusiness: ["name"],
+  LocalBusiness: ["name", "url"],
   Organization: ["name"],
-  Service: ["name"],
-  WebSite: ["name"],
+  Service: ["name", "url"],
+  WebSite: ["name", "url"],
   BreadcrumbList: ["itemListElement"],
   FAQPage: ["mainEntity"],
 }

@@ -358,6 +358,10 @@ function StepDetail({
           Reading the home page at phone, tablet and desktop widths.
         </p>
       ) : null
+    case "polishing":
+      return at === "now" ? (
+        <p className={META}>Making the changes the design review asked for.</p>
+      ) : null
     case "fixing":
       return at === "now" ? (
         <p className={META}>
@@ -551,6 +555,9 @@ function WorkingOn({
   const ended =
     stage.step === 3 && build.endedAt ? Date.parse(build.endedAt) : undefined
   const ran = useElapsed(build.startedAt, ended ?? now)
+  // "Built in" is the build's own time: claim to preview_ready less the wait
+  // on the owner's plan review. Perf run 2: 6 min 05 s less 16.6 s of review
+  // shows 5 min 48 s, which is right.
   const elapsed = ran === null ? null : ran - (build.reviewMs ?? 0)
   // "asking" once Stop is pressed, "kept" once the owner keeps building.
   // A Stop in flight keeps the question on screen, with its buttons

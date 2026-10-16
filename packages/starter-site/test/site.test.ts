@@ -722,11 +722,19 @@ describe("templates", () => {
   test("every page renders with no JavaScript", () => {
     for (const built of [filled, planted, marked]) {
       if (!built) throw new Error("the build did not run")
-      const scripts = readPages(built.dist).flatMap((page) =>
+      const pages = readPages(built.dist)
+      // The one inline script is the entrance reveal (Base.astro): it marks
+      // blocks only once it runs, so without it nothing is hidden.
+      const scripts = pages.flatMap((page) =>
         page.scripts
           .filter((script) => script.type !== "application/ld+json")
+          .filter((script) => !script.body.includes("dataset.reveal"))
           .map(() => page.file)
       )
+      const hiddenWithoutScript = pages
+        .filter((page) => /class="[^"]*\breveal\b|data-reveal/.test(page.html))
+        .map((page) => page.file)
+      expect(hiddenWithoutScript).toEqual([])
       const bundles = readdirSync(built.dist, { recursive: true })
         .map(String)
         .filter((file) => /\.m?js$/.test(file))

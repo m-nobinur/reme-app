@@ -411,7 +411,7 @@ function render({ id }: AgentProps) {
   const base = cloudflareSandbox(stub as never)
   useSandbox(
     {
-      createSandbox: base.createSandbox,
+      createSandbox: unlisted(base.createSandbox),
       tools: sandboxTools(current),
     },
     { cwd: SITE_ROOT }
@@ -570,6 +570,31 @@ export const sandboxTools = (current: Session) =>
     mutations: current.mutations,
     fromChild: current.gate.fromChild,
   })
+
+/**
+ * The site's sandbox with the site's own directory listed as empty. Flue
+ * appends a listing of the cwd to the system prompt at the start of every
+ * delivery: none at a first build's start, then dist, .astro and the rest
+ * once it has built. In perf run 2 the prompt grew 130 characters when the
+ * critique arrived, so the turn after it read only the tools from cache
+ * (3,052 tokens) and wrote the other 34,827 again, 28% of the lead's cost.
+ * The instructions carry the site map, and the lead's tools list with bash
+ * and glob, never readdir.
+ */
+export const unlisted =
+  <O, S extends { readdir: (path: string) => Promise<string[]> }>(
+    create: (options: O) => Promise<S>
+  ) =>
+  async (options: O): Promise<S> => {
+    const made = await create(options)
+    return {
+      ...made,
+      readdir: (path: string) =>
+        path.replace(/\/+$/, "") === SITE_ROOT
+          ? Promise.resolve([])
+          : made.readdir(path),
+    }
+  }
 
 /** How long `write_pages` waits for the photo step, from its start. */
 const PHOTO_WAIT_MS = 5 * 60_000

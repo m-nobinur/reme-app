@@ -1,3 +1,4 @@
+import type { FactRecord } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
   COPY_WORDS,
@@ -5,6 +6,7 @@ import {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  factWords,
   fieldFindings,
   HEADING_NEAR,
   TITLE_CHARS,
@@ -336,6 +338,118 @@ describe("the copy gate", () => {
       expect(copyFindings(site(chips("Fiton")))).toEqual([])
     })
 
+    it("fails a word one slip from a service name or the trade, and passes real forms and other words", () => {
+      const fact = (key: string, value: unknown) =>
+        ({ key, value }) as unknown as FactRecord
+      const own = factWords([
+        fact("business.name", { name: "Brightside Window and Gutter Care" }),
+        fact("business.offerings", {
+          items: [
+            "window cleaning",
+            "gutter clearing",
+            "fascia and soffit cleaning",
+            "conservatory roof cleaning",
+          ],
+        }),
+        fact("business.industry", { name: "Window and gutter cleaning" }),
+      ])
+      const site = (main: string) => [
+        page(
+          "index.html",
+          "Brightside window and gutter care in Bristol and Clifton",
+          `<h1>Window cleaning</h1>${main}`
+        ),
+      ]
+      const slips = (main: string) =>
+        copyFindings(site(main), "", own)
+          .filter((f) => f.problem === "term")
+          .map((f) => f.text)
+      // The run's typo, in the home subhead and the footer.
+      expect(
+        slips(
+          "<p>Windows, gutters, fascias and conservative roofs, cleaned for homeowners.</p>"
+        )
+      ).toEqual(["conservative"])
+      expect(slips("<p>Cleering gutters and gutter clearing.</p>")).toEqual([
+        "cleering",
+      ])
+      expect(slips("<p>Winndow cleaning for homes.</p>")).toEqual(["winndow"])
+      // Plurals, other forms and ordinary words are not slips.
+      expect(
+        slips(
+          "<p>Conservatories, conservatory roofs, gutters, fascias, cleaner windows, cleaned by hand, planning ahead.</p>"
+        )
+      ).toEqual([])
+      // A word the facts themselves use is theirs, whatever it resembles.
+      expect(
+        copyFindings(site("<p>Conservative roofs.</p>"), "", {
+          ...own,
+          known: new Set([...own.known, "conservative"]),
+        })
+      ).toEqual([])
+      // Without the facts there is nothing to hold the words to.
+      expect(copyFindings(site("<p>Conservative roofs.</p>"))).toEqual([])
+      const checked = (html: string) =>
+        checkCopy(site(html), true, [
+          fact("business.offerings", { items: ["conservatory roof cleaning"] }),
+        ])
+      expect(checked("<p>Conservative roofs.</p>")).toMatchObject({
+        passed: false,
+      })
+      expect(checked("<p>Conservatory roofs.</p>").message).not.toContain(
+        "misspelling"
+      )
+    })
+
+    it("does not spell-check addresses or JSON-LD urls, nor a real word the trade shares", () => {
+      const fact = (key: string, value: unknown) =>
+        ({ key, value }) as unknown as FactRecord
+      const own = factWords([
+        fact("business.offerings", {
+          items: ["gutter clearing", "exterior painting"],
+        }),
+        fact("business.industry", { name: "Property maintenance" }),
+      ])
+      // The run's case: a platform host whose org slug holds "cleaning".
+      const host = "dev-owner-9a6fc6d2-cleaning-fictional-f6489c51.reme.example"
+      const ld = (description = "") =>
+        `<script type="application/ld+json">${JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "@id": `https://${host}/#business`,
+          name: "Harbourside Property Care",
+          url: `https://${host}/`,
+          sameAs: [`https://${host}/about/`],
+          email: `hello@${host}`,
+          description,
+        })}</script>`
+      const slips = (main: string, head = ld()) =>
+        copyFindings(
+          [
+            page(
+              "index.html",
+              "Harbourside property care in Bristol and Clifton",
+              `<h1>Gutter clearing</h1>${main}`,
+              head
+            ),
+          ],
+          "",
+          own
+        ).filter((f) => f.problem === "term")
+      expect(slips("<p>Gutters cleared across Bristol.</p>")).toEqual([])
+      expect(
+        slips(`<p>Write to hello@${host} or see https://${host}/about/.</p>`)
+      ).toEqual([])
+      // Prose in the JSON-LD is still read.
+      expect(
+        slips("<p>Gutters cleared.</p>", ld("Exterior paintting")).map(
+          (f) => f.text
+        )
+      ).toEqual(["paintting"])
+      // Cleaning and clearing are both real words.
+      expect(slips("<p>Gutter cleaning and gutter clearing.</p>")).toEqual([])
+    })
+
     it("fails a service page missing its included or who-it-suits block, naming which", () => {
       const service = (blocks: string) =>
         page(
@@ -529,6 +643,28 @@ describe("the copy gate's field check, per writer before the build", () => {
       expect.stringContaining(
         'servicesHeading "Our services" is a stock label'
       ),
+    ])
+  })
+
+  // Perf run 2: 55 characters with "Brightside Care", 91 on the page.
+  it("counts a title as the page shows it, the business name added, and finds a shared one", () => {
+    const business = "Brightside Window and Gutter Care"
+    const titled = {
+      businessName: business,
+      homeTitle: "Window and Gutter Cleaning in Bristol | Brightside Care",
+      service1Title: "Window Cleaning Bristol",
+      service2Title: "Gutter Clearing Bristol",
+      service3Title: `Fascia Cleaning | ${business}`,
+      service4Title: "Window Cleaning Bristol",
+    }
+    expect(fieldFindings(titled, ["homeTitle"])).toEqual([
+      `homeTitle shows as "Window and Gutter Cleaning in Bristol | Brightside Care | ${business}", 91 characters, because a title that does not contain businessName exactly gets " | ${business}" after it; write 50 to 60 in all, or name the business exactly within that`,
+    ])
+    expect(fieldFindings(titled, ["service2Title", "service3Title"])).toEqual(
+      []
+    )
+    expect(fieldFindings(titled, ["service1Title"])).toEqual([
+      "service1Title is the same as service4Title; each page needs its own title",
     ])
   })
 
