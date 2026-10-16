@@ -43,6 +43,8 @@ export const ReviewValue = z.strictObject({
   name: Text(80),
   permission: z.literal(true),
 })
+/** A phone number as the site stores it: E.164. */
+export const E164 = z.string().regex(/^\+[1-9]\d{6,14}$/)
 const fact = <K extends string, V extends z.ZodRawShape>(
   key: K,
   value: V,
@@ -66,7 +68,7 @@ const fact = <K extends string, V extends z.ZodRawShape>(
  */
 export const FactValue = z.discriminatedUnion("key", [
   fact("business.name", { name: Text(120) }),
-  fact("business.phone", { e164: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
+  fact("business.phone", { e164: E164 }),
   fact("business.email", { address: z.email().max(254) }),
   fact("hours.weekday", { open: HHMM, close: HHMM }, (v) =>
     v.refine((h) => h.close === "00:00" || h.open < h.close, {

@@ -1,6 +1,6 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
-  OwnerChangeRequest,
+  CosChangeRequest,
   type RequestChangeOutput,
   RequestChangeOutput as RequestChangeResult,
 } from "@workspace/contracts"
@@ -48,7 +48,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
     props={props}
     slot="request-change"
     title={(input) => input.text}
-    view={decisionView(props, OwnerChangeRequest, RequestChangeResult)}
+    view={decisionView(props, CosChangeRequest, RequestChangeResult)}
     yes="Approve"
   />
 )

@@ -6,7 +6,9 @@ import {
   CheckDomainOutput,
   type ConnectDomainInput,
   ConnectDomainOutput,
+  type CosChangeRequest,
   CosFacts,
+  CosMessage,
   CosWorkspace,
   type CreateReminderOutput,
   type CreateReminderRequest,
@@ -19,7 +21,6 @@ import {
   GetPreviewOutput,
   InformationAnswer,
   OwnerAnswerText,
-  type OwnerChangeRequest,
   PreviewLink,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
@@ -51,12 +52,14 @@ import {
   startChange,
   stateFacts,
 } from "../changes.ts"
+import { emailFromOwner, phoneFromOwner } from "../contact.ts"
 import { failure } from "../http.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
 } from "../reminders.ts"
 import { readFacts, readWorkspace } from "../workspace.ts"
+import { readSession } from "./history.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -275,19 +278,119 @@ export async function getPreview(
   })
 }
 
+const untyped = (what: string) =>
+  failure(400, {
+    class: "validation",
+    code: "contact.not_typed",
+    message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. Name it in the change, as the owner typed it, then propose again.`,
+    detail: {},
+  })
+
+/**
+ * A new phone or email the owner typed in full, recorded as their fact
+ * before the change starts, so the build reads the number the owner gave and
+ * the content gate agrees with the site. The model proposes the value; it is
+ * recorded only when the owner's own messages in `sessionId` hold the digits
+ * or the address, so a number the model made up never becomes a fact. The
+ * change text, which the owner reads on the card, must name it too.
+ * Null when there is nothing to record or it is recorded, else the refusal.
+ */
+async function recordContact(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { contact, text }: CosChangeRequest
+): Promise<Response | null> {
+  if (!contact?.phone && !contact?.email) return null
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  const said = log
+    .flatMap((e) => {
+      const m =
+        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+      return m?.success && m.data.message.role === "user"
+        ? m.data.message.parts.flatMap((p) =>
+            p.type === "text" ? [p.text] : []
+          )
+        : []
+    })
+    .join("\n")
+  const stated: FactValue[] = []
+  if (contact.phone) {
+    if (
+      !(
+        phoneFromOwner(contact.phone, said) &&
+        phoneFromOwner(contact.phone, text)
+      )
+    )
+      return untyped("phone number")
+    stated.push({ key: "business.phone", value: { e164: contact.phone } })
+  }
+  if (contact.email) {
+    if (
+      !(
+        emailFromOwner(contact.email, said) &&
+        emailFromOwner(contact.email, text)
+      )
+    )
+      return untyped("email address")
+    stated.push({ key: "business.email", value: { address: contact.email } })
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      (db) => stateFacts(db, owner, stated)
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.contact_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "contact.unconfirmed",
+      message: "The new contact detail could not be confirmed.",
+      detail: {},
+    })
+  }
+  return null
+}
+
+/**
+ * The owner's change, started as `/changes` starts it, keyed by the
+ * approval, after any contact detail in it is recorded. Both ways a yes
+ * reaches the change come here: the tool's body and the chat's approval.
+ */
+export async function startOwnerChange(
+  context: Pick<ToolContext, "env" | "kit" | "owner">,
+  sessionId: string,
+  input: CosChangeRequest,
+  approvalId: string
+): Promise<Response> {
+  return (
+    (await recordContact(context, sessionId, input)) ??
+    startChange(
+      context.env,
+      context.kit,
+      context.owner,
+      input.text,
+      approvalId,
+      input.change_kind
+    )
+  )
+}
+
 /** The owner's change, started as `/changes` starts it, keyed by the approval. */
 export async function requestChange(
-  { env, kit, owner }: ToolContext,
-  input: OwnerChangeRequest,
-  approvalId: string
+  context: ToolContext,
+  input: CosChangeRequest,
+  approvalId: string,
+  turn: Turn
 ): Promise<RequestChangeOutput> {
-  const response = await startChange(
-    env,
-    kit,
-    owner,
-    input.text,
-    approvalId,
-    input.change_kind
+  const response = await startOwnerChange(
+    context,
+    turn.sessionId,
+    input,
+    approvalId
   )
   if (!response.ok) return refused(response)
   return RequestChangeOutput.parse({
