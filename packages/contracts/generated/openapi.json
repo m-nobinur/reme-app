@@ -11943,7 +11943,7 @@
                 "pattern": "\\S",
                 "description": "The owner's full legal name, first and last."
               },
-              "organization": {
+              "business_name": {
                 "description": "The business's registered or trading name.",
                 "type": "string",
                 "minLength": 1,
@@ -23947,7 +23947,7 @@
                 "pattern": "\\S",
                 "description": "The owner's full legal name, first and last."
               },
-              "organization": {
+              "business_name": {
                 "description": "The business's registered or trading name.",
                 "type": "string",
                 "minLength": 1,

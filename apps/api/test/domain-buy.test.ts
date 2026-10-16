@@ -35,7 +35,7 @@ const STRIPE = {
 const details = {
   registrant: {
     name: "Jane Smith",
-    organization: "Sparkle Clean",
+    business_name: "Sparkle Clean",
     email: "jane@sparkle.invalid",
     phone: "+447700900123",
     address: {

@@ -219,7 +219,7 @@ export function toRegistrant(
   const { address } = details
   return {
     name: details.name,
-    ...(details.organization && { organization: details.organization }),
+    ...(details.business_name && { organization: details.business_name }),
     email: details.email,
     phone: registrarPhone(details.phone),
     address: {
@@ -256,6 +256,24 @@ async function priceNow(
   return {
     price: { tld, retail_gbp: DOMAIN_PRICES[tld].retail_gbp, cost_usd: cost },
   }
+}
+
+/**
+ * The details as the registry takes them: who the registrant is in law only
+ * where the extension asks (.co.uk and .uk), never on a .com or .net.
+ */
+export function heldDetails(
+  name: string,
+  d: RegistrantDetails
+): RegistrantDetails {
+  const tld = sellableTld(name)
+  return tld === "co.uk" || tld === "uk"
+    ? {
+        registrant: d.registrant,
+        ...(d.registrant_type && { registrant_type: d.registrant_type }),
+        ...(d.company_number && { company_number: d.company_number }),
+      }
+    : { registrant: d.registrant }
 }
 
 /** The details checked against the extension's own rules, or the refusal. */
@@ -306,10 +324,9 @@ export async function buy(
   if (!parsed.success) return fromEnvelope(400, BUY_REFUSALS.registrant_invalid)
   const priced = await priceNow(env, name)
   if ("refused" in priced) return priced
-  const invalid = await checkRegistrant(env, name, parsed.data)
+  const held = heldDetails(name, parsed.data)
+  const invalid = await checkRegistrant(env, name, held)
   if (invalid) return invalid
-  const { registrant, registrant_type, company_number } = parsed.data
-  const held = { registrant, registrant_type, company_number }
   let created: Refusal | { id: string } | false
   try {
     created = await kit.withOrg({ orgId }, async (db) => {
@@ -380,7 +397,9 @@ export async function buy(
             sandbox: !registrarLive(env),
             years: 1,
             auto_renew: true,
-            ...(registrant_type && { registrant_type }),
+            ...(held.registrant_type && {
+              registrant_type: held.registrant_type,
+            }),
           }),
         })
         .returning({ id: domains.id })
@@ -457,16 +476,16 @@ export async function checkoutSession(
   if (!input.success) return fromEnvelope(400, BUY_REFUSALS.registrant_invalid)
   const row = await readPurchase(kit, orgId, domainId)
   if (!row) return noPurchase()
-  const invalid = await checkRegistrant(env, row.name, input.data)
+  const { session_id, customer, ...details } = input.data
+  const held = heldDetails(row.name, details)
+  const invalid = await checkRegistrant(env, row.name, held)
   if (invalid) return invalid
-  const { session_id, customer, registrant, registrant_type, company_number } =
-    input.data
   const stored = await kit.withOrg({ orgId }, (db) =>
     db
       .update(domains)
       .set({
         stripe: { customer, checkout_session: session_id },
-        registrant: { registrant, registrant_type, company_number },
+        registrant: held,
       })
       .where(
         sql`${domains.id} = ${domainId} and ${domains.state} = 'awaiting_payment'`

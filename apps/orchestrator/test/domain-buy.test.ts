@@ -7,6 +7,7 @@ import {
   checkoutSession,
   find,
   finishSandbox,
+  heldDetails,
   MAX_OPEN_PURCHASES,
   paymentEvent,
   registrarPhone,
@@ -229,7 +230,7 @@ const unique = (tld = "com") =>
 const details = {
   registrant: {
     name: "Jane Smith",
-    organization: "BrightClean",
+    business_name: "BrightClean",
     email: "jane@example.com",
     phone: "+447700900123",
     address: {
@@ -715,5 +716,21 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     await revokeDomains(p.env, kit, p.orgId)
     expect((await rowOf(p.orgId, p.name)).state).toBe("verifying")
     expect((await rowOf(p.orgId, name)).state).toBe("removed")
+  })
+})
+
+describe("the details a purchase keeps", () => {
+  it("keeps who the registrant is in law only for .co.uk and .uk", () => {
+    const legal = {
+      registrant_type: "IND" as const,
+      company_number: "00000000",
+    }
+    expect(heldDetails("bright.com", { ...details, ...legal })).toEqual({
+      registrant: details.registrant,
+    })
+    expect(heldDetails("bright.co.uk", { ...details, ...legal })).toEqual({
+      registrant: details.registrant,
+      ...legal,
+    })
   })
 })

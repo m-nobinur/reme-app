@@ -46,7 +46,7 @@ vi.mock("@workspace/ui/lib/stripe", () => ({ mountCheckout: stripe.mount }))
 const NAME = "sparkleclean.co.uk"
 const REGISTRANT = {
   name: "Jane Smith",
-  organization: "Sparkle Clean",
+  business_name: "Sparkle Clean",
   email: "jane@sparkle.example",
   phone: "+447700900123",
   address: {
@@ -206,6 +206,29 @@ it("shows what is bought, for how much, in whose name, and the agreements", asyn
     "Edit details",
     "Continue to pay £8",
   ])
+  await card.unmount()
+})
+
+it("shows no legal type or company number on a .com, and no county that repeats the city", async () => {
+  // As staging saw it: the assistant sent an individual with a made-up number.
+  const name = "sparklecleaning.com"
+  const card = await draw("buy_domain", {
+    args: {
+      name,
+      registrant: {
+        ...REGISTRANT,
+        address: { ...REGISTRANT.address, state: "Bristol" },
+      },
+      registrant_type: "IND",
+      company_number: "00000000",
+    },
+    result: { ...AWAITING, name, price_gbp: 12 },
+  })
+  const text = card.container.textContent ?? ""
+  expect(text).toContain("Sparkle Clean")
+  expect(text).not.toContain("individual")
+  expect(text).not.toContain("00000000")
+  expect(text).toContain("12 Mill Lane, Bristol, BS1 4AB, GB")
   await card.unmount()
 })
 
@@ -470,7 +493,7 @@ const form = (fields: Record<string, string>) => {
 }
 const FIELDS = {
   name: "Jane Smith",
-  organization: "Sparkle Clean",
+  business_name: "Sparkle Clean",
   email: "jane@sparkle.example",
   phone: "07700 900123",
   street: "12 Mill Lane",

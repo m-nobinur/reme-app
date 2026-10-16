@@ -72,6 +72,10 @@ const sparkle = {
   },
 }
 
+/** `sparkle` as our contract has it, for the rule checks. */
+const { organization: _business, ...sparklePerson } = sparkle
+const sparkleDetails = { ...sparklePerson, business_name: sparkle.organization }
+
 describe("the registrar client", () => {
   it("checks through the sandbox unless REGISTRAR_API says registrar", async () => {
     const calls = stub({ [`POST ${SANDBOX}/domain-check`]: CHECK_SANDBOX })
@@ -152,21 +156,35 @@ describe("the registrar client", () => {
       expect.arrayContaining(["LTD", "LLP"])
     )
     expect(coUk.organizationRequired).toBe(true)
-    expect(registrantProblem(coUk, { registrant: sparkle })).toBe(
+    expect(registrantProblem(coUk, { registrant: sparkleDetails })).toBe(
       "registrant_type"
     )
     expect(
-      registrantProblem(coUk, { registrant: sparkle, registrant_type: "LTD" })
+      registrantProblem(coUk, {
+        registrant: sparkleDetails,
+        registrant_type: "LTD",
+      })
     ).toBe("company_number")
     expect(
-      registrantProblem(coUk, { registrant: sparkle, registrant_type: "STRA" })
+      registrantProblem(coUk, {
+        registrant: sparkleDetails,
+        registrant_type: "STRA",
+      })
     ).toBeNull()
     expect(
       registrantProblem(coUk, {
-        registrant: { ...sparkle, organization: undefined },
+        registrant: { ...sparkleDetails, business_name: undefined },
         registrant_type: "STRA",
       })
-    ).toBe("organization")
+    ).toBe("business_name")
+    // A company number only with a company: an individual's is made up.
+    expect(
+      registrantProblem(coUk, {
+        registrant: sparkleDetails,
+        registrant_type: "IND",
+        company_number: "00000000",
+      })
+    ).toBe("company_number")
 
     const com = await registrantRules(live, "com")
     expect(com).toEqual({
@@ -174,7 +192,7 @@ describe("the registrar client", () => {
       companyNumberFor: [],
       organizationRequired: false,
     })
-    expect(registrantProblem(com, { registrant: sparkle })).toBeNull()
+    expect(registrantProblem(com, { registrant: sparkleDetails })).toBeNull()
   })
 
   it("registers asynchronously with the registrant, one year, auto-renew and redaction", async () => {

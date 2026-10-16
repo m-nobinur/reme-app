@@ -153,7 +153,9 @@ export const RegistrantType = z.enum(["STRA", "LTD", "LLP", "PTNR", "IND"])
  */
 export const Registrant = z.strictObject({
   name: Text(200).describe("The owner's full legal name, first and last."),
-  organization: Text(200)
+  // Not `organization`: the web refuses any request body naming an
+  // organisation (lib/auth/input.ts), since the org comes from the session.
+  business_name: Text(200)
     .optional()
     .describe("The business's registered or trading name."),
   email: z.email().max(254),

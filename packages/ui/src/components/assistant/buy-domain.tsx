@@ -293,11 +293,11 @@ function DetailsText({ details }: { details: RegistrantDetails }) {
   const address = who.address
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-      {who.organization ? (
+      {who.business_name ? (
         <>
           <dt className="text-muted-foreground">Business</dt>
           <dd className="min-w-0 break-words">
-            {who.organization}
+            {who.business_name}
             {type ? `, ${TYPES[type].toLowerCase()}` : ""}
             {details.company_number ? ` (${details.company_number})` : ""}
           </dd>
@@ -306,14 +306,14 @@ function DetailsText({ details }: { details: RegistrantDetails }) {
       <dt className="text-muted-foreground">Name</dt>
       <dd className="min-w-0 break-words">
         {who.name}
-        {!who.organization && type ? `, ${TYPES[type].toLowerCase()}` : ""}
+        {!who.business_name && type ? `, ${TYPES[type].toLowerCase()}` : ""}
       </dd>
       <dt className="text-muted-foreground">Address</dt>
       <dd className="min-w-0 break-words">
         {[
           address.street,
           address.city,
-          address.state,
+          address.state === address.city ? undefined : address.state,
           address.postal_code,
           address.country_code,
         ]
@@ -330,7 +330,7 @@ function DetailsText({ details }: { details: RegistrantDetails }) {
 
 const MESSAGES = {
   name: "Write your full name.",
-  organization: "Write your business's name.",
+  business_name: "Write your business's name.",
   email: "Write an email address you read.",
   phone: "Write a phone number, such as 07700 900123.",
   street: "Write the street address.",
@@ -364,7 +364,7 @@ export function readDetails(
   const candidate = {
     registrant: {
       name: field(data, "name"),
-      organization: field(data, "organization"),
+      business_name: field(data, "business_name"),
       email: field(data, "email"),
       phone: phone ? toE164(phone) : undefined,
       address: {
@@ -375,9 +375,11 @@ export function readDetails(
         country_code: field(data, "country_code")?.toUpperCase(),
       },
     },
-    registrant_type: type,
+    registrant_type: needsType(name) ? type : undefined,
     company_number:
-      type === "LTD" || type === "LLP" ? company?.toUpperCase() : undefined,
+      needsType(name) && (type === "LTD" || type === "LLP")
+        ? company?.toUpperCase()
+        : undefined,
   }
   const errors: Record<string, string> = {}
   const parsed = RegistrantDetails.safeParse(candidate)
@@ -390,8 +392,8 @@ export function readDetails(
   }
   if (needsType(name)) {
     if (!type) errors.registrant_type ??= MESSAGES.registrant_type
-    if (type !== "IND" && !candidate.registrant.organization) {
-      errors.organization ??= MESSAGES.organization
+    if (type !== "IND" && !candidate.registrant.business_name) {
+      errors.business_name ??= MESSAGES.business_name
     }
   }
   if ((type === "LTD" || type === "LLP") && !candidate.company_number) {
@@ -459,7 +461,7 @@ function DetailsForm({
         name="name"
         ref={first}
       />
-      {text("organization", "Business name", who.organization, {
+      {text("business_name", "Business name", who.business_name, {
         autoComplete: "organization",
       })}
       {needsType(name) ? (
@@ -742,7 +744,12 @@ function Purchase({
         <>
           <div className="flex flex-col gap-2">
             <p className={META}>Registered to your business</p>
-            <DetailsText details={details} />
+            <DetailsText
+              details={
+                // Who the registrant is in law matters to .co.uk and .uk only.
+                needsType(name) ? details : { registrant: details.registrant }
+              }
+            />
             {phase.at === "paying" ? null : (
               <div>
                 <Button

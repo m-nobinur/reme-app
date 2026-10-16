@@ -1444,7 +1444,7 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
 
 const REGISTRANT = {
   name: "Jane Smith",
-  organization: "Sparkle Clean",
+  business_name: "Sparkle Clean",
   email: "jane@sparkleclean.example",
   phone: "+447700900123",
   address: {

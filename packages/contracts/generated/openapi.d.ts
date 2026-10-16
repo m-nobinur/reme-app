@@ -3301,7 +3301,7 @@ export interface components {
         /** @description The owner's full legal name, first and last. */
         name: string
         /** @description The business's registered or trading name. */
-        organization?: string
+        business_name?: string
         /** Format: email */
         email: string
         phone: string
@@ -6697,7 +6697,7 @@ export interface components {
         /** @description The owner's full legal name, first and last. */
         name: string
         /** @description The business's registered or trading name. */
-        organization?: string
+        business_name?: string
         /** Format: email */
         email: string
         phone: string

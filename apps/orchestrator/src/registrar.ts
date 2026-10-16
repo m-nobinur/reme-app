@@ -190,24 +190,21 @@ export type Registrant = {
 export function registrantProblem(
   rules: RegistrantRules,
   input: {
-    registrant: { organization?: string }
+    registrant: { business_name?: string }
     registrant_type?: string
     company_number?: string
   }
 ): string | null {
-  if (rules.organizationRequired && !input.registrant.organization?.trim())
-    return "organization"
+  if (rules.organizationRequired && !input.registrant.business_name?.trim())
+    return "business_name"
   if (rules.registrantTypes.length === 0) return null
   if (
     !input.registrant_type ||
     !rules.registrantTypes.includes(input.registrant_type)
   )
     return "registrant_type"
-  if (
-    rules.companyNumberFor.includes(input.registrant_type) &&
-    !input.company_number?.trim()
-  )
-    return "company_number"
+  const needsNumber = rules.companyNumberFor.includes(input.registrant_type)
+  if (needsNumber !== !!input.company_number?.trim()) return "company_number"
   return null
 }
 

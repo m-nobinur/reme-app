@@ -881,7 +881,7 @@ it("marks a reminder done once, however often Done is pressed", async () => {
 const DETAILS = {
   registrant: {
     name: "Jane Smith",
-    organization: "Sparkle Clean",
+    business_name: "Sparkle Clean",
     email: "jane@sparkle.example",
     phone: "+447700900123",
     address: {
