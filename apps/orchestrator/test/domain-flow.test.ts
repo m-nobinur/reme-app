@@ -421,8 +421,9 @@ describe("a connect request", () => {
   })
 })
 
-it("backs off 2, 5, 15 and 30 minutes, then hourly", () => {
-  expect([1, 2, 3, 4, 5, 9].map(nextWait)).toEqual(
-    [2, 5, 15, 30, 60, 60].map((m) => m * 60 * 1000)
+it("looks every minute for the first half hour, every 10 to two hours, then hourly", () => {
+  const MIN = 60 * 1000
+  expect([0, 29, 30, 119, 120, 71 * 60].map((m) => nextWait(m * MIN))).toEqual(
+    [1, 1, 10, 10, 60, 60].map((m) => m * MIN)
   )
 })

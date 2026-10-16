@@ -24,6 +24,14 @@ import {
 const MINUTE = 60 * 1000
 
 /**
+ * How many `check` nudges a claim honours. With the schedule's ~110 looks a
+ * claim spends ~230 steps over 72 hours; each nudge adds a look and a wait,
+ * so this keeps the worst case near 550, inside even the 1,024 a Free plan
+ * Workflow gets (10,000 on Paid).
+ */
+export const MAX_CHECKS = 100
+
+/**
  * A message waits while the owner's chat is in a turn or holds an unanswered
  * card, which can be days: 10 s doubling to a 30-minute cap, about four days
  * of tries in all. Past that the message is dropped and its `domain.status`
@@ -40,7 +48,8 @@ export const SAY_RETRIES: WorkflowStepConfig = {
 /**
  * One instance per custom domain claim, `domain-{domain_id}`, connect path
  * only. It claims the two custom hostnames, then looks: at once, again on a
- * `check` nudge or after 2, 5, 15 and 30 minutes and hourly from then, until
+ * `check` nudge or on `nextWait`'s schedule (every minute for the first half
+ * hour, every 10 minutes to two hours, hourly from then), until
  * the domain is ready, removed, or 72 hours old. Ready activates it and
  * writes the pointers again after `SETTLE`; 72 hours fails it and frees the
  * name. A removal starts `domain-{domain_id}-removed` with `settle`, which
@@ -92,6 +101,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
     }
 
     let nudged = false
+    let checks = 0
     for (let n = 1; ; n++) {
       const seen = await step.do(`look ${n}`, () =>
         withKit(env, (kit) => look(env, kit, orgId, domainId, n))
@@ -115,11 +125,15 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         await say("say nudge", message)
         nudged = true
       }
+      const wait = Math.min(nextWait(seen.at - started), deadline - seen.at)
+      // Past `MAX_CHECKS` nudges the waits are sleeps, which are not steps.
+      if (checks >= MAX_CHECKS) {
+        await step.sleep(`wait ${n}`, wait)
+        continue
+      }
       try {
-        await step.waitForEvent(`check ${n}`, {
-          type: "check",
-          timeout: Math.min(nextWait(n), deadline - seen.at),
-        })
+        await step.waitForEvent(`check ${n}`, { type: "check", timeout: wait })
+        checks++
       } catch {
         // No nudge in time: look anyway.
       }

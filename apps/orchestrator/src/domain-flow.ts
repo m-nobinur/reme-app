@@ -82,9 +82,20 @@ export const DEADLINE_MS = 72 * 60 * 60 * 1000
  */
 export const NUDGE_AFTER_MS = 24 * 60 * 60 * 1000
 const MINUTE = 60 * 1000
-const WAITS_MS = [2, 5, 15, 30].map((m) => m * MINUTE)
-/** How long the `n`th look waits for a nudge before looking again. */
-export const nextWait = (n: number) => WAITS_MS[n - 1] ?? 60 * MINUTE
+/**
+ * How long a look waits for a `check` nudge before looking again, by how long
+ * the claim has been connecting: every minute for the first half hour, while
+ * the owner adds records and Cloudflare answers within minutes (measured
+ * 2026-10-16: hostname active at 43 s, certificate at 2 min 8 s), every 10
+ * minutes to two hours, then hourly. By the clock, not the look count, so a
+ * nudge never moves the schedule on: about 110 looks over 72 hours.
+ */
+export const nextWait = (elapsedMs: number) =>
+  elapsedMs < 30 * MINUTE
+    ? MINUTE
+    : elapsedMs < 120 * MINUTE
+      ? 10 * MINUTE
+      : 60 * MINUTE
 
 type DomainRow = typeof domains.$inferSelect
 type CfIds = { apex?: string; www?: string }
