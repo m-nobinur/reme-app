@@ -153,9 +153,9 @@ export function siteValues(source: string): Record<string, string> {
 /**
  * BA4's per-page copy check: after a writer's edit, the copy gate's field
  * rules over its own filled fields, against every heading on the site so
- * far. Siblings in one group write at once, so of two that collide the later
- * one sees the earlier. Null when nothing fails; the message otherwise, which
- * the writer acts on in the same session. The caller sends it once a task. In the confirming run of 2026-10-15 every one of the first
+ * far. Writers run at once, so of two that collide the later one sees the
+ * earlier. Null when nothing fails; the message otherwise, which goes to the
+ * writer's one retry. In the confirming run of 2026-10-15 every one of the first
  * gate's nine misses was one of these, and the two repair rounds they cost
  * took 61 s and 18 s of the lead's turns after a gate run each.
  */
@@ -260,7 +260,7 @@ export function leadLines(brief: Brief, plan: Blueprint): string[] {
   ]
 }
 
-/** What every child is told before its own part; one string for every page builder, so they share a cached prefix. */
+/** What every writer is told before its own part; one string for every page writer, so they share a cached prefix. */
 function childPrefix(
   brief: Brief,
   role: string,

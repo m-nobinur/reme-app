@@ -1,4 +1,4 @@
-# ADR-038: The builder plans a Blueprint before it builds, and builds it with subagents
+# ADR-038: The builder plans a Blueprint before it builds, and builds it with parallel writers
 
 Status: accepted, 2026-10-14. Applies to `apps/orchestrator`, `apps/api`, `packages/facade`,
 `packages/contracts`, `packages/db` and `packages/starter-site`. Amends ADR-036: an owner's first
@@ -68,11 +68,13 @@ dollars later.
    written out (an inner page's hero is the plain page hero unless `layout` names one), each
    section's purpose, the image slots and the feature list. Where it differs from the owner's
    choices listed above it, the Blueprint wins, because it already applied them.
-9. **Subagents.** flue's `task` tool and `useSubagent`, which the facade already ships, are no
-   longer refused. Page builders, a copy writer, the photo director and a critic may run under one
-   lead, at most four at once. Children cannot call `task`, `checkpoint`, `report_complete` or
-   `ask_chief`, cannot run `astro build`, write files through a per-path queue, and charge the
-   assignment's one budget. BA1 records the turn-gate details.
+9. **Parallel writers.** The lead writes the shell, then calls `write_pages`. Code runs one
+   model call per planned page and one for the copy, up to six at once, each with no tools and a
+   JSON reply, and writes every value into its own line of `site-config`. The photo director
+   draws meanwhile and each picture lands in the site as it is made. The first design had the
+   lead delegate to flue subagents through the `task` tool; one model call per writer replaced
+   that because the lead sent the pages one after another. The facade's turn gate still handles subagent
+   calls, and none run.
 10. **Runtime models.** One role, one effort, so cached prefixes hold: Sonnet 5.5 for planning
     (high) and for the lead and page builders (medium, sharing a prefix), Haiku 5.5 for copy and
     small single-shot work, the design critic on Sonnet 5.5 at medium. The track index holds the

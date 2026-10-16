@@ -22,7 +22,7 @@ import type { Ids } from "./state.ts"
 
 /**
  * BA4: the Blueprint's generated photos, made after the owner decided on the
- * plan and before the page builders start, in a Workflow step of its own so a
+ * plan and while the lead writes the pages, in a Workflow step of its own so a
  * retry reuses what was drawn (the asset id is the picture's hash). A slot
  * that fell back leaves the plan, so its section renders its no-image form;
  * the rest get their asset id. The plan on the row, the `site.photos` event

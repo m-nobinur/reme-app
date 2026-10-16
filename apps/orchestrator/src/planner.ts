@@ -202,7 +202,7 @@ export function withOwnerChoices(
   const owner = ownerChoices(facts)
   const notes = pickNotes(facts)
   const budgeted = withinBudget(blueprint)
-  const pages = withContentBlocks(framedHeaders(budgeted))
+  const pages = withContentBlocks(splitHeaders(budgeted))
   const features = [
     ...blueprint.features.filter((line) => !notes.includes(line)),
   ]
@@ -415,7 +415,7 @@ const cap = (text: string, max: number) =>
  * The hero takes a photo in every variant but `text_led`, drawn at the shape
  * of the box it renders in (starter `site.css`): wash's photo is the right
  * half of the hero on a wide screen, about 1:1 to 5:4, and 5:4 under the copy
- * on a phone; split_frame is 5:4; split_arch is 4:5; dark_center fills the
+ * on a phone; split_frame is 4:3; split_arch is 3:4; dark_center fills the
  * hero behind the copy. A 16:9 wash photo lost 44% of its width to the crop.
  */
 const PHOTO_HERO: Record<string, ImageSlot["aspect"]> = {
@@ -476,10 +476,11 @@ function withContentBlocks(pages: Blueprint["pages"]): Blueprint["pages"] {
 }
 
 /**
- * An inner page whose header has a photo draws it in a frame beside the
- * copy: text_led's portrait inset is too small to carry a header's photo.
+ * An inner page whose header has a photo draws it as a split_frame hero, the
+ * photo beside the copy: text_led's portrait inset is too small to carry a
+ * header's photo.
  */
-function framedHeaders(blueprint: Blueprint): Blueprint["pages"] {
+function splitHeaders(blueprint: Blueprint): Blueprint["pages"] {
   return blueprint.pages.map((page) =>
     page.page !== "home" &&
     blueprint.images.some((s) => s.page === page.page && s.section === "hero")
