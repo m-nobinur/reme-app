@@ -110,7 +110,7 @@ export async function bridge(
   owner: Owner,
   path: string,
   init: {
-    method?: "GET" | "POST"
+    method?: "GET" | "POST" | "DELETE"
     body?: unknown
     key?: string | null
     signal?: AbortSignal
