@@ -11,6 +11,7 @@ import {
   domains,
   eq,
   facts,
+  memberships,
   reminders,
   sql,
   supersedeFact,
@@ -28,10 +29,12 @@ import {
 } from "vitest"
 import {
   answerQuestion,
+  buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
   connectDomain,
   createReminder,
+  findDomain,
   getFacts,
   getPreview,
   getWorkspace,
@@ -1559,6 +1562,112 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           crypto.randomUUID()
         )
       ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("find_domain and buy_domain", () => {
+    const paying = (who: Owner, stub: Stub): ToolContext => {
+      const base = context(who, stub)
+      return {
+        ...base,
+        env: {
+          ...base.env,
+          STRIPE_SECRET_KEY: "sk_fixture",
+          STRIPE_WEBHOOK_SECRET: "whsec_fix",
+        },
+      }
+    }
+    const registrant = {
+      registrant: {
+        name: "Jane Smith",
+        email: "jane@sparkle.invalid",
+        phone: "+447700900123",
+        address: {
+          street: "12 Mill Lane",
+          city: "Bristol",
+          postal_code: "BS1 4AB",
+          country_code: "GB",
+        },
+      },
+    }
+
+    it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
+      const found = {
+        outcome: "found",
+        best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
+        options: [
+          { name: "sparkleclean.net", price_gbp_year: 12, why: "Close." },
+        ],
+      }
+      const stub = stubOrchestrator(() => Response.json(found))
+      expect(
+        kept(
+          "find_domain",
+          await findDomain(context(me, stub), { query: "sparkle" })
+        )
+      ).toEqual(found)
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/find"
+      )
+      expect(call?.body).toEqual({ query: "sparkle" })
+    })
+
+    it("buy_domain prepares the purchase keyed by the call, and charges nothing", async () => {
+      const answer = {
+        outcome: "awaiting_payment",
+        name: "sparkleclean.com",
+        price_gbp: 12,
+        checkout: "embedded",
+      }
+      const stub = stubOrchestrator(() =>
+        Response.json(answer, { status: 201 })
+      )
+      const input = { name: "sparkleclean.com", ...registrant }
+      expect(
+        kept(
+          "buy_domain",
+          await buyDomain(paying(me, stub), input, "toolu_buy_1")
+        )
+      ).toEqual(answer)
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/buy"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe("toolu_buy_1")
+      expect(call?.body).toEqual(input)
+    })
+
+    it("buy_domain refuses without the Stripe keys and for a member who is not the owner, before the orchestrator", async () => {
+      const quiet = stubOrchestrator()
+      const input = { name: "sparkleclean.com", ...registrant }
+      expect(
+        kept(
+          "buy_domain",
+          await buyDomain(context(me, quiet), input, "toolu_buy_2")
+        )
+      ).toEqual({
+        outcome: "refused",
+        error: {
+          class: "resource",
+          code: "domain.buy_unavailable",
+          message: "Buying a domain isn't available yet.",
+        },
+      })
+      const member = await owner(kit, url as string, "cos-member")
+      await kit.withOrg({ orgId: member.orgId }, (db) =>
+        db
+          .update(memberships)
+          .set({ role: "member" })
+          .where(sql`${memberships.orgId} = ${member.orgId}`)
+      )
+      expect(
+        await buyDomain(paying(member, quiet), input, "toolu_buy_3")
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.not_owner" },
+      })
+      expect(quiet.calls).toEqual([])
     })
   })
 

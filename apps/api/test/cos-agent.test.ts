@@ -760,6 +760,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         ...env(url as string),
         ORCHESTRATOR: stub,
         SITE_HOST_SUFFIX: SUFFIX,
+        STRIPE_SECRET_KEY: "sk_fixture",
+        STRIPE_WEBHOOK_SECRET: "whsec_fix",
       } as unknown as Env,
       kit,
       { orgId: who.orgId, session: session(who) },
@@ -959,6 +961,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     expect(names.sort()).toEqual([
       "check_domain",
+      "find_domain",
       "get_facts",
       "get_preview",
       "get_workspace",
@@ -1591,6 +1594,59 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       done.chunks.filter((c) => c.type === "tool-approval-request")
     ).toHaveLength(2)
     expect(stub.calls).toHaveLength(0)
+  })
+
+  it("runs buy_domain without a card, keyed by its tool call, since paying in Checkout is the consent", async () => {
+    const id = await conversation(me)
+    const stub = stubOrchestrator(() =>
+      Response.json(
+        {
+          outcome: "awaiting_payment",
+          name: "sparkleclean.com",
+          price_gbp: 12,
+          checkout: "embedded",
+        },
+        { status: 201 }
+      )
+    )
+    const done = await turn(
+      me,
+      typed(id, "Yes, buy sparkleclean.com."),
+      {
+        model: scripted(
+          calls({
+            id: "call_buy",
+            tool: "buy_domain",
+            input: {
+              name: "sparkleclean.com",
+              registrant: {
+                name: "Jane Smith",
+                email: "jane@sparkle.invalid",
+                phone: "+447700900123",
+                address: {
+                  street: "12 Mill Lane",
+                  city: "Bristol",
+                  postal_code: "BS1 4AB",
+                  country_code: "GB",
+                },
+              },
+            },
+          }),
+          said("The card has the details; paying there buys it.")
+        ).model,
+      },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(0)
+    expect(waiting(await tailOf(me, id))).toEqual([])
+    const [call] = stub.calls
+    expect(new URL(call?.request.url ?? "").pathname).toBe(
+      "/assignments/domains/buy"
+    )
+    expect(call?.request.headers.get("idempotency-key")).toBe("call_buy")
   })
 
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {

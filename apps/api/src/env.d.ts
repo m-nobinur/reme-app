@@ -21,6 +21,13 @@ interface Env {
   /** The onboarding planner's model id, when not `DEFAULT_ONBOARDING_MODEL`. Same table. */
   ONBOARDING_MODEL?: string
   /**
+   * The buy path's Stripe keys (test mode until live keys are made). With
+   * either unset, `buy_domain` and checkout refuse `domain.buy_unavailable`
+   * and `/webhooks/stripe` is not a route; `find_domain` still works.
+   */
+  STRIPE_SECRET_KEY?: string
+  STRIPE_WEBHOOK_SECRET?: string
+  /**
    * Local dev only, from `.dev.vars` with `SITE_HOST_SUFFIX=.reme.localhost`:
    * the local router's port. Never in `wrangler.jsonc`; `siteUrl` refuses it
    * on a real host.

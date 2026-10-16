@@ -2,6 +2,8 @@ import {
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
   BuildSummary,
+  type BuyDomainInput,
+  BuyDomainOutput,
   type CheckDomainInput,
   CheckDomainOutput,
   type ConnectDomainInput,
@@ -17,6 +19,8 @@ import {
   type FactRecord,
   FactValue,
   FactValueKey,
+  type FindDomainInput,
+  FindDomainOutput,
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
@@ -36,11 +40,9 @@ import {
   eq,
   events,
   failureCode,
-  memberships,
   siteRevisions,
   sql,
   type Tenancy,
-  users,
 } from "@workspace/db"
 import {
   type Bridged,
@@ -53,6 +55,12 @@ import {
   stateFacts,
 } from "../changes.ts"
 import { emailFromOwner, phoneFromOwner } from "../contact.ts"
+import {
+  buyConfigured,
+  buyUnavailable,
+  isOrgOwner,
+  notOwner,
+} from "../domain-buy.ts"
 import { failure } from "../http.ts"
 import {
   ASSISTANT_KEY_PREFIX,
@@ -647,23 +655,7 @@ export async function removal(
   name: string,
   key: string
 ): Promise<Response> {
-  const [own] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({ role: memberships.role })
-      .from(memberships)
-      .innerJoin(users, eq(users.id, memberships.userId))
-      .where(
-        sql`${memberships.status} = 'active' and ${users.workosUserId} = ${owner.session.workosUserId}`
-      )
-  )
-  if (own?.role !== "owner") {
-    return failure(403, {
-      class: "permission",
-      code: "domain.not_owner",
-      message: "Only the owner can remove a domain.",
-      detail: {},
-    })
-  }
+  if (!(await isOrgOwner(kit, owner))) return notOwner("remove")
   const result = await bridge(env, owner, `/domains/${name}`, {
     method: "DELETE",
     key,
@@ -683,4 +675,40 @@ export async function removeDomain(
   const answered = await removal(context, name, approvalId)
   if (!answered.ok) return refused(answered)
   return { outcome: "removed" }
+}
+
+/**
+ * Names free to register now, at the price table's price: the
+ * orchestrator's registrar search, which keeps only what the configured
+ * registrar reports registrable under the table's cost cap. It costs
+ * nothing and reserves nothing, so it needs no approval.
+ */
+export async function findDomain(
+  { env, owner }: ToolContext,
+  input: FindDomainInput
+): Promise<FindDomainOutput> {
+  return domainAnswer(
+    await bridge(env, owner, "/domains/find", { body: input }),
+    FindDomainOutput.parse
+  )
+}
+
+/**
+ * A purchase prepared and nothing charged: the orchestrator rechecks the
+ * name and its price and holds it as `awaiting_payment`, keyed by the tool
+ * call, so a rerun replays it. It takes no approval: the owner's payment in
+ * the card's Checkout is the consent, and the amount there comes from the
+ * row's price. The owner only, and only once this Worker can take payments.
+ */
+export async function buyDomain(
+  { env, kit, owner }: ToolContext,
+  input: BuyDomainInput,
+  key: string
+): Promise<BuyDomainOutput> {
+  if (!buyConfigured(env)) return refused(buyUnavailable())
+  if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
+  return domainAnswer(
+    await bridge(env, owner, "/domains/buy", { body: input, key }),
+    BuyDomainOutput.parse
+  )
 }
