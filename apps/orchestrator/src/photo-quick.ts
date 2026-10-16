@@ -2,6 +2,7 @@ import { ImageSlot } from "@workspace/contracts"
 import { events, sql, type Tenancy } from "@workspace/db"
 import { z } from "zod"
 import { directPhotos, type PhotoBucket, placeGenerated } from "./images.ts"
+import { GENERATED_DIR, generatedPath } from "./photo-files.ts"
 import { SITE_ROOT } from "./revise.ts"
 
 const CONFIG = "src/site-config.ts"
@@ -143,16 +144,16 @@ export async function regenerateSlot(input: {
   if (!result || result.status === "fallback" || !result.asset_id) {
     throw new PhotoFell(`photo: ${result?.reason ?? "no result"}`)
   }
-  const dir = `${SITE_ROOT}/src/assets/generated`
+  const dir = `${SITE_ROOT}/${GENERATED_DIR}`
   const old = await sandbox.exec(`ls ${dir} | grep -E '^${slot.id}\\.'`)
-  const path = `src/assets/generated/${slot.id}.${result.key?.split(".").pop()}`
+  const path = generatedPath(slot.id, result.content_type)
   const onDisk = old.stdout.split("\n").filter(Boolean)
   if (onDisk.length === 0)
     throw new PhotoFell("photo: slot has no file on disk")
   const written = [path]
   const was = onDisk[0] as string
   if (!onDisk.includes(path.split("/").pop() as string)) {
-    const from = `src/assets/generated/${was}`
+    const from = `${GENERATED_DIR}/${was}`
     const swapped = await sandbox.exec(
       `cd ${SITE_ROOT} && grep -qF '${from}' ${CONFIG} && sed -i 's#${from.replaceAll(".", "\\.")}#${path}#g' ${CONFIG} && rm ${from}`
     )

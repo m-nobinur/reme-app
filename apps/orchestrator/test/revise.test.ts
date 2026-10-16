@@ -26,9 +26,10 @@ vi.mock("../src/sandbox.ts", () => ({
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
-const { photoKey, placePhotos, publishedSource, restoreAndMap } = await import(
+const { placePhotos, publishedSource, restoreAndMap } = await import(
   "../src/revise.ts"
 )
+const { photoKey } = await import("../src/photo-files.ts")
 const { activate } = await import("../src/publish.ts")
 const { default: app } = await import("../src/app.ts")
 const { addRevision, eventsOf, GOOD_HTML, kit, previewed, storage } =

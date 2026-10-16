@@ -28,6 +28,7 @@ import {
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
 import { DIRECTIONS } from "./directions.ts"
+import { photoFile } from "./photo-files.ts"
 import { SEED_FIELDS } from "./seed.ts"
 
 /**
@@ -279,16 +280,6 @@ const labelOf = (list: readonly { id: string; label: string }[], id: string) =>
 
 /** The owner's own words, quoted so they read as data. */
 const quoted = (words: string) => JSON.stringify(words)
-
-/** The path the site config names an owner photo by; the file sits under `src/assets/`. */
-export const photoFile = (asset: Asset) =>
-  `uploads/${asset.id}.${EXTENSION[asset.content_type]}`
-
-const EXTENSION: Record<Asset["content_type"], string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-}
 
 /** The owner's photos, from the `media.uploads` fact. */
 export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>

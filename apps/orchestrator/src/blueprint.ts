@@ -7,7 +7,7 @@ import {
   type SectionKind,
 } from "@workspace/contracts"
 
-import { generatedPath, plannedPath } from "./images.ts"
+import { generatedPath, plannedPath } from "./photo-files.ts"
 import type { PhotoFile } from "./photo-step.ts"
 
 // The Blueprint as the builder reads it (ADR-038). Pure, so the Developer's

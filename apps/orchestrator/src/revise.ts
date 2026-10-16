@@ -6,7 +6,8 @@ import {
   siteRevisions,
   sql,
 } from "@workspace/db"
-import { ownerPhotos, photoFile } from "./developer-rules.ts"
+import { ownerPhotos } from "./developer-rules.ts"
+import { photoFile, photoKey } from "./photo-files.ts"
 import { activeDeployment } from "./publish.ts"
 import { repoMap } from "./repo-map.ts"
 
@@ -133,13 +134,6 @@ export async function mapSite(sandbox: Restorable): Promise<string> {
   }
   return repoMap(files)
 }
-
-/**
- * Where `apps/api` stores an owner's photo (its `uploadKey`): the site
- * bucket, under the org.
- */
-export const photoKey = (orgId: string, assetId: string) =>
-  `uploads/${orgId}/${assetId}`
 
 /**
  * Copies the owner's photos from the bucket into the site's `src/assets/`,

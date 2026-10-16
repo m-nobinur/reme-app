@@ -5,7 +5,7 @@ import {
   pageOfPrompt,
   type WriterTask,
 } from "./fanout.ts"
-import { generatedPath } from "./images.ts"
+import { GENERATED_DIR, generatedPath } from "./photo-files.ts"
 import type { PhotoFile } from "./photo-step.ts"
 import { SITE_ROOT } from "./revise.ts"
 
@@ -139,7 +139,7 @@ const findings = (check: string) =>
  * for the lead; a writer that fails says so, and its fields are the lead's.
  *
  * shortcut: the stagger is a fixed wait, not the first token (the call does
- * not stream); move to the facade's prefix warmer if writers move to it.
+ * not stream); wait for the first token if writers ever stream.
  */
 export async function writePages(input: {
   tasks: readonly WriterTask[]
@@ -328,7 +328,7 @@ export function reconcilePhotos(
     const file = files.find((f) => f.slot_id === slot && f.key)
     const to = file ? generatedPath(slot, file.content_type) : ""
     next = next.replace(
-      new RegExp(`"src/assets/generated/${slot}\\.(?:jpe?g|png|webp)"`, "g"),
+      new RegExp(`"${GENERATED_DIR}/${slot}\\.(?:jpe?g|png|webp)"`, "g"),
       JSON.stringify(to)
     )
   }
