@@ -1406,6 +1406,11 @@ picture {
   font-variant-numeric: tabular-nums;
 }
 
+/* A page about one service has no list to number it in. */
+.service-single .service-detail-main .eyebrow::after {
+  content: none;
+}
+
 .service-detail-main :is(h2, h3) {
   margin-block-end: var(--space-sm);
 }

@@ -179,12 +179,14 @@ const sha256 = async (bytes: Uint8Array) =>
 export const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
 
 /**
- * The starter's own layouts and components are read-only to the Developer: a
+ * The starter's own layouts and components, and its JSON-LD code (a lead once
+ * deleted the `url` from it to pass a gate), are read-only to the Developer: a
  * model that rewrote `Photo.astro` to pass the size gate dropped the hero's
  * widths. Custom sections live beside them and stay writable. Compared with
  * the site's first commit, the starter as it was seeded or restored.
  */
-const PROTECTED = "src/layouts src/components ':(exclude)src/components/custom'"
+const PROTECTED =
+  "src/layouts src/components src/structured-data.ts ':(exclude)src/components/custom'"
 
 /** Fails the report, after putting back the starter's copy, when a protected file changed. */
 async function holdStarterFiles(

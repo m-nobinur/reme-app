@@ -1,4 +1,5 @@
 ---
+import { accentParts } from "../accent"
 import Icon from "../components/Icon/Icon.astro"
 import Section from "../components/Section/Section.astro"
 import { headerPhoto } from "../header-photo"
@@ -46,6 +47,8 @@ const proofItems = [
   ...[site.trust1, site.trust2, site.trust3].filter(Boolean),
 ]
 const storyHeading = story ? site.overviewHeading : site.audienceHeading
+// The audience h3 reads the same accent marks as the h2 above it.
+const audienceHead = accentParts(site.audienceHeading)
 ---
 
 {
@@ -87,7 +90,13 @@ const storyHeading = story ? site.overviewHeading : site.audienceHeading
                 )
               }
               {story && audience && site.audienceHeading && (
-                <h3>{site.audienceHeading}</h3>
+                <h3>
+                  {audienceHead.lead}
+                  {audienceHead.accent && (
+                    <span class="accent">{audienceHead.accent}</span>
+                  )}
+                  {audienceHead.tail}
+                </h3>
               )}
               {audience && <p data-copy="about_body">{audience}</p>}
             </div>

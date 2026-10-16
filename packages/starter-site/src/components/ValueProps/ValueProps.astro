@@ -1,4 +1,5 @@
 ---
+import { plain } from "../../accent"
 import { iconFor } from "../../icons"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
@@ -45,7 +46,7 @@ const shown = items.filter((item) => item.title || item.body)
                 <Icon name={iconFor(item.icon, `${item.title} ${item.body}`)} />
               </span>
               <div>
-                {item.title && <h3>{item.title}</h3>}
+                {item.title && <h3>{plain(item.title)}</h3>}
                 {item.body && <p data-copy={copy}>{item.body}</p>}
               </div>
             </li>

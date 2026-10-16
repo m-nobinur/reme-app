@@ -105,6 +105,21 @@ describe("a service page's included and who-it-suits blocks", () => {
     }
   })
 
+  // Perf run 3: every service page's eyebrow read "Services 01".
+  test("number a service only in a list of services, never on its own page", () => {
+    const pages = pagesOf(bare)
+    const own = pages.filter((p) =>
+      /^services\/[^/]+\/index\.html$/.test(p.file)
+    )
+    expect(own.length).toBeGreaterThan(1)
+    for (const page of own)
+      expect(page.html, page.file).toMatch(/class="[^"]*service-single/)
+    for (const file of ["index.html", "services/index.html"])
+      expect(pages.find((p) => p.file === file)?.html, file).not.toContain(
+        "service-single"
+      )
+  })
+
   test("show the service's own words", () => {
     const html =
       pagesOf(rows).find((p) => p.file === "services/weekly-clean/index.html")
