@@ -35,7 +35,7 @@ export type FactInput = {
  * A UK number as the owner types it, to E.164. Anything it does not
  * recognise goes through unchanged, and `FactValue` refuses it.
  */
-function toE164(raw: string): string {
+export function toE164(raw: string): string {
   // "+44 (0)7700 900123": the bracketed trunk zero is dropped after a
   // country code, or it would land inside the number.
   const digits = raw

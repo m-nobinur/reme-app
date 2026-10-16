@@ -39,6 +39,7 @@ import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
 import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
+import { Route as AppDomainsReturnRouteImport } from './routes/app/domains.return'
 import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -190,6 +191,11 @@ const AppConversationIndexRoute = AppConversationIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppConversationRoute,
 } as any)
+const AppDomainsReturnRoute = AppDomainsReturnRouteImport.update({
+  id: '/domains/return',
+  path: '/domains/return',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppConversationCIdRoute = AppConversationCIdRouteImport.update({
   id: '/c/$id',
   path: '/c/$id',
@@ -225,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
+  '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/': typeof AppConversationIndexRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
+  '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesById {
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
+  '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
   '/app/_conversation/c/$id': typeof AppConversationCIdRoute
 }
@@ -324,6 +333,7 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/photos/$id'
+    | '/app/domains/return'
     | '/app/'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -356,6 +366,7 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/photos/$id'
+    | '/app/domains/return'
     | '/app/c/$id'
   id:
     | '__root__'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/photos/$id'
+    | '/app/domains/return'
     | '/app/_conversation/'
     | '/app/_conversation/c/$id'
   fileRoutesById: FileRoutesById
@@ -627,6 +639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConversationIndexRouteImport
       parentRoute: typeof AppConversationRoute
     }
+    '/app/domains/return': {
+      id: '/app/domains/return'
+      path: '/domains/return'
+      fullPath: '/app/domains/return'
+      preLoaderRoute: typeof AppDomainsReturnRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/_conversation/c/$id': {
       id: '/app/_conversation/c/$id'
       path: '/c/$id'
@@ -661,6 +680,7 @@ interface AppRouteChildren {
   AppRemindersRoute: typeof AppRemindersRoute
   AppStaffRoute: typeof AppStaffRoute
   AppWebsiteRoute: typeof AppWebsiteRoute
+  AppDomainsReturnRoute: typeof AppDomainsReturnRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -673,6 +693,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRemindersRoute: AppRemindersRoute,
   AppStaffRoute: AppStaffRoute,
   AppWebsiteRoute: AppWebsiteRoute,
+  AppDomainsReturnRoute: AppDomainsReturnRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

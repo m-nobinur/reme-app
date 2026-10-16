@@ -9,11 +9,15 @@ import {
   ConversationHistory,
   ConversationList,
   type CreateReminderRequest,
+  DomainCheckout,
+  DomainName,
+  DomainPurchaseStatus,
   ErrorEnvelope,
   FactList,
   type MessageFeedback,
   Org,
   PreviewLink,
+  type RegistrantDetails,
   StaffDirectory,
   Uuid,
   WorkspaceStatus,
@@ -538,6 +542,42 @@ async function createReminder(
   return await outcome(await post("/reminders", input, key), "/reminders")
 }
 
+/**
+ * A domain purchase's Checkout, created with the registrant as the card
+ * shows it. A refusal is the owner's to read (the name was taken, the price
+ * changed, buying is off), so it comes back as its code. Each press is its
+ * own Checkout, keyed by the caller.
+ */
+async function domainCheckout(
+  name: string,
+  details: RegistrantDetails,
+  key: string
+): Promise<DomainCheckout | { refused: string | null }> {
+  // A hostname never holds "/" or a lone dot, so it cannot reach another route.
+  const path = `/domains/${DomainName.parse(name)}/checkout`
+  const response = await post(path, details, key)
+  const body = await response.json().catch(() => null)
+  if (response.ok) return DomainCheckout.parse(body)
+  const refusal = ErrorEnvelope.safeParse(body)
+  if (response.status >= 400 && response.status < 500 && refusal.success) {
+    return { refused: refusal.data.code }
+  }
+  throw new Error(`apps/api answered ${response.status} for ${path}`)
+}
+
+/** The newest purchase of a domain in the owner's business, or null when there is none. */
+async function domainStatus(
+  name: string
+): Promise<DomainPurchaseStatus | null> {
+  const path = `/domains/${DomainName.parse(name)}`
+  const response = await call(path)
+  if (!response || response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
+  }
+  return DomainPurchaseStatus.parse(await response.json())
+}
+
 async function completeReminder(id: string): Promise<WriteOutcome> {
   const path = `/reminders/${segment(id)}`
   // Done is done: a second press is the same request.
@@ -664,6 +704,8 @@ export const apiSource: OwnerDataSource = {
   requestChange,
   createReminder,
   completeReminder,
+  domainCheckout,
+  domainStatus,
   conversations,
   conversation,
   createConversation,

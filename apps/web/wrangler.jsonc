@@ -48,7 +48,12 @@
     // service binding: a binding would also decide whether apps/api gets a
     // public hostname at all, which is a design question this does not settle.
     // The local value goes in apps/web/.dev.vars, which `pnpm bootstrap` writes.
-    "REME_API_URL": "https://staging-api.remeai.co.uk"
+    "REME_API_URL": "https://staging-api.remeai.co.uk",
+    // Stripe's public key for the domain purchase's embedded Checkout: public
+    // by design, it only mounts a Checkout the api already created. Test mode,
+    // so local and staging pay with test cards. Production leaves it unset,
+    // and without it the buy card says buying is not available yet.
+    "STRIPE_PUBLISHABLE_KEY": "pk_test_51TKPxWRJqz17tJWBeRsib9U5hyBMDfdDrbiwxxTlNsyqznoM7rxg7gxayhBbfnaX6uhjTRmJpXmpWNurjiXaDCQN00wZd9DpqP"
   },
   // `reme-staging-web-cache`, created by `node infra/bootstrap.ts staging`. Dev
   // and preview still run against a local simulation of it; the id only decides

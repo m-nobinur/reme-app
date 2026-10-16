@@ -878,6 +878,63 @@ it("marks a reminder done once, however often Done is pressed", async () => {
   })
 })
 
+const DETAILS = {
+  registrant: {
+    name: "Jane Smith",
+    organization: "Sparkle Clean",
+    email: "jane@sparkle.example",
+    phone: "+447700900123",
+    address: {
+      street: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+      country_code: "GB",
+    },
+  },
+  registrant_type: "STRA",
+} as const
+
+it("opens a domain's Checkout with the details shown, and hands back a refusal's code", async () => {
+  const checkout = {
+    name: "sparkleclean.co.uk",
+    price_gbp: 8,
+    client_secret: "cs_x",
+    expires_at: AT,
+  }
+  answers["POST /domains/sparkleclean.co.uk/checkout"] = checkout
+  expect(
+    await apiSource.domainCheckout("sparkleclean.co.uk", DETAILS, "k-9")
+  ).toEqual(checkout)
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(DETAILS)
+  expect(headerOf(calls[0], "idempotency-key")).toBe("k-9")
+
+  answers["POST /domains/sparkleclean.co.uk/checkout"] = refusal(
+    409,
+    "domain.unavailable"
+  )
+  expect(
+    await apiSource.domainCheckout("sparkleclean.co.uk", DETAILS, "k-10")
+  ).toEqual({ refused: "domain.unavailable" })
+
+  // A name that is not a hostname never becomes a path.
+  await expect(
+    apiSource.domainCheckout("../account", DETAILS, "k-11")
+  ).rejects.toThrow()
+  expect(calls).toHaveLength(2)
+})
+
+it("reads a domain purchase's status, and none when the api has no such purchase", async () => {
+  const status = {
+    name: "sparkleclean.co.uk",
+    state: "verifying",
+    test: true,
+    outcome: "test_registered",
+  }
+  answers["GET /domains/sparkleclean.co.uk"] = status
+  expect(await apiSource.domainStatus("sparkleclean.co.uk")).toEqual(status)
+  expect(await apiSource.domainStatus("other.co.uk")).toBeNull()
+})
+
 it("reads the open reminders in the order /workspace lists them", async () => {
   const written = (id: string, due_at: string | null) => ({
     id,
