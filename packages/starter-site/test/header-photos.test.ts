@@ -108,6 +108,26 @@ describe("a page header with a photo", () => {
     expect(headerOf(about?.html ?? "")).toContain("hero-media")
   })
 
+  // The sources here are 1600 px wide: only the home hero may offer more than 960.
+  test("caps every inner page's photos at 960 px, and lets the home hero go past it", () => {
+    const widths = (html: string) =>
+      [...html.matchAll(/<source[^>]*srcset="([^"]+)"/g)].flatMap((m) =>
+        (m[1] ?? "")
+          .split(",")
+          .map((c) => Number.parseInt(c.trim().split(/\s+/)[1] ?? "", 10))
+      )
+    const pages = pagesOf(photos)
+    const inner = pages.filter((p) => p.file !== "index.html")
+    expect(inner.flatMap((p) => widths(p.html)).length).toBeGreaterThan(0)
+    for (const page of inner) {
+      expect(Math.max(0, ...widths(page.html)), page.file).toBeLessThanOrEqual(
+        960
+      )
+    }
+    const home = pages.find((p) => p.file === "index.html")
+    expect(Math.max(...widths(home?.html ?? ""))).toBeGreaterThan(960)
+  })
+
   test("never repeats the home hero's photo or another header's", () => {
     const pages = pagesOf(photos)
     const shown = pages

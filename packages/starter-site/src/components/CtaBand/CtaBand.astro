@@ -31,7 +31,7 @@ const image =
       class:list={["band band-tint cta-band", image && "cta-photo"]}
     >
       {image && (
-        <Photo class="cta-image" src={image} alt="" sizes="100vw" />
+        <Photo class="cta-image" src={image} alt="" sizes="100vw" widths={[640, 960, 1280]} />
       )}
       <div class="wrap cta-inner">
         <div class="cta-text">

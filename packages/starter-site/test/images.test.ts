@@ -95,20 +95,37 @@ function phoneImages() {
 }
 
 describe("uploaded photos", () => {
-  test("go out as AVIF and WebP up to the source width, the hero from 640 to 2560, with width and height", () => {
+  test("go out as AVIF up to the source width, the hero from 640 to 2400, with one WebP <img> to fall back on", () => {
     const hero = tags().find((e) =>
       (e.attrs.class ?? "").includes("hero-image")
     )
     expect(hero?.attrs.width).toBeTruthy()
     expect(hero?.attrs.height).toBeTruthy()
-    for (const type of ["image/avif", "image/webp"]) {
-      const source = tags().find(
-        (e) => e.tag === "source" && e.attrs.type === type
-      )
-      const widths = (source?.attrs.srcset ?? "")
+    expect(hero?.attrs.srcset).toBeUndefined()
+    expect(hero?.attrs.src).toMatch(/\.webp$/)
+    expect(tags().some((e) => e.attrs.type === "image/webp")).toBe(false)
+    const source = tags().find(
+      (e) => e.tag === "source" && e.attrs.type === "image/avif"
+    )
+    const widths = (source?.attrs.srcset ?? "")
+      .split(",")
+      .map((c) => c.trim().split(/\s+/)[1])
+    expect(widths).toEqual(["640w", "960w", "1280w", "1920w", "2400w"])
+  })
+
+  test("offer no width above 960 for a photo that is not the home hero", () => {
+    const all = tags()
+    const sources = all.flatMap((el, i) => {
+      if (el.tag !== "source" || el.attrs.type !== "image/avif") return []
+      const img = all.slice(i).find((e) => e.tag === "img")
+      return (img?.attrs.class ?? "").includes("hero-image") ? [] : [el]
+    })
+    expect(sources.length).toBeGreaterThan(0)
+    for (const source of sources) {
+      const widths = (source.attrs.srcset ?? "")
         .split(",")
-        .map((c) => c.trim().split(/\s+/)[1])
-      expect(widths, type).toEqual(["640w", "960w", "1280w", "1920w", "2400w"])
+        .map((c) => Number.parseInt(c.trim().split(/\s+/)[1] ?? "", 10))
+      expect(Math.max(...widths)).toBeLessThanOrEqual(960)
     }
   })
 
