@@ -76,19 +76,22 @@ export const DomainProvider = z.strictObject({
 })
 
 /** The endings Reme sells. */
-export const DomainTld = z.enum(["co.uk", "uk", "com"])
+export const DomainTld = z.enum(["co.uk", "uk", "com", "net"])
 
 /**
  * What the owner pays a year, and the most Cloudflare may charge us for it.
  * The price an owner sees and pays comes from here, never from the model; a
  * live cost over `max_cost_usd` refuses the sale, so a registry price rise
  * never sells at a loss. Live costs 2026-10-16: .co.uk and .uk $5.30, .com
- * $10.46.
+ * $10.46, .net $11.86. A priced ending is not one the registrar sells: the
+ * sandbox refuses .co.uk and .uk, so only the configured registrar's
+ * `registrable` answer counts.
  */
 export const DOMAIN_PRICES = {
   "co.uk": { retail_gbp: 8, max_cost_usd: 6.5 },
   uk: { retail_gbp: 8, max_cost_usd: 6.5 },
   com: { retail_gbp: 12, max_cost_usd: 12.5 },
+  net: { retail_gbp: 12, max_cost_usd: 12.5 },
 } as const satisfies Record<
   z.infer<typeof DomainTld>,
   { retail_gbp: number; max_cost_usd: number }
@@ -144,8 +147,9 @@ export const RegistrantType = z.enum(["STRA", "LTD", "LLP", "PTNR", "IND"])
 
 /**
  * The domain's registrant, from the business facts and the owner, shaped as
- * Cloudflare's registration contact. It goes to Cloudflare once and Reme
- * never stores it. `state` is the county or region, where there is one.
+ * Cloudflare's registration contact. Reme holds it on the domain row only
+ * while the purchase is open. `state` is the county or region, where there
+ * is one.
  */
 export const Registrant = z.strictObject({
   name: Text(200).describe("The owner's full legal name, first and last."),
@@ -193,12 +197,49 @@ export const DomainStripe = z.strictObject({
   subscription: StripeId("sub").optional(),
 })
 
-/** A bought domain's registration, as stored on the row. */
+/**
+ * How a purchase closed: registered (live), registered in the sandbox, the
+ * hold released after a failed registration, refused for a price rise or a
+ * name taken meanwhile, or its Checkout expired unpaid.
+ */
+export const PurchaseOutcome = z.enum([
+  "registered",
+  "test_registered",
+  "payment_released",
+  "price_changed",
+  "unavailable",
+  "expired",
+])
+
+/**
+ * A purchase's registration, as stored on the row: `sandbox` from when the
+ * row is made, the rest as registering goes and the purchase closes.
+ */
 export const DomainRegistration = z.strictObject({
-  years: z.int().min(1).max(10),
-  auto_renew: z.boolean(),
-  expires_at: Timestamp.nullable(),
+  /** Registered in Cloudflare's sandbox: paid in test mode, never served. */
+  sandbox: z.boolean(),
+  /** Cloudflare's registration status as last read, such as `registered`. */
+  status: z
+    .string()
+    .regex(/^[a-z_]{1,40}$/)
+    .optional(),
+  /** Set when the purchase closes. */
+  outcome: PurchaseOutcome.optional(),
+  years: z.int().min(1).max(10).optional(),
+  auto_renew: z.boolean().optional(),
+  expires_at: Timestamp.optional(),
   registrant_type: RegistrantType.optional(),
+})
+
+/**
+ * `GET /domains/{name}`, api to web: the newest purchase of that name in the
+ * owner's org. `test` is a sandbox purchase; `outcome` is set once it closed.
+ */
+export const DomainPurchaseStatus = z.strictObject({
+  name: DomainName,
+  state: DomainState,
+  test: z.boolean(),
+  outcome: PurchaseOutcome.optional(),
 })
 
 /**
@@ -304,7 +345,9 @@ export type RegistrantType = z.infer<typeof RegistrantType>
 export type Registrant = z.infer<typeof Registrant>
 export type RegistrantDetails = z.infer<typeof RegistrantDetails>
 export type DomainStripe = z.infer<typeof DomainStripe>
+export type PurchaseOutcome = z.infer<typeof PurchaseOutcome>
 export type DomainRegistration = z.infer<typeof DomainRegistration>
+export type DomainPurchaseStatus = z.infer<typeof DomainPurchaseStatus>
 export type DomainCheckoutRequest = z.infer<typeof DomainCheckoutRequest>
 export type DomainCheckout = z.infer<typeof DomainCheckout>
 export type DomainPaymentEvent = z.infer<typeof DomainPaymentEvent>
