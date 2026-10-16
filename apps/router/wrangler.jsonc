@@ -8,12 +8,16 @@
 // passthrough. No staging service hostname matches `*-stg.remeai.co.uk/*`, so
 // staging passes nothing through and answers 404 instead.
 //
-// Production owns `*.remeai.co.uk/*`, which is the whole zone, so every service
-// hostname does reach it and is passed through by name. That the zone-wide
-// pattern loses `-stg` hosts to the longer literal suffix follows from the same
-// 2026-09-16 measurement, but the exact pair has not itself been run against
-// the production zone: doing so puts a Worker in front of the live api for the
-// length of the test. ADR-030 carries that as an amendment (issue #90).
+// Production owns `*/*`: the whole zone, plus every owner's custom domain,
+// which Cloudflare for SaaS brings into the zone and any route on it matches
+// (docs: Cloudflare for SaaS, "Workers as your fallback origin"). Every service
+// hostname does reach it and is passed through by name. `-stg` hosts stay
+// staging's, because a more specific route wins over `*/*` (the same docs page,
+// and the 2026-09-16 measurement), but the exact pair has not itself been run
+// against the production zone: doing so puts a Worker in front of the live api
+// for the length of the test. ADR-030 carries that as an amendment (issue #90).
+// A custom hostname with no `host:` pointer gets 404, never a pass-through,
+// which would fetch the `100::` fallback origin.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "reme-router",
@@ -66,7 +70,7 @@
       "simple": { "limit": 20, "period": 60 }
     }
   ],
-  // Production's route is the whole zone, which runs before the custom domains
+  // Production's route is every host, which runs before the custom domains
   // of the api, the orchestrator and the app, and its suffix matches every
   // hostname in the zone. Both are why `SERVICE_HOSTS` is not empty here: those
   // names are handed back to Cloudflare rather than read as tenant sites
@@ -74,9 +78,7 @@
   "env": {
     "production": {
       "name": "reme-router-production",
-      "routes": [
-        { "pattern": "*.remeai.co.uk/*", "zone_name": "remeai.co.uk" }
-      ],
+      "routes": [{ "pattern": "*/*", "zone_name": "remeai.co.uk" }],
       "vars": {
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
         "SERVICE_HOSTS": "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk,staging.remeai.co.uk,staging-api.remeai.co.uk,staging-orchestrator.remeai.co.uk"

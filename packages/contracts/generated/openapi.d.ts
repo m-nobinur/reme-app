@@ -8363,6 +8363,7 @@ export interface components {
       revision_id: string
       config_version: number
       canonical_host?: string
+      origin_host?: string
     }
     SiteRevision: {
       /** Format: uuid */

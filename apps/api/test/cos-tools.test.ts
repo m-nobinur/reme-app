@@ -7,6 +7,7 @@ import {
 } from "@workspace/contracts"
 import {
   assignments,
+  domains,
   eq,
   facts,
   reminders,
@@ -26,6 +27,8 @@ import {
 } from "vitest"
 import {
   answerQuestion,
+  checkDomain,
+  connectDomain,
   createReminder,
   getFacts,
   getPreview,
@@ -66,12 +69,15 @@ function leaks(value: unknown, at = "$"): string[] {
   if (Array.isArray(value))
     return value.flatMap((v, i) => leaks(v, `${at}[${i}]`))
   if (typeof value === "string") {
-    return /https?:\/\//i.test(value) ? [`${at}: a URL`] : []
+    // The provider's settings link is our own allowlisted one, shown on purpose.
+    return /https?:\/\//i.test(value) && !at.endsWith(".settings_url")
+      ? [`${at}: a URL`]
+      : []
   }
   if (typeof value === "object" && value !== null) {
     return Object.entries(value).flatMap(([key, v]) => [
-      ...(/(^|_)(org|staff)_id$/.test(key)
-        ? [`${at}.${key}: a tenancy id`]
+      ...(/(^|_)(org|staff)_id$|^cf_/.test(key)
+        ? [`${at}.${key}: a tenancy or Cloudflare id`]
         : []),
       ...leaks(v, `${at}.${key}`),
     ])
@@ -152,6 +158,30 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     },
   })
 
+  /** A domain row for `who`, `check` its last check; its name, unique to this run. */
+  const run = crypto.randomUUID().slice(0, 8)
+  const domain = async (
+    who: Owner,
+    label: string,
+    state: "awaiting_dns" | "active" | "removed",
+    check: unknown = null
+  ) => {
+    const name = `${label}-${run}.example`
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.insert(domains).values({
+        orgId: who.orgId,
+        siteId: crypto.randomUUID(),
+        name,
+        primaryHost: name,
+        origin: "connected",
+        method: "records",
+        state,
+        lastCheck: check,
+      })
+    )
+    return name
+  }
+
   describe("get_workspace", () => {
     it("shows builds, questions and reviews without ids or links, and cuts a long why", async () => {
       const s = seed(kit, me)
@@ -230,9 +260,31 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         questions: [],
         approvals: [],
         missing_facts: expect.any(Array),
+        domains: [],
         expected_seconds: expect.any(Object),
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
+    })
+
+    it("lists the org's domains newest first, without removed ones or another org's", async () => {
+      const mine = await owner(kit, url as string, "cos-domains")
+      const stranger = await owner(kit, url as string, "cos-domains-other")
+      const older = await domain(mine, "older", "awaiting_dns")
+      await domain(mine, "gone", "removed")
+      const newer = await domain(mine, "newer", "active", { status: "valid" })
+      await domain(stranger, "theirs", "active")
+      const output = kept(
+        "get_workspace",
+        await getWorkspace(context(mine), {})
+      )
+      expect(output.domains).toEqual([
+        {
+          name: newer,
+          state: "active",
+          last_check: { status: "valid" },
+        },
+        { name: older, state: "awaiting_dns", last_check: null },
+      ])
     })
 
     it("cuts a why at a character, never through one", async () => {
@@ -1110,12 +1162,163 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
+  describe("check_domain", () => {
+    const checked = {
+      outcome: "checked",
+      state: "awaiting_dns",
+      status: { status: "pending_verification" },
+      next_step: "Add the CNAME record at your DNS provider.",
+    }
+
+    it("wakes the domain's check and returns its state, status and next step", async () => {
+      const name = await domain(me, "check", "awaiting_dns")
+      const stub = stubOrchestrator(() => Response.json(checked))
+      const output = kept(
+        "check_domain",
+        await checkDomain(context(me, stub), { name })
+      )
+      expect(output).toEqual(checked)
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("POST")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        `/assignments/domains/${name}/check`
+      )
+    })
+
+    it("refuses another org's domain, a removed one and an unknown one without calling the orchestrator", async () => {
+      const theirs = await domain(other, "theirs-check", "awaiting_dns")
+      const gone = await domain(me, "gone-check", "removed")
+      const stub = stubOrchestrator(() => Response.json(checked))
+      for (const name of [theirs, gone, `none-${run}.example`]) {
+        expect(
+          kept("check_domain", await checkDomain(context(me, stub), { name }))
+        ).toMatchObject({
+          outcome: "refused",
+          error: { class: "resource", code: "domain.not_found" },
+        })
+      }
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("throws, never refuses, on a 500 from the orchestrator", async () => {
+      const name = await domain(me, "down", "awaiting_dns")
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "transient",
+            code: "orchestrator.unavailable",
+            message: "down",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 503 }
+        )
+      )
+      await expect(
+        checkDomain(context(me, stub), { name })
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("connect_domain", () => {
+    const connecting = {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      steps: [{ type: "CNAME", name: "www", value: "sites.reme.example" }],
+      apex: "forward",
+      provider: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+    }
+
+    it("sends the name under the approval as body and key, and returns the contract's output", async () => {
+      const approval = crypto.randomUUID()
+      const stub = stubOrchestrator(() => Response.json(connecting))
+      const output = kept(
+        "connect_domain",
+        await connectDomain(
+          context(me, stub),
+          { name: "sparkleclean.co.uk" },
+          approval
+        )
+      )
+      expect(output).toEqual(connecting)
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("POST")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe(approval)
+      expect(call?.body).toEqual({
+        name: "sparkleclean.co.uk",
+        approval_id: approval,
+      })
+      // The org comes from the session on the bridge, never from the body.
+      expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    it.each([
+      [409, "domain.in_use", "resource"],
+      [429, "domain.too_many_pending", "budgetary"],
+      [409, "site.not_published", "resource"],
+      [400, "domain.invalid", "validation"],
+    ])(
+      "refuses as the closed shape on %i %s, detail dropped",
+      async (status, code, cls) => {
+        const stub = stubOrchestrator(() =>
+          Response.json(
+            {
+              class: cls,
+              code,
+              message: "Not this one.",
+              detail: { org_id: other.orgId },
+              occurred_at: AT,
+            },
+            { status }
+          )
+        )
+        const output = kept(
+          "connect_domain",
+          await connectDomain(
+            context(me, stub),
+            { name: "taken.example" },
+            crypto.randomUUID()
+          )
+        )
+        expect(output).toEqual({
+          outcome: "refused",
+          error: { class: cls, code, message: "Not this one." },
+        })
+      }
+    )
+
+    it("throws, never refuses, when the orchestrator answers off the contract", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json({ ...connecting, cf_hostname_id: "abc" })
+      )
+      await expect(
+        connectDomain(
+          context(me, stub),
+          { name: "odd.example" },
+          crypto.randomUUID()
+        )
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
   // Last, over everything the cases above returned.
   it("returns nothing a model must not see, and only what each contract allows", () => {
-    // The walk itself: bare and suffixed tenancy ids, and a link.
+    // The walk itself: bare and suffixed tenancy ids, a Cloudflare id and a
+    // link, but not the provider's settings link.
     expect(
-      leaks({ org_id: 1, staff_id: 2, approver_staff_id: 3, note: HTTPS })
-    ).toHaveLength(4)
+      leaks({
+        org_id: 1,
+        staff_id: 2,
+        approver_staff_id: 3,
+        cf_hostname_id: 4,
+        note: HTTPS,
+        provider: { settings_url: HTTPS },
+      })
+    ).toHaveLength(5)
     expect(new Set(seen.map(([tool]) => tool))).toEqual(
       new Set(Object.keys(COS_TOOLS))
     )
