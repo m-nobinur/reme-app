@@ -720,6 +720,11 @@ export async function connect(
     | { id: string; created: boolean; needsTxt: boolean; ownership: unknown }
   try {
     claimed = await kit.withOrg({ orgId }, async (db) => {
+      // One connect per org at a time, so two cannot both count 2 pending and
+      // insert. Key 4: 2 and 3 are the api's conversation and org locks.
+      await db.execute(
+        sql`select pg_advisory_xact_lock(4, hashtext(${orgId}::text))`
+      )
       const [held] = await db
         .select({
           id: domains.id,
