@@ -111,12 +111,17 @@ export function useConversationRuntime({
     onFinish,
     onError: (error) => restore.current(error),
   })
-  restore.current = (error) => {
+  // The open thread's stored rows, or null when it is not stored yet.
+  const storedRows = () => {
     const remoteId = aui.threadListItem.getState().remoteId
+    return remoteId ? getConversationMessages({ data: { id: remoteId } }) : null
+  }
+  restore.current = (error) => {
     // A session that ended can read nothing back; the error offers sign-in.
-    if (!remoteId || error.message === SESSION_ENDED) return
+    const read = error.message === SESSION_ENDED ? null : storedRows()
+    if (!read) return
     const last = sending.current
-    void getConversationMessages({ data: { id: remoteId } })
+    void read
       .then((rows) => {
         const stored = rows.map(toUIMessage)
         chat.setMessages(stored)
@@ -139,12 +144,7 @@ export function useConversationRuntime({
   latest.current = chat
   const [follow] = useState(() =>
     followThread({
-      read: () => {
-        const remoteId = aui.threadListItem.getState().remoteId
-        return remoteId
-          ? getConversationMessages({ data: { id: remoteId } })
-          : Promise.resolve(null)
-      },
+      read: async () => storedRows(),
       now: () => ({
         idle: ["ready", "error"].includes(latest.current.status),
         messages: latest.current.messages,
