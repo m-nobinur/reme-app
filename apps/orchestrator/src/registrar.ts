@@ -5,6 +5,7 @@
  * never reach the live registrar, which charges our card and never refunds.
  * Workers Custom Domains serve a bought domain from the router.
  */
+import { DOMAIN_PRICES, sellableTld } from "@workspace/contracts"
 import { CF_API, CF_TIMEOUT_MS, DomainError, resultOf } from "./domains.ts"
 
 export type RegistrarEnv = {
@@ -52,30 +53,6 @@ const registrar = (
 ) => cloudflare(env, method, registrarPath(env, path), body, headers)
 
 // ---------------------------------------------------------------------------
-// Price table
-// ---------------------------------------------------------------------------
-
-/**
- * What the owner pays a year, in pence, and the most Cloudflare may charge us
- * in USD before a sale is refused, so a registry price rise or the exchange
- * rate never sells at a loss. Code, not config: a change here is reviewed.
- * Cloudflare at cost, 2026-10-16: `.co.uk` and `.uk` $5.30, `.com` $10.46.
- */
-export const PRICES: Readonly<
-  Record<string, { retail_pence: number; max_cost_usd: number }>
-> = {
-  "co.uk": { retail_pence: 800, max_cost_usd: 6.5 },
-  uk: { retail_pence: 800, max_cost_usd: 6.5 },
-  com: { retail_pence: 1200, max_cost_usd: 12.5 },
-}
-
-/** The table's TLD for a name, the longest that fits (`co.uk` before `uk`). */
-export function tldOf(name: string): string | null {
-  const tlds = Object.keys(PRICES).sort((a, b) => b.length - a.length)
-  return tlds.find((t) => name.endsWith(`.${t}`)) ?? null
-}
-
-// ---------------------------------------------------------------------------
 // Search and check
 // ---------------------------------------------------------------------------
 
@@ -117,13 +94,13 @@ export async function searchDomains(
 ): Promise<string[]> {
   const q = new URLSearchParams({
     q: query,
-    extensions: Object.keys(PRICES).join(","),
+    extensions: Object.keys(DOMAIN_PRICES).join(","),
     limit: "10",
   })
   const result = await resultOf<{ domains?: Array<{ name: string }> }>(
     await registrar(env, "GET", `/domain-search?${q}`)
   )
-  return (result.domains ?? []).map((d) => d.name).filter((n) => tldOf(n))
+  return (result.domains ?? []).map((d) => d.name).filter((n) => sellableTld(n))
 }
 
 /**
@@ -132,12 +109,12 @@ export async function searchDomains(
  * when it may, else null.
  */
 export function sellable(checked: Checked): number | null {
-  const tld = tldOf(checked.name)
+  const tld = sellableTld(checked.name)
   if (!tld || !checked.registrable || checked.tier === "premium") return null
   if (checked.pricing?.currency !== "USD") return null
   const cost = Number(checked.pricing.registration_cost)
   const renewal = Number(checked.pricing.renewal_cost)
-  const cap = PRICES[tld]?.max_cost_usd ?? 0
+  const cap = DOMAIN_PRICES[tld].max_cost_usd
   if (!Number.isFinite(cost) || cost > cap || !(renewal <= cap)) return null
   return cost
 }
@@ -464,7 +441,7 @@ export function candidates(facts: RankFacts): Ranked[] {
   const out: Ranked[] = []
   for (const [l, points, why] of labels) {
     if (l.length > 63) continue
-    for (const tld of Object.keys(PRICES)) {
+    for (const tld of Object.keys(DOMAIN_PRICES)) {
       const name = `${l}.${tld}`
       if (seen.has(name)) continue
       seen.add(name)

@@ -51,6 +51,9 @@ async function stripe<T>(
   const json = (await response.json().catch(() => ({}))) as T & {
     error?: { code?: string; type?: string }
   }
+  // Stripe's own outage or rate limit: a retry may succeed.
+  if (response.status >= 500 || response.status === 429)
+    throw new DomainError("stripe.unavailable")
   if (!response.ok) {
     throw new DomainError(
       `stripe.${json.error?.code ?? json.error?.type ?? response.status}`
@@ -77,13 +80,29 @@ export const getPaymentIntent = (env: StripeEnv, id: string) =>
     `/payment_intents/${encodeURIComponent(id)}`
   )
 
+/**
+ * The PaymentIntent, refused unless its metadata names this domain: our own
+ * Checkout writes `domain_id` there, so an id from anywhere else can never
+ * capture or release another purchase.
+ */
+async function ours(
+  env: StripeEnv,
+  id: string,
+  domainId: string
+): Promise<PaymentIntent> {
+  const pi = await getPaymentIntent(env, id)
+  if (pi.metadata.domain_id !== domainId)
+    throw new DomainError("stripe.payment_mismatch")
+  return pi
+}
+
 /** Takes the held amount. A PaymentIntent already captured is done. */
 export async function capturePayment(
   env: StripeEnv,
   id: string,
   domainId: string
 ): Promise<PaymentIntent> {
-  const pi = await getPaymentIntent(env, id)
+  const pi = await ours(env, id, domainId)
   if (pi.status === "succeeded") return pi
   return stripe<PaymentIntent>(
     env,
@@ -103,7 +122,7 @@ export async function releasePayment(
   id: string,
   domainId: string
 ): Promise<"released" | "captured"> {
-  const pi = await getPaymentIntent(env, id)
+  const pi = await ours(env, id, domainId)
   if (pi.status === "canceled") return "released"
   if (pi.status === "succeeded") return "captured"
   await stripe<PaymentIntent>(
@@ -154,6 +173,7 @@ export const RENEW_DAYS_BEFORE = 50
 export async function createRenewal(
   env: StripeEnv,
   input: {
+    orgId: string
     domainId: string
     customer: string
     paymentMethod: string
@@ -185,7 +205,7 @@ export async function createRenewal(
       ],
       billing_cycle_anchor: anchor,
       proration_behavior: "none",
-      metadata: { domain_id: input.domainId },
+      metadata: { org_id: input.orgId, domain_id: input.domainId },
     },
     `domain-renewal-${input.domainId}`
   )

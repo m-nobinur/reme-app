@@ -109,6 +109,33 @@ describe("the hold", () => {
     expect(calls).toHaveLength(1)
   })
 
+  it("refuses a PaymentIntent another purchase made", async () => {
+    const calls = stub({
+      [`GET ${API}/payment_intents/pi_123`]: json(
+        PI("requires_capture", { metadata: { domain_id: "other" } })
+      ),
+    })
+    await expect(capturePayment(env, "pi_123", "dom")).rejects.toThrow(
+      "stripe.payment_mismatch"
+    )
+    await expect(releasePayment(env, "pi_123", "dom")).rejects.toThrow(
+      "stripe.payment_mismatch"
+    )
+    expect(calls.every((c) => c.method === "GET")).toBe(true)
+  })
+
+  it("calls a Stripe outage retryable", async () => {
+    stub({
+      [`GET ${API}/payment_intents/pi_123`]: json(
+        { error: { type: "api_error" } },
+        500
+      ),
+    })
+    await expect(capturePayment(env, "pi_123", "dom")).rejects.toThrow(
+      "stripe.unavailable"
+    )
+  })
+
   it("fails by Stripe's code, and as not configured without a key", async () => {
     stub({
       [`GET ${API}/payment_intents/pi_123`]: json(
@@ -133,6 +160,7 @@ describe("the renewal", () => {
       [`POST ${API}/subscriptions`]: json(SUBSCRIPTION),
     })
     const sub = await createRenewal(env, {
+      orgId: "org",
       domainId: "dom",
       customer: "cus_123",
       paymentMethod: "pm_123",
@@ -155,6 +183,7 @@ describe("the renewal", () => {
       "items[0][price_data][recurring][interval]": "year",
       billing_cycle_anchor: String(anchor),
       proration_behavior: "none",
+      "metadata[org_id]": "org",
       "metadata[domain_id]": "dom",
     })
     expect(calls[2]?.headers.get("idempotency-key")).toBe("domain-renewal-dom")
@@ -166,6 +195,7 @@ describe("the renewal", () => {
       [`POST ${API}/subscriptions`]: json(SUBSCRIPTION),
     })
     await createRenewal(env, {
+      orgId: "org",
       domainId: "dom",
       customer: "cus_123",
       paymentMethod: "pm_123",
