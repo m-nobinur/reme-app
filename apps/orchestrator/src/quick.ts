@@ -44,10 +44,10 @@ export function pickLane(
 const QUICK: readonly ChangeKind[] = ["copy", "style", "section", "photo"]
 
 /** The kinds one model call can edit; `section` goes to the Developer at low effort. */
-export type OneCallKind = "copy" | "style"
+type OneCallKind = "copy" | "style"
 
 /** The only files a one-call edit may touch, by kind. */
-export const QUICK_FILES: Record<OneCallKind, readonly string[]> = {
+const QUICK_FILES: Record<OneCallKind, readonly string[]> = {
   copy: ["src/site-config.ts"],
   style: ["src/site-config.ts", "src/styles/theme.css"],
 }
@@ -174,8 +174,8 @@ export function applyQuick(
 }
 
 /** Why a quick attempt handed the change on, for the log and the fall-through. */
-export type QuickFell = { done: false; reason: string; model_ms: number }
-export type QuickDone = {
+type QuickFell = { done: false; reason: string; model_ms: number }
+type QuickDone = {
   done: true
   /** The commit the edit started from, which a failed gate puts back. */
   base: string

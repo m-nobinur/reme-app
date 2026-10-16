@@ -335,17 +335,14 @@ export const REQUIRED: readonly FactValueKey[] = [...BUSINESS, ...PERSONA]
  * is never the assistant's to choose: proof it invented would be a claim
  * the owner never made.
  */
-export const OPTIONAL: readonly FactValueKey[] = [
+const OPTIONAL: readonly FactValueKey[] = [
   "business.audience",
   "business.proof",
 ]
-export const OPTIONAL_ASKS = 1
+const OPTIONAL_ASKS = 1
 
 /** Facts the builder drafts itself, never asked in onboarding. */
-export const NEVER_ASKED: readonly string[] = [
-  "business.tagline",
-  "business.overview",
-]
+const NEVER_ASKED: readonly string[] = ["business.tagline", "business.overview"]
 
 /** The design choices a build needs once the assistant builds the site. */
 export const DESIGN: readonly FactValueKey[] = [
@@ -590,7 +587,7 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
  * the owner's brief lists the slogan in discovery, and "no slogan" is an
  * answer.
  */
-export const beforeWebsite = (
+const beforeWebsite = (
   o: Onboarding,
   asked: Readonly<Record<string, number>> = {}
 ) => [
@@ -732,7 +729,7 @@ export function sayProblems(
 }
 
 /** What `sayProblems` knows of the turn beyond the message itself. */
-export type SayContext = {
+type SayContext = {
   /** The owner's message this turn, which say must not read back. */
   typed?: string
   /** Whether the plan replaces a fact already held: the one time to thank for a correction. */
@@ -771,7 +768,7 @@ function echoes(say: string, typed: string): boolean {
 }
 
 /** What `sayProblems` needs to know of a plan's turn. */
-export function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
+function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
   const held = s.onboarding.facts
   return {
     ...(s.input.kind === "message" ? { typed: s.input.text } : {}),
@@ -1190,7 +1187,7 @@ const OPEN_FACTS = [
  * and for whom is missing, the quote question in words or a proposal, and
  * every other step's own card. Null once nothing is left.
  */
-export function expectedNext(after: Onboarding): Move[] | null {
+function expectedNext(after: Onboarding): Move[] | null {
   const step = currentStep(after)?.id
   if (!step) return null
   if ((OPEN_FACTS as readonly string[]).includes(step)) {
@@ -1328,7 +1325,7 @@ function planOf(raw: string): { plan: OnboardingPlan } | { errors: string[] } {
 }
 
 /** The longest start of `message` that ends a sentence: its stop, any closing quote, then a space. */
-export function wholeSentences(message: string): string {
+function wholeSentences(message: string): string {
   let end = 0
   for (const mark of message.matchAll(/[.!?]["'”’)]*(?=\s)/g)) {
     end = mark.index + mark[0].length

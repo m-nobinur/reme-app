@@ -11,7 +11,7 @@ import type { AuthService } from "@workos/authkit-tanstack-react-start"
  * line carries the failure class, the path and the cookie's length, never
  * the cookie, a token or a user id.
  */
-export type NoUserReason = {
+type NoUserReason = {
   event: "auth.no_user"
   class: "cookie_absent" | "unseal_failed" | "refresh_failed" | "unknown"
   /** WorkOS's error code on a failed refresh. */

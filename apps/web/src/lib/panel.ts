@@ -16,7 +16,7 @@ import { stoppedOf } from "./stopped"
  */
 
 /** The pages the panel words itself for. Any other /app page is "elsewhere". */
-export type PanelPage =
+type PanelPage =
   | "home"
   | "chat"
   | "onboarding"

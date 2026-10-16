@@ -29,7 +29,7 @@ const NO_PENDING: AuthFailure = {
 }
 
 /** What the flow pages show about the half-finished sign-in they belong to. */
-export type PendingSummary = {
+type PendingSummary = {
   email: string
   organizations: Array<{ id: string; name: string }>
 }
@@ -289,7 +289,7 @@ export const resetPassword = createServerFn({ method: "POST" })
 
 // --- multi-factor -----------------------------------------------------------
 
-export type MfaEnrolment = {
+type MfaEnrolment = {
   /** A `data:image/png;base64,…` QR code, rendered as an image. */
   qrCode: string
   /** The same secret in text, for an authenticator that cannot scan. */

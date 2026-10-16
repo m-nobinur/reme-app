@@ -86,7 +86,7 @@ export const ONBOARDING_GOAL = "Build my website from the details I gave you."
  * needs. The slogan and how a job runs are never asked: the builder drafts
  * them.
  */
-export const SKIPPABLE: readonly FactValueKey[] = [
+const SKIPPABLE: readonly FactValueKey[] = [
   "business.audience",
   "business.proof",
 ]
@@ -965,7 +965,7 @@ export const STEPS: readonly Step[] = [
 ]
 
 /** The script's quote form, for a typed answer no model could read: a short form to confirm. */
-export const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
+const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
   text(quoteForm(voiceOf(o))),
   call(
     "tool-review_quote_form",
@@ -1322,7 +1322,7 @@ const SKIP =
   /^(skip|no|nope|nah|none|pass|not now|later|no thanks|n\/a|(i )?don'?t have (any|one)|i have none|nothing)\b/
 
 /** Yes, no, or neither, from a typed reply. */
-export function yesNo(words: string): boolean | null {
+function yesNo(words: string): boolean | null {
   const said = norm(words)
   if (YES.test(said)) return true
   if (NO.test(said)) return false
@@ -1330,7 +1330,7 @@ export function yesNo(words: string): boolean | null {
 }
 
 /** Whether a typed reply passes over a skippable step. */
-export const saysSkip = (words: string) => SKIP.test(norm(words))
+const saysSkip = (words: string) => SKIP.test(norm(words))
 
 /** A typed phone number in E.164, if it can be one. */
 const e164 = (words: string) =>
@@ -1489,7 +1489,7 @@ const NAMES = ["Ava", "Sam", "Max", "Mia", "Leo", "Isla"]
  * assistant's to answer: what the business does, its contact details and
  * whether to build are always the owner's.
  */
-export function pickFor(part: ToolPart, o: Onboarding): Answer | null {
+function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
   const name = NAMES[hash(`${o.orgId}|name`) % NAMES.length] as string
   const palette = firstPalettes(o.orgId)[0] as PaletteId

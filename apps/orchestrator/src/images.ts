@@ -2,8 +2,16 @@ import type { Blueprint, ImageSlot } from "@workspace/contracts"
 import { MODELS, ROLES } from "@workspace/facade"
 import { generatedImageFindings, limit } from "@workspace/gates"
 import { z } from "zod"
+import {
+  extension,
+  findGenerated,
+  GENERATED_DIR,
+  generatedKey,
+  generatedPath,
+  photoKey,
+} from "./photo-files.ts"
 import { framingOf, houseLine, STYLE_GUIDE, settingFor } from "./photo-style.ts"
-import { photoKey, SITE_ROOT } from "./revise.ts"
+import { SITE_ROOT } from "./revise.ts"
 
 /**
  * The photo director (ADR-039). Runs in this Worker, never in the sandbox,
@@ -161,13 +169,6 @@ export type PhotoBucket = {
   }>
 }
 
-const EXTENSION: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-}
-const extension = (contentType: string) => EXTENSION[contentType] ?? "png"
-
 const sha256 = async (text: string) =>
   Array.from(
     new Uint8Array(
@@ -184,9 +185,6 @@ function uuidFrom(hash: string): string {
   const h = hex.join("")
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
-
-const generatedKey = (orgId: string, assetId: string) =>
-  `generated/${orgId}/${assetId}`
 
 function base64(bytes: Uint8Array): string {
   let binary = ""
@@ -387,7 +385,7 @@ async function draw(
  * What the defect check scores, each 0 (none), 1 (minor, ships) or 2 (a
  * visitor would notice, so the photo is redrawn).
  */
-export const DEFECTS = {
+const DEFECTS = {
   geometry:
     "warped, bent or impossible geometry: lines that should be straight, fittings that could not be built, objects melting into each other",
   text: "garbled or readable text, logos, signage or labels",
@@ -414,7 +412,7 @@ const Check = z.object({
   note: z.string().max(400).catch(""),
 })
 export type Check = z.infer<typeof Check>
-export const failedChecks = (check: Check) =>
+const failedChecks = (check: Check) =>
   (Object.keys(DEFECTS) as Defect[]).filter((k) => check[k] === 2)
 
 /**
@@ -630,22 +628,18 @@ export async function directPhotos(input: {
   const misses: Planned[] = []
   const stored = new Map<string, { key: string; contentType: string }>()
   for (const p of planned) {
-    const prefix = generatedKey(orgId, p.assetId)
-    const found = (await env.SITES.list({ prefix: `${prefix}.` })).objects[0]
+    const found = await findGenerated(env.SITES, orgId, p.assetId)
     if (!found) {
       misses.push(p)
       continue
     }
-    const ext = found.key.slice(prefix.length + 1)
-    const contentType =
-      Object.entries(EXTENSION).find(([, e]) => e === ext)?.[0] ?? "image/png"
-    stored.set(p.slot.id, { key: found.key, contentType })
+    stored.set(p.slot.id, found)
     settle(p.slot.id, {
       slot_id: p.slot.id,
       status: "reused",
       asset_id: p.assetId,
       key: found.key,
-      content_type: contentType,
+      content_type: found.contentType,
       cost_usd: 0,
       reason: null,
     })
@@ -684,15 +678,11 @@ export async function directPhotos(input: {
     }
 
     for (const id of (input.siblings ?? []).slice(0, SIBLING_REFERENCES)) {
-      const prefix = generatedKey(orgId, id)
-      const found = (await env.SITES.list({ prefix: `${prefix}.` })).objects[0]
+      const found = await findGenerated(env.SITES, orgId, id)
       const object = found && (await env.SITES.get(found.key))
       if (found && object) {
-        const ext = found.key.slice(prefix.length + 1)
         owner.push({
-          content_type:
-            Object.entries(EXTENSION).find(([, e]) => e === ext)?.[0] ??
-            "image/png",
+          content_type: found.contentType,
           b64: base64(new Uint8Array(await object.arrayBuffer())),
         })
       }
@@ -828,14 +818,6 @@ export async function directPhotos(input: {
   return ordered.map((s) => results.get(s.id) ?? fallback(s.id, "not planned"))
 }
 
-/** Where a generated slot's picture lives in the site, which its site field names. */
-export const generatedPath = (slotId: string, contentType: string | null) =>
-  `src/assets/generated/${slotId}.${extension(contentType ?? "")}`
-
-/** A slot's path before its photo exists: what most draws come back as. */
-export const plannedPath = (slotId: string) =>
-  generatedPath(slotId, "image/jpeg")
-
 /**
  * Copies generated photos from the bucket into the site's
  * `src/assets/generated/{slot id}.{ext}`, where `astro:assets` finds them and
@@ -856,7 +838,7 @@ export async function placeGenerated(
   const placed: Record<string, string> = {}
   const ready = results.filter((r) => r.key && r.status !== "fallback")
   if (ready.length === 0) return placed
-  await sandbox.exec(`mkdir -p ${SITE_ROOT}/src/assets/generated`)
+  await sandbox.exec(`mkdir -p ${SITE_ROOT}/${GENERATED_DIR}`)
   for (const r of ready) {
     const object = await sites.get(r.key as string)
     if (!object) continue

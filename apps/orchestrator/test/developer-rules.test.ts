@@ -20,10 +20,10 @@ import {
   COPY_RULES,
   ownerChoices,
   paletteRoles,
-  photoFile,
   siteRules,
 } from "../src/developer-rules.ts"
 import { COPY_WRITER_RULES } from "../src/fanout.ts"
+import { photoFile } from "../src/photo-files.ts"
 import { SEED_FIELDS } from "../src/seed.ts"
 
 const hidden = (keys: string[]): FactRecord => ({

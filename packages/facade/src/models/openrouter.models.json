@@ -181,48 +181,6 @@
     }
   },
   {
-    "id": "google/gemini-nano-banana-2.1",
-    "name": "Google: Nano Banana 2.1",
-    "api": "openai-completions",
-    "baseUrl": "https://openrouter.ai/api/v1",
-    "provider": "openrouter",
-    "reasoning": true,
-    "input": ["image", "text"],
-    "cost": {
-      "input": 3.15,
-      "output": 15.75,
-      "cacheRead": 0,
-      "cacheWrite": 0
-    },
-    "contextWindow": 65536,
-    "maxTokens": 58982,
-    "compat": {
-      "thinkingFormat": "openrouter",
-      "openRouterRouting": {
-        "max_price": {
-          "prompt": 3.15,
-          "completion": 15.75
-        },
-        "ignore": [
-          "alibaba",
-          "baidu",
-          "deepseek",
-          "minimax",
-          "moonshotai",
-          "nex-agi",
-          "seed",
-          "siliconflow",
-          "stepfun",
-          "streamlake",
-          "tencent",
-          "xiaomi",
-          "z-ai"
-        ],
-        "data_collection": "deny"
-      }
-    }
-  },
-  {
     "id": "openai/gpt-6.1-sol",
     "name": "OpenAI: GPT-6.1 Sol",
     "api": "openai-completions",

@@ -95,7 +95,7 @@ export const ROUTES = {
   },
 } as const
 
-export type CosTask = keyof typeof ROUTES
+type CosTask = keyof typeof ROUTES
 
 /** The route for `task`, or the owner-turn route while its own row is not enabled. */
 export const routeOf = (task: CosTask) =>
@@ -374,7 +374,7 @@ export const SITE_CHANGE_LINE =
   "The owner pressed Request changes on their website before writing this message, so it describes a change to their website. Propose it with request_change in the owner's own words. Only if the change is unclear, ask one short question first."
 
 /** Who the owner made the Chief of Staff, from their facts. Null where they have not said. */
-export type Persona = {
+type Persona = {
   name: string | null
   pronouns: PronounId | null
   tone: ToneId | null

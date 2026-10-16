@@ -14,11 +14,11 @@
  * a public URL, which is why the sweep scores a build from its HTML.
  */
 
-export type BatchRequest = { custom_id: string; body: Record<string, unknown> }
+type BatchRequest = { custom_id: string; body: Record<string, unknown> }
 
 export const TERMINAL = ["completed", "failed", "expired", "cancelled"] as const
 
-export type BatchResult = {
+type BatchResult = {
   custom_id: string
   id?: string
   response: {

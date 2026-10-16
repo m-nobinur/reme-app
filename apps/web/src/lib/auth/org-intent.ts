@@ -11,7 +11,7 @@ import { useSession as openSession } from "@tanstack/react-start/server"
  * retry waits on the person coming back. `userId` binds it to the account
  * that signed up, so a different sign-in in the same browser ignores it.
  */
-export type OrgIntent = { userId: string; orgName: string }
+type OrgIntent = { userId: string; orgName: string }
 
 export const ORG_INTENT = "reme-org-intent"
 

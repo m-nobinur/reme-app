@@ -519,7 +519,7 @@ describe("pages the starter has no file for", () => {
     fact("site.pages", { ids }),
     ...more,
   ]
-  const plan = (facts: FactRecord[]) => {
+  const fallback = (facts: FactRecord[]) => {
     const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
     expect(problems(made, { facts, library: LIBRARY })).toEqual([])
     return made
@@ -528,7 +528,7 @@ describe("pages the starter has no file for", () => {
     made.pages.find((p) => p.page === "home")?.sections.map((s) => s.kind) ?? []
 
   it("makes a gallery from the owner's photos, never the hero's alone", () => {
-    const made = plan(picking(["home", "gallery"], UPLOADS))
+    const made = fallback(picking(["home", "gallery"], UPLOADS))
     expect(made.pages.map((p) => p.page)).toEqual(["home", "quote"])
     expect(home(made)).toContain("gallery")
     expect(
@@ -543,7 +543,7 @@ describe("pages the starter has no file for", () => {
     // The 2026-10-15 run's words, as the tray now stores them.
     const words =
       "Home, Services, About, Gallery, FAQ, Contact, Request a quote"
-    const made = plan([
+    const made = fallback([
       ...CLEANING,
       fact("site.pages", {
         ids: [
@@ -574,7 +574,7 @@ describe("pages the starter has no file for", () => {
   })
 
   it("leaves the gallery out without photos and says so", () => {
-    const made = plan(picking(["home", "gallery"]))
+    const made = fallback(picking(["home", "gallery"]))
     expect(home(made)).not.toContain("gallery")
     expect(made.images.filter((i) => i.section === "gallery")).toEqual([])
     expect(made.features.join("\n")).toMatch(
@@ -583,7 +583,7 @@ describe("pages the starter has no file for", () => {
   })
 
   it("refuses a planned gallery with no photos, and one with no slot", () => {
-    const withGallery = plan(picking(["home", "gallery"], UPLOADS))
+    const withGallery = fallback(picking(["home", "gallery"], UPLOADS))
     const none = picking(["home", "gallery"])
     expect(
       problems(withGallery, { facts: none, library: LIBRARY }).join("\n")
@@ -600,7 +600,7 @@ describe("pages the starter has no file for", () => {
     ["testimonials", "Your reviews are a section on the home page."],
     ["faq", "Your FAQ is a section on the home page."],
   ])("makes %s a home page section and says so", (id, line) => {
-    const made = plan(picking(["home", id]))
+    const made = fallback(picking(["home", id]))
     expect(home(made)).toContain(id)
     expect(made.features).toContain(line)
     expect(made.pages.map((p) => p.page)).not.toContain(id)
@@ -612,7 +612,7 @@ describe("pages the starter has no file for", () => {
       fact("site.pages", { ids: ["home", "gallery", "faq"] }),
       UPLOADS,
     ]
-    const kinds = home(plan(legal))
+    const kinds = home(fallback(legal))
     expect(kinds.indexOf("gallery")).toBe(kinds.indexOf("service_area") - 1)
     expect(kinds.indexOf("faq")).toBeLessThan(kinds.indexOf("cta_band"))
   })
@@ -629,7 +629,7 @@ describe("pages the starter has no file for", () => {
       "contact",
       "quote",
     ]
-    const made = plan(picking(everything, UPLOADS))
+    const made = fallback(picking(everything, UPLOADS))
     expect(made.pages.map((p) => p.page)).toEqual([
       "home",
       "about",
@@ -650,7 +650,7 @@ describe("pages the starter has no file for", () => {
 
   it("keeps the lines once on a re-plan and asks the model for the sections", () => {
     const facts = picking(["home", "gallery", "faq"], UPLOADS)
-    const made = plan(facts)
+    const made = fallback(facts)
     expect(withOwnerChoices(made, facts).features).toEqual(made.features)
     const prompt = plannerPrompt({ facts, recent: [], previous: null })
     expect(prompt.user).toContain(

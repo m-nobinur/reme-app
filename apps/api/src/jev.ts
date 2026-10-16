@@ -31,7 +31,7 @@ export type JevDecision = { kind: "answer"; option: string } | { kind: "defer" }
 
 type Choice = { choice?: unknown; confidence?: unknown }
 /** Jev's response as far as this reads it; anything missing reads as unsure. */
-export type JevResponse = {
+type JevResponse = {
   answers?: { answers_it?: { noul?: unknown }; kind?: Choice; option?: Choice }
   usage?: { cost?: unknown }
 }

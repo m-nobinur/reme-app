@@ -44,7 +44,7 @@ export function readyForReview(
  * nothing, when the review went some other way (the panel, an expiry, a
  * replacement).
  */
-export type ReadyCard =
+type ReadyCard =
   | { kind: "review"; review: ReadyReview }
   | { kind: "approved"; version: number }
   | null

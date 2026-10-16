@@ -76,7 +76,7 @@ export function copyFields(plan: Blueprint): string[] {
 type PageTask = { page: PageId; fields: string[]; service?: number }
 
 /** The most services a site shows, so the most service pages. */
-export const SERVICES_MAX = 6
+const SERVICES_MAX = 6
 
 /** How many service pages a build writes: one per offering, six at most. */
 export const serviceCount = (brief: Brief) =>
@@ -153,9 +153,9 @@ export function siteValues(source: string): Record<string, string> {
 /**
  * BA4's per-page copy check: after a writer's edit, the copy gate's field
  * rules over its own filled fields, against every heading on the site so
- * far. Siblings in one group write at once, so of two that collide the later
- * one sees the earlier. Null when nothing fails; the message otherwise, which
- * the writer acts on in the same session. The caller sends it once a task. In the confirming run of 2026-10-15 every one of the first
+ * far. Writers run at once, so of two that collide the later one sees the
+ * earlier. Null when nothing fails; the message otherwise, which goes to the
+ * writer's one retry. In the confirming run of 2026-10-15 every one of the first
  * gate's nine misses was one of these, and the two repair rounds they cost
  * took 61 s and 18 s of the lead's turns after a gate run each.
  */
@@ -220,7 +220,7 @@ export function writerTasks(
 }
 
 /** The pack's CTA and headings from src/recipes.json, as this build reads them. */
-export function packLines(brief: Brief): string[] {
+function packLines(brief: Brief): string[] {
   const id = (INDUSTRY_PACK as Record<string, string>)[
     industryOf(brief.snapshot.facts) ?? ""
   ]
@@ -237,7 +237,7 @@ export function packLines(brief: Brief): string[] {
 }
 
 /** The lead's build command: the check's last lines and only the build's errors and warnings. */
-export const BUILD_COMMAND =
+const BUILD_COMMAND =
   './node_modules/.bin/astro check 2>&1 | tail -n 15 && ./node_modules/.bin/astro build 2>&1 | grep -E "error|Error|WARN|copy-check" | head -n 40'
 
 /** The lead's plan of work for a planned first build, after the Blueprint. */
@@ -260,7 +260,7 @@ export function leadLines(brief: Brief, plan: Blueprint): string[] {
   ]
 }
 
-/** What every child is told before its own part; one string for every page builder, so they share a cached prefix. */
+/** What every writer is told before its own part; one string for every page writer, so they share a cached prefix. */
 function childPrefix(
   brief: Brief,
   role: string,

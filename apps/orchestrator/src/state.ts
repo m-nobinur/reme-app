@@ -72,7 +72,7 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   cancelled: [],
 }
 
-export type TransitionErrorClass = "transient" | "validation" | "resource"
+type TransitionErrorClass = "transient" | "validation" | "resource"
 
 /** R4: the code and class travel; the message is for a log, never a model. */
 export class TransitionError extends Error {
@@ -191,14 +191,14 @@ export async function lastEventAt(
   return row?.at ? new Date(row.at).getTime() : 0
 }
 
-export type TransitionInput = Ids & {
+type TransitionInput = Ids & {
   to: AssignmentState
   expectedVersion: number
   reason?: string
   payload?: Record<string, unknown>
 }
 
-export type Transition = {
+type Transition = {
   from: AssignmentState
   to: AssignmentState
   version: number

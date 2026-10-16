@@ -43,7 +43,8 @@ registry only and it holds no key (ADR-031), so generation runs in the orchestra
    put one.
 6. **Where and how it runs.** The photo director runs in the orchestrator Worker. Haiku 5.5 at
    low effort writes the prompts: one shared style line for the set, then a subject line per
-   slot. `google/gemini-nano-banana-2.1` generates through OpenRouter's `POST /api/v1/images`.
+   slot. A chain of image models generates through OpenRouter's `POST /api/v1/images`
+   (`QUALITY_MODELS` for the hero, `FAST_MODELS` for the rest, in `images.ts`).
    The hero goes first at 2K, then the rest at 1K, at most four at once, with the hero as a
    reference image so the grade matches.
 7. **Storage and reuse.** R2 `generated/{org}/{assetId}.{ext}`, in the bucket uploads use. A slot

@@ -107,7 +107,7 @@ type Session = {
   kit: Tenancy
   brief: Brief
   gate: TurnGate
-  /** One per assignment, so the lead's and every subagent's writes to one file take turns. */
+  /** One per assignment, so the lead's and `write_pages`' writes to one file take turns. */
   mutations: MutationQueue
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
@@ -544,7 +544,7 @@ const CONFIG = `${SITE_ROOT}/src/site-config.ts`
  * checkpoint. Durable: a replay after an interruption returns each writer's
  * recorded reply, and every write it makes is the same again.
  */
-export const writePagesTool = (current: Session) =>
+const writePagesTool = (current: Session) =>
   defineTool({
     name: "write_pages",
     description:

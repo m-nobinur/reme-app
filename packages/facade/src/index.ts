@@ -70,5 +70,3 @@ export {
   selectTransport,
   TRANSPORTS,
 } from "./transport.ts"
-export type { PrefixWarmer } from "./warm.ts"
-export { createPrefixWarmer } from "./warm.ts"
