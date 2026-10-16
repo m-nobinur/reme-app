@@ -436,8 +436,24 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       )
       expect(sent.response.status, sent.text).toBe(200)
       const chunks = chunksOf(sent.text)
-      const after = await tail(conversationId)
-      expect(plain(await replay(before, chunks))).toStrictEqual(plain(after))
+      const row = (await rows(conversationId)).at(-1)
+      if (!row) throw new Error("the conversation holds no rows")
+      const after = asMessage(row)
+      const { metadata, ...replayed } = (await replay(
+        before,
+        chunks
+      )) as UIMessage
+      expect(plain(replayed)).toStrictEqual(plain(after))
+      // A new message carries the time its row was written, as a reload
+      // reads it; a continued one keeps the time it already shows.
+      if (before) expect(metadata).toBeUndefined()
+      else {
+        const { createdAt } = (metadata as { custom: { createdAt: string } })
+          .custom
+        expect(
+          Math.abs(Date.parse(createdAt) - row.createdAt.getTime())
+        ).toBeLessThan(2000)
+      }
       return { ...sent, chunks, after }
     }
     const onboarding = async () => {
@@ -609,7 +625,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     const history = await me.history(id)
     const hash = await sha256(
       // The colour card's first four are seeded by the org's id, which each
-      // run creates afresh; everything else is the same bytes.
+      // run creates afresh, and each new message carries the time it was
+      // written; everything else is the same bytes.
       (
         bodies.join("") +
         JSON.stringify(
@@ -629,7 +646,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             })
           )
         )
-      ).replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
+      )
+        .replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
+        .replace(/"createdAt":"[^"]*"/g, '"createdAt":""')
     )
     const listed = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()
@@ -1980,6 +1999,41 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         turn: { kind: "message", message_id: "u_plan_2", text: "Couples" },
       })
       expect(next.calls[0]).toContain('\\"waiting_card\\":null')
+    }, 60_000)
+
+    it("keeps the owner's message at the time it was sent, though its row is written after the planner", async () => {
+      const who = await owner(kit, url as string, "chat-sent-at")
+      const { model } = planner([
+        plan({
+          facts: {},
+          say: "Lovely. Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ])
+      const me = talker(who, undefined, { planner: model })
+      const id = await me.onboarding()
+      // The api's clock, ten minutes behind the database's: a row written
+      // with the database's `now()` cannot pass for the time it arrived.
+      const sent = new Date(Date.now() - 10 * 60_000)
+      vi.useFakeTimers({ toFake: ["Date"], now: sent })
+      try {
+        const done = await me.send({
+          conversation_id: id,
+          mode: "act",
+          turn: { kind: "message", message_id: "u_sent_at", text: "Hello" },
+        })
+        expect(done.response.status, done.text).toBe(200)
+      } finally {
+        vi.useRealTimers()
+      }
+      const row = (await me.rows(id)).find((r) => r.id === "u_sent_at")
+      expect(row?.createdAt.toISOString()).toBe(sent.toISOString())
+      const reloaded = (await me.history(id)).messages.find(
+        (m) => m.id === "u_sent_at"
+      )
+      expect(reloaded?.content.metadata).toEqual({
+        custom: { createdAt: sent.toISOString() },
+      })
     }, 60_000)
 
     it("shows the waiting card again after a side question, and answers a card with no model", async () => {

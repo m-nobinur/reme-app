@@ -62,6 +62,7 @@ import {
   ranTurn,
   settle,
   streamTurn,
+  writtenAt,
 } from "./cos/run.ts"
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
@@ -614,6 +615,7 @@ export async function chat(
   deps: ChatDeps = {}
 ): Promise<Response> {
   const newId = deps.newId ?? (() => crypto.randomUUID())
+  const arrived = new Date()
   const body = await readBody(request)
   const parsed = ChatRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
@@ -836,6 +838,7 @@ export async function chat(
       request: parsed.data,
       newId,
       rowId: newId(),
+      sentAt: arrived,
       model: planner as LanguageModel,
       modelId: plannerId,
       price: planPrice as NonNullable<typeof planPrice>,
@@ -908,7 +911,8 @@ function scriptTurn(
   { mode, turn }: ChatRequest,
   newId: () => string,
   given: Given | null = null,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   if (turn.kind === "message") {
     return typed(
@@ -922,7 +926,8 @@ function scriptTurn(
       turn.message_id,
       newId,
       given,
-      rowId
+      rowId,
+      sentAt
     )
   }
   // The script's steps each wait on one call, so its results turn
@@ -932,7 +937,19 @@ function scriptTurn(
   if (!result || more.length > 0) return Promise.resolve(stale())
   const one = { message_id: turn.message_id, ...result }
   if (one.kind === "answer") {
-    return answer(db, env, kit, owner, held, id, one, turn.reply, newId, rowId)
+    return answer(
+      db,
+      env,
+      kit,
+      owner,
+      held,
+      id,
+      one,
+      turn.reply,
+      newId,
+      rowId,
+      sentAt
+    )
   }
   return approve(db, env, kit, owner, held, id, one)
 }
@@ -1276,7 +1293,7 @@ async function fallbackTurn(
         parts: [{ type: "step-start" }, ...step],
       })
     })
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     readSession(db, run.turn.sessionId)
@@ -1417,7 +1434,8 @@ async function typed(
   messageId: string,
   newId: () => string,
   given: Given | null = null,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   if (await messageTaken(db, id, messageId)) return messageExists()
   const { tail } = held
@@ -1440,7 +1458,7 @@ async function typed(
     owner,
     id,
     tail?.id ?? null,
-    { id: messageId, text: message.text },
+    { id: messageId, text: message.text, at: sentAt },
     step,
     newId,
     rowId
@@ -1450,7 +1468,7 @@ async function typed(
     .update(conversations)
     .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, id))
-  return stream(assistantId, step)
+  return stream(assistantId, step, [writtenAt()])
 }
 
 /**
@@ -1462,7 +1480,7 @@ async function ownerThenStep(
   owner: Owner,
   id: string,
   parentId: string | null,
-  message: { id: string; text: string },
+  message: { id: string; text: string; at?: Date | undefined },
   step: Part[],
   newId: () => string,
   rowId?: string
@@ -1473,6 +1491,8 @@ async function ownerThenStep(
       id: message.id,
       parentId,
       content: { role: "user", parts: [{ type: "text", text: message.text }] },
+      // Written late, the owner's row keeps the time it arrived.
+      ...(message.at ? { createdAt: message.at } : {}),
     },
     {
       id: assistantId,
@@ -1591,7 +1611,8 @@ async function answer(
   turn: Resolved<"answer">,
   reply: Reply,
   newId: () => string,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   // A reply is written once, as a typed message is: a retry is refused.
   if (reply && (await messageTaken(db, id, reply.message_id))) {
@@ -1660,12 +1681,12 @@ async function answer(
       owner,
       id,
       tail.id,
-      { id: reply.message_id, text: reply.text },
+      { id: reply.message_id, text: reply.text, at: sentAt },
       step,
       newId,
       rowId
     )
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const parts = [...answered, { type: "step-start" } as const, ...step]
   if (
@@ -1945,6 +1966,11 @@ type Planning = {
    * last. A second id mid-stream made the client draw the reply twice.
    */
   rowId: string
+  /**
+   * When the owner's message arrived. Its row is written after the planner,
+   * and keeps this time rather than the database's, as the owner saw it sent.
+   */
+  sentAt: Date
   model: LanguageModel
   modelId: string
   price: NonNullable<ReturnType<typeof priceOf>>
@@ -2194,6 +2220,7 @@ async function plannedTurn(
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
     for (const part of rest) for (const chunk of made(part)) write(chunk)
+    if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
   }
@@ -2218,7 +2245,8 @@ async function plannedTurn(
           p.request,
           p.newId,
           given,
-          p.rowId
+          p.rowId,
+          p.sentAt
         )
         if (response.ok && outcome.shown) {
           await keepShown(db, p.id, held, continued, outcome.shown)
@@ -2413,7 +2441,7 @@ async function commitPlan(
       p.owner,
       p.id,
       held.tail?.id ?? null,
-      { id: turn.message_id, text: turn.text },
+      { id: turn.message_id, text: turn.text, at: p.sentAt },
       step,
       p.newId,
       p.rowId
@@ -2453,7 +2481,7 @@ async function commitPlan(
       p.owner,
       p.id,
       tail.id,
-      { id: reply.message_id, text: reply.text },
+      { id: reply.message_id, text: reply.text, at: p.sentAt },
       step,
       p.newId,
       p.rowId

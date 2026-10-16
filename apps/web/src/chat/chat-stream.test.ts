@@ -360,6 +360,81 @@ it("a message the assistant posted on its own is a message of its own, with its 
   expect(link?.textContent).toBe("Open DNS settings (opens in a new tab)")
 })
 
+it("every message keeps the time it was sent, as a reload shows it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  try {
+    /** The api's stream with the time it writes on a new message's row. */
+    const stamped = (response: string, at: string) =>
+      response.replace(
+        'data: {"type":"finish"}',
+        `data: ${JSON.stringify({
+          type: "message-metadata",
+          messageMetadata: { custom: { createdAt: at } },
+        })}\n\ndata: {"type":"finish"}`
+      )
+    const times = (container: HTMLElement) =>
+      [
+        ...container.querySelectorAll(
+          '[data-slot="aui_user-message-meta"] time, [data-slot="aui_assistant-message-footer"] time'
+        ),
+        // To the minute, as the owner reads it; the fake clock ticks on.
+      ].map((time) => time.getAttribute("datetime")?.slice(0, 16))
+    vi.setSystemTime(new Date("2026-10-16T18:33:20.000Z"))
+    const chat = await open(FIXTURE.histories.typed)
+    const before = times(chat).length
+    turns.push(() =>
+      sse({
+        ...FIXTURE.streams.name,
+        response: stamped(
+          FIXTURE.streams.name.response,
+          "2026-10-16T18:33:30.000Z"
+        ),
+      })()
+    )
+    await press(chat, "Save")
+    await vi.waitFor(() =>
+      expect(transcript(chat).at(-1)).toContain(
+        "What number should customers ring?"
+      )
+    )
+    // Minutes later the owner writes again, and the thread converts every
+    // message once more.
+    vi.setSystemTime(new Date("2026-10-16T18:36:50.000Z"))
+    turns.push(() =>
+      sse({
+        request: null,
+        response: stamped(
+          [
+            { type: "start", messageId: "late" },
+            { type: "start-step" },
+            { type: "text-start", id: "t" },
+            { type: "text-delta", id: "t", delta: "Noted." },
+            { type: "text-end", id: "t" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]
+            .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join("")
+            .concat("data: [DONE]\n\n"),
+          "2026-10-16T18:36:51.000Z"
+        ),
+      })()
+    )
+    await type(chat, "Hello again")
+    await vi.waitFor(() => expect(chat.textContent).toContain("Noted."))
+    await vi.waitFor(() =>
+      expect(times(chat).slice(before)).toEqual([
+        "2026-10-16T18:33",
+        "2026-10-16T18:33",
+        "2026-10-16T18:36",
+        "2026-10-16T18:36",
+      ])
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {

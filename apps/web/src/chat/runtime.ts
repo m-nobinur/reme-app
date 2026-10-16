@@ -111,6 +111,20 @@ export function useConversationRuntime({
     onFinish,
     onError: (error) => restore.current(error),
   })
+  // The owner's message carries the time it was sent, as a stored row does:
+  // without it the thread shows the converter's clock, which moves on every
+  // render. The api writes the same on its own new messages.
+  const send: typeof chat.sendMessage = (message, options) =>
+    chat.sendMessage(
+      message && {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          custom: { createdAt: new Date().toISOString() },
+        },
+      },
+      options
+    )
   // The open thread's stored rows, or null when it is not stored yet.
   const storedRows = () => {
     const remoteId = aui.threadListItem.getState().remoteId
@@ -199,7 +213,7 @@ export function useConversationRuntime({
   ) => {
     const reply = replyTo(chat.messages, given)
     await chat.addToolOutput(given)
-    if (reply) await chat.sendMessage(reply)
+    if (reply) await send(reply)
   }
   const runtime = useAISDKRuntime(
     {
@@ -223,9 +237,9 @@ export function useConversationRuntime({
           })
         }
         chat.setMessages(cancelOvertaken)
-        if (!carried) return chat.sendMessage(message, options)
+        if (!carried) return send(message, options)
         onIntentSent?.()
-        return chat.sendMessage(message, {
+        return send(message, {
           ...options,
           body: { ...options?.body, intent: carried },
         })

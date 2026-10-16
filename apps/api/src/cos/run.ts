@@ -45,6 +45,15 @@ const isContent = (chunk: UIMessageChunk) =>
   chunk.type.startsWith("reasoning-") ||
   chunk.type.startsWith("tool-input-")
 
+/**
+ * A new message's time, sent as its row is written, so the thread shows what
+ * a reload reads from `created_at` rather than the browser's render clock.
+ */
+export const writtenAt = (): UIMessageChunk => ({
+  type: "message-metadata",
+  messageMetadata: { custom: { createdAt: new Date().toISOString() } },
+})
+
 /** A tool part the model left unfinished. It never enters the history. */
 const unfinished = (part: UIMessage["parts"][number]) =>
   "toolCallId" in part &&
@@ -212,6 +221,10 @@ export async function streamTurn(
   let queued = [...head]
   const [start, ...rest] = queued
   queued = start?.type === "start" ? [start, ...input.lead, ...rest] : queued
+  // A message the history does not hold yet gets its row at the close.
+  const fresh =
+    start?.type === "start" &&
+    !input.uiMessages.some((m) => m.id === start.messageId)
   let finish: UIMessageChunk | null = null
   let errored = queued.some((c) => c.type === "error")
   // Reasoning counts as content above and stays in the log, but the owner
@@ -233,7 +246,10 @@ export async function streamTurn(
         }
       }
       try {
-        if ((await closeRun()) && finish) controller.enqueue(finish)
+        if ((await closeRun()) && finish) {
+          if (fresh) controller.enqueue(writtenAt())
+          controller.enqueue(finish)
+        }
       } catch (error) {
         console.error(
           JSON.stringify({
