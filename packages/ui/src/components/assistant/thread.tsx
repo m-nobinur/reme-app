@@ -353,6 +353,39 @@ const KeepTurnAnchor: FC = () => {
   return null
 }
 
+/**
+ * The slot after the last message, from app state. The space assistant-ui
+ * holds below a pinned reply is sized from the reply alone and never from
+ * this slot, so when a card here shrinks or goes (the ready card on Approve)
+ * that space stays and the view settles on blank above the composer until a
+ * reload. A shrink with no run going ends the pinned turn, which takes the
+ * space away.
+ */
+const AfterSlot: FC<{ children: ReactNode }> = ({ children }) => {
+  const viewport = useThreadViewportStore()
+  const aui = useAui()
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!slot) return
+    let height = slot.offsetHeight
+    const observer = new ResizeObserver(() => {
+      const next = slot.offsetHeight
+      if (next < height && !aui.thread().getState().isRunning) {
+        viewport.getState().setTopAnchorTurn(null)
+      }
+      height = next
+    })
+    observer.observe(slot)
+    return () => observer.disconnect()
+  }, [slot, viewport, aui])
+  return (
+    // Always in the page, so a card that appears in it is read out.
+    <div aria-live="polite" className="-mt-8 mb-14 empty:m-0" ref={setSlot}>
+      {children}
+    </div>
+  )
+}
+
 const ThreadRoot: FC<{
   isEmpty: boolean
   autoFocus: boolean
@@ -407,10 +440,7 @@ const ThreadRoot: FC<{
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
             </div>
-            {/* Always in the page, so a card that appears in it is read out. */}
-            <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
-              {after}
-            </div>
+            <AfterSlot>{after}</AfterSlot>
 
             <ThreadPrimitive.ViewportFooter
               className={cn(
