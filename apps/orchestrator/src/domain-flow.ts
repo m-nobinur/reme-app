@@ -819,6 +819,8 @@ export async function checkNow(
   let status: DomainCheck
   if (connecting(row.state)) {
     status = (await currentCheck(env, row)).check
+    // Valid at Cloudflare is not live: only the Workflow's activation is, as in `look`.
+    if (status.status === "valid") status = { status: "pending_certificate" }
     try {
       const instance = await env.DOMAINS.get(domainInstanceId(row.id))
       await instance.sendEvent({ type: "check", payload: {} })

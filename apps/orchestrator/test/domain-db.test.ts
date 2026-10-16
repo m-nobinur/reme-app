@@ -3,6 +3,7 @@ import { deployments, domains, eq, events, orgs, sql } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   activateDomain,
+  checkNow,
   claimHostnames,
   connect,
   expireDomain,
@@ -36,7 +37,14 @@ const NAME = "sparklecleanbristol.co.uk"
 const CF = "https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames"
 
 /** DNS from the recordings plus a SOA for any other name asked; Cloudflare's hostnames in a map. */
-function stubNet() {
+/**
+ * `doh` answers ahead of the recorded ones; `active` makes a hostname read
+ * by id come back active with its certificate issued.
+ */
+function stubNet(
+  doh: Record<string, unknown> = {},
+  { active = false }: { active?: boolean } = {}
+) {
   const hostnames = new Map<string, string>()
   const deleted: string[] = []
   const fetched = vi.fn(
@@ -45,7 +53,7 @@ function stubNet() {
       if (u.hostname === "cloudflare-dns.com") {
         const name = u.searchParams.get("name") ?? ""
         const type = u.searchParams.get("type")
-        const recorded = DOH[`${name} ${type}`]
+        const recorded = doh[`${name} ${type}`] ?? DOH[`${name} ${type}`]
         if (recorded) return Response.json(recorded)
         if (type === "SOA" && name.endsWith(".co.uk")) {
           return Response.json({
@@ -77,6 +85,15 @@ function stubNet() {
         if (init?.method === "DELETE") {
           deleted.push(u.pathname.split("/").at(-1) ?? "")
           return envelope({ id: "x" })
+        }
+        const id = u.pathname.split("/").at(-1) ?? ""
+        if (active && hostnames.has(id)) {
+          return envelope({
+            id,
+            hostname: hostnames.get(id),
+            status: "active",
+            ssl: { status: "active" },
+          })
         }
         return envelope([])
       }
@@ -502,6 +519,50 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(await rowOf(site.orgId, name)).toMatchObject({
       state: "active",
       lastCheck: { status: "valid" },
+    })
+  })
+
+  it("connects a first-level subdomain on its own host, and a connecting check is never live", async () => {
+    const name = unique()
+    const sub = `book.${name}`
+    const doh: Record<string, unknown> = {
+      // No record at the subdomain yet: NXDOMAIN under a zone in use.
+      [`${sub} SOA`]: {
+        Status: 3,
+        Authority: [{ name, type: 6, TTL: 60, data: "ns. host. 1 1 1 1 1" }],
+      },
+      [`${name} A`]: {
+        Status: 0,
+        Answer: [{ name, type: 1, TTL: 60, data: "192.0.2.10" }],
+      },
+    }
+    const { hostnames } = stubNet(doh, { active: true })
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const made = await connect(env, kit, site.orgId, {
+      name: sub,
+      approval_id: "a",
+    })
+    expect(made).toMatchObject({
+      status: 201,
+      output: {
+        steps: [{ type: "CNAME", name: "book", value: "domains.remeai.co.uk" }],
+      },
+    })
+    expect((made as { output: object }).output).not.toHaveProperty("apex")
+    const row = await rowOf(site.orgId, sub)
+    expect(row).toMatchObject({ primaryHost: sub, state: "awaiting_dns" })
+    await claimHostnames(env, kit, site.orgId, row?.id ?? "")
+    // The owner adds the record from the card.
+    doh[`${sub} A`] = {
+      Status: 0,
+      Answer: [{ name: sub, type: 5, TTL: 60, data: "domains.remeai.co.uk." }],
+    }
+    expect([...hostnames.values()]).toEqual([sub])
+    expect(await checkNow(env, kit, site.orgId, sub)).toMatchObject({
+      state: "awaiting_dns",
+      status: { status: "pending_certificate" },
+      next_step: expect.stringContaining(`records for ${sub}`),
     })
   })
 })
