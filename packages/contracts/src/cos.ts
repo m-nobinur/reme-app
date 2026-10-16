@@ -3,6 +3,13 @@ import { InformationRequest } from "./assignment.ts"
 import { ChatRequest, RequestChangeOutput } from "./chat.ts"
 import { JsonObject, Timestamp, Ulid, Uuid } from "./common.ts"
 import { ConversationMessage, MessageRating } from "./conversation.ts"
+import {
+  DnsRecord,
+  DomainCheck,
+  DomainName,
+  DomainProvider,
+  DomainState,
+} from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   BuildSummary,
@@ -15,6 +22,7 @@ import {
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
+import { Text } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
 // what the model reads, so none carries an org id, a staff id or a signed
@@ -66,6 +74,20 @@ export const CosWorkspace = z.strictObject({
     .array(z.strictObject({ version: Version, expires_at: Timestamp }))
     .max(10),
   missing_facts: z.array(FactValueKey),
+  /**
+   * The org's custom domains that are not removed, newest first. Optional
+   * while the api that fills it lands after the contract; absent means none.
+   */
+  domains: z
+    .array(
+      z.strictObject({
+        name: DomainName,
+        state: DomainState,
+        last_check: DomainCheck.nullable(),
+      })
+    )
+    .max(10)
+    .optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
 })
@@ -137,6 +159,40 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/** `check_domain`'s input; it also wakes the domain's workflow to look now. */
+export const CheckDomainInput = z.strictObject({ name: DomainName })
+
+/** `check_domain`'s output: where the domain is, the latest check, and what to tell the owner to do next. */
+export const CheckDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("checked"),
+    state: DomainState,
+    status: DomainCheck,
+    next_step: Text(300),
+  }),
+  Refused,
+])
+
+/** `connect_domain`'s input: the owner's existing domain. */
+export const ConnectDomainInput = z.strictObject({ name: DomainName })
+
+/**
+ * `connect_domain`'s output once the owner said yes. A no is `output-denied`.
+ * `steps` are the records to add, `apex` says whether the bare domain is an
+ * alias or forwards from `www`, and `provider` is the detected DNS provider.
+ */
+export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("connecting"),
+    method: z.enum(["domain_connect", "records"]),
+    email_affected: z.boolean(),
+    steps: z.array(DnsRecord).max(10).optional(),
+    apex: z.enum(["alias", "forward"]),
+    provider: DomainProvider.optional(),
+  }),
+  Refused,
+])
+
 const Empty = z.strictObject({})
 
 /**
@@ -155,6 +211,8 @@ export const COS_TOOLS = {
     output: CreateReminderOutput,
   },
   record_review: { input: RecordReviewInput, output: RecordReviewOutput },
+  check_domain: { input: CheckDomainInput, output: CheckDomainOutput },
+  connect_domain: { input: ConnectDomainInput, output: ConnectDomainOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -286,6 +344,16 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("record_review"),
     output: COS_TOOLS.record_review.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("check_domain"),
+    output: COS_TOOLS.check_domain.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("connect_domain"),
+    output: COS_TOOLS.connect_domain.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -325,6 +393,10 @@ export type AnswerQuestionOutput = z.infer<typeof AnswerQuestionOutput>
 export type CreateReminderOutput = z.infer<typeof CreateReminderOutput>
 export type RecordReviewInput = z.infer<typeof RecordReviewInput>
 export type RecordReviewOutput = z.infer<typeof RecordReviewOutput>
+export type CheckDomainInput = z.infer<typeof CheckDomainInput>
+export type CheckDomainOutput = z.infer<typeof CheckDomainOutput>
+export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
+export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type CosTurn = z.infer<typeof CosTurn>
 export type CosPrefix = z.infer<typeof CosPrefix>
 export type CosContext = z.infer<typeof CosContext>

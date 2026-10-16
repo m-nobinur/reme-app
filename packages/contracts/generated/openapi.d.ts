@@ -4076,6 +4076,70 @@ export interface components {
             }
           }
     }
+    CheckDomainInput: {
+      name: string
+    }
+    CheckDomainOutput:
+      | {
+          /** @constant */
+          outcome: "checked"
+          /** @enum {string} */
+          state: "awaiting_dns" | "verifying" | "active" | "failed" | "removed"
+          status:
+            | {
+                /** @constant */
+                status: "not_found"
+              }
+            | {
+                /** @constant */
+                status: "unknown_error"
+              }
+            | {
+                /** @constant */
+                status: "conflicting_record"
+                conflicts: {
+                  /** @enum {string} */
+                  type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                  name: string
+                  value: string
+                }[]
+              }
+            | {
+                /** @constant */
+                status: "pending_verification"
+              }
+            | {
+                /** @constant */
+                status: "invalid_configuration"
+              }
+            | {
+                /** @constant */
+                status: "pending_certificate"
+              }
+            | {
+                /** @constant */
+                status: "valid"
+              }
+          next_step: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     CompletionReport: {
       /** Format: uuid */
       report_id: string
@@ -4119,6 +4183,47 @@ export interface components {
       /** @enum {string} */
       source: "generated" | "hand-written"
     }
+    ConnectDomainInput: {
+      name: string
+    }
+    ConnectDomainOutput:
+      | {
+          /** @constant */
+          outcome: "connecting"
+          /** @enum {string} */
+          method: "domain_connect" | "records"
+          email_affected: boolean
+          steps?: {
+            /** @enum {string} */
+            type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+            name: string
+            value: string
+          }[]
+          /** @enum {string} */
+          apex: "alias" | "forward"
+          provider?: {
+            name: string
+            settings_url?: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Conversation: {
       /** Format: uuid */
       id: string
@@ -4217,6 +4322,8 @@ export interface components {
         | "answer_question"
         | "create_reminder"
         | "record_review"
+        | "check_domain"
+        | "connect_domain"
       )[]
       text: string
       reserved_usd: number
@@ -4552,6 +4659,8 @@ export interface components {
           | "answer_question"
           | "create_reminder"
           | "record_review"
+          | "check_domain"
+          | "connect_domain"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -4652,6 +4761,54 @@ export interface components {
               | "testimonials.review_1"
               | "testimonials.review_2"
             )[]
+            domains?: {
+              name: string
+              /** @enum {string} */
+              state:
+                | "awaiting_dns"
+                | "verifying"
+                | "active"
+                | "failed"
+                | "removed"
+              last_check:
+                | (
+                    | {
+                        /** @constant */
+                        status: "not_found"
+                      }
+                    | {
+                        /** @constant */
+                        status: "unknown_error"
+                      }
+                    | {
+                        /** @constant */
+                        status: "conflicting_record"
+                        conflicts: {
+                          /** @enum {string} */
+                          type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                          name: string
+                          value: string
+                        }[]
+                      }
+                    | {
+                        /** @constant */
+                        status: "pending_verification"
+                      }
+                    | {
+                        /** @constant */
+                        status: "invalid_configuration"
+                      }
+                    | {
+                        /** @constant */
+                        status: "pending_certificate"
+                      }
+                    | {
+                        /** @constant */
+                        status: "valid"
+                      }
+                  )
+                | null
+            }[]
             expected_seconds?: {
               full: {
                 p50: number
@@ -5726,6 +5883,122 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "check_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "checked"
+                /** @enum {string} */
+                state:
+                  | "awaiting_dns"
+                  | "verifying"
+                  | "active"
+                  | "failed"
+                  | "removed"
+                status:
+                  | {
+                      /** @constant */
+                      status: "not_found"
+                    }
+                  | {
+                      /** @constant */
+                      status: "unknown_error"
+                    }
+                  | {
+                      /** @constant */
+                      status: "conflicting_record"
+                      conflicts: {
+                        /** @enum {string} */
+                        type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                        name: string
+                        value: string
+                      }[]
+                    }
+                  | {
+                      /** @constant */
+                      status: "pending_verification"
+                    }
+                  | {
+                      /** @constant */
+                      status: "invalid_configuration"
+                    }
+                  | {
+                      /** @constant */
+                      status: "pending_certificate"
+                    }
+                  | {
+                      /** @constant */
+                      status: "valid"
+                    }
+                next_step: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "connect_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "connecting"
+                /** @enum {string} */
+                method: "domain_connect" | "records"
+                email_affected: boolean
+                steps?: {
+                  /** @enum {string} */
+                  type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                  name: string
+                  value: string
+                }[]
+                /** @enum {string} */
+                apex: "alias" | "forward"
+                provider?: {
+                  name: string
+                  settings_url?: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -5746,6 +6019,8 @@ export interface components {
             | "answer_question"
             | "create_reminder"
             | "record_review"
+            | "check_domain"
+            | "connect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5771,6 +6046,8 @@ export interface components {
             | "answer_question"
             | "create_reminder"
             | "record_review"
+            | "check_domain"
+            | "connect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5794,6 +6071,8 @@ export interface components {
             | "answer_question"
             | "create_reminder"
             | "record_review"
+            | "check_domain"
+            | "connect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5817,6 +6096,8 @@ export interface components {
             | "answer_question"
             | "create_reminder"
             | "record_review"
+            | "check_domain"
+            | "connect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5840,6 +6121,8 @@ export interface components {
             | "answer_question"
             | "create_reminder"
             | "record_review"
+            | "check_domain"
+            | "connect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -5926,6 +6209,49 @@ export interface components {
         | "testimonials.review_1"
         | "testimonials.review_2"
       )[]
+      domains?: {
+        name: string
+        /** @enum {string} */
+        state: "awaiting_dns" | "verifying" | "active" | "failed" | "removed"
+        last_check:
+          | (
+              | {
+                  /** @constant */
+                  status: "not_found"
+                }
+              | {
+                  /** @constant */
+                  status: "unknown_error"
+                }
+              | {
+                  /** @constant */
+                  status: "conflicting_record"
+                  conflicts: {
+                    /** @enum {string} */
+                    type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                    name: string
+                    value: string
+                  }[]
+                }
+              | {
+                  /** @constant */
+                  status: "pending_verification"
+                }
+              | {
+                  /** @constant */
+                  status: "invalid_configuration"
+                }
+              | {
+                  /** @constant */
+                  status: "pending_certificate"
+                }
+              | {
+                  /** @constant */
+                  status: "valid"
+                }
+            )
+          | null
+      }[]
       expected_seconds?: {
         full: {
           p50: number
@@ -6123,6 +6449,51 @@ export interface components {
       ornament: string
       image_style: string
       voice: string
+    }
+    DnsRecord: {
+      /** @enum {string} */
+      type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+      name: string
+      value: string
+    }
+    DomainCheck:
+      | {
+          /** @constant */
+          status: "not_found"
+        }
+      | {
+          /** @constant */
+          status: "unknown_error"
+        }
+      | {
+          /** @constant */
+          status: "conflicting_record"
+          conflicts: {
+            /** @enum {string} */
+            type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+            name: string
+            value: string
+          }[]
+        }
+      | {
+          /** @constant */
+          status: "pending_verification"
+        }
+      | {
+          /** @constant */
+          status: "invalid_configuration"
+        }
+      | {
+          /** @constant */
+          status: "pending_certificate"
+        }
+      | {
+          /** @constant */
+          status: "valid"
+        }
+    DomainProvider: {
+      name: string
+      settings_url?: string
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -6888,6 +7259,9 @@ export interface components {
             message: string
           }
         }
+    RedirectPointer: {
+      redirect_to: string
+    }
     Reminder: {
       /** Format: uuid */
       id: string
@@ -7634,6 +8008,42 @@ export interface components {
       expires_at: string
       signature: string
     }
+    ServerButtonPart: {
+      /** @constant */
+      type: "data-button"
+      data: {
+        label: string
+        action:
+          | {
+              /** @constant */
+              kind: "ask"
+              text: string
+            }
+          | {
+              /** @constant */
+              kind: "open"
+              url: string
+            }
+      }
+    }
+    ServerMessage: {
+      id: string
+      text: string[]
+      button?: {
+        label: string
+        action:
+          | {
+              /** @constant */
+              kind: "ask"
+              text: string
+            }
+          | {
+              /** @constant */
+              kind: "open"
+              url: string
+            }
+      }
+    }
     SetFactsRequest: {
       facts: (
         | {
@@ -7952,6 +8362,7 @@ export interface components {
       /** Format: uuid */
       revision_id: string
       config_version: number
+      canonical_host?: string
     }
     SiteRevision: {
       /** Format: uuid */
