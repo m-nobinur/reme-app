@@ -724,6 +724,65 @@
     ],
     "hostname held": ["hostnames", "held", "say held"],
     "removed before the hostnames": ["hostnames"],
-    "removed while waiting": ["hostnames", "look 1", "check 1", "look 2"]
+    "removed while waiting": ["hostnames", "look 1", "check 1", "look 2"],
+    "bought in the sandbox": [
+      "payment 1",
+      "paid 1",
+      "payment 2",
+      "register",
+      "registering 1",
+      "registration 1",
+      "capture",
+      "renewal",
+      "test",
+      "say test"
+    ],
+    "bought and served": [
+      "payment 1",
+      "register",
+      "capture",
+      "say registered",
+      "renewal",
+      "serve",
+      "serving 1",
+      "wait serving 1",
+      "serving 2",
+      "activate",
+      "say live",
+      "settle",
+      "pointers again"
+    ],
+    "purchase abandoned": [
+      "payment 1",
+      "paid 1",
+      "payment 2",
+      "paid 2",
+      "payment 3",
+      "paid 3",
+      "payment 4",
+      "paid 4",
+      "payment 5",
+      "abandon"
+    ],
+    "purchase refused": ["payment 1", "register", "say refused"],
+    "registration failed": [
+      "payment 1",
+      "register",
+      "registering 1",
+      "registration 1",
+      "not registered",
+      "say failed"
+    ],
+    "bought, never served": [
+      "payment 1",
+      "register",
+      "capture",
+      "say registered",
+      "renewal",
+      "serve",
+      "serving 1",
+      "stalled",
+      "say stalled"
+    ]
   }
 }

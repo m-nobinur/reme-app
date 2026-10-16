@@ -48,6 +48,7 @@ import {
   dropDomainPointers,
   writePointer,
 } from "./publish.ts"
+import { detachHostname, type RegistrarEnv } from "./registrar.ts"
 
 /**
  * Connecting an owner's existing domain (records path): the step bodies of
@@ -60,7 +61,13 @@ import {
  * R8: ids only. `settle` is the short instance a removal starts, which only
  * rewrites the pointers once more after `SETTLE`.
  */
-export type DomainParams = { org_id: string; domain_id: string; settle?: true }
+export type DomainParams = {
+  org_id: string
+  domain_id: string
+  settle?: true
+  /** A purchase: wait for the payment, register, capture, serve. */
+  buy?: true
+}
 export const domainInstanceId = (domainId: string) => `domain-${domainId}`
 const settleInstanceId = (domainId: string) => `domain-${domainId}-removed`
 
@@ -126,7 +133,7 @@ async function readDomain(db: OrgScopedDb, domainId: string) {
 }
 
 /** The newest claim `where` picks, with its org's slug host, in one read. */
-async function readClaim(
+export async function readClaim(
   db: OrgScopedDb,
   env: Pick<Env, "SITE_HOST_SUFFIX">,
   where: SQL
@@ -149,7 +156,7 @@ async function readClaim(
  * write that committed in between wins: an activation that lost to a
  * removal moves nothing and gets false.
  */
-async function moveTo(
+export async function moveTo(
   db: OrgScopedDb,
   row: DomainRow,
   to: DomainState,
@@ -177,10 +184,21 @@ async function moveTo(
   return true
 }
 
-/** A claim's custom hostnames deleted; one already gone is done. */
-async function dropHostnames(env: CloudflareEnv, cfIds: unknown) {
-  for (const id of Object.values(cfIds as CfIds)) {
+/**
+ * A claim's custom hostnames deleted, and a bought domain's Workers Custom
+ * Domains; one already gone is done. A bought zone stays: the domain is the
+ * owner's.
+ */
+async function dropHostnames(
+  env: CloudflareEnv & RegistrarEnv,
+  cfIds: unknown
+) {
+  const ids = cfIds as CfIds & { worker_apex?: string; worker_www?: string }
+  for (const id of [ids.apex, ids.www]) {
     if (id) await deleteHostname(env, id)
+  }
+  for (const id of [ids.worker_apex, ids.worker_www]) {
+    if (id) await detachHostname(env, id)
   }
 }
 
@@ -207,10 +225,13 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
  * the shape of `events.idempotency_key` (a ULID), as `eventKey` in
  * apps/api/src/http.ts makes them, so the org's unique index refuses a repeat.
  */
-async function eventKey(key: string): Promise<string> {
+export async function eventKey(
+  key: string,
+  kind = "domain.status"
+): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`domain.status:${key}`)
+    new TextEncoder().encode(`${kind}:${key}`)
   )
   // 128 bits as 26 base-32 digits: the first is at most 3, inside a ULID's 0 to 7.
   let n = new Uint8Array(digest)
@@ -654,7 +675,7 @@ export type Refusal = {
   code: string
   message: string
 }
-const refuse = (
+export const refuse = (
   status: Refusal["status"],
   errorClass: Refusal["class"],
   code: string,
@@ -754,7 +775,9 @@ export async function connect(
       const [pending] = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(domains)
-        .where(sql`${domains.state} in ('awaiting_dns', 'verifying')`)
+        .where(
+          sql`${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected'`
+        )
       if ((pending?.n ?? 0) >= MAX_PENDING)
         return refuse(
           409,
@@ -850,11 +873,16 @@ export async function connect(
 }
 
 /** The claim's Workflow, created; one already there is fine. */
-async function start(env: Env, orgId: string, domainId: string) {
+export async function start(
+  env: Env,
+  orgId: string,
+  domainId: string,
+  buy?: true
+) {
   try {
     await env.DOMAINS.create({
       id: domainInstanceId(domainId),
-      params: { org_id: orgId, domain_id: domainId },
+      params: { org_id: orgId, domain_id: domainId, ...(buy && { buy }) },
     })
   } catch {
     // Already created: the id is the claim's.
@@ -932,6 +960,12 @@ export async function remove(
   if (!name) return invalid()
   const found = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.name, name))
+    // A purchase being paid for or registered holds money: it finishes first.
+    if (
+      claim?.row.origin === "purchased" &&
+      ["awaiting_payment", "verifying"].includes(claim.row.state)
+    )
+      return "buying" as const
     // From any state, so a removal racing an activation still removes it.
     if (claim)
       await moveTo(
@@ -947,6 +981,13 @@ export async function remove(
       )
     return claim
   })
+  if (found === "buying")
+    return refuse(
+      409,
+      "resource",
+      "domain.purchase_in_progress",
+      `${name} is still being bought. Remove it once it's live.`
+    )
   if (!found)
     return refuse(
       404,
@@ -1033,7 +1074,7 @@ export async function sweepDomains(
       .select()
       .from(domains)
       .where(
-        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.createdAt} < ${stale}::timestamptz)`
+        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected' and ${domains.createdAt} < ${stale}::timestamptz)`
       )
   )
   const says: Say[] = []
@@ -1109,11 +1150,16 @@ export async function revokeDomains(
   kit: Tenancy,
   orgId: string
 ): Promise<void> {
+  // A purchase that is paid for and registering holds the owner's money:
+  // its Workflow finishes it (capture or release) and the row is left alone.
+  // shortcut: such a purchase then stays `verifying` on a closed org, its
+  // activation refused; settle it by hand if a takedown ever lands mid-purchase.
+  const kept = sql`${domains.state} <> 'removed' and not (${domains.origin} = 'purchased' and ${domains.state} = 'verifying')`
   const held = await kit.withOrg({ orgId }, (db) =>
     db
       .select({ id: domains.id, cfIds: domains.cfIds })
       .from(domains)
-      .where(sql`${domains.state} <> 'removed'`)
+      .where(kept)
   )
   // The hostnames before the rows, so a retried takedown still finds them.
   // Failed claims are included: their hostnames are deleted again, idempotently.
@@ -1122,6 +1168,6 @@ export async function revokeDomains(
     db
       .update(domains)
       .set({ state: "removed", removedAt: new Date() })
-      .where(sql`${domains.state} <> 'removed'`)
+      .where(kept)
   )
 }

@@ -29,6 +29,12 @@ interface __BaseEnv_Env {
    * the token; without it a connect fails as `domains.not_configured`.
    */
   CF_DOMAINS_TOKEN?: string
+  /**
+   * Stripe's secret key, for a bought domain's hold (capture or release) and
+   * its renewal Subscription (src/stripe.ts). Unset, `buy_domain` refuses
+   * with `domain.buy_unavailable` and finding a domain still works.
+   */
+  STRIPE_SECRET_KEY?: string
   OPENROUTER_API_KEY: string
   /** The model plane's settings, set as secrets so one list says what the Worker reads. */
   REME_MODEL_PRIMARY: string
