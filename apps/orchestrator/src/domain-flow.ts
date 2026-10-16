@@ -639,7 +639,7 @@ export async function connect(
     outcome: "connecting" as const,
     method: "records" as const,
     email_affected: false,
-    steps: recordsFor({ inspection, apex, hostnames: [], withTxt: false }),
+    steps: recordsFor({ inspection, apex }),
     // A subdomain has no bare-address choice.
     ...(!inspection.sub && { apex }),
     ...(provider && { provider }),
