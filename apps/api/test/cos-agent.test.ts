@@ -46,7 +46,7 @@ import {
   vi,
 } from "vitest"
 import type { z } from "zod"
-import { type ChatDeps, chat } from "../src/chat.ts"
+import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
   activeTools,
   type CosAgent,
@@ -1160,19 +1160,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
   })
 
-  it("falls back on a provider error before content, and ends with an error chunk after it", async () => {
+  it("answers one line, never a card, on a provider error before content, and ends with an error chunk after it", async () => {
     const id = await conversation(me)
-    const early = await turn(me, typed(id, "Change the header", "act"), {
-      model: scripted(new Error("upstream 500")).model,
-    })
-    expect(early.response.status, early.text).toBe(200)
-    expect(early.chunks.some((c) => c.type === "tool-approval-request")).toBe(
-      true
-    )
-    expect((await turnsOf(id)).at(-1)).toMatchObject({
-      outcome: "fallback",
-      reason: "provider",
-    })
+    // Live test 2026-10-16: Act mode's script turned "Hello" into a build card.
+    for (const [text, mode] of [
+      ["Change the header", "act"],
+      ["How is my site?", "ask"],
+    ] as const) {
+      const early = await turn(me, typed(id, text, mode), {
+        model: scripted(new Error("upstream 500")).model,
+      })
+      expect(early.response.status, early.text).toBe(200)
+      expect(early.chunks.some((c) => c.type.startsWith("tool-"))).toBe(false)
+      expect((await tailOf(me, id)).parts).toEqual([
+        { type: "step-start" },
+        { type: "text", text: NO_ANSWER, state: "done" },
+      ])
+      expect((await turnsOf(id)).at(-1)).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+    }
 
     const late = await turn(me, typed(id, "Tell me more", "ask"), {
       model: scripted([

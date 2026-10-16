@@ -170,6 +170,10 @@ export { ONBOARDING_GOAL }
 export const ASK_REPLY =
   "I can't answer right now. Try again in a moment, or switch to Act and tell me what to change on your site."
 
+/** The one line, in either mode, when the model was asked and failed: never a card it did not propose. */
+export const NO_ANSWER =
+  "I couldn't answer that just now. Try again in a moment."
+
 /** assistant-ui's words when a new message cancels a pending call, so a reload matches. */
 export const CANCELLED = TOOL_CALL_CANCELLED
 
@@ -1243,8 +1247,9 @@ function settledLead(messages: UIMessage[], tailId: string): UIMessageChunk[] {
 
 /**
  * The turn without the model: the script's step for a typed message, not
- * logged, so the model learns its effect from the next context; for a
- * results turn, the resolved message, logged with no model text.
+ * logged, so the model learns its effect from the next context, or
+ * `NO_ANSWER` once the provider failed; for a results turn, the resolved
+ * message, logged with no model text.
  */
 async function fallbackTurn(
   run: AgentTurn,
@@ -1253,11 +1258,14 @@ async function fallbackTurn(
   payload: CosTurn
 ): Promise<Response> {
   if (a.turn.kind === "message") {
-    const step = nextStep({
-      onboarding: null,
-      message: { mode: a.mode, text: a.turn.text },
-      newId: a.newId,
-    })
+    const step: Part[] =
+      payload.outcome === "fallback" && payload.reason === "provider"
+        ? [{ type: "text", text: NO_ANSWER, state: "done" }]
+        : nextStep({
+            onboarding: null,
+            message: { mode: a.mode, text: a.turn.text },
+            newId: a.newId,
+          })
     const assistantId = a.newId()
     await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
       await writeAsTurn(db, run.turn, [{ type: "cos.turn", payload }])
