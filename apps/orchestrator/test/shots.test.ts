@@ -7,6 +7,8 @@ import { CROPS_MAX, cropKey, SHOTS_SCRIPT } from "../src/shots.ts"
 
 type Shot = {
   path: string
+  type?: string
+  quality?: number
   fullPage?: boolean
   clip?: { y: number; height: number; width: number }
 }
@@ -72,18 +74,19 @@ describe("the capture script", () => {
     const { shoot, HEIGHT } = await load()
     const { browser, shots } = browserOf({ 390: 2000, 768: 900, 1440: 1000 })
     expect(await shoot(browser, "http://x/", "/tmp", CROPS_MAX)).toBe(true)
+    // The tablet width is only the card's image: the critic is shown phone and desktop.
     expect(shots.map((s) => s.path.replace("/tmp/", ""))).toEqual([
       "home-390.png",
-      "crop-390-1.png",
-      "crop-390-2.png",
-      "crop-390-3.png",
+      "crop-390-1.jpg",
+      "crop-390-2.jpg",
+      "crop-390-3.jpg",
       "home-768.png",
-      "crop-768-1.png",
       "home-1440.png",
-      "crop-1440-1.png",
-      "crop-1440-2.png",
+      "crop-1440-1.jpg",
+      "crop-1440-2.jpg",
     ])
     const crops = shots.filter((s) => s.clip)
+    expect(crops.every((s) => s.type === "jpeg" && s.quality === 70)).toBe(true)
     // No piece is taller than a screen, and the last one stops at the page's end.
     expect(crops.every((s) => (s.clip?.height ?? 0) <= HEIGHT)).toBe(true)
     expect(crops.slice(0, 3).map((s) => [s.clip?.y, s.clip?.height])).toEqual([
@@ -99,11 +102,7 @@ describe("the capture script", () => {
     await shoot(browser, "http://x/", "/tmp", CROPS_MAX)
     const per = (w: number) =>
       shots.filter((s) => s.path.includes(`crop-${w}-`)).length
-    expect([per(390), per(768), per(1440)]).toEqual([
-      CROPS_MAX,
-      CROPS_MAX,
-      CROPS_MAX,
-    ])
+    expect([per(390), per(768), per(1440)]).toEqual([CROPS_MAX, 0, CROPS_MAX])
   })
 
   it("goes on to the next width when one fails, and says so", async () => {
@@ -178,8 +177,12 @@ describe("lazy images in a capture", () => {
     const { shoot } = await load()
     const { browser, order } = browserOf({ 390: 900, 768: 900, 1440: 900 })
     await shoot(browser, "http://x/", "/tmp", CROPS_MAX)
-    // Per width: load, whole page, one piece.
-    expect(order).toEqual([...Array(3).fill(["load", "shot", "shot"]).flat()])
+    // Per width: load, whole page, and one piece at the critic's widths only.
+    expect(order).toEqual([
+      ...["load", "shot", "shot"],
+      ...["load", "shot"],
+      ...["load", "shot", "shot"],
+    ])
   })
 
   it("makes every image eager, scrolls the whole page and waits for the decodes", async () => {
@@ -222,6 +225,6 @@ describe("lazy images in a capture", () => {
 
 describe("cropKey", () => {
   it("sits outside screenshots/, which the router serves", () => {
-    expect(cropKey("o", "r", 390, 2)).toBe("sites/o/r/critic/home-390-2.png")
+    expect(cropKey("o", "r", 390, 2)).toBe("sites/o/r/critic/home-390-2.jpg")
   })
 })

@@ -2,6 +2,7 @@ import { RULES, TELLS } from "@workspace/gates/rubric"
 import { describe, expect, it, vi } from "vitest"
 import {
   type Complete,
+  changedPieces,
   criticPrompt,
   critique,
   FIXES_MAX,
@@ -34,9 +35,9 @@ const base = {
   sessionId: "assignment-1",
   blueprint: { direction: "calm_daylight" },
   images: [
-    { width: 390, data: "QQ==" },
-    { width: 768, data: "Qg==" },
-    { width: 1440, data: "Qw==" },
+    { width: 390, part: 1, data: "QQ==" },
+    { width: 1440, part: 1, data: "Qg==" },
+    { width: 1440, part: 2, data: "Qw==" },
   ] satisfies Piece[],
 }
 const replying =
@@ -53,14 +54,21 @@ describe("the critic's prompt", () => {
   })
 
   it("tells the critic how many pieces of each width it is shown", () => {
-    const pieces = [390, 390, 390, 768, 1440, 1440].map((width) => ({
-      width,
+    const pieces = [
+      [390, 1],
+      [390, 2],
+      [390, 3],
+      [1440, 2],
+    ].map(([width, part]) => ({
+      width: width as number,
+      part: part as number,
       data: "QQ==",
     }))
     const { user } = criticPrompt({ blueprint: {}, pieces })
-    expect(user).toContain("- 390 px wide: 3 pieces")
-    expect(user).toContain("- 768 px wide: 1 piece\n")
-    expect(user).toContain("- 1440 px wide: 2 pieces")
+    expect(user).toContain("- 390 px wide: 3 pieces, screens 1, 2, 3")
+    // A recheck shows only what changed, so a width can hold a later screen alone.
+    expect(user).toContain("- 1440 px wide: 1 piece, screens 2")
+    expect(user).not.toContain("768")
   })
 
   it("names the earlier fixes on the second look", () => {
@@ -80,10 +88,11 @@ describe("critique", () => {
     expect(out).toMatchObject({ ran: true, errors: [] })
     const call = complete.mock.calls[0]?.[0]
     expect(call?.images).toEqual([
-      { data: "QQ==", mimeType: "image/png" },
-      { data: "Qg==", mimeType: "image/png" },
-      { data: "Qw==", mimeType: "image/png" },
+      { data: "QQ==", mimeType: "image/jpeg" },
+      { data: "Qg==", mimeType: "image/jpeg" },
+      { data: "Qw==", mimeType: "image/jpeg" },
     ])
+    expect(call?.cacheRetention).toBe("none")
     expect(call?.maxTokens).toBe(4_000)
     expect(call?.schema.name).toBe("design_critique")
   })
@@ -145,6 +154,42 @@ describe("critique", () => {
   it("keeps the model's usage for the meter, even when the reply is unusable", async () => {
     const out = await critique({ ...base, complete: replying("Looks fine.") })
     expect(out.calls).toEqual([{ usage: { cost: 0.01 }, model: route.model }])
+  })
+})
+
+describe("the recheck's pictures", () => {
+  it("are the pieces the repair changed, or that are new, and no others", () => {
+    const before: Piece[] = [
+      { width: 390, part: 1, data: "A" },
+      { width: 390, part: 2, data: "B" },
+      { width: 1440, part: 1, data: "C" },
+    ]
+    const now: Piece[] = [
+      { width: 390, part: 1, data: "A" },
+      { width: 390, part: 2, data: "B2" },
+      { width: 1440, part: 1, data: "C" },
+      { width: 1440, part: 2, data: "D" },
+    ]
+    expect(changedPieces(now, before).map((p) => [p.width, p.part])).toEqual([
+      [390, 2],
+      [1440, 2],
+    ])
+    expect(changedPieces(now, now)).toEqual([])
+  })
+
+  it("make no call, and no verdict, when the picture is the same", async () => {
+    const complete = vi.fn(replying('{"fixes":[]}'))
+    const out = await critique({
+      ...base,
+      images: [],
+      skip: "no screenshot changed since the first look",
+      complete,
+    })
+    expect(out).toMatchObject({
+      ran: false,
+      errors: ["no screenshot changed since the first look"],
+    })
+    expect(complete).not.toHaveBeenCalled()
   })
 })
 

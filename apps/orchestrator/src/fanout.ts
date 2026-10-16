@@ -281,7 +281,7 @@ function childPrefix(
     "- Edit only the site fields your task names, and your page's layout entry when it names one, in src/site-config.ts, with one edit call whose edits are each anchored on the field's own line. Never touch another field, another page's entry or any other file: other subagents are editing the same file now.",
     "- Never run astro check or astro build; the lead builds once, after you.",
     "- You cannot ask anyone anything. A field whose fact is missing stays empty; say so in your summary.",
-    "- End with one short paragraph: what you filled, what you left empty and why. Never paste file contents.",
+    "- Write nothing between tool calls. End with one sentence of at most 40 words: what you filled, what you left empty and why. Never paste file contents or restate the copy you wrote.",
     ...stableRules(),
     ...(hidden.length > 0
       ? [
@@ -346,6 +346,6 @@ export const copyInstructions = (brief: Brief) =>
 
 /** The catalog lines the lead sees for each subagent. */
 export const PAGE_AGENT =
-  "Fills one page of the site: its layout entry and the site fields the prompt names, from the facts and the Blueprint. Replies with a one-paragraph summary."
+  "Fills one page of the site: its layout entry and the site fields the prompt names, from the facts and the Blueprint. Replies with a one-sentence summary."
 export const COPY_AGENT =
-  "Writes each page's SEO title and description and the FAQ entries, in the fields the prompt names. Replies with a one-paragraph summary."
+  "Writes each page's SEO title and description and the FAQ entries, in the fields the prompt names. Replies with a one-sentence summary."
