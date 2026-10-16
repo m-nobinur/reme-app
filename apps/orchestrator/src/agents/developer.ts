@@ -7,13 +7,20 @@ import {
   InformationRequest,
   RuntimeSpec,
 } from "@workspace/contracts"
-import { assignments, eq, type Tenancy, tenancy } from "@workspace/db"
+import {
+  assignments,
+  eq,
+  events,
+  sql,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import {
   type AgentProps,
   type BudgetGuard,
+  completeOnce,
   createBudgetGuard,
   createMutationQueue,
-  createPrefixWarmer,
   createTee,
   createTurnGate,
   defineTool,
@@ -21,7 +28,6 @@ import {
   instrument,
   type MutationQueue,
   observe,
-  type PrefixWarmer,
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
@@ -37,19 +43,21 @@ import {
   usePersistentState,
   useResponseFinish,
   useSandbox,
-  useSubagent,
   useTool,
   withOutputCap,
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
+import { z } from "zod"
 import type { Brief } from "../brief.ts"
 import {
-  COPY_AGENT,
   copyInstructions,
-  PAGE_AGENT,
-  pageCheck,
+  FAN_OUT,
+  fansOut,
+  fieldsOfPrompt,
   pageInstructions,
   pageOfPrompt,
+  serviceCount,
+  writerTasks,
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
 import { instructions, sectionInstructions } from "../instructions.ts"
@@ -59,6 +67,7 @@ import {
   askedOptions,
   refuseQuestion,
 } from "../question.ts"
+import { logTurn } from "../quick.ts"
 import { placePhotos, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
@@ -66,6 +75,16 @@ import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
 import { checksOf, finishRevision, GIT, SEAL_PHOTOS } from "../tail.ts"
 import { LEAD_TURN_MS, since } from "../timing.ts"
+import {
+  createWarmer,
+  followPhotos,
+  type Landed,
+  landedOf,
+  reconcilePhotos,
+  replySchema,
+  WARM_BUILD,
+  writePages,
+} from "../write-pages.ts"
 
 /**
  * The Developer (§8, ADR-031): one Durable Object conversation per
@@ -92,12 +111,6 @@ type Session = {
   mutations: MutationQueue
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
-  /** One cache write per fan-out (BA4). */
-  warm: PrefixWarmer
-  /** Page builders' tasks by id, and the pages they finished, for the panel's "3 of 5". */
-  pages: { byTask: Map<string, string>; done: Set<string>; started: boolean }
-  /** Every subagent's task prompt by id, and the tasks the per-page copy check has spoken to. */
-  checks: { prompts: Map<string, string>; sent: Set<string> }
   budgetExhausted: boolean
 }
 const sessions = new Map<string, Session>()
@@ -109,45 +122,8 @@ observe((observation, ctx) => {
   if (!found) return
   found.tee.subscriber(observation)
   found.budget.instrumentation.observe(observation, ctx)
-  found.warm.observe(observation as { type?: string; taskId?: string })
-  const o = observation as { type?: string; taskId?: string; prompt?: string }
-  if (o.type === "task_start" && o.taskId && o.prompt)
-    found.checks.prompts.set(o.taskId, o.prompt)
-  pageProgress(found, observation)
   interrupted(found, observation)
 })
-
-/**
- * BA4: one `build.progress` row when the first page builder starts and one
- * per page it finishes, which the workspace counts as "Writing the pages,
- * 3 of 5". A page is named by its task prompt's first words, which the
- * lead copies from the instructions. A page sent again counts once.
- */
-function pageProgress(found: Session, observation: unknown) {
-  const o = observation as {
-    type?: string
-    taskId?: string
-    agent?: string
-    prompt?: string
-    isError?: boolean
-  }
-  const total = found.brief.blueprint?.pages.length ?? 0
-  if (o.agent !== "page" || !o.taskId || total === 0) return
-  if (o.type === "task_start") {
-    const page = pageOfPrompt(o.prompt)
-    if (page) found.pages.byTask.set(o.taskId, page)
-    if (!found.pages.started) {
-      found.pages.started = true
-      found.tee.emit("build.progress", { stage: "pages", item: null, total })
-    }
-    return
-  }
-  const page = found.pages.byTask.get(o.taskId)
-  if (o.type !== "task" || o.isError || !page || found.pages.done.has(page))
-    return
-  found.pages.done.add(page)
-  found.tee.emit("build.progress", { stage: "pages", item: page, total })
-}
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
@@ -222,62 +198,15 @@ instrument({
   interceptor: (operation, ctx, next) => {
     const found = ctx.instanceId ? sessions.get(ctx.instanceId) : undefined
     if (!found) return next()
-    // The turn gate first: a refused tool call never reaches the budget. A
-    // subagent's first model call may wait on a sibling's warm-up before the
-    // budget reads the spend.
+    // The turn gate first: a refused tool call never reaches the budget.
     return found.gate.interceptor(operation, ctx, () =>
-      checkedEdit(found, operation, ctx.taskId, () =>
-        found.warm.interceptor(operation, ctx, () =>
-          found.budget.instrumentation.interceptor(operation, ctx, next)
-        )
-      )
+      found.budget.instrumentation.interceptor(operation, ctx, next)
     )
   },
   dispose() {
     sessions.clear()
   },
 })
-
-/**
- * The per-page copy check (fanout.ts `pageCheck`): when a subagent's edit
- * returns, the copy gate's field rules over its own fields ride back on that
- * edit's result, once a task, so it fixes its page before the lead
- * integrates. A read of one file and no model call; a failed read changes
- * nothing, and the gate after the build still reads the page.
- */
-async function checkedEdit<T>(
-  found: Session,
-  operation: { type: string; toolName?: string },
-  taskId: string | undefined,
-  next: () => Promise<T>
-): Promise<T> {
-  const result = await next()
-  if (
-    operation.type !== "tool" ||
-    operation.toolName !== "edit" ||
-    !taskId ||
-    found.checks.sent.has(taskId)
-  )
-    return result
-  const content = (result as { content?: unknown[] }).content
-  if (!Array.isArray(content)) return result
-  try {
-    const file = await getSandbox(
-      env.SANDBOX as never,
-      found.runtime.spec.org_id
-    ).readFile(`${SITE_ROOT}/src/site-config.ts`)
-    const message = pageCheck(file.content, found.checks.prompts.get(taskId))
-    if (!message) return result
-    found.checks.sent.add(taskId)
-    found.tee.emit("developer.page_check", {
-      task_id: taskId,
-      findings: message.split("\n- ").length - 1,
-    })
-    return { ...result, content: [...content, { type: "text", text: message }] }
-  } catch {
-    return result
-  }
-}
 
 const sandboxIds = (found: Session) => ({
   orgId: found.runtime.spec.org_id,
@@ -340,9 +269,6 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     gate: undefined as unknown as TurnGate,
     mutations: createMutationQueue(),
     interruptions: new Set(),
-    warm: createPrefixWarmer(),
-    pages: { byTask: new Map(), done: new Set(), started: false },
-    checks: { prompts: new Map(), sent: new Set() },
     budgetExhausted: false,
   }
   created.gate = createTurnGate({
@@ -475,7 +401,6 @@ export function Developer({ id }: AgentProps) {
     // Every delivery is a new turn, so a turn a terminal tool ended reopens
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
-    current.warm.reset()
     current.interruptions.clear()
     if (askedForBuildRole && brief.role && !onBuildRole) {
       setOnBuildRole(true)
@@ -581,27 +506,10 @@ export function Developer({ id }: AgentProps) {
     setRestored(true)
   })
 
-  // BA4: the lead's subagents, on their own roles. Registered on every run
-  // so the lead's catalog is the same for every build; only a planned first
-  // build's instructions send them work. Each renders the same instructions
-  // for every task, so siblings share one cached prefix.
-  const page = roleOf(runtime.spec, "page")
-  const copy = roleOf(runtime.spec, "copy")
-  useSubagent({
-    name: "page",
-    description: PAGE_AGENT,
-    agent: () => withOutputCap(pageInstructions(brief), page.maxTokens),
-    model: page.model,
-    thinkingLevel: page.effort,
-  })
-  useSubagent({
-    name: "copy",
-    description: COPY_AGENT,
-    agent: () => withOutputCap(copyInstructions(brief), copy.maxTokens),
-    model: copy.model,
-    thinkingLevel: copy.effort,
-  })
-
+  // BA4: registered on every run so the lead's tool list, and the prefix it
+  // caches, is the same for every build; only a planned first build's
+  // instructions call it.
+  useTool(writePagesTool(current))
   useTool(askChief(current))
   useTool(reportComplete(current))
 
@@ -623,6 +531,169 @@ export function Developer({ id }: AgentProps) {
 
 Developer.agentName = "developer"
 Developer.durability = { maxAttempts: 3, timeoutMs: LEAD_TURN_MS }
+
+/** How long `write_pages` waits for the photo step, from its start. */
+const PHOTO_WAIT_MS = 5 * 60_000
+const CONFIG = `${SITE_ROOT}/src/site-config.ts`
+
+/**
+ * BA4's fan-out, in code (write-pages.ts): every page writer and the copy
+ * writer as one model call each, FAN_OUT at once, while the plan's photos
+ * land in the site and warm Astro's image cache; then each photo's path
+ * as it landed, the photo seal and one "pages" commit, saved like a
+ * checkpoint. Durable: a replay after an interruption returns each writer's
+ * recorded reply, and every write it makes is the same again.
+ */
+export const writePagesTool = (current: Session) =>
+  defineTool({
+    name: "write_pages",
+    description:
+      "Writes every page's site fields and the SEO and FAQ copy, one writer per page in parallel, places the plan's photos as they are made and commits. Call it once, alone, after the shell's checkpoint. Returns one line per writer.",
+    input: toolInput(z.object({})),
+    harness: true,
+    durable: true,
+    async run({ harness, step }) {
+      const { brief } = current
+      if (!fansOut(brief)) {
+        return {
+          output:
+            "Nothing to do: write_pages is for a planned first build only.",
+        }
+      }
+      const { spec } = current.runtime
+      const orgId = spec.org_id
+      const assignmentId = brief.snapshot.assignment_id
+      const sandbox = harness.sandbox
+      const stub = getSandbox(env.SANDBOX as never, orgId)
+      const plan = brief.blueprint
+      const tasks = writerTasks(plan, serviceCount(brief))
+      const total = plan.pages.length
+      const shown = new Set<string>()
+      current.tee.emit("build.progress", { stage: "pages", item: null, total })
+
+      // One change at a time, through the assignment's queue for this file.
+      const edit = (change: (source: string) => string) =>
+        current.mutations(CONFIG, async () => {
+          const { content } = await stub.readFile(CONFIG)
+          const next = change(content)
+          if (next !== content) await stub.writeFile(CONFIG, next)
+          return next
+        })
+      const roles = {
+        page: roleOf(spec, "page"),
+        copy: roleOf(spec, "copy"),
+      }
+      // One string per agent, so siblings share a cached prefix.
+      const systems = {
+        page: pageInstructions(brief),
+        copy: copyInstructions(brief),
+      }
+      const call = (
+        index: number,
+        attempt: 1 | 2,
+        user: string,
+        strict: boolean
+      ) =>
+        step.do(`writer ${index + 1}.${attempt}`, async () => {
+          const task = tasks[index] as (typeof tasks)[number]
+          const route = roles[task.agent]
+          const reply = await completeOnce(env, {
+            model: route.model,
+            effort: route.effort,
+            maxTokens: route.maxTokens,
+            system: systems[task.agent],
+            user,
+            sessionId: assignmentId,
+            // Strict only to retry an unparsable reply (write-pages.ts).
+            ...(strict
+              ? { schema: replySchema(fieldsOfPrompt(task.prompt)) }
+              : {}),
+          })
+          await logTurn(
+            current.kit,
+            { orgId, assignmentId },
+            spec.staff_id,
+            task.agent,
+            reply
+          )
+          return reply.text
+        })
+
+      // The photo step's progress rows carry each slot's key as it lands;
+      // its `site.photos` event is the final list, and a `site.photos_failed`
+      // from the Workflow settles it with what landed.
+      const slots = plan.images
+        .filter((s) => s.source === "generated" && !s.asset_id)
+        .map((s) => s.id)
+      const landed = (): Promise<Landed> =>
+        current.kit.withOrg({ orgId }, async (db) =>
+          landedOf(
+            await db
+              .select({ type: events.type, payload: events.payload })
+              .from(events)
+              .where(
+                sql`${events.assignmentId} = ${assignmentId} and (${events.type} in ('site.photos', 'site.photos_failed') or (${events.type} = 'build.progress' and ${events.payload}->>'stage' = 'photos' and ${events.payload}->>'key' is not null))`
+              )
+              .orderBy(events.eventId)
+          )
+        )
+      const warm = createWarmer(() => sandbox.exec(WARM_BUILD))
+      const following = followPhotos({
+        slots,
+        landed,
+        place: (files) => placeGenerated(sandbox, env.SITES, files),
+        onPlaced: warm.kick,
+        pollMs: 2000,
+        timeoutMs: PHOTO_WAIT_MS,
+      })
+      const lines = await writePages({
+        tasks,
+        max: FAN_OUT,
+        staggerMs: 3000,
+        call,
+        edit,
+        onWritten: (task) => {
+          warm.kick()
+          const page = pageOfPrompt(task.prompt)
+          if (!page || shown.has(page)) return
+          shown.add(page)
+          current.tee.emit("build.progress", {
+            stage: "pages",
+            item: page,
+            total,
+          })
+        },
+      })
+      const photos = await following
+      const before = await edit((s) => s)
+      if (
+        (await edit((s) => reconcilePhotos(s, slots, photos.files))) !== before
+      )
+        warm.kick()
+      // The photos as placed are the baseline the report holds the lead to.
+      await sandbox.exec(`cd ${SITE_ROOT} && ${SEAL_PHOTOS}`)
+      await warm.idle()
+      await sandbox.exec(
+        `cd ${SITE_ROOT} && ${GIT} add -A && ${GIT} commit -qm pages || true`
+      )
+      await save(current)
+      const missing = slots.filter(
+        (id) => !photos.files.some((f) => f.slot_id === id)
+      )
+      return {
+        output: [
+          `Wrote ${tasks.length} writers' fields and committed them as "pages":`,
+          ...lines,
+          ...(missing.length > 0
+            ? [
+                `No photo for ${missing.join(", ")} (${photos.timedOut ? "the photo step did not finish in time" : "it fell back"}): its field is empty, so its section takes the no-image form.`,
+              ]
+            : []),
+          "The photos are placed and the image cache is warm. Integrate now.",
+        ].join("\n"),
+      }
+    },
+  })
 
 /**
  * The only escalation (§7.2): name the fact, why, and the shape an answer

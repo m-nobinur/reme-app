@@ -7,7 +7,7 @@ import {
   type SectionKind,
 } from "@workspace/contracts"
 
-import { generatedPath } from "./images.ts"
+import { generatedPath, plannedPath } from "./images.ts"
 import type { PhotoFile } from "./photo-step.ts"
 
 // The Blueprint as the builder reads it (ADR-038). Pure, so the Developer's
@@ -46,11 +46,19 @@ function headerField(slot: ImageSlot): string {
   return field ? ` (site.${field} and site.${field}Alt)` : ""
 }
 
-/** Where each image slot's picture is, as its site field holds it. */
-function slotLine(slot: ImageSlot, files: readonly PhotoFile[]): string {
+/**
+ * Where each image slot's picture is, as its site field holds it. With no
+ * `files` the photos are still being drawn while the pages are written, so
+ * each slot gets its planned path; `write_pages` corrects the extension or
+ * empties the field once they land.
+ */
+function slotLine(slot: ImageSlot, files?: readonly PhotoFile[]): string {
   const where = `${slot.id}: ${slot.page} ${slot.section}${headerField(slot)}, ${slot.aspect}`
   if (slot.source === "upload") {
     return `${where}, the owner's photo ${slot.asset_id}. Alt: ${slot.alt}`
+  }
+  if (!files) {
+    return `${where}, generated: set its field to "${plannedPath(slot.id)}". Alt: ${slot.alt}`
   }
   const file = files.find((f) => f.slot_id === slot.id)
   return file
@@ -61,7 +69,7 @@ function slotLine(slot: ImageSlot, files: readonly PhotoFile[]): string {
 /** The Blueprint as the Developer reads it, after the facts (instructions.ts). */
 export function blueprintLines(
   plan: Blueprint,
-  files: readonly PhotoFile[] = []
+  files?: readonly PhotoFile[]
 ): string[] {
   const preset =
     plan.palette.kind === "preset"

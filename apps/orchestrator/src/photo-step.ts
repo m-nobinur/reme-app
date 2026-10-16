@@ -134,7 +134,8 @@ export async function makePhotos(input: {
     palette: paletteWords(plan.data),
   }
   // The "0 of n" row first, then one per slot as it settles, with its
-  // asset id so the panel can show the picture the moment it exists.
+  // asset id so the panel can show the picture the moment it exists, and
+  // its key so `write_pages` places it in the site while the rest draw.
   const progress = (slot: PhotoResult | null) =>
     kit.withOrg({ orgId: ids.orgId }, (db) =>
       appendEvent(db, {
@@ -146,7 +147,14 @@ export async function makePhotos(input: {
           stage: "photos",
           item: slot?.slot_id ?? null,
           total: wanted.length,
-          ...(slot ? { status: slot.status, asset_id: slot.asset_id } : {}),
+          ...(slot
+            ? {
+                status: slot.status,
+                asset_id: slot.asset_id,
+                key: slot.key,
+                content_type: slot.content_type,
+              }
+            : {}),
         },
       })
     )

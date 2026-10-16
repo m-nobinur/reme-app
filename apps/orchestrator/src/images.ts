@@ -832,6 +832,10 @@ export async function directPhotos(input: {
 export const generatedPath = (slotId: string, contentType: string | null) =>
   `src/assets/generated/${slotId}.${extension(contentType ?? "")}`
 
+/** A slot's path before its photo exists: what most draws come back as. */
+export const plannedPath = (slotId: string) =>
+  generatedPath(slotId, "image/jpeg")
+
 /**
  * Copies generated photos from the bucket into the site's
  * `src/assets/generated/{slot id}.{ext}`, where `astro:assets` finds them and

@@ -22,11 +22,11 @@ import { SEED_DIGEST, SEED_FIELDS, STARTER_FILES } from "./seed.ts"
 
 /**
  * BA4, the parallel first build (ADR-038). The lead writes the shell, then
- * hands each page to a page builder and the SEO and FAQ copy to the copy
- * writer, at most four at once, then assembles and builds once. Code decides
- * who owns which site field, so no two children ever edit the same line of
- * src/site-config.ts, and writes the exact task prompts, so the lead copies
- * them instead of composing them.
+ * calls `write_pages`, which runs every page writer and the copy writer as
+ * one model call each, several at once (write-pages.ts), then assembles and
+ * builds once. Code decides who owns which site field and writes each value
+ * into its own line, so no two writers ever touch the same line of
+ * src/site-config.ts, and nothing about the fan-out is left to the lead.
  */
 
 /** A first build from a Blueprint fans out; a revise and the quick lane do not. */
@@ -35,8 +35,8 @@ export const fansOut = (
 ): brief is Brief & { blueprint: Blueprint } =>
   Boolean(brief.blueprint) && brief.restore_key === null && !brief.role
 
-/** How many subagents run at once. */
-export const FAN_OUT = 4
+/** How many writers run at once: the five main pages and the copy writer in the first wave. */
+export const FAN_OUT = 6
 
 type Recipes = {
   pages: Partial<Record<PageId, { page: string; fields: string[] }>>
@@ -174,43 +174,49 @@ export function pageCheck(
   return [
     "The copy gate's check of your fields, before the build, found:",
     ...found.map((line) => `- ${line}`),
-    "Fix exactly these with one more edit call, then stop and write your summary. This check runs once.",
+    "Fix exactly these in one more reply, then stop. This check runs once.",
   ].join("\n")
 }
 
+/** One writer's task: its agent, its prompt, and the task it waits for. */
+export type WriterTask = {
+  agent: "page" | "copy"
+  prompt: string
+  /** The index of the task that must finish first. */
+  after?: number
+}
+
 /**
- * The task prompts, in the groups the lead sends them: one turn per group.
- * The service pages go last, in groups of their own, so each reads the
- * service's name and card that the home page's builder wrote.
+ * Every writer's task, which `write_pages` runs. The one real ordering need
+ * is explicit: each service page waits for the home page, whose writer names
+ * the service and writes its card. A page with no fields has no task.
  */
-export function taskGroups(
+export function writerTasks(
   plan: Blueprint,
   services = SERVICES_MAX
-): { agent: "page" | "copy"; prompt: string }[][] {
-  const tasks = pageTasks(plan, services)
-  const first = [
+): WriterTask[] {
+  const tasks = pageTasks(plan, services).filter((t) => t.fields.length > 0)
+  const first: WriterTask[] = [
     ...tasks
       .filter((t) => t.service === undefined)
       .map(({ page, fields }) => ({
         agent: "page" as const,
-        prompt: `Page ${page}. Your layout entry: layout.${page}. Your fields: ${fields.join(", ") || "none beyond the layout entry"}.`,
+        prompt: `Page ${page}. Your fields: ${fields.join(", ")}.`,
       })),
     {
       agent: "copy" as const,
       prompt: `SEO and FAQ copy. Your fields: ${copyFields(plan).join(", ")}.`,
     },
   ]
+  const home = first.findIndex((t) => pageOfPrompt(t.prompt) === "home")
   const last = tasks
     .filter((t) => t.service !== undefined)
     .map(({ service, fields }) => ({
       agent: "page" as const,
-      prompt: `Page service. Service ${service}'s own page, /services/<slug of service${service}Name>/, laid out by layout.service, which you leave as it is. If service${service}Name is empty, leave your fields empty and stop. Your fields: ${fields.join(", ")}.`,
+      prompt: `Page service. Service ${service}'s own page, /services/<slug of service${service}Name>/, laid out by layout.service. If service${service}Name is empty, leave your fields empty. Your fields: ${fields.join(", ")}.`,
+      ...(home >= 0 ? { after: home } : {}),
     }))
-  const chunk = <T>(list: T[]) =>
-    Array.from({ length: Math.ceil(list.length / FAN_OUT) }, (_, i) =>
-      list.slice(i * FAN_OUT, (i + 1) * FAN_OUT)
-    )
-  return [...chunk(first), ...chunk(last)]
+  return [...first, ...last]
 }
 
 /** The pack's CTA and headings from src/recipes.json, as this build reads them. */
@@ -230,26 +236,17 @@ export function packLines(brief: Brief): string[] {
   ]
 }
 
-/** Anthropic's parallel tool use guidance, worded for the fan-out. */
-const PARALLEL =
-  "<use_parallel_tool_calls>For maximum efficiency, whenever you perform multiple independent operations, invoke all relevant tools simultaneously rather than sequentially. A group of task calls below is independent: send the whole group in one message, with no other tool call beside it.</use_parallel_tool_calls>"
+/** The lead's build command: the check's last lines and only the build's errors and warnings. */
+export const BUILD_COMMAND =
+  './node_modules/.bin/astro check 2>&1 | tail -n 15 && ./node_modules/.bin/astro build 2>&1 | grep -E "error|Error|WARN|copy-check" | head -n 40'
 
 /** The lead's plan of work for a planned first build, after the Blueprint. */
 export function leadLines(brief: Brief, plan: Blueprint): string[] {
-  const groups = taskGroups(plan, serviceCount(brief))
   return [
     "How you build it, in three steps:",
-    "1. The shell, yourself. In src/site-config.ts set direction, font and colour and write the `layout` export exactly as the Blueprint says, then the fields every page shares: businessName, phone, email, logo, the nav labels and ctaLabel. Call checkpoint.",
-    `2. The pages, by subagent. Send these task calls, copying each agent and prompt exactly. Send group 1 in one message, and each later group once the one before it has returned.${groups.length > 1 ? "" : " There is one group."}`,
-    ...groups.flatMap((group, i) => [
-      `   Group ${i + 1}:`,
-      ...group.map(
-        (t) =>
-          `   - task agent "${t.agent}", prompt ${JSON.stringify(t.prompt)}`
-      ),
-    ]),
-    PARALLEL,
-    "3. Assembly, yourself. Read each task's summary and git diff src/site-config.ts. A task that failed or was cancelled goes out once more, alone; one that fails again, you do yourself. Fill whatever the summaries say they left for you. Then call checkpoint, run astro check and astro build once, fix what they report, and call report_complete.",
+    "1. The shell, yourself. In src/site-config.ts set direction, font and colour and write the `layout` export exactly as the Blueprint says, then the fields every page shares: businessName, phone, email, logo, the nav labels and ctaLabel. Read what you need in one turn, write the shell in one edit call, then call checkpoint alone.",
+    "2. The pages: call write_pages once, with no other tool call beside it. It writes every page's fields and the SEO and FAQ copy in parallel, each writer's fields already through the copy gate's own check, places the photos as they are made, warms the image cache and commits. It returns one line per writer.",
+    `3. Assembly, yourself. Integrate, do not re-review: the writers' fields are done, so read src/site-config.ts only for a field a line says was left for you or failed, and fill it. Then run \`${BUILD_COMMAND}\` once with bash, fix what it reports, and call report_complete.`,
     ...(plan.custom_sections?.length
       ? [
           `- After the pages, and only then, write the Blueprint's custom sections yourself under src/components/custom/, at most two: ${plan.custom_sections
@@ -258,7 +255,7 @@ export function leadLines(brief: Brief, plan: Blueprint): string[] {
             .join(", ")}.`,
         ]
       : []),
-    "- After a run.interrupted message: read git log and git diff, then send again only the tasks whose fields are still empty, in groups as above.",
+    '- After a run.interrupted message: read git log, and if there is no "pages" commit, call write_pages again; it replays the writers that already ran.',
     ...packLines(brief),
   ]
 }
@@ -267,8 +264,8 @@ export function leadLines(brief: Brief, plan: Blueprint): string[] {
 function childPrefix(
   brief: Brief,
   role: string,
-  /** The first rule: a page builder reads the file first, the copy writer does not need to. */
-  reading = "Read src/site-config.ts and the components your fields feed before you write."
+  /** The first rule: a page writer gets its lines' notes, the copy writer's fields are all empty. */
+  reading = "Your fields' current lines in src/site-config.ts, each with its note, follow your task."
 ): string[] {
   const { facts } = brief.snapshot
   const pack = packVoice(facts)
@@ -278,10 +275,9 @@ function childPrefix(
     "",
     "Rules:",
     `- The lead has written the shell: direction, font, colour and the \`layout\` export in src/site-config.ts. ${reading}`,
-    "- Edit only the site fields your task names, and your page's layout entry when it names one, in src/site-config.ts, with one edit call whose edits are each anchored on the field's own line. Never touch another field, another page's entry or any other file: other subagents are editing the same file now.",
-    "- Never run astro check or astro build; the lead builds once, after you.",
+    '- You have no tools. Reply with JSON only, shaped {"summary": string, "values": {"<field>": string}}, with one entry for every field your task names and no other: the field\'s whole new text, or "" to leave it empty. Code writes each into its own line while other writers fill the other fields.',
     "- You cannot ask anyone anything. A field whose fact is missing stays empty; say so in your summary.",
-    "- Write nothing between tool calls. End with one sentence of at most 40 words: what you filled, what you left empty and why. Never paste file contents or restate the copy you wrote.",
+    "- summary is one sentence of at most 40 words: what you filled, what you left empty and why. Never restate the copy you wrote.",
     ...stableRules(),
     ...(hidden.length > 0
       ? [
@@ -327,10 +323,8 @@ export const pageInstructions = (brief: Brief) =>
  * 165, so it is told to write once, by feel, and stop.
  */
 export const COPY_WRITER_RULES = [
-  "- Write all your fields in one edit call as your first action, each edit anchored on the field's own empty line, for example `  homeTitle: \"\",`. Read a field's line only if an edit says it does not match. Use no other tool.",
   `- Never count characters, measure or script anything: aim for a title of about 55 characters naming the business and the page, and a description of one sentence of about 150; the copy gate accepts ${TITLE_CHARS.min} to ${TITLE_CHARS.max} and ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} and fails any line outside, so a title over ${TITLE_CHARS.max} or a description under ${DESCRIPTION_CHARS.min} is a repair round. No two pages share a title or a description.`,
   `- The FAQ follows the copy brief: up to eight questions, each answer ${COPY_WORDS.faq_answer.aim[0]} to ${COPY_WORDS.faq_answer.aim[1]} words, as full as the brief asks. Ask only what you can answer in full from the facts or from how the trade usually works, promising nothing for this business that a fact does not. Leave a question out rather than answer that you do not know: never write "our facts don't say", "isn't set out", "not stated" or any note about what you were told. The copy gate fails it. faqHeading names this business's customers or service, never "Common questions" or "FAQ", which may be faqEyebrow.`,
-  "- When the edit succeeds, stop and write the summary. Do not read the file back or check your work.",
 ].join("\n")
 
 /** The copy writer's instructions: SEO titles and descriptions and the FAQ, from the facts. */
@@ -339,13 +333,7 @@ export const copyInstructions = (brief: Brief) =>
     ...childPrefix(
       brief,
       "You are the copy writer at Reme. Your task names the site fields you own: each page's SEO title and description, and the FAQ entries.",
-      "Your fields are empty, one to a line, in src/site-config.ts, and everything you need is below."
+      "Your fields are empty, and everything you need is below."
     ),
     COPY_WRITER_RULES,
   ].join("\n")
-
-/** The catalog lines the lead sees for each subagent. */
-export const PAGE_AGENT =
-  "Fills one page of the site: its layout entry and the site fields the prompt names, from the facts and the Blueprint. Replies with a one-sentence summary."
-export const COPY_AGENT =
-  "Writes each page's SEO title and description and the FAQ entries, in the fields the prompt names. Replies with a one-sentence summary."

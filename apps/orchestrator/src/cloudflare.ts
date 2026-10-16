@@ -382,12 +382,28 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
-    // BA4: a planned build's photos, before any page is written, so a slot
-    // that fell back leaves the plan and its section takes the no-image form.
+    // BA4: a planned build's photos draw while the lead writes the shell and
+    // the pages (each writer names its slot's planned path). The lead's
+    // `write_pages` places each one as its progress row lands and, once the
+    // `site.photos` event is written, empties the fields of slots that fell
+    // back. Started before "developer", so the recorded step order holds. A
+    // step that throws costs the site its photos, not the build: its
+    // `site.photos_failed` event tells `write_pages` to stop waiting at once.
     const photos = route.plan
-      ? await step.do("photos", () =>
-          run((kit) => makePhotos({ env: this.env, kit, ids }))
-        )
+      ? step
+          .do("photos", () =>
+            run((kit) => makePhotos({ env: this.env, kit, ids }))
+          )
+          .catch(async (error: unknown) => {
+            await step.do("photos failed", () =>
+              run((kit) =>
+                appendAudit(kit, ids, "site.photos_failed", {
+                  reason: String(error).slice(0, 300),
+                })
+              )
+            )
+            return null
+          })
       : null
 
     /**
@@ -433,7 +449,6 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             map: null,
             ...(role ? { role } : {}),
             blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
-            ...(photos?.files.length ? { photos: photos.files } : {}),
             // The section lane's short prompt reads the site's last plan.
             ...(role === "quick_section"
               ? { site_plan: await latestBlueprint(db) }
@@ -666,6 +681,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         continue
       }
       if (payload.kind === "completion") {
+        // Settled already: `write_pages` waited for its event. Awaited so the
+        // step never outlives the instance.
+        await photos
         // Axe over this revision's build, from the sandbox the build still
         // holds. Null when a newer edit took the sandbox, which fails the gate.
         const axeOf = () =>
